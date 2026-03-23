@@ -124,6 +124,7 @@ DexScreener uses string chain IDs. Common values:
 
 ## Execution model
 
+- **priceChange values are ALREADY percentages.** `2.5` means 2.5%. Do NOT multiply by 100. Display the value as-is with a % suffix.
 - All commands are read-only (no wallet, no signing, no mutations)
 - No API key required
 - Rate limits: 60 req/min for profiles/boosts/orders, 300 req/min for search/pairs/tokens

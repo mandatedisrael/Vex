@@ -27,7 +27,7 @@ export interface ToolResult {
 export type InternalToolType =
   | "web_search" | "web_fetch"
   | "file_read" | "file_write" | "file_list" | "file_delete"
-  | "memory_update" | "trade_log"
+  | "memory_update" | "memory_manage" | "trade_log"
   | "schedule_create" | "schedule_remove";
 
 export interface InternalToolCall {
@@ -152,6 +152,7 @@ export interface AgentStatus {
   usage: UsageState;
   loop: LoopState;
   pendingApprovals: number;
+  version?: string;
 }
 
 // ── Trade tracking ───────────────────────────────────────────────────

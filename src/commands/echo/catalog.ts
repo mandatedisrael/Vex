@@ -5,9 +5,9 @@ export { PROVIDER_LABELS } from "../../shared/runtime-catalog.js";
 export const EXPLORE_ITEMS: LauncherItem[] = [
   {
     id: "ai-providers",
-    title: "See AI providers on 0G",
+    title: "See available AI providers",
     badge: "needs wallet",
-    description: "Inspect live chat providers, models, and pricing on 0G.",
+    description: "Inspect live chat providers, models, and pricing.",
     command: "echoclaw 0g-compute providers --detailed --json",
   },
   {

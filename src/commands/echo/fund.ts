@@ -99,7 +99,7 @@ export async function buildFundView(opts?: {
 }
 
 export function printFundView(view: FundView, runtimeHint?: ProviderName): void {
-  infoBox("Fund my AI in 0G", [
+  infoBox("Fund my AI", [
     `Runtime:            ${runtimeHint ? PROVIDER_LABELS[runtimeHint] : colors.muted("auto / not selected")}`,
     `Wallet balance:     ${view.walletBalanceOg.toFixed(4)} 0G`,
     `Ledger available:   ${view.ledgerAvailableOg.toFixed(4)} 0G`,

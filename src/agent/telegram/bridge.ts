@@ -14,7 +14,7 @@ import { processMessage, createSession } from "../engine.js";
 import { hydrateSession } from "../session-hydrate.js";
 import * as telegramRepo from "../db/repos/telegram.js";
 import {
-  formatTextForTelegram, formatToolStart, formatToolResult,
+  formatTextForTelegram, formatToolStart,
   formatError, chunkMessage,
 } from "./formatter.js";
 import { sendApprovalRequest } from "./approval-handler.js";
@@ -81,13 +81,22 @@ export async function handleIncomingMessage(
       // 5. Process message — same function as GUI
       await processMessage(session!, text, emit, config.loopMode);
 
-      // 6. Flush remaining text buffer
+      // 6. Flush remaining text buffer with HTML formatting
       stopTyping();
       if (textBuffer.trim()) {
-        const formattedText = formatTextForTelegram(textBuffer);
-        const chunks = chunkMessage(formattedText);
+        const { html, plain } = formatTextForTelegram(textBuffer);
+        const chunks = chunkMessage(html);
         for (const chunk of chunks) {
-          await bot.api.sendMessage(chatId, chunk);
+          try {
+            await bot.api.sendMessage(chatId, chunk, { parse_mode: "HTML" });
+          } catch (htmlErr) {
+            logger.debug("telegram.html_parse.fallback", { chatId, error: htmlErr instanceof Error ? htmlErr.message : String(htmlErr) });
+            const plainChunks = chunkMessage(plain);
+            for (const pc of plainChunks) {
+              await bot.api.sendMessage(chatId, pc);
+            }
+            break;
+          }
         }
       }
     } catch (err) {
@@ -125,23 +134,17 @@ async function handleEvent(
       return textBuffer + String(event.data.text ?? "");
 
     case "tool_start": {
-      const startMsg = formatToolStart(
-        String(event.data.command ?? ""),
-        (event.data.args as Record<string, unknown>) ?? {},
-      );
-      await bot.api.sendMessage(chatId, startMsg);
+      // Compact tool notification: emoji + name only (no args, no output)
+      const msg = formatToolStart(String(event.data.command ?? ""));
+      await bot.api.sendMessage(chatId, msg);
       startTyping();
       return undefined;
     }
 
     case "tool_result": {
-      const resultMsg = formatToolResult(
-        String(event.data.command ?? ""),
-        event.data.success as boolean,
-        String(event.data.output ?? ""),
-        (event.data.durationMs as number) ?? 0,
-      );
-      await bot.api.sendMessage(chatId, resultMsg);
+      // Don't send tool results to Telegram — the final text response covers it.
+      // Just keep typing indicator active.
+      startTyping();
       return undefined;
     }
 

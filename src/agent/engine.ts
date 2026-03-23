@@ -307,6 +307,20 @@ async function executeToolCalls(
 }
 
 // ── Internal tools (DB-backed) ───────────────────────────────────────
+// TODO: §5.3 — engine.ts exceeds 500 lines. Consider extracting tool handlers
+// and compaction into separate modules in a dedicated refactor.
+
+const FILE_SIZE_WARNING_CHARS = 3000;
+const MAX_FILES_WARNING = 50;
+const PREVIEW_CHAR_LIMIT = 1000;
+
+interface InternalToolResult { output: string; success: boolean }
+
+/** Safe string accessor for tool params. */
+function str(params: Record<string, unknown>, key: string): string {
+  const v = params[key];
+  return typeof v === "string" ? v : "";
+}
 
 async function processInternalTools(tools: InternalToolCall[], session: ConversationSession, emit: EventEmitter, loopMode: "full" | "restricted" | "off" = "off"): Promise<void> {
   for (const tool of tools) {
@@ -314,188 +328,242 @@ async function processInternalTools(tools: InternalToolCall[], session: Conversa
     const startTime = Date.now();
     emit({ type: "tool_start", data: { id: toolCallId, command: tool.type, args: tool.params } });
 
-    let output = "";
-    let success = true;
-
-    /** Safe string accessor for tool params (type is Record<string, unknown>). */
-    const str = (key: string): string => {
-      const v = tool.params[key];
-      return typeof v === "string" ? v : "";
-    };
-
+    let result: InternalToolResult;
     try {
       switch (tool.type) {
-        case "file_write": {
-          const path = str("path"), content = str("content");
-          if (!path || !content) { output = "Missing path or content"; success = false; break; }
-          if (path.includes("..") && path !== "../soul.md") {
-            output = `Blocked: path traversal "${path}"`; success = false; break;
-          }
-          if (path === "../soul.md" || path === "soul.md") {
-            await soulRepo.upsertSoul(content);
-          } else {
-            await knowledgeRepo.upsertFile(path, content);
-          }
-          emit({ type: "file_update", data: { path, action: "write" } });
-          output = `Written: ${path}`;
-          break;
-        }
-        case "file_read": {
-          const path = str("path");
-          if (!path) { output = "Missing path"; success = false; break; }
-          let content = await knowledgeRepo.getFile(path);
-          if (!content) content = await skillsRepo.getSkillReference(path);
-          if (content) {
-            session.loadedKnowledge.set(path, content);
-            emit({ type: "file_update", data: { path, action: "loaded" } });
-            output = `Loaded: ${path} (${content.length} chars)`;
-          } else {
-            output = `Not found: ${path}`; success = false;
-          }
-          break;
-        }
-        case "file_list": {
-          const entries = await knowledgeRepo.listFiles(str("path"));
-          const content = JSON.stringify(entries, null, 2);
-          const listMsg: Message = { role: "tool", content, timestamp: new Date().toISOString() };
-          session.messages.push(listMsg);
-          await messagesRepo.addMessage(session.id, listMsg);
-          output = `${entries.length} entries`;
-          break;
-        }
-        case "file_delete": {
-          const path = str("path");
-          if (!path) { output = "Missing path"; success = false; break; }
-          if (path.includes("..")) { output = `Blocked: path traversal "${path}"`; success = false; break; }
-          await knowledgeRepo.deleteFile(path);
-          session.loadedKnowledge.delete(path);
-          emit({ type: "file_update", data: { path, action: "deleted" } });
-          output = `Deleted: ${path}`;
-          break;
-        }
-        case "memory_update": {
-          const append = str("append");
-          if (!append) { output = "Missing append text"; success = false; break; }
-          await memoryRepo.appendMemory(append, undefined, "agent");
-          emit({ type: "file_update", data: { path: "memory.md", action: "updated" } });
-          output = "Memory updated";
-          break;
-        }
-        case "web_search": {
-          const query = str("query");
-          if (!query) { output = "Missing query"; success = false; break; }
-          const results = await webSearch(query);
-          const content = JSON.stringify(results, null, 2);
-          const searchMsg: Message = { role: "tool", content, timestamp: new Date().toISOString() };
-          session.messages.push(searchMsg);
-          await messagesRepo.addMessage(session.id, searchMsg);
-          output = `${Array.isArray(results) ? results.length : 0} results`;
-          break;
-        }
-        case "web_fetch": {
-          const url = str("url");
-          if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) {
-            output = "Invalid URL"; success = false; break;
-          }
-          const result = await webFetch(url);
-          const content = result
-            ? `# ${result.title ?? "Fetched page"}\n\nSource: ${url}\n\n${result.markdown}`
-            : `Failed to fetch: ${url}`;
-          const fetchMsg: Message = { role: "tool", content, timestamp: new Date().toISOString() };
-          session.messages.push(fetchMsg);
-          await messagesRepo.addMessage(session.id, fetchMsg);
-          output = result ? `Fetched: ${result.title ?? url}` : `Failed: ${url}`;
-          success = !!result;
-          break;
-        }
-        case "trade_log": {
-          const rawTrade = tool.params.trade;
-          let trade: Partial<TradeEntry>;
-          if (typeof rawTrade === "object" && rawTrade !== null) {
-            trade = rawTrade as Partial<TradeEntry>;
-          } else if (typeof rawTrade === "string") {
-            try { trade = JSON.parse(rawTrade) as Partial<TradeEntry>; }
-            catch { output = "Invalid trade entry — expected JSON object"; success = false; break; }
-          } else {
-            trade = {};
-          }
-          if (!trade.type || !trade.chain || !trade.status || !trade.input || !trade.output) {
-            output = "Incomplete trade entry"; success = false; break;
-          }
-          const entry: TradeEntry = {
-            id: trade.id ?? generateId("trade"),
-            timestamp: trade.timestamp ?? new Date().toISOString(),
-            type: trade.type, chain: trade.chain, status: trade.status,
-            input: trade.input, output: trade.output,
-            pnl: trade.pnl, meta: trade.meta ?? {},
-            reasoning: trade.reasoning, signature: trade.signature, explorerUrl: trade.explorerUrl,
-          };
-          await tradesRepo.addTrade(entry);
-          emit({ type: "file_update", data: { path: "trades", action: "logged", tradeId: entry.id } });
-          output = `Trade logged: ${entry.id}`;
-          break;
-        }
-        case "schedule_create": {
-          const p = tool.params;
-          const taskType = str("type") || "inference";
-          const validTaskTypes = new Set(["cli_execute", "inference", "alert", "snapshot", "backup"]);
-          if (!validTaskTypes.has(taskType)) {
-            output = `Invalid task type: ${taskType}`; success = false; break;
-          }
-          const cronExpr = str("cron") || "0 * * * *";
-          const { default: cron } = await import("node-cron");
-          if (!cron.validate(cronExpr)) {
-            output = `Invalid cron: ${cronExpr}`; success = false; break;
-          }
-          let payload: Record<string, unknown>;
-          if (!p.payload) {
-            payload = {};
-          } else if (typeof p.payload === "object") {
-            payload = p.payload as Record<string, unknown>;
-          } else if (typeof p.payload === "string") {
-            // Smart resolution: plain string → per-type key (inference→prompt, cli_execute→command, alert→message)
-            try { payload = JSON.parse(p.payload) as Record<string, unknown>; }
-            catch {
-              const keyMap: Record<string, string> = { inference: "prompt", cli_execute: "command", alert: "message" };
-              const key = keyMap[taskType] ?? "prompt";
-              payload = { [key]: p.payload };
-            }
-          } else {
-            payload = {};
-          }
-          const effectiveLoopMode = loopMode === "full" ? (str("loopMode") || "full") : "restricted";
-
-          if (taskType === "cli_execute" && payload.command) {
-            const cmdSnake = String(payload.command).replace(/\s+/g, "_");
-            if (isMutating(cmdSnake) && effectiveLoopMode !== "full") {
-              output = `Blocked: mutating command in ${loopMode} mode`; success = false; break;
-            }
-          }
-
-          const taskId = generateId("task");
-          await addTask({ id: taskId, name: str("name") || "Unnamed task", description: str("description"), cronExpression: cronExpr, taskType, payload, loopMode: effectiveLoopMode });
-          emit({ type: "file_update", data: { path: "tasks", action: "created", taskId, name: str("name") } });
-          output = `Task created: ${taskId}`;
-          break;
-        }
-        case "schedule_remove": {
-          const taskId = str("id");
-          if (!taskId) { output = "Missing task ID"; success = false; break; }
-          const ok = await removeTask(taskId);
-          emit({ type: "file_update", data: { path: "tasks", action: ok ? "removed" : "not_found", taskId } });
-          output = ok ? `Removed: ${taskId}` : `Not found: ${taskId}`;
-          success = ok;
-          break;
-        }
+        case "file_write":    result = await handleFileWrite(tool, session, emit); break;
+        case "file_read":     result = await handleFileRead(tool, session, emit); break;
+        case "file_list":     result = await handleFileList(tool, session); break;
+        case "file_delete":   result = await handleFileDelete(tool, session, emit); break;
+        case "memory_update": result = await handleMemoryUpdate(tool, emit); break;
+        case "memory_manage": result = await handleMemoryManage(tool, session, emit); break;
+        case "web_search":    result = await handleWebSearch(tool, session); break;
+        case "web_fetch":     result = await handleWebFetch(tool, session); break;
+        case "trade_log":     result = await handleTradeLog(tool, emit); break;
+        case "schedule_create": result = await handleScheduleCreate(tool, emit, loopMode); break;
+        case "schedule_remove": result = await handleScheduleRemove(tool, emit); break;
+        default: result = { output: `Unknown tool: ${tool.type}`, success: false };
       }
     } catch (err) {
-      output = err instanceof Error ? err.message : String(err);
-      success = false;
-      logger.warn("agent.internal_tool.failed", { command: tool.type, error: output });
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn("agent.internal_tool.failed", { command: tool.type, error: msg });
+      result = { output: msg, success: false };
     }
 
-    emit({ type: "tool_result", data: { id: toolCallId, command: tool.type, success, output: output.slice(0, SSE_TOOL_OUTPUT_LIMIT), durationMs: Date.now() - startTime } });
+    emit({ type: "tool_result", data: { id: toolCallId, command: tool.type, success: result.success, output: result.output.slice(0, SSE_TOOL_OUTPUT_LIMIT), durationMs: Date.now() - startTime } });
   }
+}
+
+// ── Tool handlers (one per tool type) ────────────────────────────────
+
+async function handleFileWrite(tool: InternalToolCall, session: ConversationSession, emit: EventEmitter): Promise<InternalToolResult> {
+  const path = str(tool.params, "path"), content = str(tool.params, "content");
+  if (!path || !content) return { output: "Missing path or content", success: false };
+  if (path.includes("..") && path !== "../soul.md") return { output: `Blocked: path traversal "${path}"`, success: false };
+
+  if (path === "../soul.md" || path === "soul.md") {
+    await soulRepo.upsertSoul(content);
+  } else {
+    await knowledgeRepo.upsertFile(path, content);
+  }
+  emit({ type: "file_update", data: { path, action: "write" } });
+
+  const hints: string[] = [];
+  if (content.length > FILE_SIZE_WARNING_CHARS) hints.push(`File is ${content.length} chars. Consider keeping files concise for efficient context usage.`);
+  const totalFiles = await knowledgeRepo.fileCount();
+  if (totalFiles > MAX_FILES_WARNING) hints.push(`You have ${totalFiles} knowledge files. Consider consolidating older files.`);
+
+  return { output: `Written: ${path}` + (hints.length > 0 ? ` (${hints.join(" ")})` : ""), success: true };
+}
+
+async function handleFileRead(tool: InternalToolCall, session: ConversationSession, emit: EventEmitter): Promise<InternalToolResult> {
+  const path = str(tool.params, "path");
+  const isPreview = tool.params.preview === true;
+  if (!path) return { output: "Missing path", success: false };
+
+  let content = await knowledgeRepo.getFile(path);
+  const isSkillRef = !content;
+  if (!content) content = await skillsRepo.getSkillReference(path);
+  if (!content) return { output: `Not found: ${path}`, success: false };
+
+  // Skill references always load fully; knowledge files respect preview flag
+  if (isPreview && !isSkillRef) {
+    const previewText = content.length > PREVIEW_CHAR_LIMIT
+      ? content.slice(0, PREVIEW_CHAR_LIMIT) + "\n\n... (preview — use file_read without preview to load full file)"
+      : content;
+    return { output: `Preview: ${path} (${content.length} chars total)\n\n${previewText}`, success: true };
+  }
+
+  session.loadedKnowledge.set(path, content);
+  emit({ type: "file_update", data: { path, action: "loaded" } });
+  return { output: `Loaded: ${path} (${content.length} chars)`, success: true };
+}
+
+async function handleFileList(tool: InternalToolCall, session: ConversationSession): Promise<InternalToolResult> {
+  const entries = await knowledgeRepo.listFiles(str(tool.params, "path"));
+  const content = JSON.stringify(entries, null, 2);
+  const listMsg: Message = { role: "tool", content, timestamp: new Date().toISOString() };
+  session.messages.push(listMsg);
+  await messagesRepo.addMessage(session.id, listMsg);
+  return { output: `${entries.length} entries`, success: true };
+}
+
+async function handleFileDelete(tool: InternalToolCall, session: ConversationSession, emit: EventEmitter): Promise<InternalToolResult> {
+  const path = str(tool.params, "path");
+  if (!path) return { output: "Missing path", success: false };
+  if (path.includes("..")) return { output: `Blocked: path traversal "${path}"`, success: false };
+  await knowledgeRepo.deleteFile(path);
+  session.loadedKnowledge.delete(path);
+  emit({ type: "file_update", data: { path, action: "deleted" } });
+  return { output: `Deleted: ${path}`, success: true };
+}
+
+async function handleMemoryUpdate(tool: InternalToolCall, emit: EventEmitter): Promise<InternalToolResult> {
+  const append = str(tool.params, "append");
+  if (!append) return { output: "Missing append text", success: false };
+  await memoryRepo.appendMemory(append, undefined, "agent");
+  emit({ type: "file_update", data: { path: "memory.md", action: "updated" } });
+  return { output: "Memory updated", success: true };
+}
+
+async function handleMemoryManage(tool: InternalToolCall, session: ConversationSession, emit: EventEmitter): Promise<InternalToolResult> {
+  const action = str(tool.params, "action");
+
+  if (action === "list") {
+    const entries = await memoryRepo.listEntriesWithIds();
+    const content = JSON.stringify(entries, null, 2);
+    const listMsg: Message = { role: "tool", content, timestamp: new Date().toISOString() };
+    session.messages.push(listMsg);
+    await messagesRepo.addMessage(session.id, listMsg);
+    return { output: `${entries.length} memory entries`, success: true };
+  }
+
+  if (action === "append") {
+    const text = str(tool.params, "append") || str(tool.params, "content");
+    if (!text) return { output: "Missing append text", success: false };
+    await memoryRepo.appendMemory(text, undefined, "agent");
+    emit({ type: "file_update", data: { path: "memory.md", action: "updated" } });
+    return { output: "Memory entry appended", success: true };
+  }
+
+  if (action === "replace") {
+    const id = tool.params.id;
+    const content = str(tool.params, "content");
+    if (typeof id !== "number" || !content) return { output: "Missing id or content", success: false };
+    const replaced = await memoryRepo.replaceEntry(id, content);
+    if (!replaced) return { output: `Memory entry #${id} not found`, success: false };
+    emit({ type: "file_update", data: { path: "memory.md", action: "updated" } });
+    return { output: `Memory entry #${id} replaced`, success: true };
+  }
+
+  if (action === "delete") {
+    const id = tool.params.id;
+    if (typeof id !== "number") return { output: "Missing id", success: false };
+    const deleted = await memoryRepo.deleteEntry(id);
+    if (!deleted) return { output: `Memory entry #${id} not found`, success: false };
+    emit({ type: "file_update", data: { path: "memory.md", action: "updated" } });
+    return { output: `Memory entry #${id} deleted`, success: true };
+  }
+
+  return { output: `Unknown memory action: "${action}". Use list, append, replace, or delete.`, success: false };
+}
+
+async function handleWebSearch(tool: InternalToolCall, session: ConversationSession): Promise<InternalToolResult> {
+  const query = str(tool.params, "query");
+  if (!query) return { output: "Missing query", success: false };
+  const results = await webSearch(query);
+  const content = JSON.stringify(results, null, 2);
+  const searchMsg: Message = { role: "tool", content, timestamp: new Date().toISOString() };
+  session.messages.push(searchMsg);
+  await messagesRepo.addMessage(session.id, searchMsg);
+  return { output: `${Array.isArray(results) ? results.length : 0} results`, success: true };
+}
+
+async function handleWebFetch(tool: InternalToolCall, session: ConversationSession): Promise<InternalToolResult> {
+  const url = str(tool.params, "url");
+  if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) return { output: "Invalid URL", success: false };
+  const result = await webFetch(url);
+  const content = result
+    ? `# ${result.title ?? "Fetched page"}\n\nSource: ${url}\n\n${result.markdown}`
+    : `Failed to fetch: ${url}`;
+  const fetchMsg: Message = { role: "tool", content, timestamp: new Date().toISOString() };
+  session.messages.push(fetchMsg);
+  await messagesRepo.addMessage(session.id, fetchMsg);
+  return { output: result ? `Fetched: ${result.title ?? url}` : `Failed: ${url}`, success: !!result };
+}
+
+async function handleTradeLog(tool: InternalToolCall, emit: EventEmitter): Promise<InternalToolResult> {
+  const rawTrade = tool.params.trade;
+  let trade: Partial<TradeEntry>;
+  if (typeof rawTrade === "object" && rawTrade !== null) {
+    trade = rawTrade as Partial<TradeEntry>;
+  } else if (typeof rawTrade === "string") {
+    try { trade = JSON.parse(rawTrade) as Partial<TradeEntry>; }
+    catch { return { output: "Invalid trade entry — expected JSON object", success: false }; }
+  } else {
+    trade = {};
+  }
+  if (!trade.type || !trade.chain || !trade.status || !trade.input || !trade.output) {
+    return { output: "Incomplete trade entry", success: false };
+  }
+  const entry: TradeEntry = {
+    id: trade.id ?? generateId("trade"),
+    timestamp: trade.timestamp ?? new Date().toISOString(),
+    type: trade.type, chain: trade.chain, status: trade.status,
+    input: trade.input, output: trade.output,
+    pnl: trade.pnl, meta: trade.meta ?? {},
+    reasoning: trade.reasoning, signature: trade.signature, explorerUrl: trade.explorerUrl,
+  };
+  await tradesRepo.addTrade(entry);
+  emit({ type: "file_update", data: { path: "trades", action: "logged", tradeId: entry.id } });
+  return { output: `Trade logged: ${entry.id}`, success: true };
+}
+
+async function handleScheduleCreate(tool: InternalToolCall, emit: EventEmitter, loopMode: string): Promise<InternalToolResult> {
+  const p = tool.params;
+  const taskType = str(p, "type") || "inference";
+  const validTaskTypes = new Set(["cli_execute", "inference", "alert", "snapshot", "backup"]);
+  if (!validTaskTypes.has(taskType)) return { output: `Invalid task type: ${taskType}`, success: false };
+
+  const cronExpr = str(p, "cron") || "0 * * * *";
+  const { default: cron } = await import("node-cron");
+  if (!cron.validate(cronExpr)) return { output: `Invalid cron: ${cronExpr}`, success: false };
+
+  let payload: Record<string, unknown>;
+  if (!p.payload) {
+    payload = {};
+  } else if (typeof p.payload === "object") {
+    payload = p.payload as Record<string, unknown>;
+  } else if (typeof p.payload === "string") {
+    try { payload = JSON.parse(p.payload) as Record<string, unknown>; }
+    catch {
+      const keyMap: Record<string, string> = { inference: "prompt", cli_execute: "command", alert: "message" };
+      payload = { [keyMap[taskType] ?? "prompt"]: p.payload };
+    }
+  } else {
+    payload = {};
+  }
+
+  const effectiveLoopMode = loopMode === "full" ? (str(p, "loopMode") || "full") : "restricted";
+  if (taskType === "cli_execute" && payload.command) {
+    const cmdSnake = String(payload.command).replace(/\s+/g, "_");
+    if (isMutating(cmdSnake) && effectiveLoopMode !== "full") {
+      return { output: `Blocked: mutating command in ${loopMode} mode`, success: false };
+    }
+  }
+
+  const taskId = generateId("task");
+  await addTask({ id: taskId, name: str(p, "name") || "Unnamed task", description: str(p, "description"), cronExpression: cronExpr, taskType, payload, loopMode: effectiveLoopMode });
+  emit({ type: "file_update", data: { path: "tasks", action: "created", taskId, name: str(p, "name") } });
+  return { output: `Task created: ${taskId}`, success: true };
+}
+
+async function handleScheduleRemove(tool: InternalToolCall, emit: EventEmitter): Promise<InternalToolResult> {
+  const taskId = str(tool.params, "id");
+  if (!taskId) return { output: "Missing task ID", success: false };
+  const ok = await removeTask(taskId);
+  emit({ type: "file_update", data: { path: "tasks", action: ok ? "removed" : "not_found", taskId } });
+  return { output: ok ? `Removed: ${taskId}` : `Not found: ${taskId}`, success: ok };
 }
 
 // ── Compaction ────────────────────────────────────────────────────────
@@ -506,7 +574,7 @@ async function compactSession(session: ConversationSession, emit: EventEmitter):
 
   const compactionMessages: Message[] = [
     { role: "system", content: getCompactionSystemPrompt(), timestamp: new Date().toISOString() },
-    { role: "user", content: buildCompactionPrompt(session.messages), timestamp: new Date().toISOString() },
+    { role: "user", content: buildCompactionPrompt(session.messages, [...session.loadedKnowledge.keys()]), timestamp: new Date().toISOString() },
   ];
 
   try {
@@ -525,13 +593,18 @@ async function compactSession(session: ConversationSession, emit: EventEmitter):
     await sessionsRepo.createSession(session.id);
     emit({ type: "status", data: { type: "session", sessionId: session.id } });
     const today = new Date().toISOString().slice(0, 10);
+    // Clear loaded knowledge — new session starts clean.
+    // The continuation context in the summary lists which files to re-read.
+    session.loadedKnowledge.clear();
+
     session.messages = [{ role: "system", content: `[Session compacted — ${today}]
 
 Your previous session was summarized. Key insights saved to memory.
+Loaded knowledge files were cleared — re-read files listed in the continuation context below as needed.
 
 To restore full working context:
-1. Your memory entries above contain pointers to knowledge files
-2. Use file_read on recent thoughts/ and journal/ entries for today (${today})
+1. Check the continuation context below for files to re-read and next steps
+2. Your memory entries above contain pointers to knowledge files
 3. Resume where you left off — your entire knowledge base is intact
 
 Previous session summary:

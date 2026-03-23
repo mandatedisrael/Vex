@@ -12,7 +12,7 @@ import * as approvalsRepo from "../db/repos/approvals.js";
 import * as telegramRepo from "../db/repos/telegram.js";
 import { resumeAfterApproval, createSession } from "../engine.js";
 import { hydrateSession } from "../session-hydrate.js";
-import { formatApprovalMessage, formatError, formatToolResult, chunkMessage } from "./formatter.js";
+import { formatApprovalMessage, formatError, formatToolStart, formatTextForTelegram, chunkMessage } from "./formatter.js";
 import { withSessionLock } from "./session-lock.js";
 import type { TelegramConfig } from "./types.js";
 import type { AgentEvent } from "../types.js";
@@ -84,10 +84,19 @@ export function registerApprovalCallbacks(bot: Bot, config: TelegramConfig): voi
 
       try {
         await resumeAfterApproval(session, item.toolCall, emit, config.loopMode as "full" | "restricted" | "off", item.toolCallId);
-        // Flush remaining buffer
+        // Flush remaining buffer with HTML formatting
         if (textBuffer.trim()) {
-          for (const chunk of chunkMessage(textBuffer)) {
-            await bot.api.sendMessage(chatId, chunk);
+          const { html, plain } = formatTextForTelegram(textBuffer);
+          const chunks = chunkMessage(html);
+          for (const chunk of chunks) {
+            try {
+              await bot.api.sendMessage(chatId, chunk, { parse_mode: "HTML" });
+            } catch {
+              for (const pc of chunkMessage(plain)) {
+                await bot.api.sendMessage(chatId, pc);
+              }
+              break;
+            }
           }
         }
       } catch (err) {
@@ -148,20 +157,17 @@ async function handleResumeEvent(
     case "text_delta":
       return textBuffer + String(event.data.text ?? "");
 
-    case "tool_start":
+    case "tool_start": {
+      const msg = formatToolStart(String(event.data.command ?? ""));
+      await bot.api.sendMessage(chatId, msg);
       await bot.api.sendChatAction(chatId, "typing");
       return undefined;
-
-    case "tool_result": {
-      const result = formatToolResult(
-        String(event.data.command ?? ""),
-        event.data.success as boolean,
-        String(event.data.output ?? ""),
-        (event.data.durationMs as number) ?? 0,
-      );
-      await bot.api.sendMessage(chatId, result);
-      return undefined;
     }
+
+    case "tool_result":
+      // Don't send tool results — final text response covers it
+      await bot.api.sendChatAction(chatId, "typing");
+      return undefined;
 
     case "error":
       await bot.api.sendMessage(chatId, formatError(String(event.data.message ?? "Unknown error")));

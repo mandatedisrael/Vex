@@ -23,8 +23,8 @@ export const AGENT_DEFAULT_PORT = 4201;
 
 // ── Context limits ───────────────────────────────────────────────────
 
-export const COMPACTION_THRESHOLD = 0.8;
-export const DEFAULT_CONTEXT_LIMIT = 128_000;
+export const COMPACTION_THRESHOLD = 0.75;
+export const DEFAULT_CONTEXT_LIMIT = Number(process.env.AGENT_CONTEXT_LIMIT) || 66_000;
 
 // ── Loop ─────────────────────────────────────────────────────────────
 

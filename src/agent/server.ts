@@ -10,7 +10,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AGENT_DEFAULT_PORT, AGENT_PID_FILE, AGENT_DIR } from "./constants.js";
+import { AGENT_DEFAULT_PORT, AGENT_PID_FILE, AGENT_DIR, PACKAGE_ROOT } from "./constants.js";
 import { runMigrations } from "./db/migrate.js";
 import { closePool } from "./db/client.js";
 import { seedSkills } from "./db/repos/skills.js";
@@ -171,10 +171,14 @@ export async function startAgentServer(port?: number, writePid = false): Promise
   registerConfigRoutes();
   registerTelegramRoutes();
 
-  // Health: no auth required
+  // Health: no auth required — includes version for monitoring
+  const agentVersion = (() => {
+    try { return JSON.parse(readFileSync(join(PACKAGE_ROOT, "package.json"), "utf-8")).version ?? "unknown"; }
+    catch { return "unknown"; }
+  })();
   registerRoute("GET", "/api/agent/health", (_req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", port: listenPort }));
+    res.end(JSON.stringify({ status: "ok", port: listenPort, version: agentVersion }));
   });
 
   // Auth bootstrap: sets HttpOnly cookie — never exposes token in response body.

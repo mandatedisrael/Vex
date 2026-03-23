@@ -166,6 +166,7 @@ echoclaw solana close-accounts --yes --json
 
 ## Execution model
 
+- **Percentage conventions:** `priceImpactPct` is ALREADY a percentage (`0.01` = 0.01%, do NOT multiply by 100). `slippageBps` is in basis points (divide by 100 for %). Jupiter Lend `supplyRate`/`totalRate` are fractional (multiply by 100 for %).
 - all read commands (`browse`, `price`, `list`, `rates`, `positions`, `portfolio`, `holdings`, `shield`, `invites`) are safe and idempotent
 - all write commands (`execute`, `send`, `deposit`, `withdraw`, `create`, `cancel`, `buy`, `sell`, `claim`, `burn`, `close-accounts`, `delegate`, `clawback`) require `--yes`
 - without `--yes`, write commands show a preview and exit with `CONFIRMATION_REQUIRED`

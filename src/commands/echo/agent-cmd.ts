@@ -38,7 +38,7 @@ function runCompose(args: string[], options: { silent?: boolean; envOverrides?: 
 
 export function createAgentSubcommand(): Command {
   const agent = new Command("agent")
-    .description("Echo Agent — AI trading assistant powered by 0G Compute");
+    .description("Echo Agent — autonomous AI trading assistant for multi-chain DeFi");
 
   // ── agent start ─────────────────────────────────────────────
 

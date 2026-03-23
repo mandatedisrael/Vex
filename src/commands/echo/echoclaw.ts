@@ -28,7 +28,7 @@ function formatStartFailure(err: unknown): string {
 
 export async function runInteractiveEchoClaw(): Promise<void> {
   infoBox("EchoClaw Agent", [
-    "Autonomous AI trading agent powered by 0G Compute.",
+    "Autonomous AI trading agent for multi-chain DeFi.",
     "Runs locally in Docker on http://localhost:4201.",
     "First start pulls a prebuilt multi-arch agent image matched to your npm package version.",
     "Uses your current wallet and compute provider setup.",

@@ -177,8 +177,25 @@ export async function updateSoul(content: string): Promise<void> {
 
 // ── Config ──────────────────────────────────────────────────────────
 
-export async function getAgentConfig(): Promise<{ tavilyConfigured: boolean; telegramConfigured: boolean }> {
+export interface AgentConfig {
+  tavilyConfigured: boolean;
+  telegramConfigured: boolean;
+  contextLimit: number;
+  compactionThreshold: number;
+  version: string;
+  uptime: number;
+}
+
+export async function getAgentConfig(): Promise<AgentConfig> {
   return fetchJson("/api/agent/config");
+}
+
+export async function updateAgentConfig(config: { contextLimit?: number; tavilyApiKey?: string }): Promise<{ success: boolean; changes: string[] }> {
+  return fetchJson("/api/agent/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
 }
 
 // ── Telegram ────────────────────────────────────────────────────────

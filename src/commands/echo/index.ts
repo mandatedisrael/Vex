@@ -51,7 +51,7 @@ function createConnectSubcommand(): Command {
 
 function createFundSubcommand(): Command {
   return new Command("fund")
-    .description("Inspect and top up the shared 0G compute wallet/ledger/provider flow")
+    .description("Inspect and top up the compute wallet/ledger/provider flow")
     .option("--runtime <runtime>", "Runtime hint: openclaw, claude-code, codex, other")
     .option("--provider <addr>", "Provider address")
     .option("--amount <0G>", "Amount to fund to provider")
@@ -87,7 +87,7 @@ function createFundSubcommand(): Command {
 
 function createVerifySubcommand(): Command {
   return new Command("verify")
-    .description("Verify that the selected runtime and 0G compute path are ready")
+    .description("Verify that the selected runtime and compute path are ready")
     .option("--runtime <runtime>", "Runtime: openclaw, claude-code, codex, other")
     .option("--fresh", "Refresh snapshot data before verification")
     .option("--json", "JSON output")
@@ -116,7 +116,7 @@ function createListSubcommand(name: "explore" | "advanced", items: typeof EXPLOR
 
 export function createEchoCommand(): Command {
   const echo = new Command("echo")
-    .description("Human-first EchoClaw launcher for connecting AI, funding 0G compute, and fixing setup")
+    .description("Human-first EchoClaw launcher for connecting AI, managing compute, and fixing setup")
     .action(runEchoMenu);
 
   echo.addCommand(createConnectSubcommand());

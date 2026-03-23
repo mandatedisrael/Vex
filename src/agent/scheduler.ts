@@ -65,6 +65,21 @@ export async function initScheduler(): Promise<void> {
     logger.info("scheduler.task.created", { taskId: "builtin-auto-backup", taskName: "Auto Backup", schedule: "hourly at :30" });
   }
 
+  // Ensure default knowledge audit task
+  const hasAuditTask = tasks.some(t => t.id === "builtin-knowledge-audit");
+  if (!hasAuditTask) {
+    await tasksRepo.createTask({
+      id: "builtin-knowledge-audit",
+      name: "Knowledge Audit",
+      description: "Daily check of knowledge base size and health",
+      cronExpression: "0 6 * * *",
+      taskType: "inference",
+      payload: { prompt: "Run a knowledge audit: file_list all your folders, check how many files you have total, use memory_manage action=list to review memory entries. If any folder has more than 5 files, consolidate older ones. If memory has stale or outdated entries, prune them. Report a brief summary of what you found and did." },
+      loopMode: "restricted",
+    });
+    logger.info("scheduler.task.created", { taskId: "builtin-knowledge-audit", taskName: "Knowledge Audit", schedule: "daily at 06:00" });
+  }
+
   // Load and register all enabled tasks
   const enabled = await tasksRepo.getEnabledTasks();
   for (const task of enabled) {
@@ -263,11 +278,14 @@ export function stopAll(): void {
 let loopTimer: ReturnType<typeof setInterval> | null = null;
 let loopCycleInFlight = false;
 
+const LOOP_CYCLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
 /**
  * Start the autonomous loop engine.
  * Runs inference at intervalMs intervals with a meta-prompt.
  * Each cycle: agent checks portfolio, evaluates positions, takes action.
  * Uses inFlight guard to prevent overlapping cycles.
+ * Cycle timeout prevents permanent hangs.
  */
 export function startLoopEngine(mode: "full" | "restricted", intervalMs: number): void {
   stopLoopEngine(); // Clear existing if any
@@ -288,7 +306,17 @@ export function startLoopEngine(mode: "full" | "restricted", intervalMs: number)
     loopCycleInFlight = true;
     logger.info("scheduler.loop.cycle_start");
     try {
-      await inferenceHandler(getAutonomousLoopPrompt(), mode);
+      // Race cycle against timeout to prevent permanent hangs
+      const cyclePromise = inferenceHandler(getAutonomousLoopPrompt(), mode);
+      let timeoutId: ReturnType<typeof setTimeout>;
+      const timeoutPromise = new Promise<string>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`Loop cycle timed out after ${LOOP_CYCLE_TIMEOUT_MS / 1000}s`)), LOOP_CYCLE_TIMEOUT_MS);
+      });
+      try {
+        await Promise.race([cyclePromise, timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutId!);
+      }
 
       // Record cycle in DB
       const { recordCycle } = await import("./db/repos/loop.js");

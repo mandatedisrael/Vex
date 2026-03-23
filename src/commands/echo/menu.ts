@@ -51,7 +51,7 @@ export async function runEchoMenu(): Promise<void> {
   writeStderr("");
   await renderBatBanner({
     subtitle: "Echo Launcher",
-    description: "Connect your AI, fund it with 0G, explore safely, and fix setup from one menu.",
+    description: "Connect your AI, fund compute, explore safely, and fix setup from one menu.",
   });
 
   while (true) {
@@ -66,7 +66,7 @@ export async function runEchoMenu(): Promise<void> {
         { name: "Open Launcher (browser)", value: "launcher" },
         { name: "Run EchoClaw Agent locally", value: "echoclaw" },
         { name: "Connect my AI", value: "connect" },
-        { name: "Fund my AI in 0G", value: "fund" },
+        { name: "Fund my AI", value: "fund" },
         { name: "Bridge / Cross-Chain", value: "bridge" },
         { name: "Explore Echo", value: "explore" },
         { name: "Wallet & Keys", value: "wallet" },

@@ -52,6 +52,13 @@ export {
 
   // Settings
   Settings01Icon,          // Operations
+  Settings02Icon,          // Settings tab
+  SlidersHorizontalIcon,   // Context limit
+  ApiIcon,                 // API key
+  AiWebBrowsingIcon,       // Web search / Tavily
+  SystemUpdate01Icon,      // Version
+  TokenCircleIcon,         // Token count
+  Configuration01Icon,     // Config
 
   // Integrations
   TelegramIcon,            // Telegram

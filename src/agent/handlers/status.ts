@@ -12,6 +12,7 @@ import * as sessionsRepo from "../db/repos/sessions.js";
 import * as loopRepo from "../db/repos/loop.js";
 import * as backupRepo from "../db/repos/backup.js";
 import { loadComputeState } from "../../0g-compute/readiness.js";
+import { getAgentPackageVersion } from "../compose.js";
 import type { AgentStatus } from "../types.js";
 
 export function registerStatusRoutes(): void {
@@ -38,6 +39,7 @@ export function registerStatusRoutes(): void {
       usage: { ...usage, lastBackupAt: lastBackup?.createdAt ?? null },
       loop,
       pendingApprovals,
+      version: getAgentPackageVersion(),
     };
 
     jsonResponse(res, 200, status);

@@ -1,26 +1,39 @@
 /**
- * Ops widget — operational controls: backup, restore, billing, soul edit.
- * Replaces removed Settings page. Accessible via sidebar or floating widget.
+ * Ops widget — operational controls: backup, restore, billing, soul edit, settings.
+ * Accessible via sidebar or floating widget.
  */
 
 import { type FC, useState, useEffect, useCallback } from "react";
-import { triggerBackup, triggerRestore, getBackups, getBilling, getSoul, updateSoul, getAgentConfig } from "../api";
+import { triggerBackup, triggerRestore, getBackups, getBilling, getSoul, updateSoul, getAgentConfig, updateAgentConfig, type AgentConfig } from "../api";
 import type { BillingState } from "../types";
 import { cn } from "../utils";
+import {
+  HugeiconsIcon,
+  Settings02Icon,
+  AiWebBrowsingIcon,
+  SlidersHorizontalIcon,
+  SystemUpdate01Icon,
+  CheckmarkCircle02Icon,
+  AlertCircleIcon,
+} from "../components/icons";
 
 interface OpsWidgetProps {
   onBack: () => void;
 }
 
 export const OpsWidget: FC<OpsWidgetProps> = ({ onBack }) => {
-  const [tab, setTab] = useState<"backup" | "billing" | "soul">("backup");
+  const [tab, setTab] = useState<"backup" | "billing" | "soul" | "settings">("backup");
   const [backups, setBackups] = useState<Array<Record<string, unknown>>>([]);
   const [billing, setBilling] = useState<BillingState | null>(null);
   const [soul, setSoul] = useState("");
   const [restoreHash, setRestoreHash] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [tavilyOk, setTavilyOk] = useState<boolean | null>(null);
+  const [config, setConfig] = useState<AgentConfig | null>(null);
+
+  // Settings form state
+  const [contextLimit, setContextLimit] = useState(66000);
+  const [tavilyKey, setTavilyKey] = useState("");
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -37,6 +50,11 @@ export const OpsWidget: FC<OpsWidgetProps> = ({ onBack }) => {
         const res = await getSoul();
         if (signal?.aborted) return;
         setSoul(res.content ?? "");
+      } else if (tab === "settings") {
+        const res = await getAgentConfig();
+        if (signal?.aborted) return;
+        setConfig(res);
+        setContextLimit(res.contextLimit);
       }
     } catch (err) {
       if (signal?.aborted) return;
@@ -52,9 +70,9 @@ export const OpsWidget: FC<OpsWidgetProps> = ({ onBack }) => {
     return () => ac.abort();
   }, [load]);
 
-  // Fetch Tavily status once on mount
+  // Fetch config on mount for header status
   useEffect(() => {
-    getAgentConfig().then(c => setTavilyOk(c.tavilyConfigured)).catch(() => setTavilyOk(null));
+    getAgentConfig().then(c => setConfig(c)).catch(() => setConfig(null));
   }, []);
 
   const handleBackup = async () => {
@@ -89,10 +107,37 @@ export const OpsWidget: FC<OpsWidgetProps> = ({ onBack }) => {
     setLoading(false);
   };
 
+  const handleSaveContextLimit = async () => {
+    setLoading(true); setMessage(null);
+    try {
+      await updateAgentConfig({ contextLimit });
+      setMessage("Context limit updated");
+      load();
+    } catch (err) {
+      setMessage(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    setLoading(false);
+  };
+
+  const handleSaveTavily = async () => {
+    if (!tavilyKey.trim()) return;
+    setLoading(true); setMessage(null);
+    try {
+      await updateAgentConfig({ tavilyApiKey: tavilyKey });
+      setMessage("Tavily API key saved! Web search is now active.");
+      setTavilyKey("");
+      load();
+    } catch (err) {
+      setMessage(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    setLoading(false);
+  };
+
   const tabs = [
     { key: "backup" as const, label: "Backup" },
     { key: "billing" as const, label: "Billing" },
     { key: "soul" as const, label: "Soul" },
+    { key: "settings" as const, label: "Settings" },
   ];
 
   return (
@@ -100,10 +145,13 @@ export const OpsWidget: FC<OpsWidgetProps> = ({ onBack }) => {
       <div className="flex items-center gap-4 px-4 py-3 border-b border-border">
         <button onClick={onBack} className="text-muted-foreground hover:text-foreground text-sm transition">&larr;</button>
         <h2 className="text-sm font-semibold text-foreground">Operations</h2>
-        {tavilyOk !== null && (
-          <div className="ml-auto flex items-center gap-1.5">
-            <span className={`h-1.5 w-1.5 rounded-full ${tavilyOk ? "bg-status-ok" : "bg-muted-foreground"}`} />
-            <span className="text-2xs text-muted-foreground">{tavilyOk ? "Search" : "No search"}</span>
+        {config && (
+          <div className="ml-auto flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className={`h-1.5 w-1.5 rounded-full ${config.tavilyConfigured ? "bg-status-ok" : "bg-muted-foreground"}`} />
+              <span className="text-2xs text-muted-foreground">{config.tavilyConfigured ? "Search" : "No search"}</span>
+            </div>
+            <span className="text-2xs text-muted-foreground">v{config.version}</span>
           </div>
         )}
       </div>
@@ -184,8 +232,92 @@ export const OpsWidget: FC<OpsWidgetProps> = ({ onBack }) => {
           </>
         )}
 
+        {tab === "settings" && (
+          <div className="space-y-5">
+            {/* Context Limit */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <HugeiconsIcon icon={SlidersHorizontalIcon} className="h-4 w-4 text-accent" />
+                <span className="text-sm font-medium text-foreground">Context Limit</span>
+              </div>
+              <p className="text-2xs text-muted-foreground">
+                Maximum tokens per session. Compaction triggers at 75% of this value.
+              </p>
+              <div className="flex gap-2">
+                <input type="number" value={contextLimit} onChange={e => setContextLimit(Number(e.target.value))}
+                  min={10000} max={200000} step={1000}
+                  className="flex-1 px-3 py-2 text-sm rounded-lg bg-card border border-border text-foreground font-mono" />
+                <button onClick={handleSaveContextLimit} disabled={loading}
+                  className="px-4 py-2 text-xs font-medium rounded-lg bg-accent/15 text-accent hover:bg-accent/25 transition disabled:opacity-50">
+                  Save
+                </button>
+              </div>
+              <p className="text-2xs text-muted-foreground">
+                Compaction at: ~{Math.round(contextLimit * (config?.compactionThreshold ?? 0.75)).toLocaleString()} tokens
+              </p>
+            </div>
+
+            {/* Tavily Web Search */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <HugeiconsIcon icon={AiWebBrowsingIcon} className="h-4 w-4 text-accent" />
+                <span className="text-sm font-medium text-foreground">Web Search (Tavily)</span>
+                {config && (
+                  <HugeiconsIcon
+                    icon={config.tavilyConfigured ? CheckmarkCircle02Icon : AlertCircleIcon}
+                    className={cn("h-3.5 w-3.5 ml-auto", config.tavilyConfigured ? "text-status-ok" : "text-muted-foreground")}
+                  />
+                )}
+              </div>
+              <p className="text-2xs text-muted-foreground">
+                Web search lets your agent research tokens, projects, news, and documentation from the internet.
+              </p>
+              <div className="flex gap-2">
+                <input type="password" value={tavilyKey} onChange={e => setTavilyKey(e.target.value)}
+                  placeholder={config?.tavilyConfigured ? "tvly-•••• (configured)" : "tvly-... paste your API key"}
+                  className="flex-1 px-3 py-2 text-sm rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground font-mono" />
+                <button onClick={handleSaveTavily} disabled={loading || !tavilyKey.trim()}
+                  className="px-4 py-2 text-xs font-medium rounded-lg bg-accent/15 text-accent hover:bg-accent/25 transition disabled:opacity-50">
+                  Save
+                </button>
+              </div>
+              <div className="text-2xs text-muted-foreground space-y-1 mt-1">
+                <p className="font-medium">How to get a free API key:</p>
+                <ol className="list-decimal list-inside space-y-0.5 ml-1">
+                  <li>Go to <a href="https://tavily.com" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">tavily.com</a> and sign up</li>
+                  <li>Copy your API key from the dashboard</li>
+                  <li>Paste it above and click Save</li>
+                </ol>
+                <p className="text-muted-foreground/60 mt-1">Free tier: 1,000 credits/month, no credit card needed.</p>
+              </div>
+            </div>
+
+            {/* Version */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <HugeiconsIcon icon={SystemUpdate01Icon} className="h-4 w-4 text-accent" />
+                <span className="text-sm font-medium text-foreground">Version</span>
+              </div>
+              {config && (
+                <div className="text-sm text-muted-foreground">
+                  <span className="text-foreground font-mono">v{config.version}</span>
+                  <span className="ml-2">Uptime: {formatUptime(config.uptime)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {loading && <div className="flex justify-center py-4"><div className="h-5 w-5 rounded-full border-2 border-accent/30 border-t-accent animate-spin" /></div>}
       </div>
     </div>
   );
 };
+
+function formatUptime(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
+}
