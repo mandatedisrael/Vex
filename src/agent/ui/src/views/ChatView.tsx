@@ -4,6 +4,7 @@ import { ToolCallsSection } from "../components/ToolCallsSection";
 import { ChatInput } from "../components/ChatInput";
 import { EchoLoader } from "../components/EchoLoader";
 import { BurnIndicator } from "../components/BurnIndicator";
+import { AgentSticker } from "../components/AgentSticker";
 import { useAgentStream } from "../hooks/useAgentStream";
 import { startLoop, stopLoop } from "../api";
 import type { AgentStatus, AssistantTurn, ChatFeedItem, ChatMessage } from "../types";
@@ -161,12 +162,11 @@ export const ChatView: FC<ChatViewProps> = ({ status, onRefreshStatus, onBurnSta
         {/* Empty state */}
         {feedItems.length === 0 && !pendingAssistantTurn && (
           <div className="flex flex-col items-center justify-center h-[75vh] gap-6 animate-fade-in select-none">
-            <div className="relative flex items-center justify-center">
-              <div className="absolute h-28 w-28 rounded-full bg-accent/18 blur-[56px]" />
-              <div className="relative h-20 w-20 rounded-[28px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.12),rgba(255,255,255,0.02))] shadow-[0_24px_60px_rgba(0,0,0,0.32)]">
-                <div className="absolute inset-3 rounded-[22px] border border-white/8 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.22),rgba(255,255,255,0.02)_62%)]" />
-              </div>
-            </div>
+            <AgentSticker
+              size={104}
+              bare
+              className="drop-shadow-[0_18px_48px_rgba(82,138,255,0.18)]"
+            />
             <h1 className="text-2xl md:text-3xl font-semibold text-foreground tracking-tight opacity-90">
               EchoClaw
             </h1>

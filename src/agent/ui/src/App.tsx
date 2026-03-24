@@ -1,6 +1,7 @@
 import { type FC, useState, useEffect, useCallback } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FloatingWidget } from "./components/FloatingWidget";
+import { AgentSticker } from "./components/AgentSticker";
 import SubagentPanel from "./components/SubagentPanel";
 import LoopStatusBar from "./components/LoopStatusBar";
 import { ChatView } from "./views/ChatView";
@@ -154,12 +155,11 @@ export const App: FC = () => {
       >
         {/* Agent avatar / Logo area */}
         <div className="flex items-center gap-3 px-4 py-6 border-b border-white/5 shrink-0">
-          <div className="relative shrink-0 flex items-center justify-center w-9 h-9">
-            <div className="absolute inset-0 rounded-2xl bg-accent/18 blur-md" />
-            <div className="relative z-10 h-8 w-8 rounded-2xl border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.14),rgba(255,255,255,0.03))] shadow-[0_8px_22px_rgba(0,0,0,0.28)]">
-              <div className="absolute inset-1.5 rounded-xl border border-white/8 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.18),rgba(255,255,255,0.02)_68%)]" />
-            </div>
-          </div>
+          <AgentSticker
+            size={sidebarOpen ? 36 : 30}
+            bare
+            className="shrink-0 drop-shadow-[0_10px_24px_rgba(82,138,255,0.14)]"
+          />
           {sidebarOpen && (
             <div className="animate-fade-in min-w-0">
               <div className="text-[15px] font-medium text-foreground tracking-tight truncate">

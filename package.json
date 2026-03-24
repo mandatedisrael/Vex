@@ -32,6 +32,7 @@
     "dev": "tsc --watch",
     "dev:launcher": "vite --config src/launcher/ui/vite.config.ts",
     "dev:agent": "vite --config src/agent/ui/vite.config.ts",
+    "demo:pnl-card": "vite --config src/agent/ui/vite.config.ts --open /?demo=pnl-card",
     "start": "node dist/cli.js",
     "test": "vitest run",
     "test:watch": "vitest"

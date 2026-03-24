@@ -4,6 +4,7 @@ import { cn } from "../utils";
 interface AgentStickerProps {
   size?: number;
   playOnMount?: boolean;
+  bare?: boolean;
   className?: string;
 }
 
@@ -12,6 +13,7 @@ const STICKER_DURATION_MS = 3000;
 export const AgentSticker: FC<AgentStickerProps> = ({
   size = 28,
   playOnMount = false,
+  bare = false,
   className,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -75,7 +77,9 @@ export const AgentSticker: FC<AgentStickerProps> = ({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-[0_10px_24px_rgba(0,0,0,0.22)]",
+        bare
+          ? "overflow-hidden bg-transparent shadow-none"
+          : "overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-[0_10px_24px_rgba(0,0,0,0.22)]",
         className,
       )}
       style={{ width: size, height: size }}
@@ -83,7 +87,12 @@ export const AgentSticker: FC<AgentStickerProps> = ({
       <video
         ref={videoRef}
         aria-label="Echo sticker"
-        className="h-full w-full object-cover"
+        className={cn(
+          "h-full w-full",
+          bare
+            ? "object-contain"
+            : "object-cover",
+        )}
         muted
         playsInline
         preload="metadata"

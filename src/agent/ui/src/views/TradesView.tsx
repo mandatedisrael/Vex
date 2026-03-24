@@ -1,5 +1,6 @@
 import { type FC, useEffect, useState, useCallback } from "react";
 import { TradeCard } from "../components/TradeCard";
+import { TradeShareModal } from "../components/TradeShareModal";
 import { TradeSummaryBar } from "../components/TradeSummary";
 import { getTrades, getTradesSummary } from "../api";
 import type { TradeEntry, TradeSummary, TradeType } from "../types";
@@ -27,6 +28,7 @@ export const TradesView: FC<TradesViewProps> = ({ onBack }) => {
   const [filter, setFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTrade, setSelectedTrade] = useState<TradeEntry | null>(null);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -94,7 +96,7 @@ export const TradesView: FC<TradesViewProps> = ({ onBack }) => {
           <div>
             <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Open Positions</h3>
             <div className="space-y-2">
-              {openPredictions.map(t => <TradeCard key={t.id} trade={t} />)}
+              {openPredictions.map(t => <TradeCard key={t.id} trade={t} onViewCard={setSelectedTrade} />)}
             </div>
           </div>
         )}
@@ -106,7 +108,7 @@ export const TradesView: FC<TradesViewProps> = ({ onBack }) => {
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">History</h3>
             )}
             <div className="space-y-2">
-              {historyTrades.map(t => <TradeCard key={t.id} trade={t} />)}
+              {historyTrades.map(t => <TradeCard key={t.id} trade={t} onViewCard={setSelectedTrade} />)}
             </div>
           </div>
         )}
@@ -134,6 +136,8 @@ export const TradesView: FC<TradesViewProps> = ({ onBack }) => {
           </div>
         )}
       </div>
+
+      <TradeShareModal trade={selectedTrade} open={selectedTrade != null} onClose={() => setSelectedTrade(null)} />
     </div>
   );
 };

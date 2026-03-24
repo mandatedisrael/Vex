@@ -46,7 +46,7 @@ const SUPPORTED_CAPTURE_COMMANDS = [
   "slop_trade_sell",
 ] as const;
 
-const COMMAND_TOKENS = new Map(
+const COMMAND_TOKENS: Map<string, string[]> = new Map(
   SUPPORTED_CAPTURE_COMMANDS.map((command) => [command, command.replace(/_/g, " ").split(/\s+/)]),
 );
 

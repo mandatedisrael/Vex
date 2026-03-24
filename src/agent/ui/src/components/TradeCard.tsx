@@ -1,10 +1,12 @@
 import { type FC, useState } from "react";
 import { cn } from "../utils";
 import type { TradeEntry } from "../types";
+import { canGenerateTradePnlCard } from "../trade-pnl-card";
 
 interface TradeCardProps {
   trade: TradeEntry;
   compact?: boolean;
+  onViewCard?: (trade: TradeEntry) => void;
 }
 
 const TYPE_STYLES: Record<string, { label: string; color: string; bg: string }> = {
@@ -37,13 +39,14 @@ function timeAgo(ts: string): string {
   return `${days}d ago`;
 }
 
-export const TradeCard: FC<TradeCardProps> = ({ trade, compact }) => {
+export const TradeCard: FC<TradeCardProps> = ({ trade, compact, onViewCard }) => {
   const [expanded, setExpanded] = useState(false);
   const typeStyle = TYPE_STYLES[trade.type] ?? TYPE_STYLES.swap;
   const statusStyle = STATUS_STYLES[trade.status] ?? STATUS_STYLES.executed;
   const hasPnl = trade.pnl != null;
   const isProfit = hasPnl && trade.pnl!.amountUsd >= 0;
   const isPrediction = trade.type === "prediction";
+  const canViewCard = canGenerateTradePnlCard(trade) && !compact;
 
   return (
     <div
@@ -64,6 +67,18 @@ export const TradeCard: FC<TradeCardProps> = ({ trade, compact }) => {
         <span className="text-2xs text-muted-foreground">{timeAgo(trade.timestamp)}</span>
         {!compact && (
           <div className="flex items-center gap-1.5">
+            {canViewCard && onViewCard && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onViewCard(trade);
+                }}
+                className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-200 transition hover:bg-white/[0.08]"
+              >
+                View Card
+              </button>
+            )}
             <div className={cn("h-1.5 w-1.5 rounded-full", statusStyle.dot)} />
             <span className={cn("text-2xs font-medium", statusStyle.text)}>{trade.status}</span>
           </div>
