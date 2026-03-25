@@ -82,6 +82,15 @@ async function loadSetupCommand(root: string) {
   vi.doMock("../commands/skill.js", () => ({
     handleSkillInstall: (...args: unknown[]) => mockHandleSkillInstall(...args),
   }));
+  vi.doMock("../utils/ui.js", () => ({
+    successBox: vi.fn(),
+    warnBox: vi.fn(),
+    infoBox: vi.fn(),
+    colors: { bold: (s: string) => s, info: (s: string) => s, muted: (s: string) => s, value: (s: string) => s, warn: (s: string) => s, success: (s: string) => s, error: (s: string) => s },
+  }));
+  vi.doMock("../utils/respond.js", () => ({
+    respond: vi.fn(),
+  }));
 
   const setupModule = await import("../commands/setup.js");
   const pathsModule = await import("../config/paths.js");

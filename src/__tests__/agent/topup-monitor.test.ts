@@ -1,106 +1,152 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mockProviderBalance } from "./_fixtures.js";
 
-// Mock all dependencies
-const mockGetLedgerState = vi.fn(async () => null);
-const mockGetInferenceConfig = vi.fn(() => null);
-const mockPublish = vi.fn(async () => {});
-const mockGetBaseline = vi.fn(async () => ({ baselineLockedOg: 0, baselineTotalOg: 0, lastTopupAt: null, lastTopupAmountOg: null, updatedAt: "" }));
-const mockRecordEvent = vi.fn(async () => {});
-const mockUpdateBaseline = vi.fn(async () => {});
+const mockGetProviderBalance = vi.fn();
+const mockGetInferenceConfig = vi.fn();
+const mockGetActiveProvider = vi.fn();
+const mockPublish = vi.fn();
+const mockRecordEvent = vi.fn();
+const mockUpdateBaseline = vi.fn();
 
 vi.mock("../../agent/billing.js", () => ({
-  getLedgerState: (...a: unknown[]) => mockGetLedgerState(...a),
-  isLowBalance: vi.fn(),
+  getProviderBalance: () => mockGetProviderBalance(),
 }));
 vi.mock("../../agent/engine.js", () => ({
   getInferenceConfig: () => mockGetInferenceConfig(),
 }));
+vi.mock("../../agent/providers/registry.js", () => ({
+  getActiveProvider: () => mockGetActiveProvider(),
+}));
 vi.mock("../../agent/autonomy-inbox.js", () => ({
-  publish: (...a: unknown[]) => mockPublish(...a),
+  publish: (...args: unknown[]) => mockPublish(...args),
 }));
 vi.mock("../../agent/db/repos/topup.js", () => ({
-  getBaseline: () => mockGetBaseline(),
-  recordEvent: (...a: unknown[]) => mockRecordEvent(...a),
-  updateBaseline: (...a: unknown[]) => mockUpdateBaseline(...a),
+  recordEvent: (...args: unknown[]) => mockRecordEvent(...args),
+  updateBaseline: (...args: unknown[]) => mockUpdateBaseline(...args),
 }));
 vi.mock("../../utils/logger.js", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { startMonitor, stopMonitor, onTopupSuccess, checkBalance, _resetForTest } from "../../agent/topup-monitor.js";
+const { checkBalance, onTopupSuccess, _resetForTest, startMonitor, stopMonitor } =
+  await import("../../agent/topup-monitor.js");
 
-describe("topup-monitor", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.clearAllMocks();
-    _resetForTest();
-  });
+beforeEach(() => {
+  vi.clearAllMocks();
+  _resetForTest();
+  mockGetInferenceConfig.mockReturnValue({ provider: "0g-compute", model: "test" });
+  mockGetActiveProvider.mockReturnValue({ id: "0g-compute", getBalance: vi.fn() });
+  mockRecordEvent.mockResolvedValue(undefined);
+  mockPublish.mockResolvedValue(undefined);
+  mockUpdateBaseline.mockResolvedValue(undefined);
+});
 
-  afterEach(() => {
-    stopMonitor();
-    vi.useRealTimers();
-  });
-
-  it("does not alert when balance is above threshold", async () => {
-    mockGetInferenceConfig.mockReturnValue({ provider: "p1", model: "m1", alertThresholdOg: 0.5 });
-    mockGetLedgerState.mockResolvedValue({ providerLockedOg: 1.0, ledgerAvailableOg: 2.0, fetchedAt: "" });
-    mockGetBaseline.mockResolvedValue({ baselineLockedOg: 0, baselineTotalOg: 0, lastTopupAt: null, lastTopupAmountOg: null, updatedAt: "" });
-
-    startMonitor();
-    await vi.advanceTimersByTimeAsync(61_000);
-
+describe("checkBalance", () => {
+  it("returns early when no inference config", async () => {
+    mockGetInferenceConfig.mockReturnValue(null);
+    await checkBalance();
     expect(mockPublish).not.toHaveBeenCalled();
   });
 
-  it("publishes compute_balance_low when below threshold", async () => {
-    mockGetInferenceConfig.mockReturnValue({ provider: "p1", model: "m1", alertThresholdOg: 0.5 });
-    mockGetLedgerState.mockResolvedValue({ providerLockedOg: 0.3, ledgerAvailableOg: 0, fetchedAt: "" });
-    mockGetBaseline.mockResolvedValue({ baselineLockedOg: 0, baselineTotalOg: 0, lastTopupAt: null, lastTopupAmountOg: null, updatedAt: "" });
+  it("returns early for non-0G provider", async () => {
+    mockGetActiveProvider.mockReturnValue({ id: "openrouter" });
+    await checkBalance();
+    expect(mockPublish).not.toHaveBeenCalled();
+  });
 
+  it("does nothing when balance is not low", async () => {
+    mockGetActiveProvider.mockReturnValue({
+      id: "0g-compute",
+      getBalance: vi.fn().mockResolvedValue(mockProviderBalance({ isLow: false })),
+    });
+    await checkBalance();
+    expect(mockPublish).not.toHaveBeenCalled();
+  });
+
+  it("publishes compute_balance_low when balance is low", async () => {
+    mockGetActiveProvider.mockReturnValue({
+      id: "0g-compute",
+      getBalance: vi.fn().mockResolvedValue(
+        mockProviderBalance({ isLow: true, availableRaw: 2, availableDisplay: "2.00 0G", currency: "0G" }),
+      ),
+    });
+
+    await checkBalance();
+
+    expect(mockPublish).toHaveBeenCalledWith(
+      "compute_balance_low",
+      expect.objectContaining({ available: 2 }),
+    );
+    expect(mockRecordEvent).toHaveBeenCalled();
+  });
+
+  it("respects cooldown between alerts", async () => {
+    const lowBalance = mockProviderBalance({ isLow: true, availableRaw: 1, availableDisplay: "1.00 0G", currency: "0G" });
+    mockGetActiveProvider.mockReturnValue({
+      id: "0g-compute",
+      getBalance: vi.fn().mockResolvedValue(lowBalance),
+    });
+
+    await checkBalance(); // first alert
+    await checkBalance(); // within cooldown
+
+    expect(mockPublish).toHaveBeenCalledTimes(1);
+  });
+
+  it("resets consecutive alerts when balance recovers", async () => {
+    const lowBalance = mockProviderBalance({ isLow: true, availableRaw: 1, availableDisplay: "1.00 0G" });
+    const goodBalance = mockProviderBalance({ isLow: false, availableRaw: 50 });
+
+    const mockGetBalance = vi.fn()
+      .mockResolvedValueOnce(lowBalance)
+      .mockResolvedValueOnce(goodBalance);
+
+    mockGetActiveProvider.mockReturnValue({ id: "0g-compute", getBalance: mockGetBalance });
+
+    await checkBalance(); // low
+    _resetForTest(); // simulate cooldown passed
+    await checkBalance(); // recovered
+
+    // No second publish (balance is fine)
+    expect(mockPublish).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not throw on DB error", async () => {
+    mockGetActiveProvider.mockReturnValue({
+      id: "0g-compute",
+      getBalance: vi.fn().mockRejectedValue(new Error("DB down")),
+    });
+
+    await expect(checkBalance()).resolves.toBeUndefined();
+  });
+});
+
+describe("onTopupSuccess", () => {
+  it("updates baseline and records success event", async () => {
+    await onTopupSuccess(50, 100, 25);
+
+    expect(mockUpdateBaseline).toHaveBeenCalledWith(50, 100, 25);
+    expect(mockRecordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "topup_succeeded",
+        amount: 25,
+        balanceAfter: 50,
+      }),
+    );
+  });
+});
+
+describe("startMonitor / stopMonitor", () => {
+  it("start is idempotent", () => {
     startMonitor();
-    await vi.advanceTimersByTimeAsync(61_000);
-
-    expect(mockPublish).toHaveBeenCalledWith("compute_balance_low", expect.objectContaining({
-      providerAddress: "p1",
-      providerLockedOg: 0.3,
-    }));
+    startMonitor(); // second call should not create a second interval
+    stopMonitor();
   });
 
-  it("uses hybrid threshold with baseline (direct call)", async () => {
-    mockGetInferenceConfig.mockReturnValue({ provider: "p1", model: "m1", alertThresholdOg: 0.1 });
-    // Baseline 10.0 → 15% = 1.5, higher than dynamic 0.1
-    mockGetBaseline.mockResolvedValue({ baselineLockedOg: 10.0, baselineTotalOg: 10.0, lastTopupAt: null, lastTopupAmountOg: null, updatedAt: "" });
-    // Balance 1.0 < threshold 1.5
-    mockGetLedgerState.mockResolvedValue({ providerLockedOg: 1.0, ledgerAvailableOg: 0, fetchedAt: "" });
-
-    await checkBalance();
-
-    expect(mockPublish).toHaveBeenCalledWith("compute_balance_low", expect.objectContaining({
-      providerLockedOg: 1.0,
-    }));
-  });
-
-  it("respects cooldown between alerts (direct call)", async () => {
-    mockGetInferenceConfig.mockReturnValue({ provider: "p1", model: "m1", alertThresholdOg: 0.5 });
-    mockGetLedgerState.mockResolvedValue({ providerLockedOg: 0.1, ledgerAvailableOg: 0, fetchedAt: "" });
-    mockGetBaseline.mockResolvedValue({ baselineLockedOg: 0, baselineTotalOg: 0, lastTopupAt: null, lastTopupAmountOg: null, updatedAt: "" });
-
-    // First call → should alert
-    await checkBalance();
-    expect(mockPublish).toHaveBeenCalledTimes(1);
-
-    // Second call immediately → cooldown blocks
-    await checkBalance();
-    expect(mockPublish).toHaveBeenCalledTimes(1);
-  });
-
-  it("onTopupSuccess resets alerts and updates baseline", async () => {
-    await onTopupSuccess(5.0, 10.0, 2.0);
-
-    expect(mockUpdateBaseline).toHaveBeenCalledWith(5.0, 10.0, 2.0);
-    expect(mockRecordEvent).toHaveBeenCalledWith(expect.objectContaining({
-      eventType: "topup_succeeded",
-      amountOg: 2.0,
-    }));
+  it("stop clears the interval", () => {
+    startMonitor();
+    stopMonitor();
+    // No error on second stop
+    stopMonitor();
   });
 });

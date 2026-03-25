@@ -4,7 +4,7 @@
   <img src="./new_echo_text.png" alt="EchoClaw" width="760" />
 </p>
 
-> Autonomous AI trading agent powered by 0G Compute, with Postgres persistence, Tavily web search, native OpenAI function calling, and deep EchoClaw CLI integration.
+> Autonomous AI trading agent with pluggable inference providers (OpenRouter, 0G Compute), Postgres persistence, Tavily web search, native OpenAI function calling, and deep EchoClaw CLI integration.
 >
 > **This file must be updated whenever agent architecture changes.** It is the single source of truth for how the agent system works.
 

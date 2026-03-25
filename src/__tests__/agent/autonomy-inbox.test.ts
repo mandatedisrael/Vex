@@ -1,109 +1,147 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mockInboxEvent } from "./_fixtures.js";
 
-// Mock DB layer
-const mockQuery = vi.fn(async () => []);
-const mockExecute = vi.fn(async () => {});
+const mockPublishRepo = vi.fn();
+const mockConsumePending = vi.fn();
+const mockPeekPending = vi.fn();
 
-vi.mock("../../agent/db/client.js", () => ({
-  query: (...args: unknown[]) => mockQuery(...args),
-  execute: (...args: unknown[]) => mockExecute(...args),
+vi.mock("../../agent/db/repos/inbox.js", () => ({
+  publish: (...args: unknown[]) => mockPublishRepo(...args),
+  consumePending: (...args: unknown[]) => mockConsumePending(...args),
+  peekPending: (...args: unknown[]) => mockPeekPending(...args),
 }));
 vi.mock("../../utils/logger.js", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { publish, consumeAll, peek, formatEventsForContext } from "../../agent/autonomy-inbox.js";
-import type { AutonomyInboxEvent } from "../../agent/types.js";
+const { publish, consumeAll, peek, formatEventsForContext } = await import(
+  "../../agent/autonomy-inbox.js"
+);
 
-describe("autonomy-inbox", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+beforeEach(() => { vi.clearAllMocks(); });
+
+// ── publish ─────────────────────────────────────────────────────────
+
+describe("publish", () => {
+  it("delegates to inbox repo", async () => {
+    mockPublishRepo.mockResolvedValue(undefined);
+    await publish("compute_balance_low", { message: "Low balance" });
+    expect(mockPublishRepo).toHaveBeenCalledWith("compute_balance_low", { message: "Low balance" });
   });
 
-  describe("publish", () => {
-    it("inserts event into DB", async () => {
-      await publish("compute_balance_low", { threshold: 0.5 });
-      expect(mockExecute).toHaveBeenCalledOnce();
-      const [sql, params] = mockExecute.mock.calls[0] as [string, unknown[]];
-      expect(sql).toContain("INSERT INTO autonomy_inbox");
-      expect(params[0]).toBe("compute_balance_low");
-      expect(JSON.parse(params[1] as string)).toEqual({ threshold: 0.5 });
-    });
-
-    it("does not throw on DB failure", async () => {
-      mockExecute.mockRejectedValueOnce(new Error("DB down"));
-      await expect(publish("external_alert", {})).resolves.toBeUndefined();
-    });
+  it("does not throw on repo error (fire-and-forget)", async () => {
+    mockPublishRepo.mockRejectedValue(new Error("DB down"));
+    await expect(publish("external_alert", {})).resolves.toBeUndefined();
   });
 
-  describe("consumeAll", () => {
-    it("returns empty array when no events", async () => {
-      mockQuery.mockResolvedValueOnce([]);
-      const events = await consumeAll();
-      expect(events).toEqual([]);
-    });
+  it("defaults payload to empty object", async () => {
+    mockPublishRepo.mockResolvedValue(undefined);
+    await publish("subagent_completed");
+    expect(mockPublishRepo).toHaveBeenCalledWith("subagent_completed", {});
+  });
+});
 
-    it("uses CTE with FOR UPDATE SKIP LOCKED", async () => {
-      mockQuery.mockResolvedValueOnce([]);
-      await consumeAll();
-      const sql = mockQuery.mock.calls[0]?.[0] as string;
-      expect(sql).toContain("FOR UPDATE SKIP LOCKED");
-      expect(sql).toContain("LIMIT");
-    });
+// ── consumeAll ──────────────────────────────────────────────────────
 
-    it("sorts results by createdAt in app code", async () => {
-      mockQuery.mockResolvedValueOnce([
-        { id: 2, event_type: "subagent_completed", payload: "{}", consumed: true, created_at: new Date("2026-03-24T10:01:00Z") },
-        { id: 1, event_type: "compute_balance_low", payload: "{}", consumed: true, created_at: new Date("2026-03-24T10:00:00Z") },
-      ]);
-      const events = await consumeAll();
-      expect(events[0].id).toBe(1);
-      expect(events[1].id).toBe(2);
-    });
-
-    it("returns empty on DB error", async () => {
-      mockQuery.mockRejectedValueOnce(new Error("DB down"));
-      const events = await consumeAll();
-      expect(events).toEqual([]);
-    });
+describe("consumeAll", () => {
+  it("returns consumed events", async () => {
+    const events = [mockInboxEvent(), mockInboxEvent({ id: 2 })];
+    mockConsumePending.mockResolvedValue(events);
+    const result = await consumeAll();
+    expect(result).toHaveLength(2);
   });
 
-  describe("formatEventsForContext", () => {
-    it("returns empty string for no events", () => {
-      expect(formatEventsForContext([])).toBe("");
-    });
+  it("returns empty array on error", async () => {
+    mockConsumePending.mockRejectedValue(new Error("DB error"));
+    const result = await consumeAll();
+    expect(result).toEqual([]);
+  });
 
-    it("formats compute_balance_low event", () => {
-      const events: AutonomyInboxEvent[] = [{
-        id: 1, eventType: "compute_balance_low",
-        payload: { message: "Balance critically low" },
-        consumed: true, createdAt: "2026-03-24T10:00:00Z",
-      }];
-      const result = formatEventsForContext(events);
-      expect(result).toContain("[COMPUTE BALANCE ALERT]");
-      expect(result).toContain("Balance critically low");
-    });
+  it("returns empty array when no events", async () => {
+    mockConsumePending.mockResolvedValue([]);
+    const result = await consumeAll();
+    expect(result).toEqual([]);
+  });
+});
 
-    it("formats subagent_completed event", () => {
-      const events: AutonomyInboxEvent[] = [{
-        id: 2, eventType: "subagent_completed",
-        payload: { name: "EchoSpark", summary: "Found 3 opportunities" },
-        consumed: true, createdAt: "2026-03-24T10:00:00Z",
-      }];
-      const result = formatEventsForContext(events);
-      expect(result).toContain("[SUBAGENT COMPLETED]");
-      expect(result).toContain("EchoSpark");
-    });
+// ── peek ────────────────────────────────────────────────────────────
 
-    it("wraps events in markers", () => {
-      const events: AutonomyInboxEvent[] = [{
-        id: 1, eventType: "external_alert",
-        payload: { message: "Test" },
-        consumed: true, createdAt: "2026-03-24T10:00:00Z",
-      }];
-      const result = formatEventsForContext(events);
-      expect(result).toContain("--- Autonomy Events ---");
-      expect(result).toContain("--- End Events ---");
-    });
+describe("peek", () => {
+  it("returns pending events without consuming", async () => {
+    const events = [mockInboxEvent()];
+    mockPeekPending.mockResolvedValue(events);
+    const result = await peek();
+    expect(result).toHaveLength(1);
+  });
+
+  it("returns empty array on error", async () => {
+    mockPeekPending.mockRejectedValue(new Error("fail"));
+    const result = await peek();
+    expect(result).toEqual([]);
+  });
+});
+
+// ── formatEventsForContext ───────────────────────────────────────────
+
+describe("formatEventsForContext", () => {
+  it("returns empty string for empty array", () => {
+    expect(formatEventsForContext([])).toBe("");
+  });
+
+  it("formats compute_balance_low event", () => {
+    const events = [mockInboxEvent({
+      eventType: "compute_balance_low",
+      payload: { message: "Balance is 2.5 0G" },
+    })];
+    const result = formatEventsForContext(events);
+    expect(result).toContain("[BALANCE ALERT]");
+    expect(result).toContain("Balance is 2.5 0G");
+  });
+
+  it("formats subagent_completed event", () => {
+    const events = [mockInboxEvent({
+      eventType: "subagent_completed",
+      payload: { name: "EchoSpark", summary: "Analysis done" },
+    })];
+    const result = formatEventsForContext(events);
+    expect(result).toContain("[SUBAGENT COMPLETED]");
+    expect(result).toContain("EchoSpark");
+  });
+
+  it("formats external_alert event", () => {
+    const events = [mockInboxEvent({
+      eventType: "external_alert",
+      payload: { message: "Price alert" },
+    })];
+    const result = formatEventsForContext(events);
+    expect(result).toContain("[ALERT]");
+    expect(result).toContain("Price alert");
+  });
+
+  it("formats unknown event type with JSON", () => {
+    const events = [mockInboxEvent({
+      eventType: "unknown_type" as any,
+      payload: { data: 42 },
+    })];
+    const result = formatEventsForContext(events);
+    expect(result).toContain("[EVENT]");
+    expect(result).toContain("unknown_type");
+  });
+
+  it("wraps with Autonomy Events markers", () => {
+    const events = [mockInboxEvent({ eventType: "external_alert", payload: { message: "test" } })];
+    const result = formatEventsForContext(events);
+    expect(result).toContain("--- Autonomy Events ---");
+    expect(result).toContain("--- End Events ---");
+  });
+
+  it("handles multiple events with line breaks", () => {
+    const events = [
+      mockInboxEvent({ id: 1, eventType: "external_alert", payload: { message: "first" } }),
+      mockInboxEvent({ id: 2, eventType: "external_alert", payload: { message: "second" } }),
+    ];
+    const result = formatEventsForContext(events);
+    expect(result).toContain("first");
+    expect(result).toContain("second");
   });
 });
