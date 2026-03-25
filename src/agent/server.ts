@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { AGENT_DEFAULT_PORT, AGENT_PID_FILE, AGENT_DIR, PACKAGE_ROOT } from "./constants.js";
 import { runMigrations } from "./db/migrate.js";
 import { closePool } from "./db/client.js";
-import { seedSkills } from "./db/repos/skills.js";
+
 import { initEngine, createSession, processMessage } from "./engine.js";
 import * as sessionsRepo from "./db/repos/sessions.js";
 import { registerChatRoutes } from "./handlers/chat.js";
@@ -136,13 +136,12 @@ export async function startAgentServer(port?: number, writePid = false): Promise
   // 1. Database: migrate + seed skills
   logger.info("[agent] running database migrations...");
   await runMigrations();
-  logger.info("[agent] seeding skill references...");
-  await seedSkills();
+  // TODO: Skill references removed — discover+execute tool routing will replace them
 
   // 2. Engine init
   const engineReady = await initEngine();
   if (!engineReady) {
-    logger.error("[agent] Engine failed to initialize — compute not configured?");
+    logger.error("[agent] Engine failed to initialize — inference provider not configured?");
     process.exit(1);
   }
 

@@ -93,6 +93,10 @@ const INTERNAL: ToolDef[] = [
     }, required: ["id"] } },
 ];
 
+// TODO: Add discover_tools and execute_tool internal tools here
+// These will replace the 130+ CLI tools with on-demand routing via tool-groups/
+// See tool-groups/README.md for architecture details
+
 // ── Registry API ────────────────────────────────────────────────────
 
 export const TOOLS: readonly ToolDef[] = [...INTERNAL, ...CLI_TOOLS];

@@ -35,6 +35,8 @@ export type InternalToolType =
 export interface InternalToolCall {
   type: InternalToolType;
   params: Record<string, unknown>;
+  /** Tool call ID from the model — must be preserved for round-trip */
+  toolCallId?: string;
 }
 
 // ── Messages ─────────────────────────────────────────────────────────
@@ -105,7 +107,7 @@ export interface RequestUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
-  costOg: number;
+  cost: number;
 }
 
 export interface UsageState {
@@ -163,7 +165,7 @@ export interface LoopCycleRecord {
   phasesCompleted: LoopPhase[];
   outcome: "completed" | "skipped" | "error" | "timeout";
   decisions: Record<string, unknown>;
-  tokenCostOg: number;
+  tokenCost: number;
   errorMessage: string | null;
 }
 
@@ -183,7 +185,7 @@ export interface SubagentState {
   endedAt: string | null;
   result: string | null;
   error: string | null;
-  tokenCostOg: number;
+  tokenCost: number;
   iterations: number;
   maxIterations: number;
 }
@@ -206,10 +208,10 @@ export interface AutonomyInboxEvent {
 // ── Funding Baseline ──────────────────────────────────────────────────
 
 export interface FundingBaseline {
-  baselineLockedOg: number;
-  baselineTotalOg: number;
+  baselineLocked: number;
+  baselineTotal: number;
   lastTopupAt: string | null;
-  lastTopupAmountOg: number | null;
+  lastTopupAmount: number | null;
   updatedAt: string;
 }
 
@@ -224,9 +226,9 @@ export interface TopupHistoryEntry {
   id: number;
   eventType: TopupEventType;
   action: string | null;
-  amountOg: number | null;
-  balanceBeforeOg: number | null;
-  balanceAfterOg: number | null;
+  amount: number | null;
+  balanceBefore: number | null;
+  balanceAfter: number | null;
   source: "auto" | "manual";
   error: string | null;
   metadata: Record<string, unknown>;
@@ -409,6 +411,8 @@ export interface JsonSchema {
 
 /** Parsed tool call from model output (OpenAI-compatible). */
 export interface ParsedToolCall {
+  /** Upstream tool call ID — must be preserved for round-trip with provider */
+  id?: string;
   name: string;
   arguments: Record<string, unknown>;
 }
@@ -427,22 +431,12 @@ export interface InferenceConfig {
   model: string;
   endpoint: string;
   contextLimit: number;
-  /** Price per 1M input tokens in 0G (from provider metadata). */
+  /** Price per 1M input tokens (currency depends on provider). */
   inputPricePerM: number;
-  /** Price per 1M output tokens in 0G (from provider metadata). */
+  /** Price per 1M output tokens (currency depends on provider). */
   outputPricePerM: number;
-  /** Recommended minimum locked balance in 0G. */
-  recommendedMinLockedOg: number;
-  /** Alert threshold (recommendedMin * 1.2). */
-  alertThresholdOg: number;
-}
-
-export interface LedgerBalance {
-  ledgerTotalOg: number;
-  ledgerAvailableOg: number;
-  providerLockedOg: number;
-  providerPendingRefundOg: number;
-  fetchedAt: string;
+  /** Currency for pricing: "0G", "USD", etc. */
+  priceCurrency: string;
 }
 
 export interface StreamChunk {

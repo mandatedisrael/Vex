@@ -17,7 +17,7 @@ import * as soulRepo from "./db/repos/soul.js";
 import * as memoryRepo from "./db/repos/memory.js";
 import * as messagesRepo from "./db/repos/messages.js";
 import * as knowledgeRepo from "./db/repos/knowledge.js";
-import * as skillsRepo from "./db/repos/skills.js";
+
 import * as tradesRepo from "./db/repos/trades.js";
 import { deriveTradeIdFromTrade } from "./trade-capture.js";
 import { normalizePortfolioChain } from "./portfolio-chains.js";
@@ -43,7 +43,7 @@ function str(params: Record<string, unknown>, key: string): string {
 
 export async function processInternalTools(tools: InternalToolCall[], session: ConversationSession, emit: EventEmitter, loopMode: ChatMode = "off"): Promise<void> {
   for (const tool of tools) {
-    const toolCallId = generateId("call");
+    const toolCallId = tool.toolCallId ?? generateId("call");
     const startTime = Date.now();
     emit({ type: "tool_start", data: { id: toolCallId, command: tool.type, args: tool.params } });
 
@@ -70,6 +70,16 @@ export async function processInternalTools(tools: InternalToolCall[], session: C
       const msg = err instanceof Error ? err.message : String(err);
       logger.warn("agent.internal_tool.failed", { command: tool.type, error: msg });
       result = { output: msg, success: false };
+    }
+
+    // Ensure any tool messages pushed by handlers carry the correct toolCallId
+    for (let i = session.messages.length - 1; i >= 0; i--) {
+      const m = session.messages[i];
+      if (m.role === "tool" && !m.toolCallId) {
+        m.toolCallId = toolCallId;
+        break;
+      }
+      if (m.role !== "tool") break;
     }
 
     emit({ type: "tool_result", data: { id: toolCallId, command: tool.type, success: result.success, output: result.output.slice(0, SSE_TOOL_OUTPUT_LIMIT), durationMs: Date.now() - startTime } });
@@ -103,12 +113,10 @@ async function handleFileRead(tool: InternalToolCall, session: ConversationSessi
   const isPreview = tool.params.preview === true;
   if (!path) return { output: "Missing path", success: false };
 
-  let content = await knowledgeRepo.getFile(path);
-  const isSkillRef = !content;
-  if (!content) content = await skillsRepo.getSkillReference(path);
+  const content = await knowledgeRepo.getFile(path);
   if (!content) return { output: `Not found: ${path}`, success: false };
 
-  if (isPreview && !isSkillRef) {
+  if (isPreview) {
     const previewText = content.length > PREVIEW_CHAR_LIMIT
       ? content.slice(0, PREVIEW_CHAR_LIMIT) + "\n\n... (preview — use file_read without preview to load full file)"
       : content;

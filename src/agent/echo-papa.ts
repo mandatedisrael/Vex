@@ -25,7 +25,6 @@ import * as messagesRepo from "./db/repos/messages.js";
 import * as usageRepo from "./db/repos/usage.js";
 import * as memoryRepo from "./db/repos/memory.js";
 import * as knowledgeRepo from "./db/repos/knowledge.js";
-import * as skillsRepo from "./db/repos/skills.js";
 import logger from "../utils/logger.js";
 
 // ── Constants ────────────────────────────────────────────────────────
@@ -137,7 +136,7 @@ async function dispatchTool(
     case "file_read": {
       const path = str("path");
       if (!path) return "Missing path";
-      const content = await knowledgeRepo.getFile(path) ?? await skillsRepo.getSkillReference(path);
+      const content = await knowledgeRepo.getFile(path);
       if (!content) return `Not found: ${path}`;
       filesReadThisCycle.add(path);
       session.loadedKnowledge.set(path, content);
@@ -249,9 +248,9 @@ export async function runEchoPapaCycle(): Promise<{ success: boolean; result: st
       const response = await inferWithTools(config, messages, papaTools);
 
       // Log usage
-      const costOg = (response.usage.promptTokens / 1_000_000) * config.inputPricePerM
-                    + (response.usage.completionTokens / 1_000_000) * config.outputPricePerM;
-      await usageRepo.logUsage(session.id, response.usage.promptTokens, response.usage.completionTokens, costOg);
+      const cost = (response.usage.promptTokens / 1_000_000) * config.inputPricePerM
+                 + (response.usage.completionTokens / 1_000_000) * config.outputPricePerM;
+      await usageRepo.logUsage(session.id, response.usage.promptTokens, response.usage.completionTokens, cost, config.provider, config.priceCurrency);
       totalTokens += response.usage.promptTokens + response.usage.completionTokens;
 
       // If text response (no tool calls) — done

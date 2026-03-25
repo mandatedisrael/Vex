@@ -1,5 +1,8 @@
 /**
  * Tests for mode-based tool filtering via proactive flag.
+ *
+ * CLI tools have been removed (discover+execute routing).
+ * Only internal tools remain in the registry.
  */
 
 import { describe, it, expect } from "vitest";
@@ -19,20 +22,14 @@ describe("toOpenAITools mode filtering", () => {
     expect(restricted.length).toBe(TOOLS.length);
   });
 
-  it("filters proactive tools when chatMode is 'off'", () => {
-    const off = toOpenAITools("off");
-    expect(off.length).toBeLessThan(TOOLS.length);
-  });
-
   it("defaults to 'off' mode when no mode passed", () => {
     const defaultTools = toOpenAITools();
     const offTools = toOpenAITools("off");
     expect(defaultTools.length).toBe(offTools.length);
   });
 
-  // Tools that MUST be available in manual mode
+  // Internal tools that MUST be available in all modes
   const mustBeAvailable = [
-    "wallet_balance",
     "web_search",
     "web_fetch",
     "file_read",
@@ -52,42 +49,16 @@ describe("toOpenAITools mode filtering", () => {
     });
   }
 
-  // Tools that MUST be filtered in manual mode
-  const mustBeFiltered = [
-    "solana_browse",
-    "dexscreener_trending",
-    "dexscreener_profiles",
-    "dexscreener_boosts",
-    "dexscreener_stream",
-    "slop-app_agents_trending",
-    "slop-app_agents_newest",
-  ];
-
-  for (const name of mustBeFiltered) {
-    it(`filters ${name} in 'off' mode`, () => {
-      expect(toolNames("off")).not.toContain(name);
-    });
-
-    it(`keeps ${name} in 'full' mode`, () => {
-      expect(toolNames("full")).toContain(name);
-    });
-  }
+  it("only contains internal tools (no CLI tools)", () => {
+    const all = toOpenAITools("full");
+    // All remaining tools should be internal — no CLI pass-through tools
+    expect(all.length).toBeGreaterThan(0);
+    expect(all.length).toBeLessThanOrEqual(20); // Internal tools only
+  });
 });
 
 describe("proactive flag on ToolDef", () => {
   const getDef = (name: string) => TOOLS.find(t => t.name === name);
-
-  it("solana_browse has proactive=true", () => {
-    expect(getDef("solana_browse")?.proactive).toBe(true);
-  });
-
-  it("dexscreener_trending has proactive=true", () => {
-    expect(getDef("dexscreener_trending")?.proactive).toBe(true);
-  });
-
-  it("wallet_balance does NOT have proactive=true", () => {
-    expect(getDef("wallet_balance")?.proactive).toBeFalsy();
-  });
 
   it("trade_log does NOT have proactive=true", () => {
     expect(getDef("trade_log")?.proactive).toBeFalsy();

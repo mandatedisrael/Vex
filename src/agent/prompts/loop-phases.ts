@@ -14,8 +14,6 @@ const PHASE_PROMPTS: Record<LoopPhase, string> = {
 
   sense: `[ECHO LOOP — SENSE PHASE]
 
-CRITICAL: Before calling ANY CLI tool, you MUST first file_read its reference doc. Never guess command arguments or flags. See the Skill Router in your system prompt for the correct reference file path.
-
 Scan the current state. Be brief and factual:
 1. Check portfolio balances across all active chains
 2. Check open positions and their current P&L
@@ -45,12 +43,9 @@ Based on the assessment above, decide on specific actions:
 3. If no action is warranted, respond with: [NO ACTION]
 
 You have full tool access. If you decide to act, the next phase will execute.
-IMPORTANT: If you plan to use CLI tools in the execute phase, ensure you have already loaded their reference docs via file_read. If not, load them now.
 Be decisive — don't hedge unnecessarily.`,
 
   execute: `[ECHO LOOP — EXECUTE PHASE]
-
-BEFORE executing: verify you have loaded the reference doc for each CLI tool you plan to use (via file_read). If you haven't, load it FIRST. Never guess CLI syntax — wrong flags waste time and cause failures.
 
 Execute the decisions from the previous phase. For each action:
 1. Use the appropriate tools

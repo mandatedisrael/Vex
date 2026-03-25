@@ -12,7 +12,7 @@ import { cn } from "../utils";
 interface ChatViewProps {
   status: AgentStatus | null;
   onRefreshStatus: () => void;
-  onBurnStateChange?: (burn: { sessionCostOg: number; ledgerLockedOg: number | null; estimatedRemaining: number; isLowBalance: boolean; model: string | null }) => void;
+  onBurnStateChange?: (burn: { sessionCost: number; providerBalance: number | null; estimatedRemaining: number; isLowBalance: boolean; model: string | null; priceCurrency: string }) => void;
   onSessionIdChange?: (id: string | undefined) => void;
 }
 
@@ -26,8 +26,9 @@ export const ChatView: FC<ChatViewProps> = ({ status, onRefreshStatus, onBurnSta
   // Propagate burnState and sessionId to parent
   useEffect(() => {
     onBurnStateChange?.({
-      sessionCostOg: burnState.sessionCostOg,
-      ledgerLockedOg: burnState.ledgerLockedOg,
+      sessionCost: burnState.sessionCost,
+      providerBalance: burnState.providerBalance,
+      priceCurrency: burnState.priceCurrency,
       estimatedRemaining: burnState.estimatedRemaining,
       isLowBalance: burnState.isLowBalance,
       model: burnState.model,
@@ -221,11 +222,12 @@ export const ChatView: FC<ChatViewProps> = ({ status, onRefreshStatus, onBurnSta
         
         <div className="mt-3">
           <BurnIndicator
-            sessionCostOg={burnState.sessionCostOg || status?.usage.sessionCost || 0}
-            ledgerLockedOg={burnState.ledgerLockedOg}
+            sessionCost={burnState.sessionCost || status?.usage.sessionCost || 0}
+            providerBalance={burnState.providerBalance}
             estimatedRemaining={burnState.estimatedRemaining}
             isLowBalance={burnState.isLowBalance}
             model={burnState.model || status?.model || null}
+            priceCurrency={burnState.priceCurrency}
           />
         </div>
       </div>

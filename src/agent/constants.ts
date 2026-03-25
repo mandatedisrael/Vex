@@ -65,9 +65,7 @@ export const AUTO_BACKUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 export const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-// ── Skills reference path ────────────────────────────────────────────
-
-export const SKILLS_REFERENCES_DIR = join(PACKAGE_ROOT, "skills", "echoclaw", "references");
+// ── Skills reference path (removed — discover+execute routing) ───────
 
 // ── Database ─────────────────────────────────────────────────────────
 

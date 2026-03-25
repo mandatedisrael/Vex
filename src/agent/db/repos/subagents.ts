@@ -25,16 +25,16 @@ export async function insert(subagent: {
 export async function updateStatus(
   id: string,
   status: SubagentStatus,
-  extra?: { result?: string; error?: string; tokenCostOg?: number; iterations?: number },
+  extra?: { result?: string; error?: string; tokenCost?: number; iterations?: number },
 ): Promise<void> {
   const ended = status !== "running" ? "NOW()" : "ended_at";
   await execute(
     `UPDATE subagents SET status = $1, ended_at = ${ended},
      result = COALESCE($2, result), error = COALESCE($3, error),
-     token_cost_og = COALESCE($4, token_cost_og), iterations = COALESCE($5, iterations)
+     token_cost = COALESCE($4, token_cost), iterations = COALESCE($5, iterations)
      WHERE id = $6`,
     [status, extra?.result ?? null, extra?.error ?? null,
-     extra?.tokenCostOg ?? null, extra?.iterations ?? null, id],
+     extra?.tokenCost ?? null, extra?.iterations ?? null, id],
   );
 }
 
@@ -84,7 +84,7 @@ function mapRow(row: Record<string, unknown>): SubagentState {
     endedAt: row.ended_at ? (row.ended_at as Date).toISOString() : null,
     result: row.result as string | null,
     error: row.error as string | null,
-    tokenCostOg: Number(row.token_cost_og ?? 0),
+    tokenCost: Number(row.token_cost ?? 0),
     iterations: row.iterations as number,
     maxIterations: row.max_iterations as number,
   };

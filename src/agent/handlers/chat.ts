@@ -32,7 +32,7 @@ export function registerChatRoutes(): void {
     const { message, loopMode, sessionId: requestSessionId } = parsed;
     const session = await hydrateSession(requestSessionId) ?? createSession();
     if (!session) {
-      errorResponse(res, 503, "NOT_READY", "Agent not initialized — compute not configured");
+      errorResponse(res, 503, "NOT_READY", "Agent not initialized — inference provider not configured");
       return;
     }
 

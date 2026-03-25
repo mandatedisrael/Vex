@@ -72,9 +72,6 @@ vi.mock("../../agent/db/repos/knowledge.js", () => ({
   fileCount: vi.fn().mockResolvedValue(0),
 }));
 
-vi.mock("../../agent/db/repos/skills.js", () => ({
-  getSkillReference: vi.fn().mockResolvedValue(null),
-}));
 
 vi.mock("../../utils/logger.js", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },

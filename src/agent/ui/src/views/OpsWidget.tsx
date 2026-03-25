@@ -207,11 +207,10 @@ export const OpsWidget: FC<OpsWidgetProps> = ({ onBack }) => {
           billing ? (
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Model</span><span className="text-foreground font-medium">{billing.model}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Ledger Available</span><span className="text-foreground">{billing.ledgerAvailableOg.toFixed(4)} 0G</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Provider Locked</span><span className="text-foreground">{billing.providerLockedOg.toFixed(4)} 0G</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Session Burn</span><span className="text-foreground">{billing.sessionBurnOg.toFixed(6)} 0G</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Lifetime Burn</span><span className="text-foreground">{billing.lifetimeBurnOg.toFixed(4)} 0G</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Avg Cost/Request</span><span className="text-foreground">{billing.avgCostPerRequest.toFixed(6)} 0G</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Provider Balance</span><span className="text-foreground">{billing.providerBalance.toFixed(4)} {billing.providerCurrency}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Session Cost</span><span className="text-foreground">{billing.sessionBurn.toFixed(6)} {billing.providerCurrency}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Lifetime Cost</span><span className="text-foreground">{billing.lifetimeBurn.toFixed(4)} {billing.providerCurrency}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Avg Cost/Request</span><span className="text-foreground">{billing.avgCostPerRequest.toFixed(6)} {billing.providerCurrency}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Est. Remaining</span><span className="text-foreground">~{billing.estimatedRequestsRemaining} requests</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Pricing (in/out per M)</span><span className="text-foreground">{billing.pricing.inputPerM} / {billing.pricing.outputPerM}</span></div>
               {billing.isLowBalance && <div className="text-status-error text-xs font-medium mt-2">Low balance warning active</div>}

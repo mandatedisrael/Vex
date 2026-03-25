@@ -11,13 +11,15 @@ export type { ToolCallState };
 
 export interface BurnState {
   requestTokens: number;
-  requestCostOg: number;
+  requestCost: number;
   sessionTokens: number;
-  sessionCostOg: number;
-  ledgerLockedOg: number | null;
+  sessionCost: number;
+  providerBalance: number | null;
   estimatedRemaining: number;
   isLowBalance: boolean;
   model: string | null;
+  priceCurrency: string;
+  providerName: string | null;
 }
 
 export type Activity = "idle" | "thinking" | "executing" | "error";
@@ -31,10 +33,11 @@ export interface PendingApproval {
 }
 
 const INITIAL_BURN: BurnState = {
-  requestTokens: 0, requestCostOg: 0,
-  sessionTokens: 0, sessionCostOg: 0,
-  ledgerLockedOg: null, estimatedRemaining: 0,
+  requestTokens: 0, requestCost: 0,
+  sessionTokens: 0, sessionCost: 0,
+  providerBalance: null, estimatedRemaining: 0,
   isLowBalance: false, model: null,
+  priceCurrency: "", providerName: null,
 };
 
 const SESSION_STORAGE_KEY = "echo_agent_session_id";
@@ -196,17 +199,19 @@ export function useAgentStream(onRefreshStatus: () => void, initialSessionId?: s
       case "usage":
         setBurnState(prev => ({
           requestTokens: (data.totalTokens as number) ?? 0,
-          requestCostOg: (data.costOg as number) ?? 0,
+          requestCost: (data.cost as number) ?? (data.costOg as number) ?? 0,
           sessionTokens: (data.sessionTotalTokens as number) ?? prev.sessionTokens,
-          sessionCostOg: (data.sessionTotalCostOg as number) ?? prev.sessionCostOg,
-          ledgerLockedOg: (data.ledgerLockedOg as number) ?? prev.ledgerLockedOg,
+          sessionCost: (data.sessionTotalCost as number) ?? (data.sessionTotalCostOg as number) ?? prev.sessionCost,
+          providerBalance: (data.providerBalance as number) ?? (data.ledgerLockedOg as number) ?? prev.providerBalance,
           estimatedRemaining: (data.estimatedRequestsRemaining as number) ?? prev.estimatedRemaining,
-          isLowBalance: prev.isLowBalance,
+          isLowBalance: (data.isLowBalance as boolean) ?? prev.isLowBalance,
           model: (data.model as string) ?? prev.model,
+          priceCurrency: (data.priceCurrency as string) ?? prev.priceCurrency,
+          providerName: (data.providerName as string) ?? prev.providerName,
         }));
         break;
       case "balance_low":
-        setBurnState(prev => ({ ...prev, isLowBalance: true, ledgerLockedOg: (data.ledgerLockedOg as number) ?? prev.ledgerLockedOg }));
+        setBurnState(prev => ({ ...prev, isLowBalance: true, providerBalance: (data.providerBalanceRaw as number) ?? (data.ledgerLockedOg as number) ?? prev.providerBalance }));
         break;
       case "file_update":
         appendPendingFile({

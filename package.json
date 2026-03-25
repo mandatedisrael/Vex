@@ -43,6 +43,7 @@
     "@grammyjs/auto-retry": "^2.0.2",
     "@hugeicons/core-free-icons": "^4.0.0",
     "@hugeicons/react": "^1.1.6",
+    "@openrouter/sdk": "^0.9.11",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@solana/spl-token": "^0.4.14",

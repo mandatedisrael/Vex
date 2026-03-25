@@ -1,16 +1,12 @@
 /**
- * Direct 0G Compute inference layer.
+ * Inference layer — provider-agnostic OpenAI-compatible HTTP transport.
  *
- * Uses the existing broker from broker-factory.ts to authenticate,
- * then sends OpenAI-compatible chat/completions requests directly
- * to the provider endpoint. Supports streaming via SSE.
+ * Delegates auth and config to the active InferenceProvider.
+ * Handles request building, streaming, tool calling, and retry logic.
  */
 
-import { getAuthenticatedBroker } from "../0g-compute/broker-factory.js";
-import { getServiceMetadata, listChatServices } from "../0g-compute/operations.js";
-import { loadComputeState } from "../0g-compute/readiness.js";
-import { calculateProviderPricing, formatPricePerMTokens } from "../0g-compute/pricing.js";
-import { DEFAULT_CONTEXT_LIMIT } from "./constants.js";
+import { resolveProvider, getActiveProvider } from "./providers/registry.js";
+import type { InferenceProvider } from "./providers/types.js";
 import type { Message, StreamChunk, InferenceConfig, InferenceResponse, ParsedToolCall } from "./types.js";
 import type { OpenAITool } from "./tool-registry.js";
 import { sanitizeContent } from "./tool-parser.js";
@@ -28,59 +24,16 @@ const INFERENCE_RETRY: RetryOptions = {
 export type { InferenceConfig, InferenceResponse, ParsedToolCall } from "./types.js";
 import logger from "../utils/logger.js";
 
-// ── Config resolution ────────────────────────────────────────────────
+// ── Config resolution (delegated to provider) ───────────────────────
 
 /**
- * Load inference config from compute state.
+ * Load inference config from the active provider.
  * Returns provider, model, endpoint, and context limit.
  */
 export async function loadInferenceConfig(): Promise<InferenceConfig | null> {
-  const state = loadComputeState();
-  if (!state) {
-    logger.warn("[agent] No compute state found — run echoclaw echo first");
-    return null;
-  }
-
-  try {
-    const broker = await getAuthenticatedBroker();
-    const metadata = await getServiceMetadata(broker, state.activeProvider);
-
-    // Dynamic pricing from provider (same approach as BalanceMonitor)
-    let inputPricePerM = 1.0;
-    let outputPricePerM = 3.2;
-    let recommendedMinLockedOg = 1.0;
-    let alertThresholdOg = 1.2;
-
-    try {
-      const services = await listChatServices(broker);
-      const svc = services.find(s => s.provider.toLowerCase() === state.activeProvider.toLowerCase());
-      if (svc) {
-        inputPricePerM = parseFloat(formatPricePerMTokens(svc.inputPrice));
-        outputPricePerM = parseFloat(formatPricePerMTokens(svc.outputPrice));
-        const pricing = calculateProviderPricing(svc.inputPrice, svc.outputPrice);
-        recommendedMinLockedOg = pricing.recommendedMinLockedOg;
-        alertThresholdOg = pricing.recommendedAlertLockedOg;
-        logger.info(`[agent] pricing loaded: ${inputPricePerM}/M in, ${outputPricePerM}/M out, min: ${recommendedMinLockedOg.toFixed(2)} 0G`);
-      }
-    } catch {
-      logger.warn("[agent] could not load provider pricing, using defaults");
-    }
-
-    return {
-      provider: state.activeProvider,
-      model: state.model ?? metadata.model,
-      endpoint: metadata.endpoint,
-      contextLimit: DEFAULT_CONTEXT_LIMIT,
-      inputPricePerM,
-      outputPricePerM,
-      recommendedMinLockedOg,
-      alertThresholdOg,
-    };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.error(`[agent] Failed to load inference config: ${msg}`);
-    return null;
-  }
+  const provider = await resolveProvider();
+  if (!provider) return null;
+  return provider.loadConfig();
 }
 
 // ── Request building ─────────────────────────────────────────────────
@@ -145,12 +98,12 @@ function buildRequest(
   };
 }
 
-// ── Auth headers ─────────────────────────────────────────────────────
+// ── Auth headers (delegated to provider) ─────────────────────────────
 
 async function getAuthHeaders(provider: string, content: string): Promise<Record<string, string>> {
-  const broker = await getAuthenticatedBroker();
-  const headers = await broker.inference.getRequestHeaders(provider, content);
-  return headers as unknown as Record<string, string>;
+  const active = getActiveProvider();
+  if (!active) throw new Error("No inference provider configured");
+  return active.getAuthHeaders(content);
 }
 
 // ── Non-streaming inference ──────────────────────────────────────────
@@ -165,6 +118,15 @@ export async function inferNonStreaming(
   config: InferenceConfig,
   messages: Message[],
 ): Promise<InferenceResult> {
+  // SDK path: provider handles inference natively (OpenRouter)
+  const provider = getActiveProvider();
+  if (provider?.chatCompletionSimple) {
+    const result = await provider.chatCompletionSimple(messages, config);
+    return { content: result.content, finishReason: "stop", usage: result.usage };
+  }
+
+  // Legacy raw fetch path (0G Compute) — with retry for transient failures
+  return retryWithBackoff(async () => {
   const request = buildRequest(config.model, messages, false);
   const contentForAuth = JSON.stringify(request.messages);
   const authHeaders = await getAuthHeaders(config.provider, contentForAuth);
@@ -184,7 +146,7 @@ export async function inferNonStreaming(
 
     if (!response.ok) {
       const errText = await response.text().catch(() => "");
-      throw new Error(`0G compute returned ${response.status}: ${errText.slice(0, 200)}`);
+      throw new Error(`Inference provider returned ${response.status}: ${errText.slice(0, 200)}`);
     }
 
     const json = await response.json() as {
@@ -205,6 +167,7 @@ export async function inferNonStreaming(
     clearTimeout(timeout);
     throw err;
   }
+  }, { maxRetries: 2, baseDelayMs: 1000 }, "inferNonStreaming");
 }
 
 // ── Streaming inference ──────────────────────────────────────────────
@@ -241,7 +204,7 @@ export async function* inferStreaming(
   if (!response.ok) {
     clearTimeout(timeout);
     const errText = await response.text().catch(() => "");
-    throw new Error(`0G compute returned ${response.status}: ${errText.slice(0, 200)}`);
+    throw new Error(`Inference provider returned ${response.status}: ${errText.slice(0, 200)}`);
   }
 
   const reader = response.body?.getReader();
@@ -319,6 +282,12 @@ export async function inferWithTools(
   messages: Message[],
   tools: OpenAITool[],
 ): Promise<InferenceResponse> {
+  // SDK path: provider handles retry natively — no double backoff
+  const provider = getActiveProvider();
+  if (provider?.chatCompletion) {
+    return provider.chatCompletion(messages, tools, config);
+  }
+  // Legacy raw fetch path (0G Compute) — needs our retry wrapper
   return retryWithBackoff(
     () => doInferWithTools(config, messages, tools),
     INFERENCE_RETRY,
@@ -358,7 +327,7 @@ async function doInferWithTools(
 
     if (!response.ok) {
       const errText = await response.text().catch(() => "");
-      throw new Error(`0G compute returned ${response.status}: ${errText.slice(0, 200)}`);
+      throw new Error(`Inference provider returned ${response.status}: ${errText.slice(0, 200)}`);
     }
 
     const json = await response.json() as {
@@ -389,7 +358,7 @@ async function doInferWithTools(
       for (const tc of msg.tool_calls) {
         try {
           const args = JSON.parse(tc.function.arguments);
-          toolCalls.push({ name: tc.function.name, arguments: args });
+          toolCalls.push({ id: tc.id, name: tc.function.name, arguments: args });
         } catch {
           logger.warn("agent.inference.malformed_tool_args", {
             name: tc.function.name, raw: tc.function.arguments.slice(0, 200),

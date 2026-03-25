@@ -220,11 +220,10 @@ export function registerCommands(bot: Bot, config: TelegramConfig, botUsername: 
     const billing = await getBillingState(inferenceConfig);
     await ctx.reply(
       `Compute Balance:\n` +
-      `Provider locked: ${billing.providerLockedOg.toFixed(4)} 0G\n` +
-      `Ledger available: ${billing.ledgerAvailableOg.toFixed(4)} 0G\n` +
+      `Provider balance: ${billing.providerBalance.toFixed(4)} ${billing.providerCurrency}\n` +
       `Low balance: ${billing.isLowBalance ? "YES" : "no"}\n` +
       `Est. requests remaining: ${billing.estimatedRequestsRemaining}\n` +
-      `Session burn: ${billing.sessionBurnOg.toFixed(4)} 0G`,
+      `Session burn: ${billing.sessionBurn.toFixed(4)} ${billing.providerCurrency}`,
     );
   });
 

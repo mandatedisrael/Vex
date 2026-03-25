@@ -129,9 +129,9 @@ export async function buildOvernightDigest(sessionId: string): Promise<string | 
       [session.started_at],
     );
 
-    // Get OG spent
+    // Get cost spent
     const usage = await query<Record<string, unknown>>(
-      "SELECT COALESCE(SUM(cost_og), 0) as total FROM usage_log WHERE session_id = $1",
+      "SELECT COALESCE(SUM(cost), 0) as total FROM usage_log WHERE session_id = $1",
       [sessionId],
     );
 

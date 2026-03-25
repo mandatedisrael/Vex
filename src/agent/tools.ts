@@ -2,7 +2,7 @@
  * System prompt builder.
  *
  * Builds the agent's system prompt from soul.md, memory.md, loaded knowledge,
- * SKILL.md capabilities, and behavior rules.
+ * and behavior rules.
  *
  * Tool definitions are NOT injected here — they go through the native OpenAI
  * `tools` parameter in inference.ts via tool-registry.ts.
@@ -13,7 +13,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as soulRepo from "./db/repos/soul.js";
 import * as memoryRepo from "./db/repos/memory.js";
-import * as skillsRepo from "./db/repos/skills.js";
+
 import type { ChatMode } from "./types.js";
 import { getBehaviorInstructions } from "./prompts/behavior.js";
 import { buildFirstConversationPrompt } from "./prompts/identity.js";
@@ -63,20 +63,15 @@ export async function buildSystemPrompt(
     parts.push(loadedKnowledgeSection);
   }
 
-  // Agent capabilities — skip full SKILL.md in manual mode (saves ~3-5k tokens)
-  if (loopMode !== "off") {
-    const skillMd = await skillsRepo.getSkillReference("SKILL.md");
-    if (skillMd) {
-      parts.push("# Agent Capabilities (echoclaw CLI)\n\n" + skillMd);
-    }
+  // TODO: Replace with discover+execute tool routing context
+  parts.push("# Agent Capabilities\n\nYou have CLI tools for blockchain operations. Use discover_tools to find available commands and execute_tool to run them.");
 
-    // EchoClaw-internal skills (not shared with external frameworks)
+  // EchoClaw-internal skills (not shared with external frameworks)
+  if (loopMode !== "off") {
     const subagentSkill = loadInternalSkill("subagents.md");
     if (subagentSkill) {
       parts.push(subagentSkill);
     }
-  } else {
-    parts.push("# Agent Capabilities\n\nYou have CLI tools for blockchain operations across 0G, Solana, and EVM chains. Load reference docs (file_read) before first use of any CLI command domain.");
   }
 
   // Behavior rules — mode-aware (manual gets lighter prompt)

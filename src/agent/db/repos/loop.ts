@@ -68,11 +68,11 @@ export async function insertCycle(cycle: {
   phasesCompleted: LoopPhase[];
   outcome: string;
   decisions?: Record<string, unknown>;
-  tokenCostOg?: number;
+  tokenCost?: number;
   errorMessage?: string;
 }): Promise<number> {
   const row = await queryOne<{ id: number }>(
-    `INSERT INTO loop_cycles (cycle_number, started_at, ended_at, phases_completed, outcome, decisions, token_cost_og, error_message)
+    `INSERT INTO loop_cycles (cycle_number, started_at, ended_at, phases_completed, outcome, decisions, token_cost, error_message)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
     [
       cycle.cycleNumber,
@@ -81,7 +81,7 @@ export async function insertCycle(cycle: {
       cycle.phasesCompleted,
       cycle.outcome,
       JSON.stringify(cycle.decisions ?? {}),
-      cycle.tokenCostOg ?? 0,
+      cycle.tokenCost ?? 0,
       cycle.errorMessage ?? null,
     ],
   );
@@ -101,7 +101,7 @@ export async function getRecentCycles(limit = 20): Promise<LoopCycleRecord[]> {
     phasesCompleted: (row.phases_completed as LoopPhase[]) ?? [],
     outcome: row.outcome as LoopCycleRecord["outcome"],
     decisions: (typeof row.decisions === "string" ? JSON.parse(row.decisions) : row.decisions) as Record<string, unknown>,
-    tokenCostOg: Number(row.token_cost_og ?? 0),
+    tokenCost: Number(row.token_cost ?? 0),
     errorMessage: row.error_message as string | null,
   }));
 }

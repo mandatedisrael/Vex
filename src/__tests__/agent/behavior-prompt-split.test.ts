@@ -56,8 +56,9 @@ describe("CORE_BEHAVIOR content (present in all modes)", () => {
       expect(getBehaviorInstructions(mode)).toContain("Transfers are ALWAYS 2-step");
     });
 
-    it(`contains Skill Router in '${mode}' mode`, () => {
-      expect(getBehaviorInstructions(mode)).toContain("Skill Router");
+    it(`contains Data Interpretation in '${mode}' mode (Skill Router removed)`, () => {
+      // Skill Router removed — discover+execute routing replaces it
+      expect(getBehaviorInstructions(mode)).not.toContain("Skill Router");
     });
 
     it(`contains Data Interpretation in '${mode}' mode`, () => {

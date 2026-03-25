@@ -1,19 +1,18 @@
 import { type FC, useEffect, useState, useCallback } from "react";
-import { getSoul, getMemory, getFiles, getFile, getSessions, getSessionMessages, getSkillReferences, getSkillContent } from "../api";
+import { getSoul, getMemory, getFiles, getFile, getSessions, getSessionMessages } from "../api";
 import type { FileTreeEntry, SessionListEntry } from "../types";
 
 interface MemoryViewProps {
   onBack: () => void;
 }
 
-type TabKey = "soul" | "memory" | "files" | "sessions" | "skills";
+type TabKey = "soul" | "memory" | "files" | "sessions";
 
 export const MemoryView: FC<MemoryViewProps> = ({ onBack }) => {
   const [tab, setTab] = useState<TabKey>("soul");
   const [content, setContent] = useState("");
   const [files, setFiles] = useState<FileTreeEntry[]>([]);
   const [sessions, setSessions] = useState<SessionListEntry[]>([]);
-  const [skillRefs, setSkillRefs] = useState<Array<{ path: string; sizeBytes: number }>>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
   const [currentPath, setCurrentPath] = useState("");
@@ -35,9 +34,6 @@ export const MemoryView: FC<MemoryViewProps> = ({ onBack }) => {
       } else if (tab === "sessions") {
         const res = await getSessions();
         setSessions(res.sessions);
-      } else if (tab === "skills") {
-        const res = await getSkillReferences();
-        setSkillRefs(res.references);
       }
     } catch (err) {
       setContent(`Error: ${err instanceof Error ? err.message : String(err)}`);
@@ -66,19 +62,10 @@ export const MemoryView: FC<MemoryViewProps> = ({ onBack }) => {
     } catch (err) { console.warn("[MemoryView] file load failed:", err); setFileContent("Failed to load file."); }
   };
 
-  const openSkill = async (path: string) => {
-    setSelectedFile(path);
-    try {
-      const res = await getSkillContent(path);
-      setFileContent(res.content);
-    } catch (err) { console.warn("[MemoryView] skill load failed:", err); setFileContent("Failed to load skill reference."); }
-  };
-
   const tabs: Array<{ key: TabKey; label: string }> = [
     { key: "soul", label: "Soul" },
     { key: "memory", label: "Memory" },
     { key: "files", label: "Knowledge" },
-    { key: "skills", label: "Skills" },
     { key: "sessions", label: "Sessions" },
   ];
 
@@ -130,28 +117,6 @@ export const MemoryView: FC<MemoryViewProps> = ({ onBack }) => {
         )}
 
         {tab === "files" && selectedFile && (
-          <div>
-            <button onClick={() => { setSelectedFile(null); setFileContent(null); }} className="text-xs text-muted-foreground hover:text-foreground mb-3">&larr; {selectedFile}</button>
-            <pre className="text-sm text-foreground whitespace-pre-wrap font-mono leading-relaxed">{fileContent}</pre>
-          </div>
-        )}
-
-        {/* Skills — packaged reference files */}
-        {tab === "skills" && !selectedFile && (
-          <div className="space-y-1">
-            {skillRefs.length === 0 && <p className="text-sm text-muted-foreground">No skill references loaded.</p>}
-            {skillRefs.map(r => (
-              <button key={r.path} onClick={() => openSkill(r.path)}
-                className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg hover:bg-card transition">
-                <span className="text-xs text-muted-foreground">·</span>
-                <span className="text-sm text-foreground flex-1 font-mono">{r.path}</span>
-                <span className="text-2xs text-muted-foreground">{(r.sizeBytes / 1024).toFixed(1)}kb</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {tab === "skills" && selectedFile && (
           <div>
             <button onClick={() => { setSelectedFile(null); setFileContent(null); }} className="text-xs text-muted-foreground hover:text-foreground mb-3">&larr; {selectedFile}</button>
             <pre className="text-sm text-foreground whitespace-pre-wrap font-mono leading-relaxed">{fileContent}</pre>

@@ -10,8 +10,9 @@
  * creating an auditable conversation trail.
  */
 
-import { getLedgerState, isLowBalance } from "./billing.js";
+import { getProviderBalance } from "./billing.js";
 import { getInferenceConfig } from "./engine.js";
+import { getActiveProvider } from "./providers/registry.js";
 import { publish } from "./autonomy-inbox.js";
 import * as topupRepo from "./db/repos/topup.js";
 import {
@@ -65,15 +66,17 @@ export async function checkBalance(): Promise<void> {
     const config = getInferenceConfig();
     if (!config) return;
 
-    const balance = await getLedgerState(config.provider);
+    // Top-up monitor is 0G Compute only — other providers use different billing
+    const provider = getActiveProvider();
+    if (!provider || provider.id !== "0g-compute") return;
+
+    const balance = await provider.getBalance();
     if (!balance) return;
 
-    const threshold = calculateThreshold(config.alertThresholdOg, await topupRepo.getBaseline());
-
-    if (balance.providerLockedOg >= threshold) {
+    if (!balance.isLow) {
       if (consecutiveAlerts > 0) {
         consecutiveAlerts = 0;
-        logger.info("topup-monitor.balance_recovered", { locked: balance.providerLockedOg, threshold });
+        logger.info("topup-monitor.balance_recovered", { available: balance.availableRaw, currency: balance.currency });
       }
       return;
     }
@@ -83,49 +86,42 @@ export async function checkBalance(): Promise<void> {
     lastAlertAt = Date.now();
     consecutiveAlerts++;
 
-    await handleLowBalance(config, balance, threshold);
+    await handleLowBalance(config, balance);
 
     if (consecutiveAlerts >= TOPUP_MAX_CONSECUTIVE_ALERTS) {
-      await handleCriticalEscalation(balance.providerLockedOg);
+      await handleCriticalEscalation(balance.availableRaw);
     }
   } catch (err) {
     logger.error("topup-monitor.check_failed", { error: err instanceof Error ? err.message : String(err) });
   }
 }
 
-function calculateThreshold(dynamicThreshold: number, baseline: { baselineLockedOg: number }): number {
-  const baselinePart = baseline.baselineLockedOg > 0 ? baseline.baselineLockedOg * TOPUP_BASELINE_MULTIPLIER : 0;
-  return Math.max(dynamicThreshold, baselinePart);
-}
-
 async function handleLowBalance(
-  config: { provider: string; model: string; alertThresholdOg: number },
-  balance: { providerLockedOg: number; ledgerAvailableOg: number },
-  threshold: number,
+  config: { provider: string; model: string },
+  balance: { availableRaw: number; availableDisplay: string; currency: string; isLow: boolean; lowBalanceMessage?: string },
 ): Promise<void> {
   logger.warn("topup-monitor.balance_low", {
-    locked: balance.providerLockedOg, threshold, available: balance.ledgerAvailableOg, consecutiveAlerts,
+    available: balance.availableRaw, currency: balance.currency, consecutiveAlerts,
   });
 
   await topupRepo.recordEvent({
     eventType: "balance_check",
-    balanceBeforeOg: balance.providerLockedOg,
-    metadata: { threshold, consecutiveAlerts },
+    balanceBefore: balance.availableRaw,
+    metadata: { consecutiveAlerts },
   });
 
+  const message = balance.lowBalanceMessage ?? `Low balance: ${balance.availableDisplay}`;
+
   await publish("compute_balance_low", {
-    message: buildAlertMessage(config.provider, config.model, balance, threshold),
+    message,
     providerAddress: config.provider, model: config.model,
-    providerLockedOg: balance.providerLockedOg, ledgerAvailableOg: balance.ledgerAvailableOg,
-    threshold, consecutiveAlerts,
+    available: balance.availableRaw, currency: balance.currency,
+    consecutiveAlerts,
   });
 
   broadcastEmit?.({
     type: "balance_low",
-    data: {
-      message: `Low compute balance: ${balance.providerLockedOg.toFixed(4)} 0G (threshold: ${threshold.toFixed(4)} 0G)`,
-      ledgerLockedOg: balance.providerLockedOg, threshold,
-    },
+    data: { message, providerBalanceRaw: balance.availableRaw, ledgerLockedOg: balance.availableRaw, threshold: 0 },
   });
 }
 
@@ -133,7 +129,7 @@ async function handleCriticalEscalation(currentLockedOg: number): Promise<void> 
   logger.error("topup-monitor.critical", { consecutiveAlerts });
   await topupRepo.recordEvent({
     eventType: "critical_alert",
-    balanceBeforeOg: currentLockedOg,
+    balanceBefore: currentLockedOg,
     metadata: { reason: "Agent failed to top up after multiple alerts" },
   });
   broadcastEmit?.({
@@ -147,8 +143,8 @@ export async function onTopupSuccess(newLockedOg: number, newTotalOg: number, am
   await topupRepo.updateBaseline(newLockedOg, newTotalOg, amount);
   await topupRepo.recordEvent({
     eventType: "topup_succeeded",
-    amountOg: amount,
-    balanceAfterOg: newLockedOg,
+    amount: amount,
+    balanceAfter: newLockedOg,
     source: "auto",
   });
   consecutiveAlerts = 0;

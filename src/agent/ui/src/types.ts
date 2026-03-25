@@ -212,17 +212,15 @@ export interface PredictionPanelState {
 // ── Billing ──────────────────────────────────────────────────────────
 
 export interface BillingState {
-  ledgerTotalOg: number;
-  ledgerAvailableOg: number;
-  providerLockedOg: number;
-  sessionBurnOg: number;
-  lifetimeBurnOg: number;
+  providerBalance: number;
+  providerCurrency: string;
+  sessionBurn: number;
+  lifetimeBurn: number;
   avgCostPerRequest: number;
   estimatedRequestsRemaining: number;
-  lowBalanceThreshold: number;
   isLowBalance: boolean;
   model: string;
-  pricing: { inputPerM: string; outputPerM: string };
+  pricing: { inputPerM: string; outputPerM: string; currency: string };
   fetchedAt: string;
 }
 

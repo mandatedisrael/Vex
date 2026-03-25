@@ -44,7 +44,7 @@ export async function handleIncomingMessage(
   if (!session) {
     session = createSession();
     if (!session) {
-      await bot.api.sendMessage(chatId, formatError("Agent not ready \u2014 compute not configured."));
+      await bot.api.sendMessage(chatId, formatError("Agent not ready \u2014 inference provider not configured."));
       return;
     }
     isNewSession = true;

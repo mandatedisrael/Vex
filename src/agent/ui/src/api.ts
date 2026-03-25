@@ -188,16 +188,6 @@ export async function getBilling(): Promise<BillingState> {
   return fetchJson("/api/agent/billing");
 }
 
-// ── Skills ───────────────────────────────────────────────────────────
-
-export async function getSkillReferences(): Promise<{ references: Array<{ path: string; sizeBytes: number }>; count: number }> {
-  return fetchJson("/api/agent/skills");
-}
-
-export async function getSkillContent(path: string): Promise<{ path: string; content: string }> {
-  return fetchJson(`/api/agent/skill?path=${encodeURIComponent(path)}`);
-}
-
 // ── Loop control ────────────────────────────────────────────────────
 
 export async function startLoop(mode: "full" | "restricted", intervalMs?: number): Promise<void> {

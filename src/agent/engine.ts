@@ -13,7 +13,8 @@ import { SSE_TOOL_OUTPUT_LIMIT } from "./constants.js";
 import { toOpenAITools, isInternal, isMutating } from "./tool-registry.js";
 import { inferWithTools, inferNonStreaming, loadInferenceConfig } from "./inference.js";
 import { executeTool } from "./executor.js";
-import { getLedgerState, isLowBalance, recordBillingSnapshot } from "./billing.js";
+import { recordBillingSnapshot } from "./billing.js";
+import { getActiveProvider } from "./providers/registry.js";
 import { calculateBudget, calculateHybridBudget, parseCompactionResult } from "./context.js";
 import { processInternalTools } from "./internal-tool-handlers.js";
 import { captureTradeFromResult } from "./trade-capture.js";
@@ -158,9 +159,9 @@ async function inferenceLoop(
     }
 
     // Record usage with dynamic pricing from provider
-    const costOg = (totalUsage.promptTokens / 1_000_000) * config.inputPricePerM
-                  + (totalUsage.completionTokens / 1_000_000) * config.outputPricePerM;
-    await usageRepo.logUsage(session.id, totalUsage.promptTokens, totalUsage.completionTokens, costOg);
+    const cost = (totalUsage.promptTokens / 1_000_000) * config.inputPricePerM
+               + (totalUsage.completionTokens / 1_000_000) * config.outputPricePerM;
+    await usageRepo.logUsage(session.id, totalUsage.promptTokens, totalUsage.completionTokens, cost, config.provider, config.priceCurrency);
 
     // Snapshot real prompt_tokens for hybrid compaction budget
     if (totalUsage.promptTokens > 0) {
@@ -169,19 +170,24 @@ async function inferenceLoop(
       await sessionsRepo.updateSessionTokenCount(session.id, totalUsage.promptTokens);
     }
 
-    // Get session totals + ledger balance for enhanced usage event
-    const sessionStats = await usageRepo.getUsageStats(session.id);
-    const ledger = await getLedgerState(config.provider);
-    const avgCost = sessionStats.requestCount > 0 ? sessionStats.lifetimeCost / sessionStats.requestCount : costOg;
-    const estimatedRemaining = avgCost > 0 && ledger ? Math.floor(ledger.providerLockedOg / avgCost) : 0;
+    // Get session totals + provider balance for enhanced usage event
+    const sessionStats = await usageRepo.getUsageStats(session.id, config.priceCurrency);
+    const providerBalance = await getActiveProvider()?.getBalance() ?? null;
+    const avgCost = sessionStats.requestCount > 0 ? sessionStats.lifetimeCost / sessionStats.requestCount : cost;
+    const estimatedRemaining = avgCost > 0 && providerBalance ? Math.floor(providerBalance.availableRaw / avgCost) : 0;
 
-    const usage: RequestUsage = { promptTokens: totalUsage.promptTokens, completionTokens: totalUsage.completionTokens, totalTokens: totalUsage.promptTokens + totalUsage.completionTokens, costOg };
+    const usage: RequestUsage = { promptTokens: totalUsage.promptTokens, completionTokens: totalUsage.completionTokens, totalTokens: totalUsage.promptTokens + totalUsage.completionTokens, cost };
     emit({ type: "usage", data: {
       ...usage,
       sessionTotalTokens: sessionStats.sessionTokens,
-      sessionTotalCostOg: sessionStats.sessionCost,
-      ledgerAvailableOg: ledger?.ledgerAvailableOg ?? null,
-      ledgerLockedOg: ledger?.providerLockedOg ?? null,
+      sessionTotalCost: sessionStats.sessionCost,
+      providerBalance: providerBalance?.availableRaw ?? null,
+      providerCurrency: providerBalance?.currency ?? config.priceCurrency,
+      priceCurrency: config.priceCurrency,
+      providerName: getActiveProvider()?.displayName ?? "Unknown",
+      isLowBalance: providerBalance?.isLow ?? false,
+      // Legacy compat — remove after UI fully migrated
+      ledgerLockedOg: providerBalance?.availableRaw ?? null,
       estimatedRequestsRemaining: estimatedRemaining,
       model: config.model,
       inputPricePerM: config.inputPricePerM.toFixed(4),
@@ -190,11 +196,11 @@ async function inferenceLoop(
 
     // Record billing snapshot + check low balance
     await recordBillingSnapshot(config.provider, sessionStats.sessionCost);
-    if (ledger && isLowBalance(ledger, config)) {
+    if (providerBalance?.isLow) {
       emit({ type: "balance_low", data: {
-        message: `Low compute balance: ${ledger.providerLockedOg.toFixed(4)} 0G (threshold: ${config.alertThresholdOg.toFixed(4)} 0G)`,
-        ledgerLockedOg: ledger.providerLockedOg,
-        threshold: config.alertThresholdOg,
+        message: providerBalance.lowBalanceMessage ?? "Low provider balance",
+        providerBalanceRaw: providerBalance.availableRaw,
+        threshold: 0,
       }});
     }
 
@@ -208,7 +214,7 @@ async function inferenceLoop(
     // Store message with clean content
     const assistantMsg: Message = {
       role: "assistant", content: response.content ?? "",
-      toolCalls: allToolCalls?.map(tc => ({ id: generateId("call"), command: tc.command, args: tc.args as Record<string, unknown> })),
+      toolCalls: allToolCalls?.map((tc, i) => ({ id: response.toolCalls?.[i]?.id ?? generateId("call"), command: tc.command, args: tc.args as Record<string, unknown> })),
       timestamp: new Date().toISOString(),
     };
     session.messages.push(assistantMsg);
@@ -225,10 +231,16 @@ async function inferenceLoop(
 
     // Process internal tools first (web search, file ops, etc.)
     if (internalCalls.length > 0) {
-      const internalAsTools: InternalToolCall[] = internalCalls.map(tc => ({
-        type: tc.command as InternalToolCall["type"],
-        params: tc.args as Record<string, string>,
-      }));
+      const internalAsTools: InternalToolCall[] = internalCalls.map(tc => {
+        // Find by original index in allToolCalls to avoid ambiguity with duplicate commands
+        const originalIdx = allToolCalls!.indexOf(tc);
+        const toolCallId = assistantMsg.toolCalls?.[originalIdx]?.id;
+        return {
+          type: tc.command as InternalToolCall["type"],
+          params: tc.args as Record<string, string>,
+          toolCallId,
+        };
+      });
       await processInternalTools(internalAsTools, session, emit, loopMode);
     }
 
@@ -245,7 +257,10 @@ async function inferenceLoop(
     // Build a filtered assistantMsg for CLI tool execution (only CLI tool_calls)
     const cliAssistantMsg: Message = {
       ...assistantMsg,
-      toolCalls: cliCalls.map(tc => ({ id: generateId("call"), command: tc.command, args: tc.args as Record<string, unknown> })),
+      toolCalls: cliCalls.map(tc => {
+        const originalIdx = allToolCalls!.indexOf(tc);
+        return { id: assistantMsg.toolCalls?.[originalIdx]?.id ?? generateId("call"), command: tc.command, args: tc.args as Record<string, unknown> };
+      }),
     };
 
     const execResult = await executeToolCalls(cliCalls, cliAssistantMsg, session, emit, loopMode);
@@ -340,6 +355,13 @@ async function compactSession(session: ConversationSession, emit: EventEmitter):
 
   try {
     const result = await inferNonStreaming(session.inferenceConfig, compactionMessages);
+
+    // Track compaction inference cost (§19 cost awareness)
+    const config = session.inferenceConfig;
+    const compactionCost = (result.usage.promptTokens / 1_000_000) * config.inputPricePerM
+                         + (result.usage.completionTokens / 1_000_000) * config.outputPricePerM;
+    await usageRepo.logUsage(session.id, result.usage.promptTokens, result.usage.completionTokens, compactionCost, config.provider, config.priceCurrency);
+
     const { summary, insights } = parseCompactionResult(result.content);
 
     // Skip insight extraction for trivial sessions (< 4 substantive messages)

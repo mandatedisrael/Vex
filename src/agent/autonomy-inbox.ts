@@ -54,7 +54,7 @@ export function formatEventsForContext(events: AutonomyInboxEvent[]): string {
   const lines = events.map((e) => {
     switch (e.eventType) {
       case "compute_balance_low":
-        return `[COMPUTE BALANCE ALERT] ${e.payload.message ?? "Inference balance is low. Check 0G Compute skill and top up."}`;
+        return `[BALANCE ALERT] ${e.payload.message ?? "Inference provider balance is low."}`;
       case "subagent_completed":
         return `[SUBAGENT COMPLETED] ${e.payload.name ?? "unknown"}: ${e.payload.summary ?? "no summary"}`;
       case "external_alert":

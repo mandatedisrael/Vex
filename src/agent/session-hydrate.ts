@@ -14,7 +14,6 @@ import type { ConversationSession } from "./types.js";
 import * as sessionsRepo from "./db/repos/sessions.js";
 import * as messagesRepo from "./db/repos/messages.js";
 import * as knowledgeRepo from "./db/repos/knowledge.js";
-import * as skillsRepo from "./db/repos/skills.js";
 
 /**
  * Hydrate a session from DB by ID.
@@ -64,7 +63,7 @@ async function rebuildLoadedKnowledge(session: ConversationSession): Promise<voi
       if (tc.command === "file_read" && tc.args.path) {
         const path = String(tc.args.path);
         if (session.loadedKnowledge.has(path)) continue;
-        const content = await knowledgeRepo.getFile(path) ?? await skillsRepo.getSkillReference(path);
+        const content = await knowledgeRepo.getFile(path);
         if (content) session.loadedKnowledge.set(path, content);
       }
     }

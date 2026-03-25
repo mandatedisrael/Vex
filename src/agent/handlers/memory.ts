@@ -8,7 +8,7 @@ import * as memoryRepo from "../db/repos/memory.js";
 import * as knowledgeRepo from "../db/repos/knowledge.js";
 import * as sessionsRepo from "../db/repos/sessions.js";
 import * as messagesRepo from "../db/repos/messages.js";
-import * as skillsRepo from "../db/repos/skills.js";
+
 
 export function registerMemoryRoutes(): void {
   registerRoute("GET", "/api/agent/memory/soul", async (_req, res) => {
@@ -65,18 +65,4 @@ export function registerMemoryRoutes(): void {
     jsonResponse(res, 200, { id, messages });
   });
 
-  // Packaged skill references (read-only, seeded from echoclaw package)
-  registerRoute("GET", "/api/agent/skills", async (_req, res) => {
-    const refs = await skillsRepo.listSkillReferences();
-    jsonResponse(res, 200, { references: refs, count: refs.length });
-  });
-
-  registerRoute("GET", "/api/agent/skill", async (_req, res) => {
-    const url = new URL(_req.url ?? "/", "http://localhost");
-    const path = url.searchParams.get("path");
-    if (!path) { errorResponse(res, 400, "MISSING_PATH", "path query parameter required"); return; }
-    const content = await skillsRepo.getSkillReference(path);
-    if (!content) { errorResponse(res, 404, "SKILL_NOT_FOUND", `Skill reference not found: ${path}`); return; }
-    jsonResponse(res, 200, { path, content });
-  });
 }

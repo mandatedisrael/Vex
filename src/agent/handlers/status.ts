@@ -12,6 +12,8 @@ import * as sessionsRepo from "../db/repos/sessions.js";
 import * as loopRepo from "../db/repos/loop.js";
 import * as backupRepo from "../db/repos/backup.js";
 import { loadComputeState } from "../../0g-compute/readiness.js";
+import { getInferenceConfig } from "../engine.js";
+import { getActiveProvider } from "../providers/registry.js";
 import { getAgentPackageVersion } from "../compose.js";
 import { DEFAULT_CONTEXT_LIMIT, COMPACTION_THRESHOLD } from "../constants.js";
 import { runEchoPapaCycle } from "../echo-papa.js";
@@ -34,8 +36,8 @@ export function registerStatusRoutes(): void {
 
     const status: AgentStatus = {
       running: true,
-      model: computeState?.model ?? null,
-      provider: computeState?.activeProvider ?? null,
+      model: getInferenceConfig()?.model ?? computeState?.model ?? null,
+      provider: getActiveProvider()?.displayName ?? computeState?.activeProvider ?? null,
       hasSoul: await soulRepo.hasSoul(),
       memorySize: await memoryRepo.getMemorySize(),
       knowledgeFileCount: await knowledgeRepo.fileCount(),

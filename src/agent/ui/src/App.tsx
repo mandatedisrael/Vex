@@ -28,7 +28,7 @@ export const App: FC = () => {
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [openWidgets, setOpenWidgets] = useState<Set<WidgetType>>(new Set());
-  const [liveBurn, setLiveBurn] = useState({ sessionCostOg: 0, ledgerLockedOg: null as number | null, estimatedRemaining: 0, isLowBalance: false, model: null as string | null });
+  const [liveBurn, setLiveBurn] = useState({ sessionCost: 0, providerBalance: null as number | null, estimatedRemaining: 0, isLowBalance: false, model: null as string | null, priceCurrency: "" });
   const [liveSessionId, setLiveSessionId] = useState<string | undefined>(undefined);
   const [recentTrades, setRecentTrades] = useState<TradeEntry[]>([]);
   const [tradeSummary, setTradeSummary] = useState<TradeSummary | null>(null);

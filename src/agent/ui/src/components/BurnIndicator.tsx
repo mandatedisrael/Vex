@@ -3,11 +3,12 @@ import { cn } from "../utils";
 import { HugeiconsIcon, CpuIcon } from "./icons";
 
 interface BurnIndicatorProps {
-  sessionCostOg: number;
-  ledgerLockedOg: number | null;
+  sessionCost: number;
+  providerBalance: number | null;
   estimatedRemaining: number;
   isLowBalance: boolean;
   model: string | null;
+  priceCurrency?: string;
   className?: string;
 }
 
@@ -16,16 +17,18 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 export const BurnIndicator: FC<BurnIndicatorProps> = ({
-  sessionCostOg,
-  ledgerLockedOg,
+  sessionCost,
+  providerBalance,
   estimatedRemaining,
   isLowBalance,
   model,
+  priceCurrency = "",
   className,
 }) => {
-  const locked = ledgerLockedOg ?? 0;
-  const cost = sessionCostOg ?? 0;
-  const total = cost + locked;
+  const balanceKnown = providerBalance != null;
+  const balance = providerBalance ?? 0;
+  const cost = sessionCost ?? 0;
+  const total = balanceKnown ? cost + balance : 0;
   const pct = total > 0 ? clamp((cost / total) * 100, 0, 100) : 0;
 
   const barGradient = isLowBalance || pct > 75
@@ -42,14 +45,14 @@ export const BurnIndicator: FC<BurnIndicatorProps> = ({
           <span className="font-mono">{model ?? "Model"}</span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="font-mono" title="Session burn">{cost.toFixed(4)} 0G</span>
+          <span className="font-mono" title="Session cost">{cost.toFixed(4)} {priceCurrency}</span>
           <span className="font-mono text-muted-foreground/40">|</span>
           <span className={cn("font-mono", isLowBalance && "text-status-error")}>
             ~{estimatedRemaining} req
           </span>
         </div>
       </div>
-      
+
       {/* Horizontal progress bar */}
       <div className="h-1 w-full bg-border/20 rounded-full overflow-hidden relative">
         <div

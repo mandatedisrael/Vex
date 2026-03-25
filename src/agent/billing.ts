@@ -1,97 +1,60 @@
 /**
- * Compute billing — reads real ledger balance on-chain, tracks burn rate.
+ * Compute billing — provider-agnostic balance tracking and burn rate.
  *
- * Uses existing operations.ts (getLedgerBalance, getSubAccountBalance)
- * to read actual on-chain data. Caches to avoid excessive RPC calls.
+ * Delegates balance reads to the active InferenceProvider.
+ * Records billing snapshots to Postgres for history/analytics.
  */
 
-import { getAuthenticatedBroker } from "../0g-compute/broker-factory.js";
-import { getLedgerBalance, getSubAccountBalance } from "../0g-compute/operations.js";
+import { getActiveProvider } from "./providers/registry.js";
+import type { ProviderBalance } from "./providers/types.js";
 import * as billingRepo from "./db/repos/billing.js";
 import * as usageRepo from "./db/repos/usage.js";
-import { retryWithBackoff } from "./resilience.js";
-import type { LedgerBalance, InferenceConfig } from "./types.js";
+import type { InferenceConfig } from "./types.js";
 import logger from "../utils/logger.js";
 
-const CACHE_TTL_MS = 30_000; // 30s — avoid excessive on-chain reads
-
-let cachedBalance: LedgerBalance | null = null;
-let cachedAt = 0;
+// ── Provider balance (delegated) ─────────────────────────────────────
 
 /**
- * Fetch current ledger balance (cached 30s).
+ * Get current provider balance via the active provider.
+ * Returns null if no provider or provider doesn't expose balance.
  */
-export async function getLedgerState(provider: string): Promise<LedgerBalance | null> {
-  const now = Date.now();
-  if (cachedBalance && (now - cachedAt) < CACHE_TTL_MS) {
-    return cachedBalance;
-  }
-
-  try {
-    const broker = await getAuthenticatedBroker();
-    const ledger = await retryWithBackoff(
-      () => getLedgerBalance(broker),
-      { maxRetries: 2, baseDelayMs: 1000 },
-      "ledger",
-    );
-    const subAccount = await retryWithBackoff(
-      () => getSubAccountBalance(broker, provider),
-      { maxRetries: 2, baseDelayMs: 1000 },
-      "ledger-sub",
-    );
-
-    if (!ledger) return null;
-
-    cachedBalance = {
-      ledgerTotalOg: ledger.totalOg,
-      ledgerAvailableOg: ledger.availableOg,
-      providerLockedOg: subAccount?.lockedOg ?? 0,
-      providerPendingRefundOg: subAccount?.pendingRefundOg ?? 0,
-      fetchedAt: new Date().toISOString(),
-    };
-    cachedAt = now;
-
-    return cachedBalance;
-  } catch (err) {
-    logger.warn("billing.ledger.read_failed", { error: err instanceof Error ? err.message : String(err) });
-    return cachedBalance; // return stale cache if available
-  }
+export async function getProviderBalance(): Promise<ProviderBalance | null> {
+  const provider = getActiveProvider();
+  if (!provider) return null;
+  return provider.getBalance();
 }
+
+// ── Billing snapshots ────────────────────────────────────────────────
 
 /**
  * Record a billing snapshot after each inference request.
  */
-export async function recordBillingSnapshot(provider: string, sessionBurnOg: number): Promise<void> {
-  const balance = await getLedgerState(provider);
+export async function recordBillingSnapshot(providerId: string, sessionBurn: number): Promise<void> {
+  const balance = await getProviderBalance();
   if (!balance) return;
 
   await billingRepo.insertSnapshot({
-    ledgerTotalOg: balance.ledgerTotalOg,
-    ledgerAvailableOg: balance.ledgerAvailableOg,
-    providerLockedOg: balance.providerLockedOg,
-    sessionBurnOg,
+    providerBalance: balance.total ?? balance.availableRaw,
+    providerAvailable: balance.available ?? balance.availableRaw,
+    providerLocked: balance.locked ?? balance.availableRaw,
+    sessionCost: sessionBurn,
+    provider: providerId,
+    currency: balance.currency,
   });
 }
 
-/**
- * Check if balance is below alert threshold.
- */
-export function isLowBalance(balance: LedgerBalance, config: InferenceConfig): boolean {
-  return balance.providerLockedOg < config.alertThresholdOg;
-}
+// ── Billing state (for API) ──────────────────────────────────────────
 
 export interface BillingState {
-  ledgerTotalOg: number;
-  ledgerAvailableOg: number;
-  providerLockedOg: number;
-  sessionBurnOg: number;
-  lifetimeBurnOg: number;
+  providerBalance: number;
+  providerCurrency: string;
+  sessionBurn: number;
+  lifetimeBurn: number;
   avgCostPerRequest: number;
   estimatedRequestsRemaining: number;
-  lowBalanceThreshold: number;
   isLowBalance: boolean;
   model: string;
-  pricing: { inputPerM: string; outputPerM: string };
+  pricing: { inputPerM: string; outputPerM: string; currency: string };
   fetchedAt: string;
 }
 
@@ -99,28 +62,27 @@ export interface BillingState {
  * Build full billing state for API response.
  */
 export async function getBillingState(config: InferenceConfig, sessionId?: string): Promise<BillingState> {
-  const balance = await getLedgerState(config.provider);
+  const balance = await getProviderBalance();
   const usage = await usageRepo.getUsageStats(sessionId);
 
   const avgCost = usage.requestCount > 0 ? usage.lifetimeCost / usage.requestCount : 0;
-  const lockedOg = balance?.providerLockedOg ?? 0;
-  const estimatedRemaining = avgCost > 0 ? Math.floor(lockedOg / avgCost) : 0;
+  const available = balance?.availableRaw ?? null;
+  const estimatedRemaining = avgCost > 0 && available != null ? Math.floor(available / avgCost) : 0;
 
   return {
-    ledgerTotalOg: balance?.ledgerTotalOg ?? 0,
-    ledgerAvailableOg: balance?.ledgerAvailableOg ?? 0,
-    providerLockedOg: lockedOg,
-    sessionBurnOg: usage.sessionCost,
-    lifetimeBurnOg: usage.lifetimeCost,
+    providerBalance: available ?? 0,
+    providerCurrency: balance?.currency ?? config.priceCurrency,
+    sessionBurn: usage.sessionCost,
+    lifetimeBurn: usage.lifetimeCost,
     avgCostPerRequest: avgCost,
     estimatedRequestsRemaining: estimatedRemaining,
-    lowBalanceThreshold: config.alertThresholdOg,
-    isLowBalance: balance ? isLowBalance(balance, config) : false,
+    isLowBalance: balance?.isLow ?? false,
     model: config.model,
     pricing: {
       inputPerM: config.inputPricePerM.toFixed(4),
       outputPerM: config.outputPricePerM.toFixed(4),
+      currency: config.priceCurrency,
     },
-    fetchedAt: balance?.fetchedAt ?? new Date().toISOString(),
+    fetchedAt: new Date().toISOString(),
   };
 }
