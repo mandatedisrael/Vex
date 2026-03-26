@@ -10,13 +10,17 @@ import { formatUnits, parseUnits, type Hex, type Address } from "viem";
 import { getKyberAggregatorClient } from "../../tools/kyberswap/aggregator/client.js";
 import { META_AGGREGATION_ROUTER_V2, NATIVE_TOKEN_ADDRESS } from "../../tools/kyberswap/constants.js";
 import { getKyberEvmClients, ensureKyberAllowance, verifyRouterAddress, sendKyberTransaction } from "../../tools/kyberswap/evm-utils.js";
-import { resolveChain, resolveTokenAddress, formatUsd, formatGas, requireFeature } from "./helpers.js";
+import { resolveChain, resolveTokenMetadata, formatUsd, formatGas, requireFeature } from "./helpers.js";
 import { slugToChainId } from "../../tools/kyberswap/chains.js";
 import { requireWalletAndKeystore } from "../../tools/wallet/auth.js";
 import { EchoError, ErrorCodes } from "../../errors.js";
 import { parseIntSafe, validateSlippage } from "../../utils/validation.js";
 import { isHeadless, writeJsonSuccess } from "../../utils/output.js";
 import { spinner, successBox, infoBox, colors } from "../../utils/ui.js";
+
+function formatTokenAmount(amount: string, decimals: number): string {
+  return formatUnits(BigInt(amount), decimals);
+}
 
 export function createSwapSubcommand(): Command {
   const swap = new Command("swap")
@@ -48,12 +52,11 @@ export function createSwapSubcommand(): Command {
       const spin = spinner("Resolving tokens...");
       spin.start();
 
-      const tokenInAddr = await resolveTokenAddress(tokenIn, chainId);
-      const tokenOutAddr = await resolveTokenAddress(tokenOut, chainId);
-
-      // For amount parsing: assume 18 decimals for native, use Token API for ERC-20
-      // Simplified: parse as 18 decimals (most common), API accepts wei strings
-      const amountInWei = parseUnits(options.amountIn, 18).toString();
+      const tokenInMeta = await resolveTokenMetadata(tokenIn, chainId);
+      const tokenOutMeta = await resolveTokenMetadata(tokenOut, chainId);
+      const tokenInAddr = tokenInMeta.address;
+      const tokenOutAddr = tokenOutMeta.address;
+      const amountInRaw = parseUnits(options.amountIn, tokenInMeta.decimals).toString();
 
       spin.text = "Finding best route...";
 
@@ -61,16 +64,18 @@ export function createSwapSubcommand(): Command {
       const routeResponse = await client.getRoute(slug, {
         tokenIn: tokenInAddr,
         tokenOut: tokenOutAddr,
-        amountIn: amountInWei,
+        amountIn: amountInRaw,
       });
 
       const { routeSummary, routerAddress } = routeResponse.data;
+      const routeAmountIn = formatTokenAmount(routeSummary.amountIn, tokenInMeta.decimals);
+      const routeAmountOut = formatTokenAmount(routeSummary.amountOut, tokenOutMeta.decimals);
       spin.succeed("Route found");
 
       // Display quote
       const quoteInfo =
-        `Sell: ${colors.value(options.amountIn)} ${tokenIn}\n` +
-        `Receive: ~${colors.value(routeSummary.amountOut)} wei ${tokenOut}\n` +
+        `Sell: ${colors.value(routeAmountIn)} ${tokenInMeta.symbol}\n` +
+        `Receive: ~${colors.value(routeAmountOut)} ${tokenOutMeta.symbol}\n` +
         `Value: ${formatUsd(routeSummary.amountInUsd)} → ${formatUsd(routeSummary.amountOutUsd)}\n` +
         `Gas: ${formatGas(routeSummary.gas, routeSummary.gasUsd)}\n` +
         `Route: ${routeSummary.route.length} path(s) via ${routeSummary.route.flat().map(s => s.exchange).filter((v, i, a) => a.indexOf(v) === i).join(", ")}\n` +
@@ -81,7 +86,11 @@ export function createSwapSubcommand(): Command {
         if (isHeadless()) {
           writeJsonSuccess({
             dryRun: true, chain: slug, chainId, tokenIn: tokenInAddr, tokenOut: tokenOutAddr,
+            tokenInSymbol: tokenInMeta.symbol, tokenOutSymbol: tokenOutMeta.symbol,
+            tokenInDecimals: tokenInMeta.decimals, tokenOutDecimals: tokenOutMeta.decimals,
+            requestedAmountIn: options.amountIn,
             amountIn: routeSummary.amountIn, amountOut: routeSummary.amountOut,
+            amountInNormalized: routeAmountIn, amountOutNormalized: routeAmountOut,
             amountInUsd: routeSummary.amountInUsd, amountOutUsd: routeSummary.amountOutUsd,
             gas: routeSummary.gas, gasUsd: routeSummary.gasUsd,
             routerAddress, routeID: routeSummary.routeID,
@@ -139,13 +148,18 @@ export function createSwapSubcommand(): Command {
         data: buildResponse.data.data as Hex,
         value: BigInt(buildResponse.data.transactionValue),
       });
+      const executedAmountIn = formatTokenAmount(buildResponse.data.amountIn, tokenInMeta.decimals);
+      const executedAmountOut = formatTokenAmount(buildResponse.data.amountOut, tokenOutMeta.decimals);
 
       spinSend.succeed("Swap executed");
 
       if (isHeadless()) {
         writeJsonSuccess({
           txHash, chain: slug, chainId, tokenIn: tokenInAddr, tokenOut: tokenOutAddr,
+          tokenInSymbol: tokenInMeta.symbol, tokenOutSymbol: tokenOutMeta.symbol,
+          tokenInDecimals: tokenInMeta.decimals, tokenOutDecimals: tokenOutMeta.decimals,
           amountIn: buildResponse.data.amountIn, amountOut: buildResponse.data.amountOut,
+          amountInNormalized: executedAmountIn, amountOutNormalized: executedAmountOut,
           amountInUsd: buildResponse.data.amountInUsd, amountOutUsd: buildResponse.data.amountOutUsd,
           routerAddress: buildResponse.data.routerAddress, recipient,
         });
@@ -169,22 +183,30 @@ export function createSwapSubcommand(): Command {
       const spin = spinner("Finding best route...");
       spin.start();
 
-      const tokenInAddr = await resolveTokenAddress(tokenIn, chainId);
-      const tokenOutAddr = await resolveTokenAddress(tokenOut, chainId);
-      const amountInWei = parseUnits(options.amountIn, 18).toString();
+      const tokenInMeta = await resolveTokenMetadata(tokenIn, chainId);
+      const tokenOutMeta = await resolveTokenMetadata(tokenOut, chainId);
+      const tokenInAddr = tokenInMeta.address;
+      const tokenOutAddr = tokenOutMeta.address;
+      const amountInRaw = parseUnits(options.amountIn, tokenInMeta.decimals).toString();
 
       const client = getKyberAggregatorClient();
       const routeResponse = await client.getRoute(slug, {
-        tokenIn: tokenInAddr, tokenOut: tokenOutAddr, amountIn: amountInWei,
+        tokenIn: tokenInAddr, tokenOut: tokenOutAddr, amountIn: amountInRaw,
       });
 
       const { routeSummary, routerAddress } = routeResponse.data;
+      const routeAmountIn = formatTokenAmount(routeSummary.amountIn, tokenInMeta.decimals);
+      const routeAmountOut = formatTokenAmount(routeSummary.amountOut, tokenOutMeta.decimals);
       spin.succeed("Route found");
 
       if (isHeadless()) {
         writeJsonSuccess({
           chain: slug, chainId, tokenIn: tokenInAddr, tokenOut: tokenOutAddr,
+          tokenInSymbol: tokenInMeta.symbol, tokenOutSymbol: tokenOutMeta.symbol,
+          tokenInDecimals: tokenInMeta.decimals, tokenOutDecimals: tokenOutMeta.decimals,
+          requestedAmountIn: options.amountIn,
           amountIn: routeSummary.amountIn, amountOut: routeSummary.amountOut,
+          amountInNormalized: routeAmountIn, amountOutNormalized: routeAmountOut,
           amountInUsd: routeSummary.amountInUsd, amountOutUsd: routeSummary.amountOutUsd,
           gas: routeSummary.gas, gasUsd: routeSummary.gasUsd,
           routerAddress, routeID: routeSummary.routeID,
@@ -193,8 +215,8 @@ export function createSwapSubcommand(): Command {
       } else {
         const exchanges = routeSummary.route.flat().map(s => s.exchange).filter((v, i, a) => a.indexOf(v) === i);
         infoBox("Swap Quote", [
-          `Sell: ${colors.value(options.amountIn)} ${tokenIn}`,
-          `Receive: ~${colors.value(routeSummary.amountOut)} wei ${tokenOut}`,
+          `Sell: ${colors.value(routeAmountIn)} ${tokenInMeta.symbol}`,
+          `Receive: ~${colors.value(routeAmountOut)} ${tokenOutMeta.symbol}`,
           `Value: ${formatUsd(routeSummary.amountInUsd)} → ${formatUsd(routeSummary.amountOutUsd)}`,
           `Gas: ${formatGas(routeSummary.gas, routeSummary.gasUsd)}`,
           `Route: ${routeSummary.route.length} path(s) via ${exchanges.join(", ")}`,

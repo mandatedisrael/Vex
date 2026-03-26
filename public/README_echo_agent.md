@@ -638,7 +638,7 @@ Agent-created tasks are stored in `scheduled_tasks` and registered with `node-cr
 
 Built-ins created automatically on init when missing:
 
-- `builtin-portfolio-snapshot` — hourly at `0 * * * *`
+- `builtin-portfolio-snapshot` — every 30 minutes at `*/30 * * * *`
 - `builtin-auto-backup` — hourly at `30 * * * *`
 
 **API endpoints:**
@@ -661,7 +661,7 @@ Built-ins created automatically on init when missing:
 
 **Files**: `src/agent/snapshot.ts`, `src/agent/db/repos/snapshots.ts`, `src/agent/handlers/portfolio.ts`
 
-Periodic capture of all balances across active chains. Uses Khalani `tokens balances` for multi-chain coverage + native 0G balance.
+Periodic capture of all balances across active chains every 30 minutes. Uses Khalani `tokens balances` for multi-chain coverage plus a native 0G fallback from `wallet balance --json`.
 
 Active chains auto-detected from `trades` table (`SELECT DISTINCT chain`) + defaults (0g, solana).
 

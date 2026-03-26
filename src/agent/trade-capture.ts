@@ -428,11 +428,11 @@ function buildTradeMutations(
           "executed",
           {
             token: invocation.positionals[0] ?? asString(payload.tokenIn) ?? "unknown",
-            amount: asString(payload.amountIn) ?? getOptionString(invocation.options, "--amount-in") ?? "0",
+            amount: asString(payload.amountInNormalized) ?? asString(payload.amountIn) ?? getOptionString(invocation.options, "--amount-in") ?? "0",
           },
           {
             token: invocation.positionals[1] ?? asString(payload.tokenOut) ?? "unknown",
-            amount: asString(payload.amountOut) ?? "0",
+            amount: asString(payload.amountOutNormalized) ?? asString(payload.amountOut) ?? "0",
           },
           {
             signature,

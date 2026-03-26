@@ -53,7 +53,7 @@ describe("takeSnapshot", () => {
       } else if (args.includes("solana")) {
         cb(null, JSON.stringify({ success: true, tokens: [] }), "");
       } else {
-        cb(null, JSON.stringify({ success: true, balance: "1.0", usdValue: 0.5 }), "");
+        cb(null, JSON.stringify({ success: true, native: { symbol: "0G", balance: "1.0", usdValue: 0.5 } }), "");
       }
     });
 
@@ -130,7 +130,7 @@ describe("takeSnapshot", () => {
       if (args.includes("eip155") || args.includes("solana")) {
         cb(null, JSON.stringify({ success: true, tokens: [] }), "");
       } else {
-        cb(null, JSON.stringify({ success: true, balance: "10", usdValue: 150 }), "");
+        cb(null, JSON.stringify({ success: true, native: { symbol: "0G", balance: "10", usdValue: 150 } }), "");
       }
     });
 
@@ -156,7 +156,10 @@ describe("takeSnapshot", () => {
       if (args.includes("eip155") || args.includes("solana")) {
         cb(null, JSON.stringify({ success: true, tokens: [] }), "");
       } else if (args.includes("balance")) {
-        cb(null, JSON.stringify({ success: true, balance: "5.0", usdValue: 2.5 }), "");
+        cb(null, JSON.stringify({
+          success: true,
+          native: { symbol: "0G", balanceWei: "5000000000000000000", balance: "5.0" },
+        }), "");
       } else {
         cb(new Error("unknown"), "", "");
       }
@@ -167,5 +170,24 @@ describe("takeSnapshot", () => {
     const ogPos = call.positions.find((p: any) => p.chain === "0g" && p.symbol === "0G");
     expect(ogPos).toBeDefined();
     expect(ogPos.amount).toBe("5.0");
+  });
+
+  it("keeps backward compatibility with legacy top-level 0G balance shape", async () => {
+    mockExecFile.mockImplementation((_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+      if (args.includes("eip155") || args.includes("solana")) {
+        cb(null, JSON.stringify({ success: true, tokens: [] }), "");
+      } else if (args.includes("balance")) {
+        cb(null, JSON.stringify({ success: true, balance: "3.5", usdValue: 1.75 }), "");
+      } else {
+        cb(new Error("unknown"), "", "");
+      }
+    });
+
+    await takeSnapshot();
+    const call = mockInsertSnapshot.mock.calls[0][0];
+    const ogPos = call.positions.find((p: any) => p.chain === "0g" && p.symbol === "0G");
+    expect(ogPos).toBeDefined();
+    expect(ogPos.amount).toBe("3.5");
+    expect(ogPos.usdValue).toBe(1.75);
   });
 });

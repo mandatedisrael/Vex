@@ -19,6 +19,10 @@ interface Position {
   usdValue: number;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 /**
  * Take a full portfolio snapshot across all active chains.
  * Calls CLI commands to fetch balances, stores in DB.
@@ -91,12 +95,21 @@ export async function takeSnapshot(source = "cron"): Promise<number> {
   try {
     const ogResult = await runCli(["wallet", "balance", "--json"]);
     const ogData = JSON.parse(ogResult);
-    if (ogData.success && ogData.balance != null) {
+    const native = isRecord(ogData?.native) ? ogData.native : null;
+    const balance = native?.balance != null
+      ? String(native.balance)
+      : ogData?.balance != null
+        ? String(ogData.balance)
+        : null;
+    const usdValueRaw = native?.usdValue ?? ogData?.usdValue ?? 0;
+    const usdValue = Number(usdValueRaw);
+    if (ogData.success && balance != null) {
       const existing = positions.find(p => p.chain === "0g" && p.symbol === "0G");
       if (!existing) {
         positions.push({
           chain: "0g", token: "native", symbol: "0G",
-          amount: String(ogData.balance), usdValue: Number(ogData.usdValue ?? 0),
+          amount: balance,
+          usdValue: Number.isFinite(usdValue) ? usdValue : 0,
         });
       }
     }

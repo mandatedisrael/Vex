@@ -137,7 +137,7 @@ export const PortfolioView: FC<PortfolioViewProps> = ({ onBack }) => {
             ))}
 
             {chains.length === 0 && !loading && (
-              <div className="text-center text-sm text-muted-foreground py-12">No portfolio data yet. Agent will snapshot balances every hour.</div>
+              <div className="text-center text-sm text-muted-foreground py-12">No portfolio data yet. Agent snapshots balances every 30 minutes.</div>
             )}
           </>
         )}
