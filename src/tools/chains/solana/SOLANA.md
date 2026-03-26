@@ -129,6 +129,156 @@ This document maps every `.ts` file in `src/tools/chains/solana/` to the data it
 
 ---
 
+## Value Formats & Decimals per Protocol
+
+Understanding what format each API returns is critical for UI display. Some return atomic (raw on-chain integers), some return human-readable, some return USD strings.
+
+### Swap (Ultra API)
+
+| Field | Format | Example | To display |
+|-------|--------|---------|------------|
+| `order.inAmount` / `order.outAmount` | **Atomic** (string) | `"1000000000"` = 1 SOL | Divide by `10^decimals` → `tokenAmountToUi()` |
+| `order.priceImpactPct` | **Already %** (string) | `"0.01"` = 0.01% | Display as-is, do NOT multiply by 100 |
+| `order.slippageBps` | **Basis points** (number) | `50` = 0.5% | Divide by 100 for % |
+| `execute.inputAmountResult` / `outputAmountResult` | **Atomic** (string) | Same as above | `tokenAmountToUi()` |
+
+### Perps API (`perps-api.jup.ag/v2`)
+
+| Field | Format | Example | To display |
+|-------|--------|---------|------------|
+| `position.sizeUsd` | **USD string** | `"10.98"` | Parse to number, display as `$10.98` |
+| `position.entryPriceUsd` / `markPriceUsd` | **USD string** | `"86.74"` | Display as `$86.74` |
+| `position.leverage` | **String** | `"1.09"` | Display as `1.09x` |
+| `position.pnlAfterFeesUsd` | **USD string** | `"-0.29"` | Display as `−$0.29` |
+| `position.pnlAfterFeesPct` | **% string** | `"-0.29"` = -0.29% | Display as-is with % |
+| `trade.price` / `trade.size` / `trade.fee` | **USD string** | `"86.74"` | Parse to number |
+| `trade.pnl` | **USD string or null** | `"5.00"` or `null` | null = open (no realized PnL yet) |
+| `market.price` / `volume` | **USD string** | `"86.74"` | Parse to number |
+| Collateral `inputTokenAmount` | **Atomic** (string) | `"10000000"` = 10 USDC | Based on input token decimals |
+
+### Predictions API (`/prediction/v1`)
+
+| Field | Format | Example | To display |
+|-------|--------|---------|------------|
+| `market.pricing.buyYesPriceUsd` | **Micro-USD** (number) | `650000` = $0.65 | Jupiter CLI divides by 1,000,000 |
+| `market.pricing.volume` | **Micro-USD** (number) | `50000000000` = $50,000 | Divide by 1,000,000 |
+| `position.totalCostUsd` / `valueUsd` / `pnlUsd` | **Micro-USD** (number) | `6500000` = $6.50 | Divide by 1,000,000 |
+| `position.contracts` | **Integer** (number or string) | `10` | Display as-is |
+| `depositAmount` (input to create order) | **Micro-USD** (integer) | `10000000` = $10 USDC | `amountUsdc * 1_000_000` |
+| `history.avgFillPriceUsd` | **Micro-USD** (string) | `"650000"` = $0.65 | Parse then ÷ 1,000,000 |
+| `history.realizedPnl` | **Micro-USD or null** (string) | `"500000"` = $0.50 | null = no realized PnL |
+
+**VERIFIED from OpenAPI YAML**: Position fields (`totalCostUsd`, `valueUsd`, `pnlUsd`, `avgFillPriceUsd`) are explicitly documented as "micro USD (u128 as string)" — divide by 1,000,000. Pricing fields (`buyYesPriceUsd`, `buyNoPriceUsd`) lack explicit unit docs in YAML but Jupiter CLI treats them as micro-USD via `NumberConverter.fromMicroUsd()`. Our `prediction-service.ts` currently passes through raw values without converting — UI must handle this conversion.
+
+**VERIFIED from OpenAPI YAML**: Perps REST API (`perps-api.jup.ag/v2`) returns **already-converted USD strings** (not atomic, not micro-USD). Jupiter CLI parses them as `Number(position.sizeUsd)` without any division. This is different from on-chain program accounts which use atomic USDC (6 decimals).
+
+### DCA / Recurring API (`/recurring/v1`)
+
+| Field | Format | Example | To display |
+|-------|--------|---------|------------|
+| `inAmount` (create param) | **Atomic** (integer) | `50000000` = 50 USDC (6 dec) | Total deposit, per-cycle = inAmount / numberOfOrders |
+| `order.inAmountPerCycle` | **Atomic** (string) | `"10000000"` = 10 USDC | Divide by `10^inputDecimals` |
+| `order.inDeposited` / `inUsed` / `outReceived` | **Atomic** (string) | `"50000000"` | Divide by respective token decimals |
+| `interval` | **Seconds** (integer) | `86400` = 1 day | Map: 60=min, 3600=hr, 86400=day, 604800=wk, 2592000=mo |
+
+### Limit Orders / Trigger V1 (`/trigger/v1`)
+
+| Field | Format | Example | To display |
+|-------|--------|---------|------------|
+| `params.makingAmount` / `takingAmount` | **Atomic** (string) | `"100000000"` = 100 USDC | Divide by `10^decimals` |
+| `order.remainingMakingAmount` | **Atomic** (string) | `"50000000"` | Divide by `10^inputDecimals` |
+
+### Lend Earn (`/lend/v1/earn`)
+
+| Field | Format | Example | To display |
+|-------|--------|---------|------------|
+| `token.supplyRate` / `rewardsRate` / `totalRate` | **Fractional** (string or number) | `"0.045"` = 4.5% APY | Multiply by 100 for % display |
+| `token.totalAssets` / `totalSupply` | **Atomic** (string) | `"1000000000"` | Divide by `10^token.decimals` |
+| `position.shares` / `underlyingAssets` | **Atomic** (string) | `"500000"` | Divide by `10^token.decimals` |
+| `earnings` | **Atomic** (number) | `24800` | Divide by `10^token.asset.decimals` |
+
+### Staking (native `@solana/web3.js`)
+
+| Field | Format | Example | To display |
+|-------|--------|---------|------------|
+| All SOL amounts | **Already converted to SOL** (number) | `1.5` | Display as-is (`lamportsToSol` already applied) |
+| `claimableMevSol` | **SOL** (number) | `0.002` | Display as-is |
+
+### Send (Jupiter Send)
+
+| Field | Format | Example | To display |
+|-------|--------|---------|------------|
+| `amount` (API param) | **Atomic** (string) | `"1000000000"` = 1 SOL | Our code converts UI→atomic before sending |
+| `invite.amount` | **Atomic** (string) | `"1000000000"` | Divide by token decimals |
+
+### Holdings (Ultra API)
+
+| Field | Format | Example | To display |
+|-------|--------|---------|------------|
+| `holdings.amount` | **Lamports** (string) | `"1500000000"` = 1.5 SOL | Divide by 10^9 |
+| `holdings.uiAmount` | **SOL** (number) | `1.5` | Display as-is |
+| `token.amount` | **Atomic** (string) | `"100000000"` | Divide by `token.decimals` |
+| `token.uiAmount` | **Human-readable** (number) | `100.0` | Display as-is |
+
+### Price API (`/price/v3`)
+
+| Field | Format | Example | To display |
+|-------|--------|---------|------------|
+| `price` | **USD string** | `"150.25"` | Parse to number, display as `$150.25` |
+
+### Well-Known Token Decimals (from `constants.ts`)
+
+| Token | Decimals | 1 unit in atomic |
+|-------|----------|-----------------|
+| SOL | 9 | 1,000,000,000 |
+| USDC | 6 | 1,000,000 |
+| USDT | 6 | 1,000,000 |
+| JUP | 6 | 1,000,000 |
+| BONK | 5 | 100,000 |
+| mSOL / jitoSOL / bSOL / JTO | 9 | 1,000,000,000 |
+| ETH / wBTC / RNDR | 8 | 100,000,000 |
+| PYTH | 6 | 1,000,000 |
+| WEN | 5 | 100,000 |
+| JLP | 6 | 1,000,000 |
+
+### How to get decimals for ANY token
+
+Decimals are NOT hardcoded — they are dynamic per token. Only 15 well-known tokens have hardcoded decimals in `constants.ts`. For all others, decimals come from the API response itself.
+
+**Where each protocol provides decimals:**
+
+| Protocol | Where decimals come from | Field |
+|----------|------------------------|-------|
+| **Holdings** (Ultra API) | Each token account in response | `token[mint][].decimals` (number) |
+| **Token search** (Tokens V2) | Search result | `token.decimals` (number) |
+| **Token resolve** (token-registry.ts) | `resolveToken(symbol)` returns full metadata | `TokenMetadata.decimals` |
+| **Lend Earn** | Token list response | `LendToken.decimals` (jlToken decimals), `LendToken.asset.decimals` (underlying) — these can differ |
+| **DCA orders** | NOT in order response — must resolve via `resolveToken(inputMint)` | Need separate lookup |
+| **Limit orders** | NOT in order response — must resolve via `resolveToken(inputMint)` | Need separate lookup |
+| **Perps** | Hardcoded in `PERPS_ASSETS` — only SOL(9), BTC(8), ETH(8), USDC(6) | `perps-client.ts` constant |
+| **Predictions** | All values in micro-USD (fixed 6 decimals, ÷1,000,000) | No token decimals needed |
+| **Staking** | Always SOL (9 decimals, already converted to SOL in service) | No conversion needed |
+| **Send** | Resolved via `resolveToken(mint)` before API call | `TokenMetadata.decimals` |
+
+**Resolution chain for unknown tokens** (`token-registry.ts`):
+1. Check `constants.ts` well-known list (instant, offline) — 15 tokens
+2. Check file cache `~/.config/echoclaw/solana-token-cache.json` (24h TTL)
+3. Call Jupiter Token API `GET /tokens/v2/search?query=` — returns `decimals` in response
+4. If all fail → `undefined` (token not found)
+
+**Critical rule**: Never assume decimals. Always resolve first, then convert. The only safe hardcoded values are in `constants.ts` and `PERPS_ASSETS`.
+
+### Conversion helpers (from `validation.ts`)
+
+| Function | Purpose |
+|----------|---------|
+| `tokenAmountToUi(rawAmount, decimals)` | Atomic → human: `Number(BigInt(raw)) / 10^decimals` |
+| `uiToTokenAmount(uiAmount, decimals)` | Human → atomic: `BigInt(Math.round(ui * 10^decimals))` |
+| `lamportsToSol(lamports)` | Lamports → SOL: `Number(lamports) / LAMPORTS_PER_SOL` |
+| `solToLamports(sol)` | SOL → lamports: `BigInt(Math.round(sol * LAMPORTS_PER_SOL))` |
+
+---
+
 ## API Key Requirements
 
 Jupiter API key (`echoclaw config set-jupiter-key <key>`, free from [portal.jup.ag](https://portal.jup.ag)).
