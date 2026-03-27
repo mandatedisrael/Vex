@@ -6,6 +6,8 @@ import {
   validateActiveMakingAmount,
   validateOperatorSignature,
   validateEncodedCalldata,
+  validateTradingPairsResponse,
+  validateContractAddressResponse,
 } from "../tools/kyberswap/limit-order/validation.js";
 
 describe("validateEip712Message", () => {
@@ -119,5 +121,52 @@ describe("validateEncodedCalldata", () => {
 
   it("rejects missing encodedData", () => {
     expect(() => validateEncodedCalldata({})).toThrow();
+  });
+});
+
+describe("validateTradingPairsResponse", () => {
+  it("parses array of pairs", () => {
+    const result = validateTradingPairsResponse([
+      { makerAsset: "0x1", takerAsset: "0x2", chainId: "1" },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].makerAsset).toBe("0x1");
+  });
+
+  it("parses { pairs: [...] } envelope", () => {
+    const result = validateTradingPairsResponse({
+      pairs: [{ makerAsset: "0x1", takerAsset: "0x2", chainId: "137" }],
+    });
+    expect(result).toHaveLength(1);
+  });
+
+  it("parses { data: [...] } envelope", () => {
+    const result = validateTradingPairsResponse({
+      data: [{ makerAsset: "0xA", takerAsset: "0xB", chainId: "56" }],
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].chainId).toBe("56");
+  });
+
+  it("rejects non-array/non-object", () => {
+    expect(() => validateTradingPairsResponse("bad")).toThrow();
+  });
+});
+
+describe("validateContractAddressResponse", () => {
+  it("parses object with string values", () => {
+    const result = validateContractAddressResponse({ "1": "0xabc", "137": "0xdef" });
+    expect(result["1"]).toBe("0xabc");
+    expect(result["137"]).toBe("0xdef");
+  });
+
+  it("ignores non-string values", () => {
+    const result = validateContractAddressResponse({ "1": "0xabc", "bad": 42 });
+    expect(result["1"]).toBe("0xabc");
+    expect(result["bad"]).toBeUndefined();
+  });
+
+  it("rejects non-object", () => {
+    expect(() => validateContractAddressResponse(null)).toThrow();
   });
 });

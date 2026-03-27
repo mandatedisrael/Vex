@@ -120,6 +120,31 @@ export interface DexOrder {
   paymentTimestamp: number;
 }
 
+// ── Community Takeovers ─────────────────────────────────────────────
+
+export interface DexCommunityTakeover {
+  url: string;
+  chainId: string;
+  tokenAddress: string;
+  icon: string;
+  header: string | null;
+  description: string | null;
+  links: DexLink[] | null;
+  claimDate: string;
+}
+
+// ── Ads ─────────────────────────────────────────────────────────────
+
+export interface DexAd {
+  url: string;
+  chainId: string;
+  tokenAddress: string;
+  date: string;
+  type: string;
+  durationHours: number | null;
+  impressions: number | null;
+}
+
 // ── Trending (combined profiles + boosts) ───────────────────────────
 
 export interface DexTrendingItem {
@@ -142,4 +167,4 @@ export interface WsHandshake<T> {
   data: T[];
 }
 
-export type DexStreamChannel = "profiles" | "boosts" | "boosts-top";
+export type DexStreamChannel = "profiles" | "boosts" | "boosts-top" | "community-takeovers" | "ads";

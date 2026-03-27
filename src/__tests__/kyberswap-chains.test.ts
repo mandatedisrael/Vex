@@ -28,6 +28,13 @@ describe("resolveChainSlug", () => {
     expect(resolveChainSlug("op")).toBe("optimism");
     expect(resolveChainSlug("avax")).toBe("avalanche");
     expect(resolveChainSlug("bera")).toBe("berachain");
+    expect(resolveChainSlug("zk")).toBe("zksync");
+    expect(resolveChainSlug("era")).toBe("zksync");
+  });
+
+  it("accepts ZaaS-only chain slugs", () => {
+    expect(resolveChainSlug("scroll")).toBe("scroll");
+    expect(resolveChainSlug("zksync")).toBe("zksync");
   });
 
   it("is case-insensitive", () => {
@@ -113,13 +120,20 @@ describe("chainSupportsFeature", () => {
   it("returns false for unsupported features", () => {
     expect(chainSupportsFeature("mantle", "zaas")).toBe(false);
     expect(chainSupportsFeature("megaeth", "zaas")).toBe(false);
+    expect(chainSupportsFeature("scroll", "aggregator")).toBe(false);
+    expect(chainSupportsFeature("zksync", "limitOrder")).toBe(false);
+  });
+
+  it("returns true for ZaaS-only chains' zaas feature", () => {
+    expect(chainSupportsFeature("scroll", "zaas")).toBe(true);
+    expect(chainSupportsFeature("zksync", "zaas")).toBe(true);
   });
 });
 
 describe("getKyberChains", () => {
-  it("returns 18 chains", () => {
+  it("returns 20 chains", () => {
     const chains = getKyberChains();
-    expect(chains).toHaveLength(18);
+    expect(chains).toHaveLength(20);
   });
 
   it("each chain has required fields", () => {
@@ -133,10 +147,14 @@ describe("getKyberChains", () => {
     }
   });
 
-  it("all chains have aggregator=true", () => {
-    for (const chain of getKyberChains()) {
-      expect(chain.aggregator).toBe(true);
-    }
+  it("aggregator-enabled chains have aggregator=true", () => {
+    const aggregatorChains = getKyberChains().filter((c) => c.aggregator);
+    expect(aggregatorChains.length).toBe(18);
+  });
+
+  it("ZaaS-only chains have aggregator=false and zaas=true", () => {
+    const zaasOnly = getKyberChains().filter((c) => !c.aggregator && c.zaas);
+    expect(zaasOnly.map((c) => c.slug).sort()).toEqual(["scroll", "zksync"]);
   });
 });
 

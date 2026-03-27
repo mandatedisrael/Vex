@@ -161,12 +161,52 @@ describe("khalani validation", () => {
   });
 
   describe("validateOrderResponse", () => {
+    const VALID_ORDER = {
+      id: "ord_1", type: "native-filler", quoteId: "q1", routeId: "r1",
+      fromChainId: 1, fromToken: "0x1", toChainId: 42161, toToken: "0x2",
+      srcAmount: "100", destAmount: "99", status: "filled", author: "0xA",
+      depositTxHash: "0xTx", createdAt: "2024-01-01", updatedAt: "2024-01-02",
+      tradeType: "EXACT_INPUT", stepsCompleted: ["created", "filled"],
+      transactions: {},
+    };
+
     it("rejects non-object", () => {
       expect(() => validateOrderResponse("nope")).toThrow();
     });
 
     it("rejects order with missing id", () => {
       expect(() => validateOrderResponse({ type: "x" })).toThrow("missing order.id");
+    });
+
+    it("parses timestamps when present", () => {
+      const result = validateOrderResponse({
+        ...VALID_ORDER,
+        timestamps: { createdAt: "2024-01-01T00:00:00Z", publishedAt: "2024-01-01T00:01:00Z" },
+      });
+      expect(result.timestamps).toEqual({ createdAt: "2024-01-01T00:00:00Z", publishedAt: "2024-01-01T00:01:00Z" });
+    });
+
+    it("returns undefined timestamps when not present", () => {
+      const result = validateOrderResponse(VALID_ORDER);
+      expect(result.timestamps).toBeUndefined();
+    });
+
+    it("parses providerStatus when present", () => {
+      const result = validateOrderResponse({
+        ...VALID_ORDER,
+        providerStatus: { provider: "across", nativeStatus: "filled", substatus: "done" },
+      });
+      expect(result.providerStatus).toEqual({ provider: "across", nativeStatus: "filled", substatus: "done", metadata: undefined });
+    });
+
+    it("returns undefined providerStatus when not present", () => {
+      const result = validateOrderResponse(VALID_ORDER);
+      expect(result.providerStatus).toBeUndefined();
+    });
+
+    it("ignores malformed providerStatus", () => {
+      const result = validateOrderResponse({ ...VALID_ORDER, providerStatus: "not-an-object" });
+      expect(result.providerStatus).toBeUndefined();
     });
   });
 

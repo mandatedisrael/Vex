@@ -18,8 +18,8 @@ echoclaw khalani tokens top [--chain-ids <id,id>] --json
 echoclaw khalani tokens search <query> [--chain-ids <id,id>] --json
 echoclaw khalani tokens autocomplete <keyword> [--chain-ids <id,id>] --json
 echoclaw khalani tokens balances [address] [--chain-ids <id,id>] [--wallet eip155|solana] --json
-echoclaw khalani quote --from-chain <chain> --from-token <token-address> --to-chain <chain> --to-token <token-address> --amount <smallest-units> [--trade-type EXACT_INPUT|EXACT_OUTPUT] [--recipient <addr>] [--refund-to <addr>] [--referrer <addr>] [--referrer-fee-bps <bps>] [--route <routeId>] [--stream] --json
-echoclaw khalani bridge --from-chain <chain> --from-token <token-address> --to-chain <chain> --to-token <token-address> --amount <smallest-units> [--route-id <routeId>] [--deposit-method CONTRACT_CALL|PERMIT2|TRANSFER] [--dry-run] [--yes] --json
+echoclaw khalani quote --from-chain <chain> --from-token <token-address> --to-chain <chain> --to-token <token-address> --amount <smallest-units> [--trade-type EXACT_INPUT|EXACT_OUTPUT] [--recipient <addr>] [--refund-to <addr>] [--referrer <addr>] [--referrer-fee-bps <bps>] [--filler <name>] [--route <routeId>] [--stream] --json
+echoclaw khalani bridge --from-chain <chain> --from-token <token-address> --to-chain <chain> --to-token <token-address> --amount <smallest-units> [--filler <name>] [--route-id <routeId>] [--deposit-method CONTRACT_CALL|PERMIT2|TRANSFER] [--dry-run] [--yes] --json
 echoclaw khalani orders [address] [--wallet eip155|solana] [--limit <n>] [--cursor <n>] --json
 echoclaw khalani order <orderId> --json
 ```
@@ -46,7 +46,8 @@ echoclaw wallet export-key [--chain eip155|solana] --to-file <path>
 - recipient must match the destination chain family
 - referrer must always be a valid EVM address
 - if address flags are omitted, EchoClaw falls back to the configured wallet for the matching family
-- chain values can be numeric IDs or aliases like `eth`, `arb`, `base`, `op`, `sol`, `0g`
+- chain values can be numeric IDs or aliases like `eth`, `arb`, `base`, `op`, `sol`, `0g`, `unichain`, `sonic`, `bera`, `world`, `monad`, `blast`, `zora`, `tron`, etc. (40+ aliases)
+- amounts accept both decimal (`1000000`) and hex (`0xF4240`) format
 - token values must be chain-specific token addresses; use token search/autocomplete if you only know the symbol
 
 ## Execution model
@@ -137,3 +138,4 @@ Bridge execute:
 - `KHALANI_SOLANA_SIGN_FAILED`
 - `KHALANI_SOLANA_KEYSTORE_NOT_FOUND`
 - `KHALANI_ADDRESS_MISMATCH`
+- `KHALANI_UNSUPPORTED_DEPOSIT_METHOD`

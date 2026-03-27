@@ -84,6 +84,22 @@ describe("parseAmountInSmallestUnits", () => {
   it("rejects empty string", () => {
     expect(() => parseAmountInSmallestUnits("")).toThrow();
   });
+
+  it("accepts hex amount with 0x prefix", () => {
+    expect(parseAmountInSmallestUnits("0xF4240")).toBe("1000000");
+  });
+
+  it("accepts hex amount with 0X prefix", () => {
+    expect(parseAmountInSmallestUnits("0X1")).toBe("1");
+  });
+
+  it("rejects hex zero", () => {
+    expect(() => parseAmountInSmallestUnits("0x0")).toThrow();
+  });
+
+  it("rejects invalid hex", () => {
+    expect(() => parseAmountInSmallestUnits("0xZZZ")).toThrow();
+  });
 });
 
 describe("parseBigintish", () => {
@@ -174,6 +190,38 @@ describe("mapKhalaniError", () => {
   it("maps UnexpectedFromAddressException to KHALANI_ADDRESS_MISMATCH", () => {
     const error = mapKhalaniError(400, { message: "Address mismatch", name: "UnexpectedFromAddressException" });
     expect(error.code).toBe(ErrorCodes.KHALANI_ADDRESS_MISMATCH);
+  });
+
+  it("maps BadRequestException to KHALANI_VALIDATION_ERROR", () => {
+    const error = mapKhalaniError(400, { message: "Bad request", name: "BadRequestException" });
+    expect(error.code).toBe(ErrorCodes.KHALANI_VALIDATION_ERROR);
+    expect(error.retryable).toBe(false);
+  });
+
+  it("maps NotSupportedContractException to KHALANI_API_ERROR", () => {
+    const error = mapKhalaniError(400, { message: "Contract not supported", name: "NotSupportedContractException" });
+    expect(error.code).toBe(ErrorCodes.KHALANI_API_ERROR);
+  });
+
+  it("maps BuildDepositParsingException to KHALANI_API_ERROR", () => {
+    const error = mapKhalaniError(400, { message: "Parsing failed", name: "BuildDepositParsingException" });
+    expect(error.code).toBe(ErrorCodes.KHALANI_API_ERROR);
+    expect(error.hint).toContain("Re-quote");
+  });
+
+  it("maps NotSupportedAssetReverseContractException to KHALANI_UNSUPPORTED_CHAIN", () => {
+    const error = mapKhalaniError(404, { message: "Asset not configured", name: "NotSupportedAssetReverseContractException" });
+    expect(error.code).toBe(ErrorCodes.KHALANI_UNSUPPORTED_CHAIN);
+  });
+
+  it("maps IntentNotFoundException to KHALANI_QUOTE_NOT_FOUND", () => {
+    const error = mapKhalaniError(404, { message: "Intent missing", name: "IntentNotFoundException" });
+    expect(error.code).toBe(ErrorCodes.KHALANI_QUOTE_NOT_FOUND);
+  });
+
+  it("maps NotSupportedDepositMethodException to KHALANI_UNSUPPORTED_DEPOSIT_METHOD", () => {
+    const error = mapKhalaniError(400, { message: "Method not supported", name: "NotSupportedDepositMethodException" });
+    expect(error.code).toBe(ErrorCodes.KHALANI_UNSUPPORTED_DEPOSIT_METHOD);
   });
 
   describe("retryable and externalName", () => {

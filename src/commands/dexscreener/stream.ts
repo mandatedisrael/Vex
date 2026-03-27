@@ -11,18 +11,18 @@ import { EchoError, ErrorCodes } from "../../errors.js";
 import { isHeadless, writeStdout } from "../../utils/output.js";
 import type { DexStreamChannel } from "../../tools/dexscreener/types.js";
 
-const VALID_CHANNELS = new Set<DexStreamChannel>(["profiles", "boosts", "boosts-top"]);
+const VALID_CHANNELS = new Set<DexStreamChannel>(["profiles", "boosts", "boosts-top", "community-takeovers", "ads"]);
 
 export function createStreamSubcommand(): Command {
   return new Command("stream")
     .description("Real-time WebSocket stream (profiles, boosts, boosts-top)")
-    .argument("<type>", "Stream type: profiles, boosts, or boosts-top")
+    .argument("<type>", "Stream type: profiles, boosts, boosts-top, community-takeovers, ads")
     .option("--json", "Output JSON lines (default in headless mode)")
     .action(async (typeArg: string, options: { json?: boolean }) => {
       if (!VALID_CHANNELS.has(typeArg as DexStreamChannel)) {
         throw new EchoError(
           ErrorCodes.DEXSCREENER_API_ERROR,
-          `Invalid stream type: "${typeArg}". Must be one of: profiles, boosts, boosts-top`,
+          `Invalid stream type: "${typeArg}". Must be one of: profiles, boosts, boosts-top, community-takeovers, ads`,
         );
       }
 

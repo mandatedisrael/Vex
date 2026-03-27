@@ -26,6 +26,8 @@ const DEXSCREENER_CHAIN_MAP: Record<string, string> = {
   sonic: "sonic",
   berachain: "berachain",
   ronin: "ronin",
+  scroll: "scroll",
+  zksync: "zksync",
 };
 
 export function createZapSearchAction(): Command {

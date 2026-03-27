@@ -5,6 +5,8 @@ import { createTokenSubcommand } from "./token.js";
 import { createTokenPairsSubcommand } from "./token-pairs.js";
 import { createProfilesSubcommand } from "./profiles.js";
 import { createBoostsSubcommand } from "./boosts.js";
+import { createCommunityTakeoversSubcommand } from "./community-takeovers.js";
+import { createAdsSubcommand } from "./ads.js";
 import { createOrdersSubcommand } from "./orders.js";
 import { createTrendingSubcommand } from "./trending.js";
 import { createStreamSubcommand } from "./stream.js";
@@ -20,6 +22,8 @@ export function createDexScreenerCommand(): Command {
   dexscreener.addCommand(createTokenPairsSubcommand());
   dexscreener.addCommand(createProfilesSubcommand());
   dexscreener.addCommand(createBoostsSubcommand());
+  dexscreener.addCommand(createCommunityTakeoversSubcommand());
+  dexscreener.addCommand(createAdsSubcommand());
   dexscreener.addCommand(createOrdersSubcommand());
   dexscreener.addCommand(createTrendingSubcommand());
   dexscreener.addCommand(createStreamSubcommand());

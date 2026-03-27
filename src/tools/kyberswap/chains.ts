@@ -35,6 +35,8 @@ const CHAINS: readonly ChainEntry[] = [
   { slug: "etherlink", chainId: 42793, name: "Etherlink",  aggregator: true, limitOrder: true,  zaas: false },
   { slug: "monad",     chainId: 143,   name: "Monad",      aggregator: true, limitOrder: true,  zaas: false },
   { slug: "megaeth",   chainId: 4326,  name: "MegaETH",    aggregator: true, limitOrder: true,  zaas: false },
+  { slug: "scroll",    chainId: 534352, name: "Scroll",    aggregator: false, limitOrder: false, zaas: true },
+  { slug: "zksync",    chainId: 324,    name: "zkSync",    aggregator: false, limitOrder: false, zaas: true },
 ] as const;
 
 // ── Alias map ───────────────────────────────────────────────────────
@@ -47,6 +49,8 @@ const ALIASES: Record<string, KyberChainSlug> = {
   op: "optimism",
   avax: "avalanche",
   bera: "berachain",
+  zk: "zksync",
+  era: "zksync",
 };
 
 // ── Lookup maps (built once) ────────────────────────────────────────

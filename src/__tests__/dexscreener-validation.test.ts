@@ -6,10 +6,14 @@ import {
   validateTokensPairsResponse,
   validateProfilesResponse,
   validateBoostsResponse,
+  validateCommunityTakeoversResponse,
+  validateAdsResponse,
   validateOrdersResponse,
   validateWsHandshake,
   validateWsProfile,
   validateWsBoost,
+  validateWsCommunityTakeover,
+  validateWsAd,
 } from "../tools/dexscreener/validation.js";
 
 // ── Fixtures ────────────────────────────────────────────────────────
@@ -65,6 +69,27 @@ const FIXTURE_ORDER = {
   type: "tokenProfile",
   status: "approved",
   paymentTimestamp: 1700000000,
+};
+
+const FIXTURE_CTO = {
+  url: "https://dexscreener.com/solana/abc",
+  chainId: "solana",
+  tokenAddress: "So111111111111111111111111111111111111112",
+  icon: "https://img.dexscreener.com/cto.png",
+  header: null,
+  description: "Community took over",
+  links: [{ type: "telegram", label: "TG", url: "https://t.me/test" }],
+  claimDate: "2024-06-15T12:00:00Z",
+};
+
+const FIXTURE_AD = {
+  url: "https://dexscreener.com/solana/abc",
+  chainId: "solana",
+  tokenAddress: "So111111111111111111111111111111111111112",
+  date: "2024-06-15T12:00:00Z",
+  type: "tokenAd",
+  durationHours: 24,
+  impressions: 50000,
 };
 
 // ── validatePairsResponse ───────────────────────────────────────────
@@ -293,5 +318,81 @@ describe("pair nested fields", () => {
     const result = validateTokensResponse([pair]);
     expect(result[0].quoteToken.address).toBeNull();
     expect(result[0].quoteToken.name).toBeNull();
+  });
+});
+
+// ── validateCommunityTakeoversResponse ──────────────────────────────
+
+describe("validateCommunityTakeoversResponse", () => {
+  it("parses valid CTO array", () => {
+    const result = validateCommunityTakeoversResponse([FIXTURE_CTO]);
+    expect(result).toHaveLength(1);
+    expect(result[0].chainId).toBe("solana");
+    expect(result[0].claimDate).toBe("2024-06-15T12:00:00Z");
+    expect(result[0].links).toHaveLength(1);
+  });
+
+  it("handles CTO with null optional fields", () => {
+    const minimal = { ...FIXTURE_CTO, header: null, description: null, links: null };
+    const result = validateCommunityTakeoversResponse([minimal]);
+    expect(result[0].header).toBeNull();
+    expect(result[0].description).toBeNull();
+    expect(result[0].links).toBeNull();
+  });
+
+  it("rejects non-array input", () => {
+    expect(() => validateCommunityTakeoversResponse(null)).toThrow();
+    expect(() => validateCommunityTakeoversResponse({})).toThrow();
+  });
+
+  it("rejects CTO with missing claimDate", () => {
+    const { claimDate, ...noClaim } = FIXTURE_CTO;
+    expect(() => validateCommunityTakeoversResponse([noClaim])).toThrow();
+  });
+});
+
+// ── validateAdsResponse ─────────────────────────────────────────────
+
+describe("validateAdsResponse", () => {
+  it("parses valid ads array", () => {
+    const result = validateAdsResponse([FIXTURE_AD]);
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe("tokenAd");
+    expect(result[0].durationHours).toBe(24);
+    expect(result[0].impressions).toBe(50000);
+  });
+
+  it("handles ad with null optional fields", () => {
+    const minimal = { ...FIXTURE_AD, durationHours: null, impressions: null };
+    const result = validateAdsResponse([minimal]);
+    expect(result[0].durationHours).toBeNull();
+    expect(result[0].impressions).toBeNull();
+  });
+
+  it("rejects non-array input", () => {
+    expect(() => validateAdsResponse(null)).toThrow();
+  });
+
+  it("rejects ad with missing type", () => {
+    const { type, ...noType } = FIXTURE_AD;
+    expect(() => validateAdsResponse([noType])).toThrow();
+  });
+});
+
+// ── WS CTO and Ad validators ───────────────────────────────────────
+
+describe("validateWsCommunityTakeover", () => {
+  it("parses valid CTO", () => {
+    const result = validateWsCommunityTakeover(FIXTURE_CTO);
+    expect(result.chainId).toBe("solana");
+    expect(result.claimDate).toBe("2024-06-15T12:00:00Z");
+  });
+});
+
+describe("validateWsAd", () => {
+  it("parses valid ad", () => {
+    const result = validateWsAd(FIXTURE_AD);
+    expect(result.type).toBe("tokenAd");
+    expect(result.impressions).toBe(50000);
   });
 });

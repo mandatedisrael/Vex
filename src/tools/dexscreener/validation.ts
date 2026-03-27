@@ -8,8 +8,10 @@
 import { EchoError, ErrorCodes } from "../../errors.js";
 import { isRecord } from "../../utils/validation-helpers.js";
 import type {
+  DexAd,
   DexBoost,
   DexBoosts,
+  DexCommunityTakeover,
   DexLink,
   DexLiquidity,
   DexOrder,
@@ -303,4 +305,61 @@ export function validateWsProfile(raw: unknown): DexTokenProfile {
 
 export function validateWsBoost(raw: unknown): DexBoost {
   return parseBoost(raw);
+}
+
+// ── Community Takeovers ─────────────────────────────────────────────
+
+function parseCommunityTakeover(raw: unknown): DexCommunityTakeover {
+  if (!isRecord(raw)) {
+    throw new EchoError(ErrorCodes.DEXSCREENER_INVALID_RESPONSE, "Invalid DexScreener response: community takeover must be an object");
+  }
+  return {
+    url: asString(raw.url, "cto.url"),
+    chainId: asString(raw.chainId, "cto.chainId"),
+    tokenAddress: asString(raw.tokenAddress, "cto.tokenAddress"),
+    icon: typeof raw.icon === "string" ? raw.icon : "",
+    header: asOptionalString(raw.header),
+    description: asOptionalString(raw.description),
+    links: parseLinks(raw.links),
+    claimDate: asString(raw.claimDate, "cto.claimDate"),
+  };
+}
+
+export function validateCommunityTakeoversResponse(raw: unknown): DexCommunityTakeover[] {
+  if (!Array.isArray(raw)) {
+    throw new EchoError(ErrorCodes.DEXSCREENER_INVALID_RESPONSE, "Invalid DexScreener response: expected community takeovers array");
+  }
+  return raw.map(parseCommunityTakeover);
+}
+
+export function validateWsCommunityTakeover(raw: unknown): DexCommunityTakeover {
+  return parseCommunityTakeover(raw);
+}
+
+// ── Ads ─────────────────────────────────────────────────────────────
+
+function parseAd(raw: unknown): DexAd {
+  if (!isRecord(raw)) {
+    throw new EchoError(ErrorCodes.DEXSCREENER_INVALID_RESPONSE, "Invalid DexScreener response: ad must be an object");
+  }
+  return {
+    url: asString(raw.url, "ad.url"),
+    chainId: asString(raw.chainId, "ad.chainId"),
+    tokenAddress: asString(raw.tokenAddress, "ad.tokenAddress"),
+    date: asString(raw.date, "ad.date"),
+    type: asString(raw.type, "ad.type"),
+    durationHours: asOptionalNumber(raw.durationHours),
+    impressions: asOptionalNumber(raw.impressions),
+  };
+}
+
+export function validateAdsResponse(raw: unknown): DexAd[] {
+  if (!Array.isArray(raw)) {
+    throw new EchoError(ErrorCodes.DEXSCREENER_INVALID_RESPONSE, "Invalid DexScreener response: expected ads array");
+  }
+  return raw.map(parseAd);
+}
+
+export function validateWsAd(raw: unknown): DexAd {
+  return parseAd(raw);
 }

@@ -10,7 +10,9 @@ import { EchoError } from "../../errors.js";
 import { fetchWithTimeout, readJson } from "../../utils/http.js";
 import { mapDexScreenerError, mapTransportError } from "./errors.js";
 import type {
+  DexAd,
   DexBoost,
+  DexCommunityTakeover,
   DexOrder,
   DexPair,
   DexTokenProfile,
@@ -20,7 +22,9 @@ import type {
   TokensResponse,
 } from "./types.js";
 import {
+  validateAdsResponse,
   validateBoostsResponse,
+  validateCommunityTakeoversResponse,
   validateOrdersResponse,
   validatePairsResponse,
   validateProfilesResponse,
@@ -113,6 +117,20 @@ export class DexScreenerClient {
   /** Get tokens with most active boosts. */
   getTopBoosts(): Promise<DexBoost[]> {
     return this.request("/token-boosts/top/v1", validateBoostsResponse);
+  }
+
+  // ── Community Takeovers ──────────────────────────────────────
+
+  /** Get latest community takeovers. */
+  getCommunityTakeovers(): Promise<DexCommunityTakeover[]> {
+    return this.request("/community-takeovers/latest/v1", validateCommunityTakeoversResponse);
+  }
+
+  // ── Ads ─────────────────────────────────────────────────────
+
+  /** Get latest ads. */
+  getAds(): Promise<DexAd[]> {
+    return this.request("/ads/latest/v1", validateAdsResponse);
   }
 
   // ── Orders ────────────────────────────────────────────────────

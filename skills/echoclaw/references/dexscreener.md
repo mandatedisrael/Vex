@@ -8,9 +8,11 @@ This module is the authoritative guide for `echoclaw dexscreener *` — multi-ch
 - Token and pair data (price, volume, liquidity, transactions)
 - Token profiles (trending projects)
 - Token boosts (promoted tokens)
+- Community takeovers (CTO signals — community reclaims abandoned tokens)
+- Ads (paid promotional placements)
 - Paid order verification
 - Unified trending view (profiles + boosts)
-- Real-time WebSocket streaming
+- Real-time WebSocket streaming (profiles, boosts, boosts-top, community-takeovers, ads)
 
 ## Core commands
 
@@ -21,6 +23,8 @@ echoclaw dexscreener token <chainId> <tokenAddresses> --json
 echoclaw dexscreener token-pairs <chainId> <tokenAddress> --json
 echoclaw dexscreener profiles --json
 echoclaw dexscreener boosts [--top] --json
+echoclaw dexscreener cto --json
+echoclaw dexscreener ads --json
 echoclaw dexscreener orders <chainId> <tokenAddress> --json
 echoclaw dexscreener trending [--limit <n>] --json
 echoclaw dexscreener stream <type> --json
@@ -81,6 +85,22 @@ echoclaw dexscreener boosts --json
 echoclaw dexscreener boosts --top --json
 ```
 
+### cto
+
+Get latest community takeovers. CTO = community reclaims an abandoned/rugged token. Strong trading signal (often precedes price action).
+
+```bash
+echoclaw dexscreener cto --json
+```
+
+### ads
+
+Get latest DexScreener ads (paid promotional placements with duration and impressions).
+
+```bash
+echoclaw dexscreener ads --json
+```
+
 ### orders
 
 Check if a token has paid promotional orders on DexScreener.
@@ -100,12 +120,14 @@ echoclaw dexscreener trending --limit 20 --json
 
 ### stream
 
-Real-time WebSocket stream. Type must be: `profiles`, `boosts`, or `boosts-top`. Long-running foreground command outputting JSONL. First line is handshake (initial snapshot), then incremental updates. Stop with SIGINT/SIGTERM.
+Real-time WebSocket stream. Type must be: `profiles`, `boosts`, `boosts-top`, `community-takeovers`, or `ads`. Long-running foreground command outputting JSONL. First line is handshake (initial snapshot), then incremental updates. Stop with SIGINT/SIGTERM.
 
 ```bash
 echoclaw dexscreener stream profiles --json
 echoclaw dexscreener stream boosts --json
 echoclaw dexscreener stream boosts-top --json
+echoclaw dexscreener stream community-takeovers --json
+echoclaw dexscreener stream ads --json
 ```
 
 ## Chain identifiers
@@ -136,7 +158,9 @@ DexScreener uses string chain IDs. Common values:
 2. `echoclaw dexscreener token <chainId> <address> --json` — get detailed data
 3. `echoclaw dexscreener token-pairs <chainId> <address> --json` — find all pools
 4. `echoclaw dexscreener trending --json` — check what's hot
-5. Use results to inform trading decisions via Jupiter (Solana), Jaine (0G), or Khalani (cross-chain)
+5. `echoclaw dexscreener cto --json` — community takeover signals (trading alpha)
+6. `echoclaw dexscreener stream community-takeovers --json` — real-time CTO feed
+7. Use results to inform trading decisions via Jupiter (Solana), Jaine (0G), KyberSwap (EVM), or Khalani (cross-chain)
 
 ## Success examples
 

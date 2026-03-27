@@ -15,6 +15,8 @@ const CHANNEL_PATHS: Record<DexStreamChannel, string> = {
   profiles: "/token-profiles/latest/v1",
   boosts: "/token-boosts/latest/v1",
   "boosts-top": "/token-boosts/top/v1",
+  "community-takeovers": "/community-takeovers/latest/v1",
+  ads: "/ads/latest/v1",
 };
 
 const INITIAL_BACKOFF_MS = 1000;

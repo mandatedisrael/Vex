@@ -66,6 +66,8 @@ const DEFAULT_RPC: Record<string, string> = {
   etherlink: "https://node.mainnet.etherlink.com",
   monad: "https://rpc.monad.xyz",
   megaeth: "https://rpc.megaeth.com",
+  scroll: "https://rpc.scroll.io",
+  zksync: "https://mainnet.era.zksync.io",
 };
 
 const RPC_TIMEOUT_MS = 30_000;

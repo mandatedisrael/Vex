@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createDexScreenerCommand } from "../commands/dexscreener/index.js";
 
 describe("dexscreener command tree", () => {
-  it("registers all 9 expected subcommands", () => {
+  it("registers all 11 expected subcommands", () => {
     const root = createDexScreenerCommand();
     const commandNames = root.commands.map((cmd) => cmd.name());
     expect(commandNames).toEqual(
@@ -13,6 +13,8 @@ describe("dexscreener command tree", () => {
         "token-pairs",
         "profiles",
         "boosts",
+        "cto",
+        "ads",
         "orders",
         "trending",
         "stream",

@@ -32,8 +32,10 @@ This module is the authoritative guide for `echoclaw kyberswap *` — multi-chai
 | Etherlink | `etherlink` | 42793 | Y | Y | - |
 | Monad | `monad` | 143 | Y | Y | - |
 | MegaETH | `megaeth` | 4326 | Y | Y | - |
+| Scroll | `scroll` | 534352 | - | - | Y |
+| zkSync | `zksync` | 324 | - | - | Y |
 
-Chain aliases: `eth`, `arb`, `base`, `op`, `poly`, `bsc`, `avax`, `linea`, `mantle`, `sonic`, `bera`, `ronin`
+Chain aliases: `eth`, `arb`, `base`, `op`, `poly`/`matic`, `bsc`, `avax`, `linea`, `mantle`, `sonic`, `bera`, `ronin`, `zk`/`era`→zksync
 
 ## Core commands
 
@@ -47,8 +49,8 @@ echoclaw kyberswap tokens check <address> --chain <chain> --json
 
 # Swap (exact-input only, no swap buy)
 echoclaw kyberswap swap quote <tokenIn> <tokenOut> --chain <chain> --amount-in <amount> --json
-echoclaw kyberswap swap sell <tokenIn> <tokenOut> --chain <chain> --amount-in <amount> [--slippage-bps <bps>] [--recipient <addr>] [--approve-exact] --dry-run --json
-echoclaw kyberswap swap sell <tokenIn> <tokenOut> --chain <chain> --amount-in <amount> [--slippage-bps <bps>] --yes --json
+echoclaw kyberswap swap sell <tokenIn> <tokenOut> --chain <chain> --amount-in <amount> [--slippage-bps <bps>] [--recipient <addr>] [--permit <hex>] [--approve-exact] --dry-run --json
+echoclaw kyberswap swap sell <tokenIn> <tokenOut> --chain <chain> --amount-in <amount> [--slippage-bps <bps>] [--permit <hex>] --yes --json
 
 # Limit orders (gasless creation)
 echoclaw kyberswap limit-order create --chain <chain> --maker-asset <token> --taker-asset <token> --making-amount <amount> --taking-amount <amount> --expires <duration> --dry-run --json
@@ -56,6 +58,7 @@ echoclaw kyberswap limit-order create ... --yes --json
 echoclaw kyberswap limit-order list --chain <chain> [--status active|filled|cancelled|expired] --json
 echoclaw kyberswap limit-order cancel <orderId> --chain <chain> --yes --json
 echoclaw kyberswap limit-order hard-cancel <orderId> --chain <chain> --yes --json
+echoclaw kyberswap limit-order fill <orderId> --chain <chain> --taking-amount <amount> --threshold <amount> [--dry-run] --yes --json
 
 # Liquidity (ZaaS)
 echoclaw kyberswap zap search <token> --chain <chain> [--limit <n>] --json

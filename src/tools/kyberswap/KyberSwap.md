@@ -156,7 +156,7 @@ All EVM-only. No Solana support in KyberSwap.
 
 ---
 
-## Chain Support (18 chains)
+## Chain Support (20 chains)
 
 | Chain | ID | Slug | Swap | LO | Zap |
 |-------|-----|------|:----:|:--:|:---:|
@@ -178,8 +178,10 @@ All EVM-only. No Solana support in KyberSwap.
 | Etherlink | 42793 | `etherlink` | Y | Y | - |
 | Monad | 143 | `monad` | Y | Y | - |
 | MegaETH | 4326 | `megaeth` | Y | Y | - |
+| Scroll | 534352 | `scroll` | - | - | Y |
+| zkSync | 324 | `zksync` | - | - | Y |
 
-**Aliases**: `eth`→ethereum, `arb`→arbitrum, `poly`/`matic`→polygon, `op`→optimism, `avax`→avalanche, `bera`→berachain
+**Aliases**: `eth`→ethereum, `arb`→arbitrum, `poly`/`matic`→polygon, `op`→optimism, `avax`→avalanche, `bera`→berachain, `zk`/`era`→zksync
 
 ---
 
