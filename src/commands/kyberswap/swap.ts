@@ -36,12 +36,13 @@ export function createSwapSubcommand(): Command {
     .requiredOption("--amount-in <amount>", "Amount of tokenIn to sell (human-readable)")
     .option("--slippage-bps <bps>", "Slippage tolerance in basis points", "50")
     .option("--recipient <address>", "Recipient address (defaults to wallet)")
+    .option("--permit <data>", "EIP-2612 permit signature (hex) for gasless approval")
     .option("--dry-run", "Show quote without executing")
     .option("--yes", "Confirm the transaction")
     .option("--approve-exact", "Approve exact amount instead of unlimited")
     .action(async (tokenIn: string, tokenOut: string, options: {
       chain: string; amountIn: string; slippageBps: string;
-      recipient?: string; dryRun?: boolean; yes?: boolean; approveExact?: boolean;
+      recipient?: string; permit?: string; dryRun?: boolean; yes?: boolean; approveExact?: boolean;
     }) => {
       const slug = resolveChain(options.chain);
       requireFeature(slug, "aggregator");
@@ -113,8 +114,8 @@ export function createSwapSubcommand(): Command {
 
       const recipient = options.recipient ? (options.recipient as Address) : address;
 
-      // Approve if non-native token
-      if (tokenInAddr.toLowerCase() !== NATIVE_TOKEN_ADDRESS.toLowerCase()) {
+      // Approve if non-native token (skip if EIP-2612 permit provided)
+      if (!options.permit && tokenInAddr.toLowerCase() !== NATIVE_TOKEN_ADDRESS.toLowerCase()) {
         const spinApprove = spinner("Checking allowance...");
         spinApprove.start();
         const approvalResult = await ensureKyberAllowance(
@@ -135,6 +136,7 @@ export function createSwapSubcommand(): Command {
         sender: address,
         recipient,
         slippageTolerance: slippageBps,
+        permit: options.permit,
       });
 
       spinBuild.succeed("Transaction built");

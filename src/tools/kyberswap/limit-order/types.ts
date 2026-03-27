@@ -114,3 +114,15 @@ export interface EncodedCalldata {
   encodedData: string;
   routerAddress?: Address;
 }
+
+// ── General ────────────────────────────────────────────────────────
+
+export interface TradingPair {
+  makerAsset: string;
+  takerAsset: string;
+  chainId: string;
+}
+
+export interface ContractAddresses {
+  [chainId: string]: string;
+}

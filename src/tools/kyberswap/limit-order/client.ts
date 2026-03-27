@@ -17,6 +17,7 @@ import {
   validateOrdersResponse,
   validateActiveMakingAmount,
   validateEncodedCalldata,
+  validateContractAddressResponse,
 } from "./validation.js";
 import logger from "../../../utils/logger.js";
 import type { EchoError } from "../../../errors.js";
@@ -27,6 +28,7 @@ import type {
   LimitOrderCreateRequest,
   LimitOrderCancelSignRequest,
   EncodedCalldata,
+  ContractAddresses,
 } from "./types.js";
 
 interface RequestOptions {
@@ -80,6 +82,11 @@ export class KyberLimitOrderClient {
       if ((err as EchoError).code?.startsWith("KYBER_")) throw err;
       mapKyberTransportError(err);
     }
+  }
+
+  /** Get contract addresses per chain for limit orders. */
+  getContractAddresses(): Promise<ContractAddresses> {
+    return this.request("/read-ks/api/v1/configs/contract-address", validateContractAddressResponse);
   }
 
   /** Get unsigned EIP-712 message for order creation. */

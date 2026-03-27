@@ -7,7 +7,7 @@ import type { Hex, Address } from "viem";
 import { formatUnits, parseUnits } from "viem";
 import { getKyberLimitOrderClient } from "../../tools/kyberswap/limit-order/client.js";
 import { signEip712Message } from "../../tools/kyberswap/limit-order/signing.js";
-import { resolveChain, resolveTokenAddress, requireFeature } from "./helpers.js";
+import { resolveChain, resolveTokenMetadata, requireFeature } from "./helpers.js";
 import { slugToChainId } from "../../tools/kyberswap/chains.js";
 import { requireWalletAndKeystore } from "../../tools/wallet/auth.js";
 import { EchoError, ErrorCodes } from "../../errors.js";
@@ -48,12 +48,13 @@ export function createLimitOrderCreateAction(): Command {
       const spin = spinner("Resolving tokens...");
       spin.start();
 
-      const makerAsset = await resolveTokenAddress(options.makerAsset, chainId) as Address;
-      const takerAsset = await resolveTokenAddress(options.takerAsset, chainId) as Address;
+      const makerMeta = await resolveTokenMetadata(options.makerAsset, chainId);
+      const takerMeta = await resolveTokenMetadata(options.takerAsset, chainId);
+      const makerAsset = makerMeta.address;
+      const takerAsset = takerMeta.address;
 
-      // Parse amounts as wei (18 decimals default)
-      const makingAmount = parseUnits(options.makingAmount, 18).toString();
-      const takingAmount = parseUnits(options.takingAmount, 18).toString();
+      const makingAmount = parseUnits(options.makingAmount, makerMeta.decimals).toString();
+      const takingAmount = parseUnits(options.takingAmount, takerMeta.decimals).toString();
 
       spin.text = "Getting sign message...";
 
@@ -76,8 +77,8 @@ export function createLimitOrderCreateAction(): Command {
 
       const orderInfo =
         `Chain: ${slug} (${chainId})\n` +
-        `Sell: ${colors.value(options.makingAmount)} ${options.makerAsset}\n` +
-        `Receive: ${colors.value(options.takingAmount)} ${options.takerAsset}\n` +
+        `Sell: ${colors.value(options.makingAmount)} ${makerMeta.symbol} (${makerMeta.decimals} dec)\n` +
+        `Receive: ${colors.value(options.takingAmount)} ${takerMeta.symbol} (${takerMeta.decimals} dec)\n` +
         `Expires: ${new Date(expiredAt * 1000).toISOString()}\n` +
         `Maker: ${walletAddress}`;
 

@@ -11,10 +11,10 @@ import { isRecord } from "../../../utils/validation-helpers.js";
 import { mapKyberTransportError } from "../errors.js";
 import { mapLimitOrderError } from "./errors.js";
 import { LIMIT_ORDER_TIMEOUT_MS } from "../constants.js";
-import { validateOrdersResponse, validateOperatorSignature, validateEncodedCalldata } from "./validation.js";
+import { validateOrdersResponse, validateOperatorSignature, validateEncodedCalldata, validateTradingPairsResponse } from "./validation.js";
 import logger from "../../../utils/logger.js";
 import type { EchoError } from "../../../errors.js";
-import type { LimitOrder, OperatorSignatureResponse, FillOrderRequest, FillBatchOrdersRequest, EncodedCalldata } from "./types.js";
+import type { LimitOrder, OperatorSignatureResponse, FillOrderRequest, FillBatchOrdersRequest, EncodedCalldata, TradingPair } from "./types.js";
 
 export class KyberLimitOrderTakerClient {
   constructor(
@@ -61,6 +61,13 @@ export class KyberLimitOrderTakerClient {
       if ((err as EchoError).code?.startsWith("KYBER_")) throw err;
       mapKyberTransportError(err);
     }
+  }
+
+  /** Query supported trading pairs. */
+  getTradingPairs(chainId: string): Promise<TradingPair[]> {
+    return this.request("/read-partner/api/v1/orders/pairs", validateTradingPairsResponse, {
+      query: { chainId },
+    });
   }
 
   /** Query available orders as a taker. */

@@ -10,6 +10,8 @@ import type {
   LimitOrderEip712Domain,
   OperatorSignatureResponse,
   EncodedCalldata,
+  TradingPair,
+  ContractAddresses,
 } from "./types.js";
 
 const { asString, asNumber, asOptionalString } = createFieldValidators(
@@ -96,4 +98,33 @@ export function validateEncodedCalldata(raw: unknown): EncodedCalldata {
     encodedData: asString(raw.encodedData, "encodedData"),
     routerAddress: asOptionalString(raw.routerAddress) as EncodedCalldata["routerAddress"],
   };
+}
+
+export function validateTradingPairsResponse(raw: unknown): TradingPair[] {
+  if (!Array.isArray(raw)) {
+    if (isRecord(raw) && Array.isArray(raw.pairs)) return (raw.pairs as unknown[]).map(parseTradingPair);
+    if (isRecord(raw) && Array.isArray(raw.data)) return (raw.data as unknown[]).map(parseTradingPair);
+    throw new Error("Expected trading pairs response");
+  }
+  return raw.map(parseTradingPair);
+}
+
+function parseTradingPair(raw: unknown): TradingPair {
+  if (!isRecord(raw)) throw new Error("trading pair must be an object");
+  return {
+    makerAsset: asString(raw.makerAsset, "pair.makerAsset"),
+    takerAsset: asString(raw.takerAsset, "pair.takerAsset"),
+    chainId: asString(raw.chainId, "pair.chainId"),
+  };
+}
+
+export function validateContractAddressResponse(raw: unknown): ContractAddresses {
+  if (!isRecord(raw)) throw new Error("Expected contract address response");
+  const result: ContractAddresses = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "string") {
+      result[key] = value;
+    }
+  }
+  return result;
 }
