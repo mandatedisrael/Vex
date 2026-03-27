@@ -30,9 +30,17 @@ describe("protocol discovery", () => {
   });
 
   it("returns empty for namespace with no active tools", () => {
-    const result = discoverProtocolCapabilities({ namespace: "echobook" });
+    const result = discoverProtocolCapabilities({ namespace: "0g-compute" });
     expect(result.count).toBe(0);
     expect(result.warnings.length).toBeGreaterThan(0);
+  });
+
+  it("returns echobook tools when filtering by echobook namespace", () => {
+    const result = discoverProtocolCapabilities({ namespace: "echobook", limit: 50 });
+    expect(result.count).toBeGreaterThan(0);
+    for (const tool of result.tools) {
+      expect(tool.namespace).toBe("echobook");
+    }
   });
 
   it("returns kyberswap tools when filtering by kyberswap namespace", () => {
@@ -116,6 +124,8 @@ describe("protocol discovery", () => {
     expect(declaredWarning).not.toContain("dexscreener");
     expect(declaredWarning).not.toContain("chainscan");
     expect(declaredWarning).not.toContain("jaine");
+    expect(declaredWarning).not.toContain("slop");
+    expect(declaredWarning).not.toContain("echobook");
   });
 
   it("returns dexscreener tools when filtering by dexscreener namespace", () => {

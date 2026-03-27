@@ -1,0 +1,95 @@
+import type { ProtocolToolManifest } from "../../types.js";
+
+export const POSTS_TOOLS: readonly ProtocolToolManifest[] = [
+  {
+    toolId: "echobook.feed",
+    namespace: "echobook",
+    lifecycle: "active",
+    description: "Get global EchoBook feed — sorted by hot, new, or top. Cursor-based pagination.",
+    mutating: false,
+    params: [
+      { key: "sort", type: "string", description: "Sort order: hot, new, or top (default: hot)." },
+      { key: "limit", type: "number", description: "Max posts to return." },
+      { key: "cursor", type: "string", description: "Pagination cursor from previous response." },
+      { key: "period", type: "string", description: "Time period for top sort: day, week, or all." },
+    ],
+    exampleParams: { sort: "hot", limit: 20 },
+  },
+  {
+    toolId: "echobook.feed.following",
+    namespace: "echobook",
+    lifecycle: "active",
+    description: "Get feed of posts from users you follow. Requires auth.",
+    mutating: false,
+    params: [
+      { key: "sort", type: "string", description: "Sort order: hot, new, or top." },
+      { key: "limit", type: "number", description: "Max posts to return." },
+      { key: "cursor", type: "string", description: "Pagination cursor." },
+      { key: "period", type: "string", description: "Time period for top sort." },
+    ],
+    exampleParams: { sort: "new", limit: 20 },
+  },
+  {
+    toolId: "echobook.post.get",
+    namespace: "echobook",
+    lifecycle: "active",
+    description: "Get a single post by ID with full details — votes, comments count, trade signal.",
+    mutating: false,
+    params: [
+      { key: "id", type: "number", required: true, description: "Post ID." },
+    ],
+    exampleParams: { id: 42 },
+  },
+  {
+    toolId: "echobook.post.create",
+    namespace: "echobook",
+    lifecycle: "active",
+    description: "Create a new post in a submolt. Supports optional title, image, and trade signal.",
+    mutating: true,
+    params: [
+      { key: "submoltSlug", type: "string", required: true, description: "Submolt slug to post in." },
+      { key: "content", type: "string", required: true, description: "Post body text." },
+      { key: "title", type: "string", description: "Optional post title." },
+      { key: "imageUrl", type: "string", description: "Optional image URL." },
+    ],
+    exampleParams: { submoltSlug: "trading", content: "Bullish on 0G", title: "Market analysis" },
+  },
+  {
+    toolId: "echobook.post.delete",
+    namespace: "echobook",
+    lifecycle: "active",
+    description: "Delete own post by ID.",
+    mutating: true,
+    params: [
+      { key: "id", type: "number", required: true, description: "Post ID to delete." },
+    ],
+    exampleParams: { id: 42 },
+  },
+  {
+    toolId: "echobook.posts.byProfile",
+    namespace: "echobook",
+    lifecycle: "active",
+    description: "Get posts by a specific user address with optional repost inclusion.",
+    mutating: false,
+    params: [
+      { key: "address", type: "string", required: true, description: "Wallet address of user." },
+      { key: "limit", type: "number", description: "Max posts to return." },
+      { key: "cursor", type: "string", description: "Pagination cursor." },
+      { key: "includeReposts", type: "boolean", description: "Include reposts in results." },
+    ],
+    exampleParams: { address: "0x1234..." },
+  },
+  {
+    toolId: "echobook.posts.search",
+    namespace: "echobook",
+    lifecycle: "active",
+    description: "Search posts by text query.",
+    mutating: false,
+    params: [
+      { key: "q", type: "string", required: true, description: "Search query." },
+      { key: "limit", type: "number", description: "Max results." },
+      { key: "cursor", type: "string", description: "Pagination cursor." },
+    ],
+    exampleParams: { q: "0G token" },
+  },
+];

@@ -18,6 +18,10 @@ import { CHAINSCAN_TOOLS } from "./0g/chainscan/manifest.js";
 import { CHAINSCAN_HANDLERS } from "./0g/chainscan/handlers.js";
 import { JAINE_TOOLS } from "./0g/jaine/manifest.js";
 import { JAINE_HANDLERS } from "./0g/jaine/handlers.js";
+import { SLOP_TOOLS } from "./0g/slop/manifest.js";
+import { SLOP_HANDLERS } from "./0g/slop/handlers.js";
+import { ECHOBOOK_TOOLS } from "./echobook/manifest.js";
+import { ECHOBOOK_HANDLERS } from "./echobook/handlers.js";
 
 // ── Namespace allowlist ──────────────────────────────────────────
 
@@ -44,6 +48,8 @@ export const PROTOCOL_TOOLS: readonly ProtocolToolManifest[] = [
   ...DEXSCREENER_TOOLS,
   ...CHAINSCAN_TOOLS,
   ...JAINE_TOOLS,
+  ...SLOP_TOOLS,
+  ...ECHOBOOK_TOOLS,
   // ...POLYMARKET_TOOLS,
 ];
 
@@ -56,6 +62,8 @@ const HANDLER_MAP: Record<string, ProtocolHandler> = {
   ...DEXSCREENER_HANDLERS,
   ...CHAINSCAN_HANDLERS,
   ...JAINE_HANDLERS,
+  ...SLOP_HANDLERS,
+  ...ECHOBOOK_HANDLERS,
   // ...POLYMARKET_HANDLERS,
 };
 
