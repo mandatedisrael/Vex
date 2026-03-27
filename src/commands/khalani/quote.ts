@@ -76,6 +76,7 @@ export function createQuoteSubcommand(): Command {
     .option("--refund-to <address>", "Override refund address")
     .option("--referrer <address>", "EVM checksum referrer address")
     .option("--referrer-fee-bps <bps>", "Referrer fee in basis points")
+    .option("--filler <name>", "Restrict quotes to a specific filler")
     .option("--route <routeId>", "Filter to a specific route")
     .option("--stream", "Stream NDJSON routes as they arrive")
     .option("--refresh-chains", "Refresh Khalani chain metadata first")
@@ -91,6 +92,7 @@ export function createQuoteSubcommand(): Command {
       refundTo?: string;
       referrer?: string;
       referrerFeeBps?: string;
+      filler?: string;
       route?: string;
       stream?: boolean;
       refreshChains?: boolean;

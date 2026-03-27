@@ -270,6 +270,10 @@ export class KhalaniClient {
   getOrderById(orderId: string): Promise<KhalaniOrder> {
     return this.request(`/v1/orders/by-id/${encodeURIComponent(orderId)}`, validateOrderResponse);
   }
+
+  getChainIconUrl(chainId: number): string {
+    return this.buildUrl(`/v1/chain/${chainId}/icon`);
+  }
 }
 
 let cachedClient: KhalaniClient | null = null;

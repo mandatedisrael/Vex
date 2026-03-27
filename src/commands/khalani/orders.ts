@@ -57,23 +57,27 @@ export async function handleOrderById(orderId: string): Promise<void> {
     return;
   }
 
-  infoBox(
-    "Khalani Order",
-    [
-      `Order ID: ${order.id}`,
-      `Status: ${order.status}`,
-      `Route: ${order.routeId}`,
-      `Author: ${order.author}`,
-      `Chains: ${order.fromChainId} -> ${order.toChainId}`,
-      `Source Amount: ${order.srcAmount}`,
-      `Destination Amount: ${order.destAmount}`,
-      `Deposit Tx: ${order.depositTxHash}`,
-      `Created: ${order.createdAt}`,
-      `Updated: ${order.updatedAt}`,
-    ].join("\n"),
-  );
+  const infoLines = [
+    `Order ID: ${order.id}`,
+    `Status: ${getStatusColor(order.status)(order.status)}`,
+    `Route: ${order.routeId}`,
+    `Author: ${order.author}`,
+    `Chains: ${order.fromChainId} -> ${order.toChainId}`,
+    `Source Amount: ${order.srcAmount}`,
+    `Destination Amount: ${order.destAmount}`,
+    `Deposit Tx: ${order.depositTxHash}`,
+    `Created: ${order.createdAt}`,
+    `Updated: ${order.updatedAt}`,
+  ];
 
-  const rows = Object.entries(order.transactions).map(([kind, txInfo]) => {
+  if (order.providerStatus) {
+    infoLines.push(`Provider: ${order.providerStatus.provider}`);
+    infoLines.push(`Provider Status: ${order.providerStatus.nativeStatus}${order.providerStatus.substatus ? ` (${order.providerStatus.substatus})` : ""}`);
+  }
+
+  infoBox("Khalani Order", infoLines.join("\n"));
+
+  const txRows = Object.entries(order.transactions).map(([kind, txInfo]) => {
     const info: KhalaniOrder["transactions"][string] = txInfo;
     return [
       kind,
@@ -84,7 +88,7 @@ export async function handleOrderById(orderId: string): Promise<void> {
     ];
   });
 
-  if (rows.length > 0) {
+  if (txRows.length > 0) {
     printTable(
       [
         { header: "Kind", width: 14 },
@@ -93,7 +97,21 @@ export async function handleOrderById(orderId: string): Promise<void> {
         { header: "Amount", width: 20 },
         { header: "Timestamp", width: 26 },
       ],
-      rows,
+      txRows,
+    );
+  }
+
+  if (order.timestamps && Object.keys(order.timestamps).length > 0) {
+    const tsRows = Object.entries(order.timestamps).map(([key, value]) => [
+      key,
+      colors.muted(value),
+    ]);
+    printTable(
+      [
+        { header: "Lifecycle Event", width: 24 },
+        { header: "Timestamp", width: 32 },
+      ],
+      tsRows,
     );
   }
 }

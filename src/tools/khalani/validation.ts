@@ -7,6 +7,7 @@ import type {
   KhalaniChain,
   KhalaniErrorBody,
   KhalaniOrder,
+  KhalaniProviderStatus,
   KhalaniToken,
   OrdersResponse,
   QuoteStreamRoute,
@@ -86,6 +87,28 @@ function parseTokenMeta(raw: unknown): KhalaniOrder["fromTokenMeta"] {
   };
 }
 
+function parseTimestamps(raw: unknown): Record<string, string> | undefined {
+  if (!isRecord(raw)) return undefined;
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "string") {
+      result[key] = value;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function parseProviderStatus(raw: unknown): KhalaniProviderStatus | undefined {
+  if (!isRecord(raw)) return undefined;
+  if (typeof raw.provider !== "string" || typeof raw.nativeStatus !== "string") return undefined;
+  return {
+    provider: raw.provider,
+    nativeStatus: raw.nativeStatus,
+    substatus: typeof raw.substatus === "string" ? raw.substatus : undefined,
+    metadata: isRecord(raw.metadata) ? raw.metadata : undefined,
+  };
+}
+
 function parseOrder(raw: unknown): KhalaniOrder {
   if (!isRecord(raw)) {
     throw new EchoError(ErrorCodes.KHALANI_API_ERROR, "Invalid Khalani response: order must be an object");
@@ -113,6 +136,8 @@ function parseOrder(raw: unknown): KhalaniOrder {
     tradeType: asString(raw.tradeType, "order.tradeType") as KhalaniOrder["tradeType"],
     stepsCompleted: asStringArray(raw.stepsCompleted),
     transactions: isRecord(raw.transactions) ? raw.transactions as KhalaniOrder["transactions"] : {},
+    timestamps: parseTimestamps(raw.timestamps),
+    providerStatus: parseProviderStatus(raw.providerStatus),
     fromTokenMeta: parseTokenMeta(raw.fromTokenMeta),
     toTokenMeta: parseTokenMeta(raw.toTokenMeta),
   };

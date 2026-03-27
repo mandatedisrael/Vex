@@ -68,9 +68,39 @@ export function mapKhalaniError(status: number, body: KhalaniErrorBody | null): 
         new EchoError(ErrorCodes.KHALANI_API_ERROR, message, "Treat this as already registered and fetch the order state."),
         false, name,
       );
+    case "BadRequestException":
+      return withMeta(
+        new EchoError(ErrorCodes.KHALANI_VALIDATION_ERROR, message, "Check chain/transaction format, quote freshness, or request state."),
+        false, name,
+      );
     case "UnexpectedFromAddressException":
       return withMeta(
         new EchoError(ErrorCodes.KHALANI_ADDRESS_MISMATCH, message, "Ensure the wallet address format matches the selected chain family."),
+        false, name,
+      );
+    case "NotSupportedContractException":
+      return withMeta(
+        new EchoError(ErrorCodes.KHALANI_API_ERROR, message, "Choose another route or contact support."),
+        false, name,
+      );
+    case "BuildDepositParsingException":
+      return withMeta(
+        new EchoError(ErrorCodes.KHALANI_API_ERROR, message, "Re-quote and retry."),
+        false, name,
+      );
+    case "NotSupportedAssetReverseContractException":
+      return withMeta(
+        new EchoError(ErrorCodes.KHALANI_UNSUPPORTED_CHAIN, message, "Choose another route or contact support."),
+        false, name,
+      );
+    case "IntentNotFoundException":
+      return withMeta(
+        new EchoError(ErrorCodes.KHALANI_QUOTE_NOT_FOUND, message, "Re-quote and re-initiate the flow."),
+        false, name,
+      );
+    case "NotSupportedDepositMethodException":
+      return withMeta(
+        new EchoError(ErrorCodes.KHALANI_UNSUPPORTED_DEPOSIT_METHOD, message, "Use a different --deposit-method or omit it to use the route default."),
         false, name,
       );
     case "InternalErrorException":

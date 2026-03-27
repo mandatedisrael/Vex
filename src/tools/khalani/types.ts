@@ -80,6 +80,7 @@ export interface QuoteRequest {
   refundTo?: string;
   referrer?: string;
   referrerFeeBps?: number;
+  filler?: string;
 }
 
 export interface QuoteRoute {
@@ -181,6 +182,13 @@ export interface KhalaniTokenMeta {
   logoURI?: string;
 }
 
+export interface KhalaniProviderStatus {
+  provider: string;
+  nativeStatus: string;
+  substatus?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface KhalaniOrder {
   id: string;
   type: string;
@@ -203,6 +211,8 @@ export interface KhalaniOrder {
   tradeType: TradeType;
   stepsCompleted: string[];
   transactions: Record<string, KhalaniTransactionInfo>;
+  timestamps?: Record<string, string>;
+  providerStatus?: KhalaniProviderStatus;
   fromTokenMeta: KhalaniTokenMeta | null;
   toTokenMeta: KhalaniTokenMeta | null;
 }

@@ -21,6 +21,7 @@ interface BridgeOptions {
   refundTo?: string;
   referrer?: string;
   referrerFeeBps?: string;
+  filler?: string;
   routeId?: string;
   depositMethod?: string;
   refreshChains?: boolean;
@@ -76,6 +77,7 @@ export function createBridgeSubcommand(): Command {
     .option("--refund-to <address>", "Override refund address")
     .option("--referrer <address>", "EVM checksum referrer address")
     .option("--referrer-fee-bps <bps>", "Referrer fee in basis points")
+    .option("--filler <name>", "Restrict quotes to a specific filler")
     .option("--route-id <routeId>", "Specific route ID to execute")
     .option("--deposit-method <method>", "CONTRACT_CALL | PERMIT2 | TRANSFER")
     .option("--refresh-chains", "Refresh Khalani chain metadata first")

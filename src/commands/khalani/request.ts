@@ -15,6 +15,7 @@ export interface QuoteRequestInput {
   refundTo?: string;
   referrer?: string;
   referrerFeeBps?: string;
+  filler?: string;
   refreshChains?: boolean;
 }
 
@@ -58,8 +59,20 @@ export function parseReferrerFeeBps(value: string | undefined): number | undefin
 }
 
 export function parseAmountInSmallestUnits(value: string): string {
+  if (value.startsWith("0x") || value.startsWith("0X")) {
+    try {
+      const decimal = BigInt(value).toString();
+      if (decimal === "0") {
+        throw new EchoError(ErrorCodes.INVALID_AMOUNT, "amount must be a positive value in smallest units.");
+      }
+      return decimal;
+    } catch (err) {
+      if (err instanceof EchoError) throw err;
+      throw new EchoError(ErrorCodes.INVALID_AMOUNT, `Invalid hex amount: ${value}`);
+    }
+  }
   if (!/^\d+$/.test(value) || value === "0") {
-    throw new EchoError(ErrorCodes.INVALID_AMOUNT, "amount must be a positive integer in smallest units.");
+    throw new EchoError(ErrorCodes.INVALID_AMOUNT, "amount must be a positive integer in smallest units (decimal or 0x hex).");
   }
   return value;
 }
@@ -101,6 +114,7 @@ export async function prepareQuoteRequest(input: QuoteRequestInput): Promise<Pre
       refundTo,
       referrer,
       referrerFeeBps: parseReferrerFeeBps(input.referrerFeeBps),
+      filler: input.filler || undefined,
     },
   };
 }
