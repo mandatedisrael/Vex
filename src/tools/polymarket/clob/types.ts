@@ -121,6 +121,25 @@ export interface PaginatedTrades {
   data: ClobTrade[];
 }
 
+// ── Batch request ──────────────────────────────────────────────────
+
+export interface BookRequest {
+  token_id: string;
+  side?: "BUY" | "SELL";
+}
+
+export interface LastTradePrice {
+  token_id: string;
+  price: string;
+  side: "BUY" | "SELL";
+}
+
+// ── Order scoring ──────────────────────────────────────────────────
+
+export interface OrderScoringResponse {
+  scoring: boolean;
+}
+
 // ── Price History ───────────────────────────────────────────────────
 
 export interface PriceHistoryPoint {

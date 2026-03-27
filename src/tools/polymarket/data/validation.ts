@@ -199,6 +199,22 @@ export function validateBuilderLeaderboardResponse(raw: unknown): DataBuilderEnt
   });
 }
 
+export function validateBuilderVolumeResponse(raw: unknown): DataBuilderVolumeEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((r) => {
+    if (!isRecord(r)) return { dt: "", builder: "", builderLogo: null, verified: false, volume: 0, activeUsers: 0, rank: "" };
+    return {
+      dt: str(r.dt),
+      builder: str(r.builder),
+      builderLogo: asOptionalString(r.builderLogo) ?? null,
+      verified: r.verified === true,
+      volume: num(r.volume),
+      activeUsers: typeof r.activeUsers === "number" ? r.activeUsers : 0,
+      rank: str(r.rank),
+    };
+  });
+}
+
 export function validateValueResponse(raw: unknown): { user: string; value: number } {
   if (Array.isArray(raw) && isRecord(raw[0])) {
     return { user: str(raw[0].user), value: num(raw[0].value) };

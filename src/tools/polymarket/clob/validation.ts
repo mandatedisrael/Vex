@@ -8,6 +8,7 @@ import type {
   OrderBookSummary, OrderSummary, SendOrderResponse,
   OpenOrder, PaginatedOrders, CancelResponse,
   ClobTrade, PaginatedTrades, PriceHistoryResponse,
+  LastTradePrice, OrderScoringResponse,
 } from "./types.js";
 
 const { asString, asOptionalString } = createFieldValidators(
@@ -173,4 +174,57 @@ export function validateFeeRateResponse(raw: unknown): { base_fee: number } {
 export function validateSendOrdersResponse(raw: unknown): SendOrderResponse[] {
   if (!Array.isArray(raw)) throw new Error("Expected orders response array");
   return raw.map(validateSendOrderResponse);
+}
+
+// ── Batch validators ──────────────────────────────────────────────
+
+export function validateBatchOrderBooksResponse(raw: unknown): OrderBookSummary[] {
+  if (!Array.isArray(raw)) throw new Error("Expected batch orderbooks array");
+  return raw.map(validateOrderBookResponse);
+}
+
+export function validateBatchPricesResponse(raw: unknown): Record<string, Record<string, number>> {
+  if (!isRecord(raw)) return {};
+  const result: Record<string, Record<string, number>> = {};
+  for (const [tokenId, sides] of Object.entries(raw)) {
+    if (isRecord(sides)) {
+      result[tokenId] = {};
+      for (const [side, price] of Object.entries(sides as Record<string, unknown>)) {
+        if (typeof price === "number") result[tokenId][side] = price;
+      }
+    }
+  }
+  return result;
+}
+
+export function validateBatchMidpointsResponse(raw: unknown): Record<string, string> {
+  if (!isRecord(raw)) return {};
+  const result: Record<string, string> = {};
+  for (const [tokenId, price] of Object.entries(raw)) {
+    if (typeof price === "string") result[tokenId] = price;
+  }
+  return result;
+}
+
+export function validateBatchSpreadsResponse(raw: unknown): Record<string, string> {
+  if (!isRecord(raw)) return {};
+  const result: Record<string, string> = {};
+  for (const [tokenId, spread] of Object.entries(raw)) {
+    if (typeof spread === "string") result[tokenId] = spread;
+  }
+  return result;
+}
+
+export function validateBatchLastTradesPricesResponse(raw: unknown): LastTradePrice[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(isRecord).map((item) => ({
+    token_id: typeof item.token_id === "string" ? item.token_id : "",
+    price: typeof item.price === "string" ? item.price : "0.5",
+    side: (item.side === "BUY" || item.side === "SELL") ? item.side : "BUY",
+  }));
+}
+
+export function validateOrderScoringResponse(raw: unknown): OrderScoringResponse {
+  if (!isRecord(raw)) return { scoring: false };
+  return { scoring: raw.scoring === true };
 }

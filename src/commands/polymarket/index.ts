@@ -6,6 +6,7 @@ import { createBuySubcommand, createSellSubcommand } from "./trade.js";
 import { createPositionsSubcommand, createOrdersSubcommand, createProfileSubcommand } from "./positions.js";
 import { createCancelSubcommand, createCancelAllSubcommand, createCancelMarketSubcommand } from "./cancel.js";
 import { createLeaderboardSubcommand, createActivitySubcommand } from "./leaderboard.js";
+import { createStreamMarketSubcommand, createStreamUserSubcommand } from "./stream.js";
 
 export function createPolymarketCommand(): Command {
   const polymarket = new Command("polymarket")
@@ -29,6 +30,8 @@ export function createPolymarketCommand(): Command {
   polymarket.addCommand(createCancelMarketSubcommand());
   polymarket.addCommand(createLeaderboardSubcommand());
   polymarket.addCommand(createActivitySubcommand());
+  polymarket.addCommand(createStreamMarketSubcommand());
+  polymarket.addCommand(createStreamUserSubcommand());
 
   return polymarket;
 }

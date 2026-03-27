@@ -146,6 +146,14 @@ export class PolyGammaClient {
     return this.request(`/tags/${encodeURIComponent(id)}/related-tags/tags`, validateTagsResponse, opts ? this.toQuery(opts) : undefined);
   }
 
+  getRelatedTagsBySlug(slug: string, opts?: { status?: string }): Promise<GammaRelatedTag[]> {
+    return this.request(`/tags/slug/${encodeURIComponent(slug)}/related-tags`, validateRelatedTagsResponse, opts ? this.toQuery(opts) : undefined);
+  }
+
+  getTagsRelatedToTagBySlug(slug: string, opts?: { status?: string }): Promise<GammaTag[]> {
+    return this.request(`/tags/slug/${encodeURIComponent(slug)}/related-tags/tags`, validateTagsResponse, opts ? this.toQuery(opts) : undefined);
+  }
+
   // ── Series ──────────────────────────────────────────────────────
 
   listSeries(opts?: { slug?: string[]; closed?: boolean }): Promise<GammaSeries[]> {

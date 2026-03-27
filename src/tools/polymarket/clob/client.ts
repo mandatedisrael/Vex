@@ -19,13 +19,16 @@ import {
   validateSendOrderResponse, validateSendOrdersResponse,
   validatePaginatedOrders, validateOpenOrder,
   validateCancelResponse, validatePaginatedTrades,
+  validateBatchOrderBooksResponse, validateBatchPricesResponse,
+  validateBatchMidpointsResponse, validateBatchSpreadsResponse,
+  validateBatchLastTradesPricesResponse, validateOrderScoringResponse,
 } from "./validation.js";
 import logger from "../../../utils/logger.js";
 import type { EchoError } from "../../../errors.js";
 import type {
   OrderBookSummary, SendOrderRequest, SendOrderResponse,
   OpenOrder, PaginatedOrders, CancelResponse, PaginatedTrades,
-  PriceHistoryResponse,
+  PriceHistoryResponse, BookRequest, LastTradePrice, OrderScoringResponse,
 } from "./types.js";
 
 export class PolyClobClient {
@@ -147,6 +150,74 @@ export class PolyClobClient {
 
   getServerTime(): Promise<number> {
     return this.requestPublic("/time", (raw) => typeof raw === "number" ? raw : 0);
+  }
+
+  // ── Batch Market Data (public, POST body) ────────────────────────
+
+  /** Unauthenticated POST (batch market data). */
+  private async requestPublicPost<T>(path: string, validator: (raw: unknown) => T, body: unknown): Promise<T> {
+    const url = this.buildUrl(path);
+    try {
+      logger.debug({ event: "polymarket.clob.batch_request.start", path });
+      const response = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        timeoutMs: this.timeoutMs,
+      });
+      if (!response.ok) {
+        const raw = await readJson(response);
+        const message = isRecord(raw) && typeof raw.error === "string" ? raw.error : `HTTP ${response.status}`;
+        throw mapPolyApiError(response.status, message, "CLOB");
+      }
+      return validator(await readJson(response));
+    } catch (err) {
+      if ((err as EchoError).code?.startsWith("POLYMARKET_")) throw err;
+      mapPolyTransportError(err);
+    }
+  }
+
+  getOrderBooks(tokenIds: BookRequest[]): Promise<OrderBookSummary[]> {
+    return this.requestPublicPost("/books", validateBatchOrderBooksResponse, tokenIds);
+  }
+
+  getBatchPrices(tokenIds: string[], sides: string[]): Promise<Record<string, Record<string, number>>> {
+    return this.requestPublic("/prices", validateBatchPricesResponse, {
+      token_ids: tokenIds.join(","),
+      sides: sides.join(","),
+    });
+  }
+
+  getBatchPricesPost(requests: BookRequest[]): Promise<Record<string, Record<string, number>>> {
+    return this.requestPublicPost("/prices", validateBatchPricesResponse, requests);
+  }
+
+  getBatchMidpoints(tokenIds: string[]): Promise<Record<string, string>> {
+    return this.requestPublic("/midpoints", validateBatchMidpointsResponse, {
+      token_ids: tokenIds.join(","),
+    });
+  }
+
+  getBatchMidpointsPost(requests: BookRequest[]): Promise<Record<string, string>> {
+    return this.requestPublicPost("/midpoints", validateBatchMidpointsResponse, requests);
+  }
+
+  getBatchSpreads(requests: BookRequest[]): Promise<Record<string, string>> {
+    return this.requestPublicPost("/spreads", validateBatchSpreadsResponse, requests);
+  }
+
+  getBatchLastTradesPrices(tokenIds: string[]): Promise<LastTradePrice[]> {
+    return this.requestPublic("/last-trades-prices", validateBatchLastTradesPricesResponse, {
+      token_ids: tokenIds.join(","),
+    });
+  }
+
+  getBatchLastTradesPricesPost(requests: BookRequest[]): Promise<LastTradePrice[]> {
+    return this.requestPublicPost("/last-trades-prices", validateBatchLastTradesPricesResponse, requests);
+  }
+
+  getOrderScoring(orderId: string): Promise<OrderScoringResponse> {
+    return this.requestAuth("GET", "/order-scoring", validateOrderScoringResponse);
   }
 
   // ── Trading (authenticated) ─────────────────────────────────────

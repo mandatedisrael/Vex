@@ -16,7 +16,8 @@ import {
   validateActivityResponse, validateTradesResponse,
   validateHoldersResponse, validateOpenInterestResponse,
   validateLiveVolumeResponse, validateLeaderboardResponse,
-  validateBuilderLeaderboardResponse, validateValueResponse,
+  validateBuilderLeaderboardResponse, validateBuilderVolumeResponse,
+  validateValueResponse,
   validateTradedResponse, validateMarketPositionsResponse,
 } from "./validation.js";
 import logger from "../../../utils/logger.js";
@@ -24,7 +25,7 @@ import type { EchoError } from "../../../errors.js";
 import type {
   DataPosition, DataClosedPosition, DataActivity, DataTrade,
   DataMetaHolder, DataOpenInterest, DataLiveVolume,
-  DataLeaderboardEntry, DataBuilderEntry,
+  DataLeaderboardEntry, DataBuilderEntry, DataBuilderVolumeEntry,
   DataMetaMarketPosition, PositionsParams,
 } from "./types.js";
 
@@ -125,6 +126,10 @@ export class PolyDataClient {
 
   getBuilderLeaderboard(opts?: { timePeriod?: string; limit?: number; offset?: number }): Promise<DataBuilderEntry[]> {
     return this.request("/v1/builders/leaderboard", validateBuilderLeaderboardResponse, opts ? this.qs(opts) : undefined);
+  }
+
+  getBuilderVolume(opts?: { timePeriod?: string }): Promise<DataBuilderVolumeEntry[]> {
+    return this.request("/v1/builders/volume", validateBuilderVolumeResponse, opts ? this.qs(opts) : undefined);
   }
 
   // ── Accounting ──────────────────────────────────────────────────

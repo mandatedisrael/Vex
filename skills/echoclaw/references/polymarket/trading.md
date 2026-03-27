@@ -37,6 +37,18 @@ echoclaw polymarket cancel-market <condition-id> <asset-id> --yes --json
 echoclaw polymarket orders [--market <condition-id>] --json
 ```
 
+## Real-time user stream
+
+```bash
+echoclaw polymarket stream-user [--markets <conditionId1> <conditionId2>] --json
+```
+
+Authenticated WebSocket emitting JSONL events:
+- `order` — order placed/updated/cancelled (type: PLACEMENT/UPDATE/CANCELLATION)
+- `trade` — trade matched/mined/confirmed/failed (trader_side: TAKER/MAKER)
+
+Requires CLOB API credentials. Ping/pong every 10s. Auto-reconnect. Stop with SIGINT/SIGTERM.
+
 ## Fee structure
 
 Base fee: ~30 bps (0.3%). Varies by token. Check via `polymarket market <id>` (shows `makerBaseFee`/`takerBaseFee`).
