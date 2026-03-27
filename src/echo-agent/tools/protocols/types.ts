@@ -25,7 +25,8 @@ export type ProtocolNamespace =
   | "slop"
   | "dexscreener"
   | "echobook"
-  | "chainscan";
+  | "chainscan"
+  | "slop-app";
 
 export type ToolLifecycle = "active" | "declared";
 

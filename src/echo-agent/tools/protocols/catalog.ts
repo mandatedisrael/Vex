@@ -24,6 +24,8 @@ import { ECHOBOOK_TOOLS } from "./echobook/manifest.js";
 import { ECHOBOOK_HANDLERS } from "./echobook/handlers.js";
 import { POLYMARKET_TOOLS } from "./polymarket/manifest.js";
 import { POLYMARKET_HANDLERS } from "./polymarket/handlers.js";
+import { SLOP_APP_TOOLS } from "./0g/slop-app/manifest.js";
+import { SLOP_APP_HANDLERS } from "./0g/slop-app/handlers.js";
 
 // ── Namespace allowlist ──────────────────────────────────────────
 
@@ -39,6 +41,7 @@ export const PROTOCOL_NAMESPACE_ALLOWLIST: readonly ProtocolNamespace[] = [
   "dexscreener",
   "echobook",
   "chainscan",
+  "slop-app",
 ] as const;
 
 // ── All protocol manifests ───────────────────────────────────────
@@ -53,6 +56,7 @@ export const PROTOCOL_TOOLS: readonly ProtocolToolManifest[] = [
   ...SLOP_TOOLS,
   ...ECHOBOOK_TOOLS,
   ...POLYMARKET_TOOLS,
+  ...SLOP_APP_TOOLS,
 ];
 
 // ── Handler registry ─────────────────────────────────────────────
@@ -67,6 +71,7 @@ const HANDLER_MAP: Record<string, ProtocolHandler> = {
   ...SLOP_HANDLERS,
   ...ECHOBOOK_HANDLERS,
   ...POLYMARKET_HANDLERS,
+  ...SLOP_APP_HANDLERS,
 };
 
 /** Get the handler function for a protocol tool by toolId */
