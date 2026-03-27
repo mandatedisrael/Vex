@@ -30,9 +30,17 @@ describe("protocol discovery", () => {
   });
 
   it("returns empty for namespace with no active tools", () => {
-    const result = discoverProtocolCapabilities({ namespace: "kyberswap" });
+    const result = discoverProtocolCapabilities({ namespace: "echobook" });
     expect(result.count).toBe(0);
     expect(result.warnings.length).toBeGreaterThan(0);
+  });
+
+  it("returns kyberswap tools when filtering by kyberswap namespace", () => {
+    const result = discoverProtocolCapabilities({ namespace: "kyberswap" });
+    expect(result.count).toBeGreaterThan(0);
+    for (const tool of result.tools) {
+      expect(tool.namespace).toBe("kyberswap");
+    }
   });
 
   // ── Mutating filter ──────────────────────────────────────────────
@@ -100,8 +108,11 @@ describe("protocol discovery", () => {
     const result = discoverProtocolCapabilities({});
     const declaredWarning = result.warnings.find(w => w.includes("Declared-only"));
     expect(declaredWarning).toBeDefined();
-    // kyberswap, solana, polymarket etc. are declared but have no active tools yet
-    expect(declaredWarning).toContain("kyberswap");
+    // polymarket, 0g-compute etc. are declared but have no active tools yet
+    expect(declaredWarning).toContain("polymarket");
+    // kyberswap and solana are now active — should NOT appear in declared-only warning
+    expect(declaredWarning).not.toContain("kyberswap");
+    expect(declaredWarning).not.toContain("solana");
   });
 
   // ── Combined filters ─────────────────────────────────────────────
