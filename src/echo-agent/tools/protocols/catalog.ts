@@ -12,6 +12,8 @@ import { SOLANA_JUPITER_TOOLS } from "./solana-jupiter/manifest.js";
 import { SOLANA_JUPITER_HANDLERS } from "./solana-jupiter/handlers.js";
 import { KYBERSWAP_TOOLS } from "./kyberswap/manifest.js";
 import { KYBERSWAP_HANDLERS } from "./kyberswap/handlers.js";
+import { DEXSCREENER_TOOLS } from "./dexscreener/manifest.js";
+import { DEXSCREENER_HANDLERS } from "./dexscreener/handlers.js";
 
 // ── Namespace allowlist ──────────────────────────────────────────
 
@@ -35,6 +37,7 @@ export const PROTOCOL_TOOLS: readonly ProtocolToolManifest[] = [
   ...KHALANI_TOOLS,
   ...SOLANA_JUPITER_TOOLS,
   ...KYBERSWAP_TOOLS,
+  ...DEXSCREENER_TOOLS,
   // ...POLYMARKET_TOOLS,
 ];
 
@@ -44,6 +47,7 @@ const HANDLER_MAP: Record<string, ProtocolHandler> = {
   ...KHALANI_HANDLERS,
   ...SOLANA_JUPITER_HANDLERS,
   ...KYBERSWAP_HANDLERS,
+  ...DEXSCREENER_HANDLERS,
   // ...POLYMARKET_HANDLERS,
 };
 

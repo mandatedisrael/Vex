@@ -110,9 +110,18 @@ describe("protocol discovery", () => {
     expect(declaredWarning).toBeDefined();
     // polymarket, 0g-compute etc. are declared but have no active tools yet
     expect(declaredWarning).toContain("polymarket");
-    // kyberswap and solana are now active — should NOT appear in declared-only warning
+    // kyberswap, solana, dexscreener are now active — should NOT appear in declared-only warning
     expect(declaredWarning).not.toContain("kyberswap");
     expect(declaredWarning).not.toContain("solana");
+    expect(declaredWarning).not.toContain("dexscreener");
+  });
+
+  it("returns dexscreener tools when filtering by dexscreener namespace", () => {
+    const result = discoverProtocolCapabilities({ namespace: "dexscreener", limit: 50 });
+    expect(result.count).toBeGreaterThan(0);
+    for (const tool of result.tools) {
+      expect(tool.namespace).toBe("dexscreener");
+    }
   });
 
   // ── Combined filters ─────────────────────────────────────────────
