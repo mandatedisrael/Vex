@@ -2,7 +2,7 @@ import { EchoError, ErrorCodes } from "../../errors.js";
 import { autoDetectProvider, detectProviders, resolveProvider } from "../../providers/registry.js";
 import type { ProviderName } from "../../providers/types.js";
 import type { EchoSnapshot, SkillLinkStatus } from "./state.js";
-import type { ComputeIssue, EchoScope, LauncherItem } from "./types.js";
+import type { ComputeIssue, EchoScope } from "./types.js";
 import type { EchoWorkflowPayload } from "./protocol.js";
 import { PROVIDER_LABELS } from "./catalog.js";
 
@@ -315,12 +315,3 @@ export function buildVerifyPayload(snapshot: EchoSnapshot, runtime: ProviderName
   };
 }
 
-export function describeLauncherItem(item: LauncherItem): string {
-  return [
-    `Badge: ${item.badge}`,
-    item.description,
-    "",
-    "Starter command:",
-    item.command,
-  ].join("\n");
-}

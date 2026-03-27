@@ -2,17 +2,9 @@ import type { ProviderName, SkillInstallResult } from "../../providers/types.js"
 import type { EchoSnapshot } from "./state.js";
 import type { EchoWorkflowPayload } from "./protocol.js";
 
-export type EchoTask = "connect" | "fund" | "bridge" | "explore" | "wallet" | "manage" | "advanced" | "exit";
+export type EchoTask = "connect" | "fund" | "bridge" | "wallet" | "manage" | "exit";
 export type EchoScope = "user" | "project";
 export type ClaudeSettingsScope = "project-local" | "project-shared" | "user";
-
-export interface LauncherItem {
-  id: string;
-  title: string;
-  badge: string;
-  description: string;
-  command: string;
-}
 
 export interface FundView {
   walletBalanceOg: number;

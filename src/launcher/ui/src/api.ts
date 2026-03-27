@@ -88,24 +88,6 @@ export function getVerify(runtime?: string): Promise<VerifyResult> {
   return fetchApi(`/api/verify${qs}`);
 }
 
-// ── Catalog ──────────────────────────────────────────────────────
-
-export interface CatalogItem {
-  id: string;
-  title: string;
-  badge: string;
-  description: string;
-  command: string;
-}
-
-export function getExplore(): Promise<{ items: CatalogItem[] }> {
-  return fetchApi("/api/explore");
-}
-
-export function getAdvanced(): Promise<{ items: CatalogItem[] }> {
-  return fetchApi("/api/advanced");
-}
-
 // ── Daemons ──────────────────────────────────────────────────────
 
 export interface DaemonStatus {

@@ -32,8 +32,6 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Tools",
     links: [
       { label: "Bridge", path: "/bridge", description: "Cross-chain via Khalani" },
-      { label: "Explore", path: "/explore", description: "Discover EchoClaw capabilities" },
-      { label: "Advanced", path: "/advanced", description: "Low-level command surfaces" },
     ],
   },
   {

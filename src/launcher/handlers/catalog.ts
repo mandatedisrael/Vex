@@ -1,22 +1,10 @@
 /**
- * Explore & Advanced catalog API handlers.
+ * Catalog API handlers — removed.
  *
- * Returns static catalog items from catalog.ts.
+ * Explore/Advanced catalog items were info-only duplicates of SKILL.md.
+ * Route registration is a no-op to avoid breaking server.ts imports during transition.
  */
 
-import type { RouteHandler } from "../types.js";
-import { jsonResponse, registerRoute } from "../routes.js";
-import { EXPLORE_ITEMS, ADVANCED_ITEMS } from "../../commands/echo/catalog.js";
-
-const handleExplore: RouteHandler = async (_req, res) => {
-  jsonResponse(res, 200, { items: EXPLORE_ITEMS });
-};
-
-const handleAdvanced: RouteHandler = async (_req, res) => {
-  jsonResponse(res, 200, { items: ADVANCED_ITEMS });
-};
-
 export function registerCatalogRoutes(): void {
-  registerRoute("GET", "/api/explore", handleExplore);
-  registerRoute("GET", "/api/advanced", handleAdvanced);
+  // No routes — catalog endpoints removed.
 }

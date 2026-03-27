@@ -42,6 +42,14 @@ vi.mock("../commands/claude/index.js", () => ({
   createClaudeCommand: () => new Command("claude").description("claude"),
 }));
 
+vi.mock("../commands/echo/launcher-cmd.js", () => ({
+  createLauncherSubcommand: () => new Command("launcher").description("launcher"),
+}));
+
+vi.mock("../commands/echo/agent-cmd.js", () => ({
+  createAgentSubcommand: () => new Command("agent").description("agent"),
+}));
+
 const { createEchoCommand } = await import("../commands/echo/index.js");
 
 describe("echo command tree", () => {
@@ -66,10 +74,10 @@ describe("echo command tree", () => {
       "status",
       "doctor",
       "support-report",
-      "explore",
-      "advanced",
       "wallet",
       "claude",
+      "launcher",
+      "agent",
     ]));
   });
 

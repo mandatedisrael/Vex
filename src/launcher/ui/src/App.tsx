@@ -37,7 +37,6 @@ import { ClaudeView } from "./views/ClaudeView";
 import { ManageView } from "./views/ManageView";
 import { BridgeView } from "./views/BridgeView";
 import { OpenClawView } from "./views/OpenClawView";
-import { ExploreView } from "./views/ExploreView";
 import { WizardView } from "./views/WizardView";
 import { getRouting, getSnapshot, type RoutingDecision } from "./api";
 
@@ -101,8 +100,6 @@ export const App: FC = () => {
       case "/manage":   return <ManageView onNavigate={navigate} />;
       case "/bridge":   return <BridgeView onNavigate={navigate} />;
       case "/openclaw": return <OpenClawView onNavigate={navigate} />;
-      case "/explore":  return <ExploreView onNavigate={navigate} mode="explore" />;
-      case "/advanced": return <ExploreView onNavigate={navigate} mode="advanced" />;
       default:          return <DashboardView onNavigate={navigate} />;
     }
   }

@@ -30,7 +30,9 @@ export type InternalToolType =
   | "file_read" | "file_write" | "file_list" | "file_delete"
   | "memory_update" | "memory_manage" | "trade_log"
   | "schedule_create" | "schedule_remove"
-  | "subagent_spawn" | "subagent_status" | "subagent_stop";
+  | "subagent_spawn" | "subagent_status" | "subagent_stop"
+  | "discover_tools" | "execute_tool"
+  | "wallet_read" | "wallet_send_prepare" | "wallet_send_confirm" | "wallet_backup";
 
 export interface InternalToolCall {
   type: InternalToolType;

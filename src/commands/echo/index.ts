@@ -4,14 +4,12 @@ import { createLauncherSubcommand } from "./launcher-cmd.js";
 import { createAgentSubcommand } from "./agent-cmd.js";
 import { isHeadless } from "../../utils/output.js";
 import { EchoError, ErrorCodes } from "../../errors.js";
-import { EXPLORE_ITEMS, ADVANCED_ITEMS } from "./catalog.js";
 import { runHeadlessConnect } from "./connect.js";
 import { runHeadlessFund } from "./fund.js";
 import { runEchoMenu } from "./menu.js";
 import { createWalletHubSubcommand } from "./wallet.js";
 import { printDoctor, printStatus, printVerify, writeSupportReportToFile } from "./status.js";
 import { normalizeRuntime } from "./assessment.js";
-import { writeEchoWorkflow } from "./protocol.js";
 
 function assertPlanningMode(options: { plan?: boolean; apply?: boolean }): void {
   if (options.plan && options.apply) {
@@ -96,24 +94,6 @@ function createVerifySubcommand(): Command {
     });
 }
 
-function createListSubcommand(name: "explore" | "advanced", items: typeof EXPLORE_ITEMS): Command {
-  return new Command(name)
-    .description(name === "explore" ? "List safe starter actions for exploring Echo" : "List low-level advanced surfaces")
-    .option("--json", "JSON output")
-    .action(async (options: { json?: boolean }) => {
-      if (options.json || isHeadless()) {
-        writeEchoWorkflow({
-          phase: name,
-          status: "ready",
-          summary: name === "explore" ? "Safe starter actions for exploring Echo." : "Advanced low-level command surfaces.",
-          items,
-        });
-        return;
-      }
-      await runEchoMenu();
-    });
-}
-
 export function createEchoCommand(): Command {
   const echo = new Command("echo")
     .description("Human-first EchoClaw launcher for connecting AI, managing compute, and fixing setup")
@@ -131,8 +111,6 @@ export function createEchoCommand(): Command {
   echo.addCommand(new Command("support-report").option("--json").action(async (options: { json?: boolean }) => {
     await writeSupportReportToFile(!!options.json || isHeadless());
   }));
-  echo.addCommand(createListSubcommand("explore", EXPLORE_ITEMS));
-  echo.addCommand(createListSubcommand("advanced", ADVANCED_ITEMS));
   echo.addCommand(createWalletHubSubcommand());
   echo.addCommand(createClaudeCommand());
   echo.addCommand(createLauncherSubcommand());

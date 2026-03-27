@@ -2,41 +2,46 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ProviderName } from "../../providers/types.js";
 import { CONFIG_DIR } from "../../config/paths.js";
-import { colors, infoBox, printTable, successBox, warnBox } from "../../utils/ui.js";
+import { colors, infoBox, printTable, successBox, warnBox, stepHeader, markOk, markPending } from "../../utils/ui.js";
 import { buildDoctorChecks, buildEchoSnapshot, buildSupportReport, type EchoSnapshot } from "./state.js";
 import { autoDetectProvider } from "../../providers/registry.js";
 import { buildVerifyPayload } from "./assessment.js";
 import { PROVIDER_LABELS } from "./catalog.js";
 import { writeEchoWorkflow } from "./protocol.js";
+import { writeStderr } from "../../utils/output.js";
 
 export function printHomeSummary(snapshot: EchoSnapshot): void {
-  const passwordLine =
+  const mark = (ok: boolean | string | null | undefined, label: string): string =>
+    ok ? markOk(label) : markPending(label);
+
+  const passwordLabel =
     snapshot.wallet.password.status === "ready"
-      ? colors.success(`Ready (${snapshot.wallet.password.source})`)
+      ? `ready (${snapshot.wallet.password.source})`
       : snapshot.wallet.password.status === "drift"
-        ? colors.warn(`Drift (${snapshot.wallet.password.driftSources.join(", ")})`)
+        ? colors.warn(`drift (${snapshot.wallet.password.driftSources.join(", ")})`)
         : snapshot.wallet.password.status === "invalid"
-          ? colors.error("Invalid for current keystore")
-          : colors.warn("Missing");
+          ? colors.error("invalid")
+          : colors.muted("missing");
 
-  const runtimeLines = Object.entries(snapshot.runtimes.detected)
-    .filter(([, value]) => value.detected)
-    .map(([key]) => PROVIDER_LABELS[key as ProviderName]);
+  const runtimeNames = Object.entries(snapshot.runtimes.detected)
+    .filter(([, v]) => v.detected)
+    .map(([k]) => PROVIDER_LABELS[k as ProviderName]);
 
-  // Solana readiness
-  const solanaCluster = snapshot.solanaCluster;
-  const jupiterKey = snapshot.jupiterApiKeySet;
+  writeStderr("");
+  writeStderr(mark(snapshot.wallet.evmAddress, `EVM:       ${snapshot.wallet.evmAddress ?? colors.muted("not configured")}`));
+  writeStderr(mark(snapshot.wallet.solanaAddress, `Solana:    ${snapshot.wallet.solanaAddress ?? colors.muted("not configured")}`));
+  writeStderr(mark(snapshot.wallet.password.status === "ready", `Password:  ${passwordLabel}`));
+  writeStderr(mark(runtimeNames.length > 0, `Runtime:   ${runtimeNames.length > 0 ? runtimeNames.join(", ") : colors.muted("none")} (rec: ${PROVIDER_LABELS[snapshot.runtimes.recommended]})`));
+  writeStderr(mark(snapshot.claude.running, `Proxy:     ${snapshot.claude.running ? colors.success(`running on ${snapshot.claude.port}`) : colors.muted("not running")}`));
+  writeStderr(mark(snapshot.monitor.running, `Monitor:   ${snapshot.monitor.running ? colors.success(`running (PID ${snapshot.monitor.pid})`) : colors.muted("not running")}`));
 
-  infoBox("Echo Launcher", [
-    `Recommended runtime: ${colors.info(PROVIDER_LABELS[snapshot.runtimes.recommended])}`,
-    `Detected runtimes:   ${runtimeLines.length > 0 ? runtimeLines.join(", ") : colors.muted("none")}`,
-    `Wallet (EVM):        ${snapshot.wallet.evmAddress ?? colors.muted("not configured")}`,
-    `Wallet (Solana):     ${snapshot.wallet.solanaAddress ?? colors.muted("not configured")}`,
-    `Password:            ${passwordLine}`,
-    `Solana:              ${solanaCluster ? `${colors.info(solanaCluster)}${jupiterKey ? ` + Jupiter key` : ""}` : colors.muted("default")}`,
-    `Claude proxy:        ${snapshot.claude.running ? colors.success(`running on ${snapshot.claude.port}`) : colors.muted("not running")}`,
-    `Monitor:             ${snapshot.monitor.running ? colors.success(`running (PID ${snapshot.monitor.pid})`) : colors.muted("not running")}`,
-  ].join("\n"));
+  const solCluster = snapshot.solanaCluster;
+  const jupKey = snapshot.jupiterApiKeySet;
+  if (solCluster || jupKey) {
+    writeStderr(markOk(`Solana:    ${solCluster ? colors.primary(solCluster) : "default"}${jupKey ? " + Jupiter key" : ""}`));
+  }
+
+  writeStderr("");
 }
 
 export async function printStatus(json: boolean, fresh = false): Promise<void> {
@@ -67,6 +72,9 @@ export async function printDoctor(json: boolean, fresh = false): Promise<void> {
     });
     return;
   }
+
+  stepHeader(1, 1, "Doctor");
+  writeStderr("");
 
   const rows = checks.map((check) => [
     check.ok ? colors.success("OK") : colors.warn("WARN"),

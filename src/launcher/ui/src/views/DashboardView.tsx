@@ -194,7 +194,6 @@ export const DashboardView: FC<{ onNavigate: (path: string) => void }> = ({ onNa
     { ...m, title: "Monitor", icon: <HugeiconsIcon icon={ActivityIcon} size={18} />, path: "/manage", actionLabel: m.status === "done" ? "View" : "Setup", copyAddresses: null },
     { status: "pending" as CardStatus, title: "Doctor", summary: "Run diagnostics", detail: "Check system health", icon: <HugeiconsIcon icon={ShieldIcon} size={18} />, path: "/manage", actionLabel: "Check", copyAddresses: null },
     { status: "pending" as CardStatus, title: "Bridge", summary: "Cross-chain transfers", detail: "Bridge tokens via Khalani", icon: <HugeiconsIcon icon={LinkIcon} size={18} />, path: "/bridge", actionLabel: "Open", copyAddresses: null },
-    { status: "pending" as CardStatus, title: "Explore", summary: "Discover features", detail: "Safe starter actions", icon: <HugeiconsIcon icon={BotIcon} size={18} />, path: "/explore", actionLabel: "Browse", copyAddresses: null },
   ];
 
   // Always render agent card — use fallback when API failed

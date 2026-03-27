@@ -15,6 +15,7 @@
 
 import type { JsonSchema, ChatMode } from "./types.js";
 import { CLI_TOOLS } from "./cli-tool-defs.js";
+import { EXECUTE_TOOL_PARAMS_SCHEMA } from "./echo-tools/types.js";
 
 // ── Tool definition ─────────────────────────────────────────────────
 
@@ -36,6 +37,17 @@ export interface OpenAITool {
 // ── Internal tools (structured params, handled by engine) ───────────
 
 const INTERNAL: ToolDef[] = [
+  { name: "discover_tools", kind: "internal", mutating: false, description: "Discover protocol capabilities from echoTools catalog. This returns protocol tool metadata only (not internal runtime tools).",
+    parameters: { type: "object", properties: {
+      query: { type: "string", description: "Free-text intent (e.g. 'swap on solana', 'bridge usdc')" },
+      namespace: { type: "string", description: "Protocol namespace filter (e.g. solana, khalani, kyberswap)" },
+      includeMutating: { type: "boolean", description: "Include mutating capabilities" },
+      includeDeclared: { type: "boolean", description: "Include template-only/declaration capabilities" },
+      limit: { type: "number", description: "Maximum tools to return (default managed by runtime)" },
+    } } },
+  { name: "execute_tool", kind: "internal", mutating: false, description: "Execute a discovered protocol capability by toolId with structured params. Mutating protocol executions require approval in restricted/off mode.",
+    parameters: EXECUTE_TOOL_PARAMS_SCHEMA },
+
   { name: "web_search", kind: "internal", mutating: false, description: "Search the internet for any information — token research, project docs, market news, chain analytics, protocol updates, contract audits, or any other data not available through CLI tools",
     parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } },
   { name: "web_fetch", kind: "internal", mutating: false, description: "Fetch any URL and return its content as markdown — documentation pages, block explorers, analytics dashboards, project websites, API responses, or any other web resource",
@@ -91,11 +103,41 @@ const INTERNAL: ToolDef[] = [
     parameters: { type: "object", properties: {
       id: { type: "string", description: "Subagent ID to stop" },
     }, required: ["id"] } },
-];
 
-// TODO: Add discover_tools and execute_tool internal tools here
-// These will replace the 130+ CLI tools with on-demand routing via tool-groups/
-// See tool-groups/README.md for architecture details
+  { name: "wallet_read", kind: "internal", mutating: false,
+    description: "Read wallet state for EVM/Solana. Supports ensure/address/balance/balances with Khalani-backed multi-chain visibility.",
+    parameters: { type: "object", properties: {
+      action: { type: "string", enum: ["ensure", "address", "balance", "balances"], description: "Read operation to run." },
+      chain: { type: "string", enum: ["eip155", "solana"], description: "Wallet chain selector for address/ensure." },
+      wallet: { type: "string", enum: ["eip155", "solana", "all"], description: "Wallet scope for balances." },
+      chainIds: { type: "string", description: "Optional chain filter for balances, comma-separated IDs or aliases." },
+    }, required: ["action"] } },
+
+  { name: "wallet_send_prepare", kind: "internal", mutating: false,
+    description: "Prepare a wallet transfer intent (no broadcast): EVM native, Solana native, or Solana SPL token.",
+    parameters: { type: "object", properties: {
+      network: { type: "string", enum: ["eip155", "solana"], description: "Transfer network family." },
+      to: { type: "string", description: "Recipient address." },
+      amount: { type: "string", description: "Amount in user-facing units." },
+      token: { type: "string", description: "For Solana token sends: symbol or mint address." },
+      note: { type: "string", description: "Optional note for intent metadata." },
+    }, required: ["network", "to", "amount"] } },
+
+  { name: "wallet_send_confirm", kind: "internal", mutating: false,
+    description: "Confirm and broadcast a prepared wallet transfer intent. Requires approval outside full mode.",
+    parameters: { type: "object", properties: {
+      network: { type: "string", enum: ["eip155", "solana"], description: "Transfer network family." },
+      intentId: { type: "string", description: "Prepared intent ID to confirm." },
+      transferType: { type: "string", enum: ["native", "token"], description: "For Solana: choose native SOL or SPL token intent type." },
+    }, required: ["network", "intentId"] } },
+
+  { name: "wallet_backup", kind: "internal", mutating: false,
+    description: "Manage wallet backups (create/list/restore). Restore requires approval.",
+    parameters: { type: "object", properties: {
+      action: { type: "string", enum: ["create", "list", "restore"], description: "Backup operation to run." },
+      backupDir: { type: "string", description: "Required when action=restore." },
+    }, required: ["action"] } },
+];
 
 // ── Registry API ────────────────────────────────────────────────────
 
