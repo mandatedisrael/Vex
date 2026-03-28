@@ -148,7 +148,7 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
     const amount = num(p, "amount");
     if (!input || !output || amount == null) return fail("Missing required: inputToken, outputToken, amount");
     const result = await executeSwap(input, output, amount, walletSecret(), { slippageBps: num(p, "slippageBps") });
-    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "swap", chain: "solana", status: "executed", inputToken: input, outputToken: output, inputAmount: result.inputAmount, outputAmount: result.outputAmount, signature: result.signature } } };
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "swap", chain: "solana", status: "executed", inputToken: input, outputToken: output, inputAmount: result.inputAmount, outputAmount: result.outputAmount, signature: result.signature, walletAddress: walletAddress(p), instrumentKey: `solana:${output}` } } };
   },
 
   // Perps
@@ -163,17 +163,17 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
     const amountUsd = num(p, "amountUsd");
     if (!asset || !side || amountUsd == null) return fail("Missing required: asset, side, amountUsd");
     const result = await openPerpsPosition(walletSecret(), { asset, side, amountUsd, inputToken: str(p, "inputToken") || undefined, leverage: num(p, "leverage"), sizeUsd: num(p, "sizeUsd"), tp: num(p, "tp"), sl: num(p, "sl"), limitPrice: num(p, "limitPrice"), slippageBps: num(p, "slippageBps") });
-    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "perps", chain: "solana", status: "executed", meta: { asset, side, amountUsd } } } };
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "perps", chain: "solana", status: "executed", walletAddress: walletAddress(p), tradeSide: side === "long" ? "buy" : "sell", positionKey: result.positionPubkey, instrumentKey: `solana:perps:${asset}`, meta: { asset, side, amountUsd } } } };
   },
   "solana.perps.close": async (p) => {
     const pk = str(p, "positionPubkey");
     if (!pk) return fail("Missing required: positionPubkey");
     const result = await closePerpsPosition(walletSecret(), { positionPubkey: pk, receiveToken: str(p, "receiveToken") || undefined, sizeUsd: num(p, "sizeUsd"), slippageBps: num(p, "slippageBps") });
-    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "perps", chain: "solana", status: "closed", meta: { positionPubkey: pk } } } };
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "perps", chain: "solana", status: "closed", walletAddress: walletAddress(p), positionKey: pk, meta: { positionPubkey: pk } } } };
   },
-  "solana.perps.closeAll": async () => {
+  "solana.perps.closeAll": async (p) => {
     const sigs = await closeAllPerpsPositions(walletSecret());
-    return ok({ signatures: sigs, count: sigs.length });
+    return { success: true, output: JSON.stringify({ signatures: sigs, count: sigs.length }, null, 2), data: { signatures: sigs, count: sigs.length, _tradeCapture: { type: "perps", chain: "solana", status: "closed", walletAddress: walletAddress(p), meta: { action: "closeAll", count: sigs.length } } } };
   },
   "solana.perps.tpsl": async (p) => {
     const pk = str(p, "positionPubkey");
@@ -237,23 +237,23 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
     const amount = num(p, "amountUsdc");
     if (!marketId || !side || amount == null) return fail("Missing required: marketId, side, amountUsdc");
     const result = await createPredictOrder(walletSecret(), marketId, side === "yes", amount);
-    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "prediction", chain: "solana", status: "open", meta: { marketId, side } } } };
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "prediction", chain: "solana", status: "open", walletAddress: walletAddress(p), tradeSide: "buy", positionKey: result.positionPubkey, instrumentKey: `solana:predict:${marketId}:${side}`, meta: { marketId, side } } } };
   },
   "solana.predict.sell": async (p) => {
     const pk = str(p, "positionPubkey");
     if (!pk) return fail("Missing required: positionPubkey");
     const result = await closePredictPosition(walletSecret(), pk);
-    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "prediction", chain: "solana", status: "closed", meta: { positionPubkey: pk } } } };
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "prediction", chain: "solana", status: "closed", walletAddress: walletAddress(p), tradeSide: "sell", positionKey: pk, meta: { positionPubkey: pk } } } };
   },
   "solana.predict.claim": async (p) => {
     const pk = str(p, "positionPubkey");
     if (!pk) return fail("Missing required: positionPubkey");
     const result = await claimPosition(walletSecret(), pk);
-    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "prediction", chain: "solana", status: "claimed", meta: { positionPubkey: pk } } } };
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "prediction", chain: "solana", status: "claimed", walletAddress: walletAddress(p), positionKey: pk, meta: { positionPubkey: pk } } } };
   },
-  "solana.predict.closeAll": async () => {
+  "solana.predict.closeAll": async (p) => {
     const results = await closeAllPredictPositions(walletSecret());
-    return ok({ results, count: results.length });
+    return { success: true, output: JSON.stringify({ results, count: results.length }, null, 2), data: { results, count: results.length, _tradeCapture: { type: "prediction", chain: "solana", status: "closed", walletAddress: walletAddress(p), tradeSide: "sell", meta: { action: "closeAll", count: results.length } } } };
   },
   "solana.predict.event": async (p) => {
     const id = str(p, "eventId");
@@ -273,13 +273,13 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
     const amount = num(p, "amountPerCycle"), interval = str(p, "interval"), count = num(p, "numberOfOrders");
     if (!input || !output || amount == null || !interval || count == null) return fail("Missing required: inputToken, outputToken, amountPerCycle, interval, numberOfOrders");
     const result = await createDcaOrder(walletSecret(), input, output, amount, interval as any, count);
-    return ok(result);
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "order", chain: "solana", status: "open", walletAddress: walletAddress(p), positionKey: result.orderKey, instrumentKey: `solana:${output}`, meta: { orderType: "dca", interval, numberOfOrders: count } } } };
   },
   "solana.dca.cancel": async (p) => {
     const key = str(p, "orderKey");
     if (!key) return fail("Missing required: orderKey");
     const sig = await cancelDcaOrder(walletSecret(), key);
-    return ok({ signature: sig });
+    return { success: true, output: JSON.stringify({ signature: sig }, null, 2), data: { signature: sig, _tradeCapture: { type: "order", chain: "solana", status: "cancelled", walletAddress: walletAddress(p), positionKey: key, meta: { orderType: "dca" } } } };
   },
 
   // Limit orders
@@ -289,13 +289,13 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
     const amount = num(p, "inputAmount"), price = num(p, "targetPriceUsd");
     if (!input || !output || amount == null || price == null) return fail("Missing required: inputToken, outputToken, inputAmount, targetPriceUsd");
     const result = await createLimitOrder(walletSecret(), input, output, amount, price);
-    return ok(result);
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "order", chain: "solana", status: "open", walletAddress: walletAddress(p), positionKey: result.orderKey, instrumentKey: `solana:${output}`, meta: { orderType: "limit", targetPriceUsd: price } } } };
   },
   "solana.limit.cancel": async (p) => {
     const key = str(p, "orderKey");
     if (!key) return fail("Missing required: orderKey");
     const sig = await cancelLimitOrder(walletSecret(), key);
-    return ok({ signature: sig });
+    return { success: true, output: JSON.stringify({ signature: sig }, null, 2), data: { signature: sig, _tradeCapture: { type: "order", chain: "solana", status: "cancelled", walletAddress: walletAddress(p), positionKey: key, meta: { orderType: "limit" } } } };
   },
 
   // Lending
@@ -312,13 +312,13 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
     const asset = str(p, "asset"), amount = str(p, "amount");
     if (!asset || !amount) return fail("Missing required: asset, amount");
     const result = await lendDeposit(walletSecret(), asset, amount);
-    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "lend", chain: "solana", status: "executed", meta: { action: "deposit", asset } } } };
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "lend", chain: "solana", status: "executed", walletAddress: walletAddress(p), inputTokenAddress: asset, inputAmount: amount, meta: { action: "deposit", asset } } } };
   },
   "solana.lend.withdraw": async (p) => {
     const asset = str(p, "asset"), amount = str(p, "amount");
     if (!asset || !amount) return fail("Missing required: asset, amount");
     const result = await lendWithdraw(walletSecret(), asset, amount);
-    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "lend", chain: "solana", status: "executed", meta: { action: "withdraw", asset } } } };
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "lend", chain: "solana", status: "executed", walletAddress: walletAddress(p), inputTokenAddress: asset, inputAmount: amount, meta: { action: "withdraw", asset } } } };
   },
 
   // Staking
@@ -327,13 +327,13 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
     const amount = num(p, "amountSol");
     if (amount == null) return fail("Missing required: amountSol");
     const result = await createAndDelegateStake(walletSecret(), amount, str(p, "validator") || undefined);
-    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "stake", chain: "solana", status: "executed", meta: { action: "delegate" } } } };
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "stake", chain: "solana", status: "executed", walletAddress: walletAddress(p), meta: { action: "delegate" } } } };
   },
   "solana.stake.withdraw": async (p) => {
     const sa = str(p, "stakeAccount");
     if (!sa) return fail("Missing required: stakeAccount");
     const result = await withdrawStake(walletSecret(), sa, num(p, "amountSol"));
-    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "stake", chain: "solana", status: "executed", meta: { action: "withdraw" } } } };
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "stake", chain: "solana", status: "executed", walletAddress: walletAddress(p), meta: { action: "withdraw" } } } };
   },
   "solana.stake.claimMev": async (p) => {
     const result = await claimMev(walletSecret(), str(p, "stakeAccount") || undefined);

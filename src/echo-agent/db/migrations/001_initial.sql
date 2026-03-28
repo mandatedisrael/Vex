@@ -375,6 +375,7 @@ CREATE TABLE proj_portfolio_snapshots (
 CREATE INDEX idx_portfolio_time ON proj_portfolio_snapshots(created_at DESC);
 
 -- Open positions — cross-protocol aggregation
+-- Covers: perps, predictions, DCA/limit orders, LP positions
 CREATE TABLE proj_open_positions (
   id SERIAL PRIMARY KEY,
   namespace TEXT NOT NULL,
@@ -382,37 +383,49 @@ CREATE TABLE proj_open_positions (
   chain TEXT NOT NULL,
   external_id TEXT,
   wallet_address TEXT NOT NULL,
+  instrument_key TEXT,
+  position_key TEXT,
+  entry_price_usd NUMERIC,
+  current_value_usd NUMERIC,
+  unrealized_pnl_usd NUMERIC,
   data JSONB NOT NULL DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'open',
   opened_at TIMESTAMPTZ,
   closed_at TIMESTAMPTZ,
+  last_refresh_at TIMESTAMPTZ,
   synced_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE UNIQUE INDEX idx_positions_external ON proj_open_positions(namespace, position_type, external_id)
   WHERE external_id IS NOT NULL;
 CREATE INDEX idx_positions_wallet ON proj_open_positions(wallet_address, status);
 CREATE INDEX idx_positions_namespace ON proj_open_positions(namespace, status);
+CREATE INDEX idx_positions_instrument ON proj_open_positions(instrument_key) WHERE instrument_key IS NOT NULL;
+CREATE INDEX idx_positions_position_key ON proj_open_positions(position_key) WHERE position_key IS NOT NULL;
 
 -- Activity feed — unified cross-protocol activity with semantic side
--- trade_side derivation per namespace:
---   polymarket: native BUY/SELL from clob.buy/clob.sell
---   kyberswap: swap.buy = buy, swap.sell = sell (after adding swap.buy)
---   solana: tool-derived (swap.execute=contextual, perps.open=side param)
---   0g jaine: swap.buy/swap.sell native
---   0g slop: trade.buy/trade.sell native
+-- trade_side: ONLY for real trades (spot buy/sell, perps open/close, prediction buy/sell)
+-- NULL for: bridge, lend, stake, lp, reward
+-- product_type: spot, perps, prediction, order, lp, lend, stake, bridge, reward
+-- instrument_key: canonical per product (solana:{mint}, polymarket:{conditionId}:{outcome}, etc.)
+-- position_key: positionPubkey, orderKey, positionId — lifecycle correlation
+-- execution_id is UNIQUE — idempotency key (1 execution = 1 activity row)
 CREATE TABLE proj_activity (
   id SERIAL PRIMARY KEY,
   namespace TEXT NOT NULL,
   activity_type TEXT NOT NULL,
+  product_type TEXT NOT NULL,
   trade_side TEXT,
   chain TEXT NOT NULL,
-  execution_id INTEGER REFERENCES protocol_executions(id),
+  execution_id INTEGER UNIQUE REFERENCES protocol_executions(id),
   wallet_address TEXT,
   input_token TEXT,
   input_amount TEXT,
   output_token TEXT,
   output_amount TEXT,
   value_usd NUMERIC,
+  capture_status TEXT,               -- from _tradeCapture.status: executed, open, closed, cancelled, claimed, pending
+  position_key TEXT,
+  instrument_key TEXT,
   external_refs JSONB DEFAULT '{}',
   meta JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -420,6 +433,33 @@ CREATE TABLE proj_activity (
 CREATE INDEX idx_activity_namespace ON proj_activity(namespace, created_at DESC);
 CREATE INDEX idx_activity_wallet ON proj_activity(wallet_address, created_at DESC);
 CREATE INDEX idx_activity_type ON proj_activity(activity_type, created_at DESC);
+CREATE INDEX idx_activity_product ON proj_activity(product_type, created_at DESC);
+CREATE INDEX idx_activity_position ON proj_activity(position_key) WHERE position_key IS NOT NULL;
+CREATE INDEX idx_activity_instrument ON proj_activity(instrument_key) WHERE instrument_key IS NOT NULL;
+
+-- PnL lots — spot DEX cost basis ledger (FIFO)
+-- Each buy creates a lot. Sells reduce lots oldest-first.
+-- MUST be after proj_activity (activity_id FK)
+CREATE TABLE proj_pnl_lots (
+  id SERIAL PRIMARY KEY,
+  instrument_key TEXT NOT NULL,
+  wallet_address TEXT NOT NULL,
+  side TEXT NOT NULL,
+  quantity_raw TEXT NOT NULL,
+  cost_basis_usd NUMERIC,
+  price_usd NUMERIC,
+  remaining_quantity_raw TEXT NOT NULL,
+  execution_id INTEGER REFERENCES protocol_executions(id),
+  activity_id INTEGER REFERENCES proj_activity(id),
+  namespace TEXT NOT NULL,
+  chain TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  opened_at TIMESTAMPTZ DEFAULT NOW(),
+  closed_at TIMESTAMPTZ
+);
+CREATE INDEX idx_lots_instrument ON proj_pnl_lots(instrument_key, wallet_address, status);
+CREATE INDEX idx_lots_wallet ON proj_pnl_lots(wallet_address, status);
+CREATE INDEX idx_lots_execution ON proj_pnl_lots(execution_id);
 
 -- ══════════════════════════════════════════════════════════════════
 -- F. Web Cache

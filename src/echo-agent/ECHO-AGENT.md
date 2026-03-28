@@ -15,7 +15,7 @@ src/echo-agent/
     migrate.ts           — Startup migration runner
     migrations/
       001_initial.sql    — Full schema (27 tables, 6 modules)
-    repos/               — 17 repo files, one per domain (includes balances.ts)
+    repos/               — 21 repo files, one per domain (includes balances.ts, activity.ts, open-positions.ts, pnl-lots.ts, subagent-messages.ts)
   inference/             — Provider-agnostic inference (OpenRouter + 0G Compute)
     types.ts             — InferenceProvider interface, InferenceConfig, InferenceUsage
     config.ts            — ENV validation + SubagentConfig
@@ -49,12 +49,14 @@ src/echo-agent/
       0g/slop/           — 11 tools (token, trade, curve, fees)
       echobook/          — 28 tools (posts, social, points)
       0g/slop-app/       — 8 tools (profile, image, agents, chat)
-  sync/                  — Balance sync pipeline (Khalani → proj_balances → snapshots)
-    index.ts             — Public API: initSync(), syncTick()
-    balance-sync.ts      — Khalani → proj_balances → proj_portfolio_snapshots
-    worker.ts            — Sync run consumer with dedup
-    seed.ts              — Default sync job seeding
-    chains.ts            — Canonical chain hint resolution
+  sync/                    — Sync pipeline (balances + activity projections)
+    index.ts               — Public API: initSync(), syncTick()
+    balance-sync.ts        — Khalani → proj_balances → proj_portfolio_snapshots
+    activity-populator.ts  — _tradeCapture → proj_activity (from runtime capture hook)
+    position-projector.ts  — activity → proj_open_positions + proj_pnl_lots (FIFO)
+    worker.ts              — Sync run consumer with dedup
+    seed.ts                — Default sync job seeding
+    chains.ts              — Canonical chain hint resolution
   public/                — Static assets (images, legacy README)
 ```
 
@@ -114,7 +116,7 @@ Source of truth: Khalani `getTokenBalances()` — native + altcoins, balance + U
 
 ## Database — 27 Tables, 6 Modules
 
-Own Postgres via `ECHO_AGENT_DB_URL`. See `db/README.md` for full details.
+Own Postgres via `ECHO_AGENT_DB_URL`. See `db/DB.md` for full details.
 
 | Module | Tables | Purpose |
 |--------|--------|---------|
@@ -136,7 +138,7 @@ Own Postgres via `ECHO_AGENT_DB_URL`. See `db/README.md` for full details.
 
 ## Inference Layer
 
-Provider-agnostic. See `inference/README.md` for full details.
+Provider-agnostic. See `inference/INFERENCE.md` for full details.
 
 | Provider | Transport | Streaming | Balance | Pricing |
 |----------|-----------|-----------|---------|---------|
@@ -160,7 +162,7 @@ Loaded from `SUBAGENT_*` ENV with fallbacks from `AGENT_*`:
 
 ## Internal Tools (17)
 
-See `tools/README.md` for full details.
+See `tools/TOOLS.md` for full details.
 
 | Tool | Handler | Description |
 |------|---------|-------------|
@@ -206,7 +208,7 @@ LLM uses `discover_tools` to search, `execute_tool` to call. Each namespace has 
 ## Implementation Status (2026-03-28)
 
 ### Done
-- DB schema (27 tables), client, migrate runner, 17 repos (including balances)
+- DB schema (27 tables), client, migrate runner, 21 repos
 - All 17 internal tools — live handlers, zero stubs
 - Approval enforcement for mutating tools (protocol + wallet)
 - Execution capture with `external_refs` (normalized) + sync enqueue
@@ -217,15 +219,25 @@ LLM uses `discover_tools` to search, `execute_tool` to call. Each namespace has 
 - Nested folder resolution for documents (`"research/2024"`)
 - KyberSwap `swap.buy` (explicit buy side for projections)
 - SubagentConfig with ENV overrides
-- 1023+ passing tests across 36 test files
+- Capture normalization (phase 2): canonical `_tradeCapture` with walletAddress, instrumentKey, positionKey, tradeSide, token addresses across all 6 trading namespaces
+- `proj_activity` auto-populated from captureExecution() with idempotency (UNIQUE execution_id)
+- Activity populator with product-aware tradeSide rules (claim ≠ sell, lend/stake/bridge → null)
+- Order management mutations captured: DCA, limit orders, closeAll, cancel, fees/rewards
+- Position projector (phase 3): activity → proj_open_positions + proj_pnl_lots
+  - Perps/prediction: open/close via `captureStatus` from `_tradeCapture.status`
+  - Orders (DCA/limit): `type: "order"` → `proj_open_positions` lifecycle (not FIFO lots)
+  - LP: `zap-in` → open, `zap-out` → close, `zap-migrate` → close old + open new (reads `meta.action`)
+  - Spot: FIFO lot ledger, skips zero-quantity
+- `proj_activity.capture_status` — explicit field from `_tradeCapture.status` (not buried in meta)
+- Cross-protocol 0G inventory: slop.trade.buy → jaine.swap.sell matched via shared instrumentKey
+- Pre-engine hardening: schema FK ordering fixed, failed executions isolated from projections (audit only), capture awaited inline (deterministic projection readiness), FIFO shortfall warning
+- 1090+ passing tests across 43 test files
 
 ### Not yet implemented
-- **Subagent inference loop** — spawn creates session/links but doesn't run inference yet
-- **Capture normalization** — `extractExternalRefs()` has minimal hotfix, full normalization (asset addresses, instrument keys) is phase 2
-- **proj_activity population** — requires capture normalization
-- **Trade resolution / PnL** — requires lot matching, position keys, FIFO/avg cost (see `trading_pnl_model` plan)
-- **proj_open_positions** — requires protocol-specific read tools
-- **Engine integration** — conversation loop, compaction, prompt building
+- **PnL reconcilers** (phase 4) — realized/unrealized PnL calculation from lots + positions
+- **Read models for UI** — portfolio curve, PnL by protocol, agent performance summary
+- **Subagent inference loop** — spawn creates session/links but doesn't run inference yet (needs engine)
+- **Echo-mama engine** — conversation loop, prompt building, approval resume, cycle bookkeeping
 - **Transport layer** — HTTP/SSE server, routes, UI
 
 ---
@@ -261,7 +273,7 @@ JUPITER_API_KEY=...                    # studio tools (3 tools)
 ## Tests
 
 ```bash
-npx vitest run src/__tests__/echo-agent/    # 36 files, 1023+ tests
+npx vitest run src/__tests__/echo-agent/    # 43 files, 1090+ tests
 pnpm tsc --noEmit                           # zero type errors
 ```
 
@@ -270,6 +282,7 @@ pnpm tsc --noEmit                           # zero type errors
 | Inference | 6 | 83 | Config validation, SubagentConfig, resilience, registry, types, cost |
 | Dispatcher | 1 | 28 | Routing, protocol discovery, all internal tools, no stubs, approval |
 | Internal handlers | 5 | 102 | web, documents (nested folders), memory, schedule (new types), subagent (session links) |
+| Sync pipeline | 7 | 59 | balance-sync, worker, seed, runtime-capture, activity-populator, position-projector, hardening (failed exec isolation, FIFO shortfall, captureStatus pipeline) |
 | Protocol manifests | 10 | 300+ | Tool counts, mutating flags, required params, namespace, ENV gating |
 | Protocol handlers | 8 | 300+ | Handler coverage, param validation, read-only execution |
 | Registry + ENV | 2 | 50+ | Tool lookup, OpenAI format, requiresEnv filtering |
@@ -278,7 +291,7 @@ pnpm tsc --noEmit                           # zero type errors
 
 ## Module Docs
 
-- [`db/DB.md`](db/DB.md) — Schema modules, design decisions, 17 repos API, startup
+- [`db/DB.md`](db/DB.md) — Schema modules, design decisions, 21 repos API, startup
 - [`inference/INFERENCE.md`](inference/INFERENCE.md) — Provider interface, ENV, SubagentConfig, provider differences
 - [`tools/TOOLS.md`](tools/TOOLS.md) — Tool call flow, internal tools table, protocol namespaces, execution capture
 - [`sync/SYNC.md`](sync/SYNC.md) — Balance sync pipeline, Khalani integration, dedup, snapshots

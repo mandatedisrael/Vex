@@ -91,7 +91,7 @@ async function executeKyberSwap(p: Record<string, unknown>, side: "buy" | "sell"
   return {
     success: true,
     output: JSON.stringify({ txHash, side, chain: slug, tokenIn: tokenIn.symbol, tokenOut: tokenOut.symbol, amountIn: buildResp.data.amountIn, amountOut: buildResp.data.amountOut, amountInUsd: buildResp.data.amountInUsd, amountOutUsd: buildResp.data.amountOutUsd }, null, 2),
-    data: { txHash, _tradeCapture: { type: "swap", chain: slug, status: "executed", inputToken: tokenIn.symbol, outputToken: tokenOut.symbol, inputAmount: buildResp.data.amountIn, outputAmount: buildResp.data.amountOut, signature: txHash, meta: { dex: "kyberswap", side } } },
+    data: { txHash, _tradeCapture: { type: "swap", chain: slug, status: "executed", inputToken: tokenIn.symbol, outputToken: tokenOut.symbol, inputTokenAddress: tokenIn.address, outputTokenAddress: tokenOut.address, inputAmount: buildResp.data.amountIn, outputAmount: buildResp.data.amountOut, signature: txHash, walletAddress: wallet.address, tradeSide: side, instrumentKey: `${slug}:${side === "buy" ? tokenOut.address : tokenIn.address}`, meta: { dex: "kyberswap", side } } },
   };
 }
 
@@ -241,7 +241,7 @@ export const KYBERSWAP_HANDLERS: Record<string, ProtocolHandler> = {
     const signature = await signEip712Message(wallet.privateKey, eip712);
     await getKyberLimitOrderClient().cancelOrders({ ...eip712, signature });
 
-    return ok({ chain: slug, orderId, method: "gasless", status: "cancelled" });
+    return { success: true, output: JSON.stringify({ chain: slug, orderId, method: "gasless", status: "cancelled" }, null, 2), data: { orderId: String(orderId), _tradeCapture: { type: "swap", chain: slug, status: "cancelled", walletAddress: wallet.address, positionKey: String(orderId), meta: { orderType: "limitOrder", method: "gasless" } } } };
   },
 
   "kyberswap.limitOrder.hardCancel": async (p) => {
@@ -257,7 +257,7 @@ export const KYBERSWAP_HANDLERS: Record<string, ProtocolHandler> = {
       data: encoded.encodedData as Hex,
     });
 
-    return ok({ chain: slug, orderId, txHash, method: "hard-cancel" });
+    return { success: true, output: JSON.stringify({ chain: slug, orderId, txHash, method: "hard-cancel" }, null, 2), data: { txHash, orderId: String(orderId), _tradeCapture: { type: "swap", chain: slug, status: "cancelled", walletAddress: wallet.address, positionKey: String(orderId), signature: txHash, meta: { orderType: "limitOrder", method: "hard-cancel" } } } };
   },
 
   // ── Limit Orders (Taker) ─────────────────────────────────────────
@@ -309,7 +309,7 @@ export const KYBERSWAP_HANDLERS: Record<string, ProtocolHandler> = {
     const to = encoded.routerAddress ? getAddress(encoded.routerAddress) : DSLO_PROTOCOL;
     const txHash = await sendKyberTransaction(publicClient, walletClient, { to, data: encoded.encodedData as Hex });
 
-    return ok({ chain: slug, orderId, txHash });
+    return { success: true, output: JSON.stringify({ chain: slug, orderId, txHash }, null, 2), data: { txHash, orderId: String(orderId), _tradeCapture: { type: "swap", chain: slug, status: "executed", walletAddress: wallet.address, positionKey: String(orderId), signature: txHash, tradeSide: "buy", meta: { orderType: "limitOrder", action: "fill" } } } };
   },
 
   "kyberswap.limitOrder.batchFill": async (p) => {
@@ -345,7 +345,7 @@ export const KYBERSWAP_HANDLERS: Record<string, ProtocolHandler> = {
     const to = encoded.routerAddress ? getAddress(encoded.routerAddress) : DSLO_PROTOCOL;
     const txHash = await sendKyberTransaction(publicClient, walletClient, { to, data: encoded.encodedData as Hex });
 
-    return ok({ chain: slug, orderIds, txHash });
+    return { success: true, output: JSON.stringify({ chain: slug, orderIds, txHash }, null, 2), data: { txHash, _tradeCapture: { type: "swap", chain: slug, status: "executed", walletAddress: wallet.address, signature: txHash, tradeSide: "buy", meta: { orderType: "limitOrder", action: "batchFill", orderIds } } } };
   },
 
   "kyberswap.limitOrder.cancelAll": async (p) => {
@@ -361,7 +361,7 @@ export const KYBERSWAP_HANDLERS: Record<string, ProtocolHandler> = {
       data: encoded.encodedData as Hex,
     });
 
-    return ok({ chain: slug, txHash, method: "increase-nonce", message: "All open orders cancelled" });
+    return { success: true, output: JSON.stringify({ chain: slug, txHash, method: "increase-nonce", message: "All open orders cancelled" }, null, 2), data: { txHash, _tradeCapture: { type: "swap", chain: slug, status: "cancelled", walletAddress: wallet.address, signature: txHash, meta: { orderType: "limitOrder", action: "cancelAll" } } } };
   },
 
   // ── Zap ──────────────────────────────────────────────────────────
@@ -400,7 +400,7 @@ export const KYBERSWAP_HANDLERS: Record<string, ProtocolHandler> = {
     const buildResp = await getKyberZaasClient().buildZapIn(slug, { sender: wallet.address, recipient: wallet.address, route: routeResp.data.route });
     const txHash = await sendKyberTransaction(publicClient, walletClient, { to: getAddress(buildResp.data.routerAddress), data: buildResp.data.callData as Hex, value: BigInt(buildResp.data.value) });
 
-    return { success: true, output: JSON.stringify({ txHash, chain: slug, dex, pool }, null, 2), data: { txHash, _tradeCapture: { type: "lp", chain: slug, status: "executed", meta: { dex, pool, action: "zap-in" } } } };
+    return { success: true, output: JSON.stringify({ txHash, chain: slug, dex, pool }, null, 2), data: { txHash, _tradeCapture: { type: "lp", chain: slug, status: "executed", walletAddress: wallet.address, positionKey: str(p, "positionId") || undefined, instrumentKey: `${slug}:lp:${pool}`, meta: { dex, pool, action: "zap-in" } } } };
   },
 
   "kyberswap.zap.out": async (p) => {
@@ -431,7 +431,7 @@ export const KYBERSWAP_HANDLERS: Record<string, ProtocolHandler> = {
     const { publicClient, walletClient } = getKyberEvmClients(slug, wallet.privateKey);
     const txHash = await sendKyberTransaction(publicClient, walletClient, { to: getAddress(buildResp.data.routerAddress), data: buildResp.data.callData as Hex, value: BigInt(buildResp.data.value) });
 
-    return { success: true, output: JSON.stringify({ txHash, chain: slug, positionId }, null, 2), data: { txHash, _tradeCapture: { type: "lp", chain: slug, status: "executed", meta: { dex, pool, action: "zap-out" } } } };
+    return { success: true, output: JSON.stringify({ txHash, chain: slug, positionId }, null, 2), data: { txHash, _tradeCapture: { type: "lp", chain: slug, status: "executed", walletAddress: wallet.address, positionKey: positionId, instrumentKey: `${slug}:lp:${pool}`, meta: { dex, pool, action: "zap-out" } } } };
   },
 
   "kyberswap.zap.migrate": async (p) => {
@@ -466,7 +466,7 @@ export const KYBERSWAP_HANDLERS: Record<string, ProtocolHandler> = {
     const { publicClient, walletClient } = getKyberEvmClients(slug, wallet.privateKey);
     const txHash = await sendKyberTransaction(publicClient, walletClient, { to: getAddress(buildResp.data.routerAddress), data: buildResp.data.callData as Hex, value: BigInt(buildResp.data.value) });
 
-    return { success: true, output: JSON.stringify({ txHash, chain: slug, positionId, from: poolFrom, to: poolTo }, null, 2), data: { txHash, _tradeCapture: { type: "lp", chain: slug, status: "executed", meta: { dexFrom, dexTo, poolFrom, poolTo, action: "zap-migrate" } } } };
+    return { success: true, output: JSON.stringify({ txHash, chain: slug, positionId, from: poolFrom, to: poolTo }, null, 2), data: { txHash, _tradeCapture: { type: "lp", chain: slug, status: "executed", walletAddress: wallet.address, positionKey: positionId, instrumentKey: `${slug}:lp:${poolTo}`, meta: { dexFrom, dexTo, poolFrom, poolTo, action: "zap-migrate" } } } };
   },
 };
 

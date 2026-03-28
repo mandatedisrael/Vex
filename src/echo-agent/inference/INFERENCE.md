@@ -91,4 +91,4 @@ interface SubagentConfig {
 npx vitest run src/__tests__/echo-agent/inference/
 ```
 
-5 files, 67 tests: config validation, resilience (retry/timeout/error classification), registry (resolution/cache), types (structural integrity), cost calculation (both providers with full breakdown).
+6 files, 81 tests: config validation, SubagentConfig, resilience (retry/timeout/error classification), registry (resolution/cache), types (structural integrity), cost calculation (both providers with full breakdown).

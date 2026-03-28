@@ -256,7 +256,7 @@ export const SLOP_HANDLERS: Record<string, ProtocolHandler> = {
     return {
       success: true,
       output: JSON.stringify({ txHash, token: addr, symbol, amountOg: amountOgRaw, tokensOut: formatUnits(quote.tokensOut, 18), hitCap: quote.hitCap }, null, 2),
-      data: { txHash, _tradeCapture: { type: "swap", chain: "0g", status: "executed", inputToken: "0G", outputToken: symbol, inputAmount: ogAmountWei.toString(), outputAmount: quote.tokensOut.toString(), signature: txHash, meta: { dex: "slop", action: "buy", hitCap: quote.hitCap } } },
+      data: { txHash, _tradeCapture: { type: "swap", chain: "0g", status: "executed", inputToken: "0G", outputToken: symbol, outputTokenAddress: addr, inputAmount: ogAmountWei.toString(), outputAmount: quote.tokensOut.toString(), signature: txHash, walletAddress: wallet.address, tradeSide: "buy", instrumentKey: `0g:${addr}`, meta: { dex: "slop", action: "buy", hitCap: quote.hitCap } } },
     };
   },
 
@@ -313,7 +313,7 @@ export const SLOP_HANDLERS: Record<string, ProtocolHandler> = {
     return {
       success: true,
       output: JSON.stringify({ txHash, token: addr, symbol, amountTokens: amountTokensRaw, ogOutNet: formatUnits(ogOutNet, 18) }, null, 2),
-      data: { txHash, _tradeCapture: { type: "swap", chain: "0g", status: "executed", inputToken: symbol, outputToken: "0G", inputAmount: tokenAmountWei.toString(), outputAmount: ogOutNet.toString(), signature: txHash, meta: { dex: "slop", action: "sell" } } },
+      data: { txHash, _tradeCapture: { type: "swap", chain: "0g", status: "executed", inputToken: symbol, inputTokenAddress: addr, outputToken: "0G", inputAmount: tokenAmountWei.toString(), outputAmount: ogOutNet.toString(), signature: txHash, walletAddress: wallet.address, tradeSide: "sell", instrumentKey: `0g:${addr}`, meta: { dex: "slop", action: "sell" } } },
     };
   },
 
@@ -403,7 +403,7 @@ export const SLOP_HANDLERS: Record<string, ProtocolHandler> = {
       args: [addr],
     });
 
-    return ok({ txHash, token: addr, action: "claimCreatorFees" });
+    return { success: true, output: JSON.stringify({ txHash, token: addr, action: "claimCreatorFees" }, null, 2), data: { txHash, _tradeCapture: { type: "reward", chain: "0g", status: "executed", walletAddress: wallet.address, signature: txHash, instrumentKey: `0g:${addr}`, meta: { action: "claimCreatorFees", token: addr } } } };
   },
 
   "slop.fees.lpPending": async (p) => {
@@ -445,7 +445,7 @@ export const SLOP_HANDLERS: Record<string, ProtocolHandler> = {
       args: [recipient],
     });
 
-    return ok({ txHash, token: addr, recipient, action: "collectLPFees" });
+    return { success: true, output: JSON.stringify({ txHash, token: addr, recipient, action: "collectLPFees" }, null, 2), data: { txHash, _tradeCapture: { type: "reward", chain: "0g", status: "executed", walletAddress: wallet.address, signature: txHash, instrumentKey: `0g:${addr}`, meta: { action: "collectLPFees", token: addr } } } };
   },
 
   // ── Reward ─────────────────────────────────────────────────────
@@ -481,6 +481,6 @@ export const SLOP_HANDLERS: Record<string, ProtocolHandler> = {
       functionName: "claimCreatorReward",
     });
 
-    return ok({ txHash, token: addr, action: "claimCreatorReward" });
+    return { success: true, output: JSON.stringify({ txHash, token: addr, action: "claimCreatorReward" }, null, 2), data: { txHash, _tradeCapture: { type: "reward", chain: "0g", status: "executed", walletAddress: wallet.address, signature: txHash, instrumentKey: `0g:${addr}`, meta: { action: "claimCreatorReward", token: addr } } } };
   },
 };

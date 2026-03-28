@@ -336,10 +336,13 @@ async function handleBridge(
         chain: String(fromChainId),
         status: "pending",
         inputToken: fromToken,
+        inputTokenAddress: fromToken,
         inputAmount: amount,
         outputToken: toToken,
+        outputTokenAddress: toToken,
         outputAmount: selectedRoute.quote.amountOut,
         signature: result.txHash,
+        walletAddress: request.fromAddress,
         meta: {
           sourceChain: String(fromChainId),
           destChain: String(toChainId),

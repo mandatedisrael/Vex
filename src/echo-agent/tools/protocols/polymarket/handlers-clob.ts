@@ -174,7 +174,7 @@ export const CLOB_HANDLERS: Record<string, ProtocolHandler> = {
     return {
       success: true,
       output: JSON.stringify({ ...result, conditionId, outcome, amount, price }, null, 2),
-      data: { ...result, _tradeCapture: { type: "prediction", chain: "polygon", status: result.status === "matched" ? "executed" : "open", inputToken: "USDC", outputToken: `${outcome}@${conditionId.slice(0, 8)}`, inputAmount: String(amount), meta: { dex: "polymarket", conditionId, outcome, price } } },
+      data: { ...result, conditionId, _tradeCapture: { type: "prediction", chain: "polygon", status: result.status === "matched" ? "executed" : "open", inputToken: "USDC", outputToken: `${outcome}@${conditionId.slice(0, 8)}`, inputAmount: String(amount), walletAddress: wallet.address, tradeSide: "buy", instrumentKey: `polymarket:${conditionId}:${outcome}`, meta: { dex: "polymarket", conditionId, outcome, price } } },
     };
   },
 
@@ -212,14 +212,15 @@ export const CLOB_HANDLERS: Record<string, ProtocolHandler> = {
     return {
       success: true,
       output: JSON.stringify({ ...result, conditionId, outcome, shares, price }, null, 2),
-      data: { ...result, _tradeCapture: { type: "prediction", chain: "polygon", status: result.status === "matched" ? "closed" : "open", outputToken: "USDC", inputToken: `${outcome}@${conditionId.slice(0, 8)}`, inputAmount: String(shares), meta: { dex: "polymarket", conditionId, outcome, price } } },
+      data: { ...result, conditionId, _tradeCapture: { type: "prediction", chain: "polygon", status: result.status === "matched" ? "closed" : "open", outputToken: "USDC", inputToken: `${outcome}@${conditionId.slice(0, 8)}`, inputAmount: String(shares), walletAddress: wallet.address, tradeSide: "sell", instrumentKey: `polymarket:${conditionId}:${outcome}`, meta: { dex: "polymarket", conditionId, outcome, price } } },
     };
   },
 
   "polymarket.clob.cancel": async (p) => {
     const orderId = str(p, "orderId");
     if (!orderId) return fail("Missing required: orderId");
-    return ok(await getPolyClobClient().cancelOrder(orderId));
+    const result = await getPolyClobClient().cancelOrder(orderId);
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, orderId, _tradeCapture: { type: "prediction", chain: "polygon", status: "cancelled", positionKey: orderId, meta: { action: "cancel" } } } };
   },
 
   "polymarket.clob.cancelOrders": async (p) => {
@@ -227,17 +228,20 @@ export const CLOB_HANDLERS: Record<string, ProtocolHandler> = {
     if (!raw) return fail("Missing required: orderIds");
     const ids = splitIds(raw);
     if (ids.length === 0) return fail("No valid order IDs provided");
-    return ok(await getPolyClobClient().cancelOrders(ids));
+    const result = await getPolyClobClient().cancelOrders(ids);
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "prediction", chain: "polygon", status: "cancelled", meta: { action: "cancelOrders", orderIds: ids } } } };
   },
 
   "polymarket.clob.cancelAll": async () => {
-    return ok(await getPolyClobClient().cancelAll());
+    const result = await getPolyClobClient().cancelAll();
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "prediction", chain: "polygon", status: "cancelled", meta: { action: "cancelAll" } } } };
   },
 
   "polymarket.clob.cancelMarket": async (p) => {
     const market = str(p, "market"), assetId = str(p, "assetId");
     if (!market || !assetId) return fail("Missing required: market, assetId");
-    return ok(await getPolyClobClient().cancelMarketOrders(market, assetId));
+    const result = await getPolyClobClient().cancelMarketOrders(market, assetId);
+    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, conditionId: market, _tradeCapture: { type: "prediction", chain: "polygon", status: "cancelled", meta: { action: "cancelMarket", conditionId: market, assetId } } } };
   },
 
   "polymarket.clob.orders": async (p) => {

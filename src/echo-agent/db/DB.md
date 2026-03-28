@@ -21,7 +21,7 @@ db/
 | B. Runtime & Sessions | `sessions`, `messages`, `messages_archive`, `approval_queue`, `runtime_state`, `runtime_cycles` | Conversation lifecycle, compaction, approvals, loop engine state |
 | C. Automation | `schedules`, `schedule_runs`, `subagents`, `session_links`, `subagent_messages`, `inbox_events` | Cron tasks, subagent lifecycle, session relationships, autonomy queue |
 | D. Inference & Provider | `usage_log`, `billing_snapshots` | Token usage with cache/reasoning breakdown, provider balance history |
-| E. Protocol Pipeline | `protocol_executions`, `protocol_sync_jobs`, `protocol_sync_runs`, `proj_balances`, `proj_portfolio_snapshots`, `proj_open_positions`, `proj_activity` | Execution audit, sync pipeline, projection tables |
+| E. Protocol Pipeline | `protocol_executions`, `protocol_sync_jobs`, `protocol_sync_runs`, `proj_balances`, `proj_portfolio_snapshots`, `proj_open_positions`, `proj_pnl_lots`, `proj_activity` | Execution audit, sync pipeline, projection tables, FIFO lot ledger |
 | F. Web Cache | `search_cache`, `fetch_cache` | Tavily search/fetch result cache with TTL |
 
 ## Key design decisions
@@ -52,9 +52,13 @@ db/
 | `search.ts` | Cache | `getCached()`/`cacheResult()`, `getCachedFetch()`/`cacheFetchResult()` |
 | `schedules.ts` | Automation | `createSchedule()`, `deleteSchedule()`, `getEnabled()`, `recordRun()` |
 | `subagents.ts` | Automation | `insert()`, `updateStatus()`, `getActive()`, `getRecent()`, `markOrphans()` |
+| `subagent-messages.ts` | Automation | `sendMessage()`, `getMessages()`, `getMessagesByDirection()` |
 | `executions.ts` | Protocol | `recordExecution()`, `getById()`, `getByExternalRef()`, `getByNamespace()` |
 | `sync.ts` | Protocol | `getJobsForNamespace()`, `getAllJobs()`, `getJob()`, `getLastCompletedRun()`, `enqueueRun()`, `claimPendingRun()`, `claimAllPending()`, `completeRun()`, `failRun()` |
 | `balances.ts` | Projection | `upsertBalance()`, `replaceBalancesForChain()` (transactional), `getBalances()`, `getBalancesByChain()`, `getTotalUsd()`, `insertSnapshot()`, `getLatestSnapshot()`, `getSnapshotHistory()` |
+| `activity.ts` | Projection | `insertActivity()` (idempotent UNIQUE execution_id), `getActivities()`, `getByExecution()`, `getByPositionKey()`, `getByInstrumentKey()` |
+| `open-positions.ts` | Projection | `upsertPosition()`, `closePosition()`, `getOpen()`, `getByPositionKey()` |
+| `pnl-lots.ts` | Projection | `openLot()`, `getOpenLots()` (FIFO ordered), `reduceLot()`, `closeLot()` |
 | `usage.ts` | Inference | `logUsage()` (with cached/reasoning tokens), `getStats()` |
 | `billing.ts` | Inference | `insertSnapshot()`, `getLatest()`, `getHistory()` |
 

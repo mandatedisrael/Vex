@@ -1,0 +1,219 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+/**
+ * Pre-engine hardening tests — real runtime gate verification.
+ *
+ * Uses a mock protocol handler injected via catalog mock to test
+ * executeProtocolTool() end-to-end without network calls.
+ */
+
+// ── DB Mocks ────────────────────────────────────────────────────
+
+const mockRecordExecution = vi.fn().mockResolvedValue(1);
+vi.mock("@echo-agent/db/repos/executions.js", () => ({
+  recordExecution: (...args: unknown[]) => mockRecordExecution(...args),
+  getById: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@echo-agent/db/repos/sync.js", () => ({
+  getJobsForNamespace: vi.fn().mockResolvedValue([]),
+  enqueueRun: vi.fn().mockResolvedValue(1),
+}));
+
+const mockInsertActivity = vi.fn().mockResolvedValue(1);
+const mockGetByExecution = vi.fn().mockResolvedValue(null);
+vi.mock("@echo-agent/db/repos/activity.js", () => ({
+  insertActivity: (...args: unknown[]) => mockInsertActivity(...args),
+  getByExecution: (...args: unknown[]) => mockGetByExecution(...args),
+}));
+
+const mockUpsertPosition = vi.fn().mockResolvedValue(undefined);
+vi.mock("@echo-agent/db/repos/open-positions.js", () => ({
+  upsertPosition: (...args: unknown[]) => mockUpsertPosition(...args),
+  closePosition: vi.fn().mockResolvedValue(true),
+}));
+
+const mockOpenLot = vi.fn().mockResolvedValue(1);
+const mockGetOpenLots = vi.fn().mockResolvedValue([]);
+const mockReduceLot = vi.fn().mockResolvedValue(undefined);
+vi.mock("@echo-agent/db/repos/pnl-lots.js", () => ({
+  openLot: (...args: unknown[]) => mockOpenLot(...args),
+  getOpenLots: (...args: unknown[]) => mockGetOpenLots(...args),
+  reduceLot: (...args: unknown[]) => mockReduceLot(...args),
+}));
+
+// ── Catalog mock — inject fake mutating handler ─────────────────
+
+const fakeHandler = vi.fn();
+
+vi.mock("@echo-agent/tools/protocols/catalog.js", () => ({
+  PROTOCOL_TOOLS: [{
+    toolId: "test.fake.mutate",
+    namespace: "test",
+    lifecycle: "active",
+    description: "Fake mutating tool for testing",
+    mutating: true,
+    params: [],
+    exampleParams: {},
+  }],
+  PROTOCOL_NAMESPACE_ALLOWLIST: ["test"],
+  getProtocolHandler: (toolId: string) => toolId === "test.fake.mutate" ? fakeHandler : undefined,
+  getProtocolManifest: (toolId: string) => toolId === "test.fake.mutate" ? {
+    toolId: "test.fake.mutate", namespace: "test", lifecycle: "active",
+    description: "Fake", mutating: true, params: [],
+  } : undefined,
+}));
+
+vi.mock("@tools/0g-compute/readiness.js", () => ({ loadComputeState: () => null }));
+
+const { executeProtocolTool } = await import("../../../echo-agent/tools/protocols/runtime.js");
+
+describe("pre-engine hardening — runtime gate", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockInsertActivity.mockResolvedValue(1);
+    mockGetByExecution.mockResolvedValue(null);
+  });
+
+  // ── Failed execution: audit yes, projections no ───────────────
+
+  it("failed mutating execution → recordExecution YES, insertActivity NO", async () => {
+    fakeHandler.mockResolvedValueOnce({
+      success: false,
+      output: "Trade failed: insufficient balance",
+      data: { _tradeCapture: { type: "swap", chain: "solana", status: "executed" } },
+    });
+
+    const result = await executeProtocolTool(
+      { toolId: "test.fake.mutate", params: {} },
+      { loopMode: "full", approved: true, sessionId: "test-fail" },
+    );
+
+    expect(result.success).toBe(false);
+
+    // Audit: protocol_executions captures failure
+    expect(mockRecordExecution).toHaveBeenCalledTimes(1);
+    expect(mockRecordExecution.mock.calls[0][2]).toBe("test-fail"); // sessionId
+    expect(mockRecordExecution.mock.calls[0][5]).toBe(false); // success
+
+    // Projections: NOT touched (gate: result.success)
+    expect(mockInsertActivity).not.toHaveBeenCalled();
+    expect(mockUpsertPosition).not.toHaveBeenCalled();
+    expect(mockOpenLot).not.toHaveBeenCalled();
+  });
+
+  // ── Successful execution: audit yes, projections yes ──────────
+
+  it("successful mutating execution → recordExecution YES, insertActivity YES", async () => {
+    fakeHandler.mockResolvedValueOnce({
+      success: true,
+      output: "Swap executed",
+      data: {
+        txHash: "0xabc",
+        _tradeCapture: {
+          type: "swap", chain: "solana", status: "executed",
+          inputToken: "SOL", outputToken: "USDC",
+          walletAddress: "0xWallet",
+        },
+      },
+    });
+
+    const result = await executeProtocolTool(
+      { toolId: "test.fake.mutate", params: {} },
+      { loopMode: "full", approved: true, sessionId: "test-success" },
+    );
+
+    expect(result.success).toBe(true);
+
+    // Audit: protocol_executions captures success
+    expect(mockRecordExecution).toHaveBeenCalledTimes(1);
+    expect(mockRecordExecution.mock.calls[0][2]).toBe("test-success");
+    expect(mockRecordExecution.mock.calls[0][5]).toBe(true);
+
+    // Projections: activity IS populated
+    expect(mockInsertActivity).toHaveBeenCalledTimes(1);
+  });
+
+  // ── sessionId propagation ─────────────────────────────────────
+
+  it("sessionId from context reaches recordExecution", async () => {
+    fakeHandler.mockResolvedValueOnce({
+      success: true,
+      output: "OK",
+      data: { _tradeCapture: { type: "swap", chain: "0g", status: "executed" } },
+    });
+
+    await executeProtocolTool(
+      { toolId: "test.fake.mutate", params: {} },
+      { loopMode: "full", approved: true, sessionId: "session-xyz-789" },
+    );
+
+    expect(mockRecordExecution).toHaveBeenCalledTimes(1);
+    expect(mockRecordExecution.mock.calls[0][2]).toBe("session-xyz-789");
+  });
+
+  // ── Thrown handler: audit yes, projections no ─────────────────
+
+  it("thrown handler → audit captures failure, projections untouched", async () => {
+    fakeHandler.mockRejectedValueOnce(new Error("Network timeout"));
+
+    const result = await executeProtocolTool(
+      { toolId: "test.fake.mutate", params: {} },
+      { loopMode: "full", approved: true, sessionId: "test-throw" },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("Network timeout");
+
+    // Audit: captures the thrown failure
+    expect(mockRecordExecution).toHaveBeenCalledTimes(1);
+    expect(mockRecordExecution.mock.calls[0][5]).toBe(false);
+
+    // Projections: NOT touched
+    expect(mockInsertActivity).not.toHaveBeenCalled();
+  });
+
+  // ── FIFO insufficient inventory ───────────────────────────────
+
+  describe("FIFO insufficient inventory", () => {
+    it("partial reduce when sell > open lots, no crash", async () => {
+      const { projectPosition } = await import("../../../echo-agent/sync/position-projector.js");
+
+      mockGetOpenLots.mockResolvedValueOnce([
+        { id: 1, remainingQuantityRaw: "200" },
+        { id: 2, remainingQuantityRaw: "100" },
+      ]);
+
+      await projectPosition({
+        id: 1, namespace: "solana", activityType: "swap", productType: "spot",
+        tradeSide: "sell", chain: "solana", executionId: 100, walletAddress: "0xW",
+        inputToken: "SOL", inputAmount: "500", outputToken: null, outputAmount: null,
+        valueUsd: null, captureStatus: "executed", positionKey: null,
+        instrumentKey: "solana:SOL", externalRefs: {}, meta: {},
+        createdAt: new Date().toISOString(),
+      } as any);
+
+      expect(mockReduceLot).toHaveBeenCalledTimes(2);
+      expect(mockReduceLot).toHaveBeenCalledWith(1, 200n);
+      expect(mockReduceLot).toHaveBeenCalledWith(2, 100n);
+    });
+  });
+
+  // ── captureStatus pipeline ────────────────────────────────────
+
+  describe("captureStatus pipeline", () => {
+    it("populateActivity passes captureStatus from tradeCapture.status", async () => {
+      const { populateActivity } = await import("../../../echo-agent/sync/activity-populator.js");
+
+      await populateActivity(
+        42, "solana.perps.close", "solana",
+        { type: "perps", chain: "solana", status: "closed", walletAddress: "0xW", positionKey: "PK1" },
+        { signature: "sig123" },
+      );
+
+      expect(mockInsertActivity).toHaveBeenCalledTimes(1);
+      const row = mockInsertActivity.mock.calls[0][0];
+      expect(row.captureStatus).toBe("closed");
+    });
+  });
+});

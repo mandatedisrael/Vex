@@ -147,14 +147,18 @@ export async function executeProtocolTool(
       durationMs,
     });
 
-    // Capture all mutating executions (success AND failure) to protocol_executions
+    // Capture mutating execution — awaited inline for deterministic projection readiness
+    // protocol_executions: ALL mutations (success + failure) for audit
+    // proj_activity + positions/lots: ONLY successful mutations (business truth)
     if (manifest.mutating) {
-      captureExecution(request.toolId, manifest.namespace, context.sessionId ?? null, params, result, durationMs).catch(err => {
+      try {
+        await captureExecution(request.toolId, manifest.namespace, context.sessionId ?? null, params, result, durationMs);
+      } catch (err) {
         logger.warn("protocol.execute.capture_failed", {
           toolId: request.toolId,
           error: err instanceof Error ? err.message : String(err),
         });
-      });
+      }
     }
 
     return result;
@@ -168,15 +172,17 @@ export async function executeProtocolTool(
       durationMs,
     });
 
-    // Capture thrown mutations to audit trail (handler threw instead of returning failed result)
+    // Capture thrown mutations to audit trail only (no projections for failures)
     const failedResult: ToolResult = { success: false, output: `${request.toolId} failed: ${message}` };
     if (manifest.mutating) {
-      captureExecution(request.toolId, manifest.namespace, context.sessionId ?? null, params, failedResult, durationMs).catch(captureErr => {
+      try {
+        await captureExecution(request.toolId, manifest.namespace, context.sessionId ?? null, params, failedResult, durationMs);
+      } catch (captureErr) {
         logger.warn("protocol.execute.capture_failed", {
           toolId: request.toolId,
           error: captureErr instanceof Error ? captureErr.message : String(captureErr),
         });
-      });
+      }
     }
 
     return failedResult;
@@ -192,7 +198,8 @@ export async function executeProtocolTool(
 function extractExternalRefs(data: Record<string, unknown> | undefined): Record<string, string> {
   if (!data) return {};
   const refs: Record<string, string> = {};
-  const candidates = ["txHash", "orderId", "positionPubkey", "orderKey", "positionId", "conditionId", "signature"];
+  // Correlation keys (NOT identity like walletAddress)
+  const candidates = ["txHash", "orderId", "positionPubkey", "orderKey", "positionId", "conditionId", "signature", "instrumentKey", "positionKey"];
 
   for (const key of candidates) {
     let value = data[key];
@@ -209,10 +216,22 @@ function extractExternalRefs(data: Record<string, unknown> | undefined): Record<
     if (!refs.signature && typeof capture.signature === "string" && capture.signature) {
       refs.signature = capture.signature;
     }
+    // positionKey from capture (perps, predictions, LP)
+    if (!refs.positionKey && typeof capture.positionKey === "string" && capture.positionKey) {
+      refs.positionKey = capture.positionKey;
+    }
+    // instrumentKey from capture (spot, predictions, LP)
+    if (!refs.instrumentKey && typeof capture.instrumentKey === "string" && capture.instrumentKey) {
+      refs.instrumentKey = capture.instrumentKey;
+    }
     // positionPubkey sometimes only in meta (perps close, prediction sell/claim)
     const meta = capture.meta as Record<string, unknown> | undefined;
     if (!refs.positionPubkey && typeof meta?.positionPubkey === "string" && meta.positionPubkey) {
       refs.positionPubkey = meta.positionPubkey;
+    }
+    // conditionId from meta (Polymarket)
+    if (!refs.conditionId && typeof meta?.conditionId === "string" && meta.conditionId) {
+      refs.conditionId = meta.conditionId;
     }
   }
 
@@ -247,6 +266,20 @@ async function captureExecution(
       }
     } catch (err) {
       logger.warn("protocol.execute.sync_enqueue_failed", {
+        toolId, namespace, executionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // Populate proj_activity ONLY for successful executions (projections = business truth)
+  // Failed mutations go to protocol_executions audit log but NOT to activity/positions/lots
+  if (tradeCapture && executionId > 0 && result.success) {
+    try {
+      const { populateActivity } = await import("@echo-agent/sync/activity-populator.js");
+      await populateActivity(executionId, toolId, namespace, tradeCapture, externalRefs);
+    } catch (err) {
+      logger.warn("protocol.execute.activity_populate_failed", {
         toolId, namespace, executionId,
         error: err instanceof Error ? err.message : String(err),
       });

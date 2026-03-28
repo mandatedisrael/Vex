@@ -6,11 +6,13 @@ Balance sync pipeline: Khalani API → `proj_balances` → `proj_portfolio_snaps
 
 ```
 sync/
-  index.ts          — Public API: initSync(), syncTick()
-  balance-sync.ts   — Khalani → proj_balances → snapshot
-  worker.ts         — Claims pending sync runs, deduplicates, dispatches
-  seed.ts           — Seeds default protocol_sync_jobs
-  chains.ts         — Canonical chain hint resolution
+  index.ts               — Public API: initSync(), syncTick()
+  balance-sync.ts        — Khalani → proj_balances → snapshot
+  activity-populator.ts  — _tradeCapture → proj_activity (from runtime capture hook)
+  position-projector.ts  — activity → proj_open_positions + proj_pnl_lots (FIFO)
+  worker.ts              — Claims pending sync runs, deduplicates, dispatches
+  seed.ts                — Seeds default protocol_sync_jobs
+  chains.ts              — Canonical chain hint resolution
 ```
 
 ## Data flow
@@ -108,11 +110,36 @@ Worker claims ALL pending runs at once (`claimAllPending()` with FOR UPDATE SKIP
 
 `pnl_vs_prev` / `pnl_pct_vs_prev` = portfolio delta vs previous snapshot.
 
+## Activity population
+
+`activity-populator.ts` is called from `captureExecution()` in `runtime.ts` after every mutating tool execution. Maps `_tradeCapture` → `proj_activity` row with:
+- `product_type`: spot, perps, prediction, lp, lend, stake, bridge, reward
+- `trade_side`: only for real trades (spot buy/sell, perps open/close, prediction buy/sell). NULL for bridge, lend, stake, lp, reward, claim.
+- `instrument_key`: canonical per product (`solana:{mint}`, `polymarket:{conditionId}:{outcome}`, `{chain}:lp:{pool}`)
+- `position_key`: positionPubkey, orderKey, positionId
+- Idempotent via `UNIQUE(execution_id)` — ON CONFLICT DO NOTHING
+
+## Position projector
+
+`position-projector.ts` is called from `populateActivity()` after each activity insert. Dispatches by `product_type`:
+
+| Product | Projection | Open/close signal |
+|---------|-----------|-------------------|
+| **perps** | `proj_open_positions` | `captureStatus`: executed/open → open, closed → close |
+| **prediction** | `proj_open_positions` | `captureStatus`: open → open, closed/claimed/cancelled → close |
+| **order** (DCA/limit) | `proj_open_positions` | `captureStatus`: open → open, cancelled → cancel (NOT FIFO lots) |
+| **lp** | `proj_open_positions` | `meta.action`: zap-in → open, zap-out → close, zap-migrate → close old + open new |
+| **spot** | `proj_pnl_lots` (FIFO) | `tradeSide`: buy → open lot, sell → reduce lots oldest-first |
+| bridge/lend/stake/reward | — | skipped |
+
+Key: `captureStatus` comes from `proj_activity.capture_status` which is set directly from `_tradeCapture.status` — not from meta.
+
+Cross-protocol: slop.trade.buy + jaine.swap.sell match via shared `instrumentKey` (`0g:{tokenAddress}`).
+
 ## What's NOT in this module
 
-- **Trade resolution / realized PnL** — separate reconciliation layer (see `trading_pnl_model` plan)
-- **proj_activity population** — requires capture normalization (phase 2)
-- **proj_open_positions** — requires protocol-specific read tools
+- **PnL reconcilers** (realized/unrealized calculation) — phase 4
+- **Read models for UI** (portfolio curve, PnL by protocol) — phase 4
 - **Cron/timer** — engine responsibility, sync exposes `initSync()` and `syncTick()`
 - **UI/API endpoints** — transport layer
 
