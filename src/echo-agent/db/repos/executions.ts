@@ -52,6 +52,14 @@ export async function getByNamespace(namespace: string, limit = 50): Promise<Exe
   return rows.map(mapRow);
 }
 
+export async function getById(id: number): Promise<ExecutionRecord | null> {
+  const row = await queryOne<Record<string, unknown>>(
+    "SELECT * FROM protocol_executions WHERE id = $1",
+    [id],
+  );
+  return row ? mapRow(row) : null;
+}
+
 export async function getBySession(sessionId: string): Promise<ExecutionRecord[]> {
   const rows = await query<Record<string, unknown>>(
     "SELECT * FROM protocol_executions WHERE session_id = $1 ORDER BY created_at DESC",

@@ -95,12 +95,12 @@ protocols/
 
 ### Execution capture
 
-When a mutating protocol tool succeeds, `runtime.ts` auto-captures the execution to `protocol_executions` table in echo-agent DB. It extracts:
+Every mutating protocol tool call (success AND failure) is captured to `protocol_executions`. Extracts:
 
 - `trade_capture` — from `_tradeCapture` in handler result data
 - `external_refs` — canonical keys (`txHash`, `orderId`, `positionPubkey`, `orderKey`, `conditionId`, `signature`) extracted from handler result
 
-This feeds the execution → sync → projection pipeline (see `db/README.md`).
+This feeds the execution → sync → projection pipeline (see `db/DB.md` and `sync/SYNC.md`).
 
 ## Key differences from legacy src/agent/
 

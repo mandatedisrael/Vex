@@ -52,8 +52,9 @@ db/
 | `search.ts` | Cache | `getCached()`/`cacheResult()`, `getCachedFetch()`/`cacheFetchResult()` |
 | `schedules.ts` | Automation | `createSchedule()`, `deleteSchedule()`, `getEnabled()`, `recordRun()` |
 | `subagents.ts` | Automation | `insert()`, `updateStatus()`, `getActive()`, `getRecent()`, `markOrphans()` |
-| `executions.ts` | Protocol | `recordExecution()`, `getByExternalRef()`, `getByNamespace()` |
-| `sync.ts` | Protocol | `getJobsForNamespace()`, `enqueueRun()`, `claimPendingRun()` (atomic), `completeRun()`, `failRun()` |
+| `executions.ts` | Protocol | `recordExecution()`, `getById()`, `getByExternalRef()`, `getByNamespace()` |
+| `sync.ts` | Protocol | `getJobsForNamespace()`, `getAllJobs()`, `getJob()`, `getLastCompletedRun()`, `enqueueRun()`, `claimPendingRun()`, `claimAllPending()`, `completeRun()`, `failRun()` |
+| `balances.ts` | Projection | `upsertBalance()`, `replaceBalancesForChain()` (transactional), `getBalances()`, `getBalancesByChain()`, `getTotalUsd()`, `insertSnapshot()`, `getLatestSnapshot()`, `getSnapshotHistory()` |
 | `usage.ts` | Inference | `logUsage()` (with cached/reasoning tokens), `getStats()` |
 | `billing.ts` | Inference | `insertSnapshot()`, `getLatest()`, `getHistory()` |
 

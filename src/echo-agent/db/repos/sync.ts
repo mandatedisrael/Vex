@@ -72,6 +72,47 @@ export async function failRun(id: number, error: string): Promise<void> {
   );
 }
 
+/** Get all enabled sync jobs. */
+export async function getAllJobs(): Promise<SyncJob[]> {
+  const rows = await query<Record<string, unknown>>(
+    "SELECT * FROM protocol_sync_jobs WHERE enabled = TRUE ORDER BY namespace, sync_type",
+  );
+  return rows.map(mapJob);
+}
+
+/** Get a single sync job by ID. */
+export async function getJob(id: number): Promise<SyncJob | null> {
+  const row = await queryOne<Record<string, unknown>>(
+    "SELECT * FROM protocol_sync_jobs WHERE id = $1",
+    [id],
+  );
+  return row ? mapJob(row) : null;
+}
+
+/** Get the last completed run for a sync job (for periodic timing). */
+export async function getLastCompletedRun(syncJobId: number): Promise<SyncRun | null> {
+  const row = await queryOne<Record<string, unknown>>(
+    "SELECT * FROM protocol_sync_runs WHERE sync_job_id = $1 AND status = 'completed' ORDER BY ended_at DESC LIMIT 1",
+    [syncJobId],
+  );
+  return row ? mapRun(row) : null;
+}
+
+/** Claim ALL pending runs (for batch dedup in worker). */
+export async function claimAllPending(): Promise<SyncRun[]> {
+  const rows = await query<Record<string, unknown>>(
+    `UPDATE protocol_sync_runs SET status = 'running', started_at = NOW()
+     WHERE id IN (
+       SELECT id FROM protocol_sync_runs
+       WHERE status = 'pending'
+       ORDER BY started_at ASC
+       FOR UPDATE SKIP LOCKED
+     )
+     RETURNING *`,
+  );
+  return rows.map(mapRun);
+}
+
 function mapJob(r: Record<string, unknown>): SyncJob {
   return {
     id: r.id as number,

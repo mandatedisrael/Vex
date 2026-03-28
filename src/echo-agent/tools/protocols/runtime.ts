@@ -168,7 +168,18 @@ export async function executeProtocolTool(
       durationMs,
     });
 
-    return { success: false, output: `${request.toolId} failed: ${message}` };
+    // Capture thrown mutations to audit trail (handler threw instead of returning failed result)
+    const failedResult: ToolResult = { success: false, output: `${request.toolId} failed: ${message}` };
+    if (manifest.mutating) {
+      captureExecution(request.toolId, manifest.namespace, context.sessionId ?? null, params, failedResult, durationMs).catch(captureErr => {
+        logger.warn("protocol.execute.capture_failed", {
+          toolId: request.toolId,
+          error: captureErr instanceof Error ? captureErr.message : String(captureErr),
+        });
+      });
+    }
+
+    return failedResult;
   }
 }
 
@@ -182,15 +193,29 @@ function extractExternalRefs(data: Record<string, unknown> | undefined): Record<
   if (!data) return {};
   const refs: Record<string, string> = {};
   const candidates = ["txHash", "orderId", "positionPubkey", "orderKey", "positionId", "conditionId", "signature"];
+
   for (const key of candidates) {
-    const value = data[key];
+    let value = data[key];
+    // Normalize: Polymarket returns "orderID" instead of "orderId"
+    if (value === undefined && key === "orderId") value = data["orderID"];
+    // Coerce numbers to strings (KyberSwap orderId can be number)
+    if (typeof value === "number") value = String(value);
     if (typeof value === "string" && value) refs[key] = value;
   }
-  // Also check nested _tradeCapture.signature
+
+  // Check nested _tradeCapture for refs not in top-level data
   const capture = data._tradeCapture as Record<string, unknown> | undefined;
-  if (capture?.signature && typeof capture.signature === "string" && !refs.signature) {
-    refs.signature = capture.signature;
+  if (capture) {
+    if (!refs.signature && typeof capture.signature === "string" && capture.signature) {
+      refs.signature = capture.signature;
+    }
+    // positionPubkey sometimes only in meta (perps close, prediction sell/claim)
+    const meta = capture.meta as Record<string, unknown> | undefined;
+    if (!refs.positionPubkey && typeof meta?.positionPubkey === "string" && meta.positionPubkey) {
+      refs.positionPubkey = meta.positionPubkey;
+    }
   }
+
   return refs;
 }
 
