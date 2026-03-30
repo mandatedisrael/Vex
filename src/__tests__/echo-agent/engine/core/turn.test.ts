@@ -101,16 +101,13 @@ describe("turn", () => {
     expect(result.toolCalls![0].name).toBe("discover_tools");
   });
 
-  it("saves assistant message to DB", async () => {
+  it("does NOT save assistant message to DB (deferred to turn-loop)", async () => {
     const provider = makeProvider({ content: "Hello" });
     await executeTurn(makeContext(), [], null, provider as any, makeConfig() as any, []);
 
-    expect(mockAddMessage).toHaveBeenCalled();
-    const [sessionId, msg, metadata] = mockAddMessage.mock.calls[0];
-    expect(sessionId).toBe("session-1");
-    expect(msg.role).toBe("assistant");
-    expect(msg.content).toBe("Hello");
-    expect(metadata.source).toBe("assistant");
+    // executeTurn no longer saves — turn-loop handles deferred save after
+    // determining the canonical batch prefix (trimming unexecuted tool calls).
+    expect(mockAddMessage).not.toHaveBeenCalled();
   });
 
   it("logs usage after inference", async () => {

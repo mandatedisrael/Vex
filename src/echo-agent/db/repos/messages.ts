@@ -65,10 +65,10 @@ export async function addEngineMessage(
   );
 }
 
-/** Get live messages (not archived) for a session. */
+/** Get live messages (not archived) for a session. Ordered by created_at + id for deterministic ordering. */
 export async function getLiveMessages(sessionId: string): Promise<Message[]> {
   const rows = await query<MessageRow>(
-    "SELECT role, content, tool_call_id, tool_calls, created_at FROM messages WHERE session_id = $1 ORDER BY created_at ASC",
+    "SELECT role, content, tool_call_id, tool_calls, created_at FROM messages WHERE session_id = $1 ORDER BY created_at ASC, id ASC",
     [sessionId],
   );
   return rows.map(r => ({
@@ -80,13 +80,13 @@ export async function getLiveMessages(sessionId: string): Promise<Message[]> {
   }));
 }
 
-/** Get all messages including archived (for history views). */
+/** Get all messages including archived (for history views). Ordered by created_at + id for deterministic ordering. */
 export async function getAllMessages(sessionId: string): Promise<Message[]> {
   const rows = await query<MessageRow>(
-    `(SELECT role, content, tool_call_id, tool_calls, created_at FROM messages WHERE session_id = $1)
+    `(SELECT id, role, content, tool_call_id, tool_calls, created_at FROM messages WHERE session_id = $1)
      UNION ALL
-     (SELECT role, content, tool_call_id, tool_calls, created_at FROM messages_archive WHERE session_id = $1)
-     ORDER BY created_at ASC`,
+     (SELECT id, role, content, tool_call_id, tool_calls, created_at FROM messages_archive WHERE session_id = $1)
+     ORDER BY created_at ASC, id ASC`,
     [sessionId],
   );
   return rows.map(r => ({

@@ -149,6 +149,26 @@ describe("resume", () => {
       expect(result.toolCallsMade).toBe(1);
     });
 
+    it("saves tool result with visibility internal (not user)", async () => {
+      mockApprove.mockResolvedValueOnce({
+        id: "approval-1",
+        toolCall: { command: "execute_tool", args: { toolId: "solana.swap" } },
+        sessionId: "session-1",
+        toolCallId: "call-1",
+        chatMode: "restricted",
+        pendingContext: null,
+      });
+      mockDispatchTool.mockResolvedValueOnce({ success: true, output: "Swap completed" });
+      mockHydrate.mockResolvedValueOnce({
+        context: { sessionId: "session-1", missionRunId: null },
+      });
+
+      await approveAndResume("approval-1");
+
+      const [, , metadata] = mockAddMessage.mock.calls[0];
+      expect(metadata.visibility).toBe("internal");
+    });
+
     it("extracts toolCallId from pendingContext when column is null", async () => {
       mockApprove.mockResolvedValueOnce({
         id: "approval-1",

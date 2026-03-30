@@ -4,22 +4,35 @@
  * In mission run, text from model does NOT end the loop.
  * Ends only on: stop condition, approval pause, or iteration limit.
  *
+ * Deferred save: executeTurn() does NOT save the assistant message.
+ * This loop determines the canonical batch prefix (only dispatched calls),
+ * then saves assistant + tool results in correct order.
+ *
+ * Invariants:
+ * - Every toolCall in the saved assistant message was actually dispatched
+ * - Each toolCall has 0 or 1 tool_result in messages (0 = approval pending)
+ * - "awaiting approval" state lives in approval_queue, not in messages
+ * - liveMessages always has assistant msg BEFORE tool results
+ *
  * Semantics per iteration:
- * 1. executeTurn() → model returns text and/or toolCalls
- * 2. If toolCalls → dispatch:
- *    - dispatch returns pendingApproval → pause run → break
- *    - dispatch OK → save results → next turn
- * 3. If text + stop condition → complete run → break
+ * 1. executeTurn() → model returns text and/or toolCalls (no save)
+ * 2. If toolCalls → dispatch + deferred save:
+ *    - dispatch returns pendingApproval → enqueue, trim batch, break
+ *    - dispatch returns engineSignal → track result, trim batch, break
+ *    - dispatch OK → track result → next call
+ *    - After batch: save assistant[canonical] + results
+ * 3. If text → deferred save text-only assistant message
  * 4. If text + checkpoint needed → checkpoint → continue
- * 5. If text + no stop + mission → save text + internal continue → next turn
- * 6. If text + no stop + chat → break (chat ends on text)
+ * 5. If text + mission → add continue → next turn
+ * 6. If text + chat → break
  */
 
 import type { EngineContext, TurnResult, StopReason } from "../types.js";
 import type { InferenceProvider, InferenceConfig, ToolDefinition } from "@echo-agent/inference/types.js";
 import type { Message } from "@echo-agent/db/repos/messages.js";
 import type { PromptStackOptions } from "../prompts/index.js";
-import { executeTurn, type SingleTurnResult } from "./turn.js";
+import { executeTurn, saveAssistantMessage, type SingleTurnResult } from "./turn.js";
+import type { ParsedToolCall } from "@echo-agent/inference/types.js";
 import { evaluateRuntimeStopConditions, type StopConditionContext } from "./stop-conditions.js";
 import { shouldCheckpoint, executeCheckpoint } from "./checkpoint.js";
 import { dispatchTool } from "@echo-agent/tools/dispatcher.js";
@@ -105,7 +118,14 @@ export async function runTurnLoop(
     currentTokenCount = freshSession?.tokenCount ?? currentTokenCount;
 
     // ── Handle tool calls ─────────────────────────────────────
+    // Deferred save: collect dispatched calls + results, then save the
+    // canonical batch prefix (only calls that actually entered dispatch).
     if (turnResult.toolCalls && turnResult.toolCalls.length > 0) {
+      const executedCalls: ParsedToolCall[] = [];
+      const executedResults: Array<{ toolCallId: string; output: string }> = [];
+      let batchStopReason: StopReason | null = null;
+      let batchStopOutput: string | null = null;
+
       for (const toolCall of turnResult.toolCalls) {
         totalToolCalls++;
 
@@ -121,34 +141,11 @@ export async function runTurnLoop(
           toolContext,
         );
 
-        // Save tool result message
-        await messagesRepo.addMessage(
-          context.sessionId,
-          {
-            role: "tool",
-            content: result.output,
-            toolCallId: toolCall.id,
-            timestamp: new Date().toISOString(),
-          },
-          { source: "tool", messageType: "tool_result", visibility: "internal" },
-        );
-
-        // Add to live messages for next turn
-        liveMessages.push({
-          role: "tool",
-          content: result.output,
-          toolCallId: toolCall.id,
-          timestamp: new Date().toISOString(),
-        });
-
-        // Check for engine signal (e.g. mission_stop tool)
-        if (result.engineSignal?.type === "stop_mission") {
-          stopReason = result.engineSignal.reason as StopReason;
-          return { text: result.output, toolCallsMade: totalToolCalls, pendingApprovals, stopReason };
-        }
-
-        // Check for pending approval — enqueue to approval_queue
+        // ── Approval break: call was dispatched but has no result in messages ──
+        // "awaiting approval" state lives in approval_queue, not in transcript.
         if (result.pendingApproval) {
+          executedCalls.push(toolCall);
+
           const approvalId = `approval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           await approvalsRepo.enqueue(
             approvalId,
@@ -159,17 +156,64 @@ export async function runTurnLoop(
             context.loopMode,
           );
           pendingApprovals.push(approvalId);
-          stopReason = "approval_required";
+          batchStopReason = "approval_required";
 
           if (context.missionRunId) {
             await missionRunsRepo.updateStatus(context.missionRunId, "paused_approval", "approval_required");
           }
+          break; // remaining calls are NOT dispatched
+        }
 
-          return { text: lastText, toolCallsMade: totalToolCalls, pendingApprovals, stopReason };
+        // Track executed call + result
+        executedCalls.push(toolCall);
+        executedResults.push({ toolCallId: toolCall.id, output: result.output });
+
+        // ── Engine signal: result tracked, then stop ──
+        if (result.engineSignal?.type === "stop_mission") {
+          batchStopReason = result.engineSignal.reason as StopReason;
+          batchStopOutput = result.output;
+          break; // remaining calls are NOT dispatched
         }
       }
 
-      // Tool calls dispatched — continue to next turn
+      // ── DEFERRED SAVE: assistant message with canonical calls only ──
+      await saveAssistantMessage(context.sessionId, turnResult.content, executedCalls);
+
+      liveMessages.push({
+        role: "assistant",
+        content: turnResult.content ?? "",
+        toolCalls: executedCalls.map(tc => ({ id: tc.id, command: tc.name, args: tc.arguments })),
+        timestamp: new Date().toISOString(),
+      });
+
+      // Save tool results (only for fully-executed, non-approval calls)
+      for (const { toolCallId, output } of executedResults) {
+        await messagesRepo.addMessage(
+          context.sessionId,
+          { role: "tool", content: output, toolCallId, timestamp: new Date().toISOString() },
+          { source: "tool", messageType: "tool_result", visibility: "internal" },
+        );
+
+        liveMessages.push({
+          role: "tool", content: output, toolCallId, timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Update lastText from current turn (assistant may have content alongside toolCalls)
+      if (turnResult.content) {
+        lastText = turnResult.content;
+      }
+
+      // Handle batch exit
+      if (batchStopReason === "approval_required") {
+        return { text: lastText, toolCallsMade: totalToolCalls, pendingApprovals, stopReason: batchStopReason };
+      }
+      if (batchStopReason) {
+        stopReason = batchStopReason;
+        return { text: batchStopOutput ?? lastText, toolCallsMade: totalToolCalls, pendingApprovals, stopReason };
+      }
+
+      // Normal batch complete — continue to next turn
       continue;
     }
 
@@ -177,7 +221,9 @@ export async function runTurnLoop(
     if (turnResult.content) {
       lastText = turnResult.content;
 
-      // Add assistant message to live messages
+      // Deferred save: text-only assistant message
+      await saveAssistantMessage(context.sessionId, turnResult.content, null);
+
       liveMessages.push({
         role: "assistant",
         content: turnResult.content,

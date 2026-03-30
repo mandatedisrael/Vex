@@ -54,6 +54,8 @@ export async function approveAndResume(approvalId: string): Promise<TurnResult> 
 
   logger.info("engine.resume.approve", { approvalId, sessionId, toolName, toolCallId });
 
+  // loadedDocuments is ephemeral — not persisted across approval pauses.
+  // The agent can re-read documents via document_read after resume.
   const toolContext: InternalToolContext = {
     sessionId,
     loadedDocuments: new Map(),
@@ -74,7 +76,7 @@ export async function approveAndResume(approvalId: string): Promise<TurnResult> 
       toolCallId,
       timestamp: new Date().toISOString(),
     },
-    { source: "tool", messageType: "tool_result", visibility: "user" },
+    { source: "tool", messageType: "tool_result", visibility: "internal" },
   );
 
   // Resume mission run — re-enter turn loop

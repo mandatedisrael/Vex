@@ -28,8 +28,12 @@ export interface SingleTurnResult {
  * 1. Build prompt stack
  * 2. Convert messages to provider format
  * 3. Call provider.chatCompletion()
- * 4. Save assistant message
- * 5. Log usage + update tokenCount
+ * 4. Log usage + update tokenCount
+ *
+ * NOTE: Does NOT save the assistant message. The caller (turn-loop)
+ * handles deferred save after determining the canonical batch prefix
+ * (trimming tool calls that were never dispatched due to approval/signal breaks).
+ * Use saveAssistantMessage() for the actual persist.
  */
 export async function executeTurn(
   context: EngineContext,
@@ -50,13 +54,15 @@ export async function executeTurn(
   // Inference
   const response = await provider.chatCompletion(providerMessages, tools, config);
 
-  // Save assistant message
-  await saveAssistantMessage(context.sessionId, response);
-
   // Log usage + update token count
+  // NOTE: assistant message is NOT saved here — turn-loop handles deferred save
+  // after determining the canonical batch prefix (trimming unexecuted tool calls).
   const promptTokens = response.usage.promptTokens ?? 0;
   const completionTokens = response.usage.completionTokens ?? 0;
 
+  // token_count = SET, not accumulate. Stores the latest prompt size (total tokens
+  // sent to provider including system prompt + messages). Used by checkpoint to
+  // evaluate context window pressure: shouldCheckpoint(tokenCount, contextLimit).
   await usageRepo.logUsage(context.sessionId, {
     promptTokens,
     completionTokens,
@@ -119,13 +125,19 @@ function buildProviderMessages(
   return result;
 }
 
-async function saveAssistantMessage(
+/**
+ * Save an assistant message to DB.
+ *
+ * Exported for use by turn-loop (deferred save after canonical batch prefix
+ * is determined). Accepts ParsedToolCall[] directly — converts to Message format.
+ */
+export async function saveAssistantMessage(
   sessionId: string,
-  response: InferenceResponse,
+  content: string | null,
+  toolCalls: ParsedToolCall[] | null,
 ): Promise<void> {
-  // Single assistant message — content + optional toolCalls in one record
-  const hasContent = response.content !== null && response.content !== undefined;
-  const hasToolCalls = response.toolCalls !== null && response.toolCalls !== undefined && response.toolCalls.length > 0;
+  const hasContent = content !== null && content !== undefined;
+  const hasToolCalls = toolCalls !== null && toolCalls !== undefined && toolCalls.length > 0;
 
   if (!hasContent && !hasToolCalls) return;
 
@@ -139,9 +151,9 @@ async function saveAssistantMessage(
     sessionId,
     {
       role: "assistant",
-      content: response.content ?? "",
+      content: content ?? "",
       toolCalls: hasToolCalls
-        ? response.toolCalls!.map(tc => ({ id: tc.id, command: tc.name, args: tc.arguments }))
+        ? toolCalls!.map(tc => ({ id: tc.id, command: tc.name, args: tc.arguments }))
         : undefined,
       timestamp: new Date().toISOString(),
     },

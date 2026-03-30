@@ -44,8 +44,9 @@ draft → ready → running → completed / failed / cancelled
 4. **`session_links` is the only relationship graph** — no `parent_run_id`. Subagent relationships via `session_links`.
 5. **Mission patch parser** — model output treated as `unknown`, validated/sanitized before DB write.
 6. **Protocol prompts from manifests** — `prompts/protocols.ts` auto-generates from `PROTOCOL_TOOLS` catalog.
-7. **Approval enqueued by engine** — turn-loop creates `approval_queue` row with generated `approvalId`. Resume uses `approvalId`, not `toolCallId`.
-8. **Explicit `updateTokenCount()`** — engine updates `sessions.token_count` after every inference round-trip. Checkpoint reads cumulative count from DB.
+7. **Approval enqueued by engine** — turn-loop creates `approval_queue` row with generated `approvalId`. Resume uses `approvalId`, not `toolCallId`. "Awaiting approval" state lives in `approval_queue`, not in messages transcript.
+8. **Explicit `updateTokenCount()`** — engine SETs `sessions.token_count` after every inference round-trip (not cumulative — stores latest prompt size). Checkpoint evaluates `tokenCount ≥ contextLimit * 0.9`.
+8a. **Deferred assistant save** — `executeTurn()` does NOT save the assistant message. Turn-loop determines canonical batch prefix (only dispatched calls), then saves. Guarantees: no orphaned tool calls, correct message ordering, 1 tool_result per toolCallId.
 9. **Domain vs row model** — `MissionDraft` (camelCase) ↔ `MissionDraftRow` (snake_case), `mapper.ts` converts.
 10. **Business stops via `mission_stop` tool** — not text parsing. Model calls `mission_stop(reason, summary)`, tool returns `engineSignal` that turn-loop acts on.
 11. **Lifecycle guards** — `startMission()` rejects if active run exists. `resumeMissionRun()` rejects terminal runs.
@@ -138,22 +139,32 @@ Reconstructs engine state from DB. Uses `getActiveMission()` (excludes terminal 
 
 ### turn.ts
 
-Single inference round-trip. Saves assistant message (single record with optional toolCalls). `logUsage()` + `updateTokenCount()` after every call.
+Single inference round-trip. Does NOT save the assistant message — deferred to turn-loop (canonical batch prefix). Exports `saveAssistantMessage()` for turn-loop use. `logUsage()` + `updateTokenCount()` after every call. `token_count` is SET (not cumulative) — stores latest prompt size for checkpoint pressure evaluation.
 
 ### turn-loop.ts
 
-Main engine loop. Semantics per iteration:
+Main engine loop. **Deferred save**: `executeTurn()` does NOT save assistant messages — turn-loop determines the canonical batch prefix (only dispatched calls), then saves assistant + tool results in correct order.
+
+**Invariants**:
+- Every toolCall in saved assistant message was actually dispatched
+- Each toolCallId has 0 or 1 tool_result in messages (0 = approval pending)
+- "awaiting approval" state lives in `approval_queue`, not in messages
+- liveMessages always has assistant msg BEFORE tool results
+
+Semantics per iteration:
 
 1. Check `abortSignal` → if aborted → `user_stopped` → break
 2. Check runtime stop conditions (iteration_limit, timeout) → break
-3. `executeTurn()` → read cumulative `tokenCount` from DB
-4. **toolCalls** → dispatch each:
-   - `engineSignal.type === "stop_mission"` → business stop → **break**
-   - `pendingApproval` → enqueue to `approval_queue` with generated `approvalId` → pause run → **break**
-   - OK → save result → next turn
-5. **text + checkpoint needed** → compact, update summary for next turns → continue
-6. **text + `missionRunId`** → add `[Engine: continue]` → next turn
-7. **text + no `missionRunId`** (chat / setup) → **break**
+3. `executeTurn()` → read `tokenCount` from DB (SET, not cumulative — latest prompt size)
+4. **toolCalls** → dispatch + collect canonical prefix:
+   - `pendingApproval` → enqueue to `approval_queue`, trim batch, **break** (no tool_result for this call in messages)
+   - `engineSignal.type === "stop_mission"` → track result, trim batch, **break**
+   - OK → track call + result → next call
+   - After batch: deferred save assistant[canonical] + tool results
+5. **text** → deferred save text-only assistant message
+6. **text + checkpoint needed** → compact, update summary for next turns → continue
+7. **text + `missionRunId`** → add `[Engine: continue]` → next turn
+8. **text + no `missionRunId`** (chat / setup) → **break**
 
 ### checkpoint.ts
 

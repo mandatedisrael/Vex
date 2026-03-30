@@ -262,14 +262,17 @@ LLM uses `discover_tools` to search, `execute_tool` to call. Each namespace has 
   - Session axes: `sessionKind` (chat | mission) × `loopMode` (off | restricted | full)
   - Two-phase missions: guided setup (draft → ready) → autonomous run (against frozen contract)
   - Turn loop: mission text does NOT end loop — engine adds internal continue, loops until stop condition
-  - Approval resume by `approvalId` — atomistic CAS, dispatch approved tool, resume run
+  - **Deferred assistant save**: executeTurn() does NOT save — turn-loop determines canonical batch prefix (only dispatched calls), then saves. No orphaned tool calls, correct message ordering, 1 tool_result per toolCallId
+  - **Batch approval trim**: if batch stops on approval, assistant message contains only dispatched calls. "Awaiting approval" state in approval_queue only, not in messages transcript
+  - Approval resume by `approvalId` — atomistic CAS, dispatch approved tool (single result), resume run
   - Checkpoint/compaction at 90% context limit — summary + archive
+  - Deterministic transcript ordering: `ORDER BY created_at ASC, id ASC`
   - Hierarchical prompt stack: constant (base + tool-usage + protocols) + variable (mode + context)
   - Protocol prompt auto-generated from PROTOCOL_TOOLS manifests (namespace descriptions frozen)
   - Mission patch parser: untrusted model output → validated domain → row conversion → DB
   - Subagent engine runner wired into `tools/internal/subagent.ts` (replaces placeholder)
   - Stop conditions: 6 business stops (terminal) + 6 runtime pauses (resumable)
-- 1336 passing tests across 64 test files
+- 1344 passing tests across 64 test files
 
 ### Not yet implemented
 - **PnL reconcilers** (phase 4) — realized/unrealized PnL calculation from lots + positions

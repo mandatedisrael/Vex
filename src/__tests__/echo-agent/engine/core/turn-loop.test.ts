@@ -219,4 +219,211 @@ describe("turn-loop", () => {
       expect(result.stopReason).toBe("iteration_limit");
     });
   });
+
+  // ── Deferred save ──────────────────────────────────────────
+
+  describe("deferred save", () => {
+    it("saves assistant message with toolCalls to DB via deferred save", async () => {
+      const provider = makeProvider([
+        { toolCalls: [{ id: "call-1", name: "web_search", arguments: { query: "test" } }] },
+        { content: "Done" },
+      ]);
+      mockDispatchTool.mockResolvedValue({ success: true, output: '{"results":[]}' });
+
+      await runTurnLoop(
+        makeContext(), [], null, 0, provider as any, makeConfig() as any, [],
+        defaultLoopConfig,
+      );
+
+      // First addMessage call should be the assistant message with toolCalls
+      expect(mockAddMessage).toHaveBeenCalled();
+      const firstCall = mockAddMessage.mock.calls[0];
+      expect(firstCall[1].role).toBe("assistant");
+      expect(firstCall[1].toolCalls).toHaveLength(1);
+      expect(firstCall[1].toolCalls[0].command).toBe("web_search");
+    });
+
+    it("saves text-only assistant message via deferred save", async () => {
+      const provider = makeProvider([{ content: "Hello!" }]);
+
+      await runTurnLoop(
+        makeContext(), [], null, 0, provider as any, makeConfig() as any, [],
+        defaultLoopConfig,
+      );
+
+      expect(mockAddMessage).toHaveBeenCalled();
+      const [, msg, metadata] = mockAddMessage.mock.calls[0];
+      expect(msg.role).toBe("assistant");
+      expect(msg.content).toBe("Hello!");
+      expect(metadata.source).toBe("assistant");
+    });
+
+    it("saves assistant message BEFORE tool results (correct ordering)", async () => {
+      const provider = makeProvider([
+        { toolCalls: [{ id: "call-1", name: "web_search", arguments: { query: "test" } }] },
+        { content: "Done" },
+      ]);
+      mockDispatchTool.mockResolvedValue({ success: true, output: '{"ok":true}' });
+
+      await runTurnLoop(
+        makeContext(), [], null, 0, provider as any, makeConfig() as any, [],
+        defaultLoopConfig,
+      );
+
+      // Find the tool-call turn's messages (first two addMessage calls)
+      const calls = mockAddMessage.mock.calls;
+      // call[0] = assistant with toolCalls, call[1] = tool result
+      expect(calls[0][1].role).toBe("assistant");
+      expect(calls[1][1].role).toBe("tool");
+      expect(calls[1][1].toolCallId).toBe("call-1");
+    });
+  });
+
+  // ── Batch approval trimming ────────────────────────────────
+
+  describe("batch approval", () => {
+    it("trims assistant message to canonical prefix on approval break", async () => {
+      const provider = makeProvider([
+        {
+          toolCalls: [
+            { id: "call-1", name: "web_search", arguments: { query: "test" } },
+            { id: "call-2", name: "execute_tool", arguments: { toolId: "solana.swap" } },
+            { id: "call-3", name: "web_fetch", arguments: { url: "https://x.com" } },
+          ],
+        },
+      ]);
+
+      let callIndex = 0;
+      mockDispatchTool.mockImplementation(() => {
+        callIndex++;
+        if (callIndex === 2) {
+          return Promise.resolve({ success: false, output: "Approval required", pendingApproval: true });
+        }
+        return Promise.resolve({ success: true, output: `result-${callIndex}` });
+      });
+
+      const result = await runTurnLoop(
+        makeContext({ sessionKind: "mission", missionRunId: "run-1", loopMode: "restricted" }),
+        [], null, 0, provider as any, makeConfig() as any, [],
+        defaultLoopConfig,
+      );
+
+      expect(result.stopReason).toBe("approval_required");
+
+      // Assistant message should contain only call-1 and call-2 (dispatched), NOT call-3
+      const assistantSave = mockAddMessage.mock.calls.find(
+        (c: unknown[]) => (c[1] as Record<string, unknown>).role === "assistant",
+      );
+      expect(assistantSave).toBeTruthy();
+      const savedToolCalls = (assistantSave![1] as Record<string, unknown>).toolCalls as Array<Record<string, unknown>>;
+      expect(savedToolCalls).toHaveLength(2);
+      expect(savedToolCalls[0].id).toBe("call-1");
+      expect(savedToolCalls[1].id).toBe("call-2");
+    });
+
+    it("does NOT save tool_result for approval call", async () => {
+      const provider = makeProvider([
+        {
+          toolCalls: [
+            { id: "call-1", name: "web_search", arguments: { query: "test" } },
+            { id: "call-2", name: "execute_tool", arguments: { toolId: "solana.swap" } },
+          ],
+        },
+      ]);
+
+      let callIndex = 0;
+      mockDispatchTool.mockImplementation(() => {
+        callIndex++;
+        if (callIndex === 2) {
+          return Promise.resolve({ success: false, output: "Approval required", pendingApproval: true });
+        }
+        return Promise.resolve({ success: true, output: "search-result" });
+      });
+
+      await runTurnLoop(
+        makeContext({ sessionKind: "mission", missionRunId: "run-1", loopMode: "restricted" }),
+        [], null, 0, provider as any, makeConfig() as any, [],
+        defaultLoopConfig,
+      );
+
+      // Tool results saved: only call-1 (the successful one)
+      const toolResults = mockAddMessage.mock.calls.filter(
+        (c: unknown[]) => (c[1] as Record<string, unknown>).role === "tool",
+      );
+      expect(toolResults).toHaveLength(1);
+      expect((toolResults[0][1] as Record<string, unknown>).toolCallId).toBe("call-1");
+    });
+
+    it("returns current turn content as text on approval break", async () => {
+      const provider = makeProvider([
+        {
+          content: "I'll swap SOL for USDC now.",
+          toolCalls: [
+            { id: "call-1", name: "execute_tool", arguments: { toolId: "solana.swap" } },
+          ],
+        },
+      ]);
+
+      mockDispatchTool.mockResolvedValue({ success: false, output: "Approval required", pendingApproval: true });
+
+      const result = await runTurnLoop(
+        makeContext({ sessionKind: "mission", missionRunId: "run-1", loopMode: "restricted" }),
+        [], null, 0, provider as any, makeConfig() as any, [],
+        defaultLoopConfig,
+      );
+
+      expect(result.stopReason).toBe("approval_required");
+      expect(result.text).toBe("I'll swap SOL for USDC now.");
+    });
+  });
+
+  // ── Batch engine signal trimming ───────────────────────────
+
+  describe("batch engine signal", () => {
+    it("trims unexecuted calls after engine signal", async () => {
+      const provider = makeProvider([
+        {
+          toolCalls: [
+            { id: "call-1", name: "web_search", arguments: { query: "market" } },
+            { id: "call-2", name: "mission_stop", arguments: { reason: "goal_reached", summary: "Done" } },
+            { id: "call-3", name: "web_fetch", arguments: { url: "https://example.com" } },
+          ],
+        },
+      ]);
+
+      let callIndex = 0;
+      mockDispatchTool.mockImplementation(() => {
+        callIndex++;
+        if (callIndex === 2) {
+          return Promise.resolve({
+            success: true,
+            output: "Mission stop: goal_reached",
+            engineSignal: { type: "stop_mission", reason: "goal_reached", summary: "Done" },
+          });
+        }
+        return Promise.resolve({ success: true, output: `result-${callIndex}` });
+      });
+
+      const result = await runTurnLoop(
+        makeContext({ sessionKind: "mission", missionRunId: "run-1" }),
+        [], null, 0, provider as any, makeConfig() as any, [],
+        defaultLoopConfig,
+      );
+
+      expect(result.stopReason).toBe("goal_reached");
+
+      // Assistant message: call-1 + call-2, NOT call-3
+      const assistantSave = mockAddMessage.mock.calls.find(
+        (c: unknown[]) => (c[1] as Record<string, unknown>).role === "assistant",
+      );
+      const savedToolCalls = (assistantSave![1] as Record<string, unknown>).toolCalls as Array<Record<string, unknown>>;
+      expect(savedToolCalls).toHaveLength(2);
+
+      // Tool results: both call-1 and call-2 (engine signal call gets result saved)
+      const toolResults = mockAddMessage.mock.calls.filter(
+        (c: unknown[]) => (c[1] as Record<string, unknown>).role === "tool",
+      );
+      expect(toolResults).toHaveLength(2);
+    });
+  });
 });

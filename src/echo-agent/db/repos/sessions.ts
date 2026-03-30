@@ -37,6 +37,7 @@ export async function setScope(id: string, scope: string): Promise<void> {
   await execute("UPDATE sessions SET scope = $1 WHERE id = $2", [scope, id]);
 }
 
+/** SET token count — latest prompt size for checkpoint pressure evaluation. Not cumulative. */
 export async function updateTokenCount(id: string, tokenCount: number): Promise<void> {
   await execute("UPDATE sessions SET token_count = $2 WHERE id = $1", [id, tokenCount]);
 }
