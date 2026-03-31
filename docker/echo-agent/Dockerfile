@@ -28,7 +28,7 @@ COPY --from=build /app/package.json ./package.json
 # Copy built output + skills + SQL migrations (tsc doesn't copy .sql files).
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/skills ./skills
-COPY --from=build /app/src/agent/db/migrations ./dist/agent/db/migrations
+COPY --from=build /app/src/echo-agent/db/migrations ./dist/echo-agent/db/migrations
 
 # Make echoclaw CLI available in PATH.
 RUN ln -s /app/dist/cli.js /usr/local/bin/echoclaw \

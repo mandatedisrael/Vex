@@ -18,6 +18,7 @@
     "skills/**",
     "docker/**",
     "src/agent/db/migrations/**",
+    "src/echo-agent/db/migrations/**",
     ".dockerignore",
     "README.md",
     "README_echo_agent.md",
