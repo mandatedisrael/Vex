@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "echo-agent-e2e": {
+      "command": "pnpm",
+      "args": ["exec", "tsx", "src/echo-agent/e2e/mcp/server.ts"],
+      "env": {
+        "ECHO_AGENT_DB_URL": "postgresql://echo_agent:echo_agent@localhost:5555/echo_agent_test"
+      }
+    }
+  }
+}

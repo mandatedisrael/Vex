@@ -1,0 +1,20 @@
+# E2E Test Stack — Postgres only (no agent container)
+# Port 5433 to avoid collision with production 5432
+# tmpfs for fast ephemeral storage — data lost on `down`
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5555:5432"
+    environment:
+      POSTGRES_DB: echo_agent_test
+      POSTGRES_USER: echo_agent
+      POSTGRES_PASSWORD: echo_agent
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U echo_agent -d echo_agent_test"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+    tmpfs:
+      - /var/lib/postgresql/data

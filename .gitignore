@@ -16,6 +16,9 @@ dist/
 .DS_Store
 Thumbs.db
 
+# MCP local config (copy from .mcp.e2e.json.example)
+.mcp.e2e.json
+
 # Test coverage
 coverage/
 
