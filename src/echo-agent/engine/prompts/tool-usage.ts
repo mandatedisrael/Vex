@@ -39,10 +39,16 @@ Execute a discovered tool by toolId with required params.
 ## Self-Inspection
 
 Use \`portfolio_inspect\` to check your own state before making decisions:
-- \`portfolio_inspect(view="summary")\` — total balance, open positions, latest snapshot
-- \`portfolio_inspect(view="open_positions")\` — all open positions across protocols
+- \`portfolio_inspect(view="summary")\` — total balance, open positions, realized PnL
+- \`portfolio_inspect(view="open_positions")\` — all open positions with MTM data
+- \`portfolio_inspect(view="lots")\` — spot lot ledger with cost basis
+- \`portfolio_inspect(view="profits")\` — realized PnL per instrument
+- \`portfolio_inspect(view="profits", groupBy="namespace")\` — realized PnL per protocol
+- \`portfolio_inspect(view="unrealized")\` — spot unrealized PnL from current prices
+- \`portfolio_inspect(view="bridges")\` — bridge transaction history
+- \`portfolio_inspect(view="orders")\` — limit order lifecycle
 - \`portfolio_inspect(view="activity", namespace="solana")\` — recent trading activity
-- \`portfolio_inspect(view="executions", namespace="khalani")\` — execution audit log
+- \`portfolio_inspect(view="executions")\` — execution audit log
 
 This reads from your own DB projections — faster and more reliable than re-querying protocols.`;
 }

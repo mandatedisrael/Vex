@@ -168,17 +168,18 @@ describe("portfolio_inspect tool", () => {
     it("returns per-instrument realized PnL", async () => {
       const { query } = await import("@echo-agent/db/client.js");
       (query as any).mockResolvedValueOnce([{
-        instrument_key: "solana:BONK",
+        group_key: "solana:BONK",
         matched_count: "3", shortfall_count: "1",
         realized_pnl_usd: "1.25", total_cost_basis: "4.00", total_proceeds: "5.25",
+        realized_pnl_native: null, benchmark_asset_key: "SOL",
       }]);
       const r = await handlePortfolioInspect({ view: "profits", instrumentKey: "solana:BONK" }, ctx);
       expect(r.success).toBe(true);
       expect(r.data!.count).toBe(1);
-      const instr = (r.data!.instruments as any[])[0];
-      expect(instr.realizedPnlUsd).toBe(1.25);
-      expect(instr.matchedCount).toBe(3);
-      expect(instr.shortfallCount).toBe(1);
+      const item = (r.data!.items as any[])[0];
+      expect(item.realizedPnlUsd).toBe(1.25);
+      expect(item.matchedCount).toBe(3);
+      expect(item.shortfallCount).toBe(1);
     });
   });
 

@@ -100,6 +100,18 @@ export async function drainPendingRuns(): Promise<DrainResult> {
     logger.info("sync.worker.drain_completed", { processed, deduped, errors });
   }
 
+  // Refresh prediction MTM after balance drain (cheap — deduped API calls)
+  if (processed > 0) {
+    try {
+      const { refreshPredictionMtm } = await import("./mtm.js");
+      await refreshPredictionMtm();
+    } catch (err) {
+      logger.warn("sync.worker.mtm_failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   return { processed, deduped, errors };
 }
 

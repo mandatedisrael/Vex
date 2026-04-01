@@ -66,12 +66,13 @@ export function registerTools(server: McpServer): void {
     "echo_portfolio_inspect",
     "DB-backed portfolio inspection: open_positions, activity, executions, balances, snapshots, summary, lots, profits, closed_positions, non_trading_history. NOTE: balances/snapshots are not authoritative in E2E (no fullBalanceSync). Use echo_wallet_balances for wallet state.",
     {
-      view: z.enum(["open_positions", "activity", "executions", "balances", "snapshots", "summary", "lots", "profits", "closed_positions", "non_trading_history"]).describe("What to inspect"),
+      view: z.enum(["open_positions", "activity", "executions", "balances", "snapshots", "summary", "lots", "profits", "closed_positions", "non_trading_history", "bridges", "lp_history", "orders", "unrealized"]).describe("What to inspect"),
       namespace: z.string().optional().describe("Filter by namespace"),
       productType: z.string().optional().describe("Filter by product type"),
       instrumentKey: z.string().optional().describe("Filter by instrument_key (lots, profits)"),
       walletAddress: z.string().optional().describe("Filter by wallet_address (profits)"),
-      status: z.string().optional().describe("Filter by status (lots)"),
+      status: z.string().optional().describe("Filter by status (lots, orders)"),
+      groupBy: z.string().optional().describe("Group by for profits: instrument (default) or namespace"),
       limit: z.number().optional().describe("Max results"),
     },
     async (params) => {
