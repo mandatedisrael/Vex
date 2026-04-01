@@ -1,8 +1,9 @@
 /**
  * MCP tool definitions — v1 surface for E2E testing.
  *
- * 9 tools:
+ * 10 tools:
  *   Core: echo_discover, echo_execute
+ *   Internal: echo_internal (generic access to all non-subagent internal tools)
  *   Read-only: echo_portfolio_inspect, echo_wallet_address, echo_wallet_balances
  *   Operator: echo_inspect_pipeline, echo_replay_verify
  *   Smoke: echo_discovery_smoke, echo_preview_smoke
@@ -154,6 +155,33 @@ export function registerTools(server: McpServer): void {
     async () => {
       const result = await runReplayCheck();
       return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  // ── Generic internal tool access ─────────────────────────────
+
+  const BLOCKED_INTERNAL = new Set([
+    "subagent_spawn", "subagent_status", "subagent_stop",
+    "subagent_reply", "subagent_request_parent", "subagent_report_complete",
+  ]);
+
+  server.tool(
+    "echo_internal",
+    "Call any internal tool directly (same as engine dispatch). Excludes subagent tools. Examples: polymarket_setup, wallet_read, memory_manage, document_read, schedule_create, web_search, mission_stop.",
+    {
+      tool: z.string().describe("Internal tool name (e.g. polymarket_setup, wallet_read)"),
+      params: z.record(z.string(), z.unknown()).optional().describe("Tool parameters"),
+    },
+    async (args) => {
+      if (BLOCKED_INTERNAL.has(args.tool)) {
+        return { content: [{ type: "text" as const, text: `Tool "${args.tool}" is blocked in MCP E2E (subagent tools not exposed)` }] };
+      }
+      const ctx = makeContext(`mcp-internal-${Date.now()}`);
+      const result = await dispatchTool(
+        { name: args.tool, args: args.params ?? {}, toolCallId: `mcp-int-${Date.now()}` },
+        ctx,
+      );
+      return { content: [{ type: "text" as const, text: result.output }] };
     },
   );
 
