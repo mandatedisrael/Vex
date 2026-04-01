@@ -114,11 +114,16 @@ describe("portfolio_inspect tool", () => {
         activeChains: 3, createdAt: "2026-03-29",
       });
       mockGetTotalRealizedPnl.mockResolvedValueOnce(null);
+      const { query } = await import("@echo-agent/db/client.js");
+      // prediction MTM aggregate
+      (query as any).mockResolvedValueOnce([{ total: null }]);
+      // spot unrealized aggregate
+      (query as any).mockResolvedValueOnce([{ total: null }]);
       const r = await handlePortfolioInspect({ view: "summary" }, ctx);
       expect(r.data!.totalBalanceUsd).toBe(5000);
       expect(r.data!.openPositionCount).toBe(2);
       expect(r.data!.realizedPnlUsd).toBeNull();
-      expect(r.data!.unrealizedPnl).toBe("not_available_yet");
+      expect(r.data!.unrealizedPnlUsd).toBeNull();
     });
 
     it("shows realized PnL when matches exist", async () => {
@@ -126,6 +131,9 @@ describe("portfolio_inspect tool", () => {
       mockGetOpen.mockResolvedValueOnce([]);
       mockGetLatestSnapshot.mockResolvedValueOnce(null);
       mockGetTotalRealizedPnl.mockResolvedValueOnce("42.50");
+      const { query } = await import("@echo-agent/db/client.js");
+      (query as any).mockResolvedValueOnce([{ total: null }]);
+      (query as any).mockResolvedValueOnce([{ total: null }]);
       const r = await handlePortfolioInspect({ view: "summary" }, ctx);
       expect(r.data!.realizedPnlUsd).toBe(42.50);
     });
@@ -226,6 +234,77 @@ describe("portfolio_inspect tool", () => {
       const act = (r.data!.activities as any[])[0];
       expect(act.product).toBe("bridge");
       expect(act.namespace).toBe("khalani");
+    });
+  });
+
+  describe("bridges", () => {
+    it("returns bridge history", async () => {
+      const { query } = await import("@echo-agent/db/client.js");
+      (query as any).mockResolvedValueOnce([{
+        namespace: "khalani", chain: "ethereum", wallet_address: "0x1",
+        input_token: "USDC", input_amount: "1000000", output_token: "USDC",
+        output_amount: "999000", capture_status: "executed", created_at: "2026-04-01",
+      }]);
+      const r = await handlePortfolioInspect({ view: "bridges" }, ctx);
+      expect(r.success).toBe(true);
+      expect(r.data!.view).toBe("bridges");
+      expect(r.data!.count).toBe(1);
+    });
+  });
+
+  describe("lp_history", () => {
+    it("returns LP events", async () => {
+      const { query } = await import("@echo-agent/db/client.js");
+      (query as any).mockResolvedValueOnce([{
+        namespace: "kyberswap", chain: "ethereum", instrument_key: "ethereum:lp:0xPool",
+        position_key: "LP1", capture_status: "executed", meta: { action: "zap-in" },
+        created_at: "2026-04-01",
+      }]);
+      const r = await handlePortfolioInspect({ view: "lp_history" }, ctx);
+      expect(r.success).toBe(true);
+      expect(r.data!.view).toBe("lp_history");
+      expect(r.data!.count).toBe(1);
+    });
+  });
+
+  describe("orders", () => {
+    it("returns order lifecycle", async () => {
+      const { query } = await import("@echo-agent/db/client.js");
+      (query as any).mockResolvedValueOnce([{
+        namespace: "kyberswap", chain: "polygon", instrument_key: "polygon:lo:0xA:0xB",
+        position_key: "123", status: "open", opened_at: "2026-04-01", closed_at: null,
+      }]);
+      const r = await handlePortfolioInspect({ view: "orders" }, ctx);
+      expect(r.success).toBe(true);
+      expect(r.data!.view).toBe("orders");
+      expect(r.data!.count).toBe(1);
+    });
+  });
+
+  describe("unrealized", () => {
+    it("returns empty when no open lots", async () => {
+      const { query } = await import("@echo-agent/db/client.js");
+      (query as any).mockResolvedValueOnce([]);
+      const r = await handlePortfolioInspect({ view: "unrealized" }, ctx);
+      expect(r.success).toBe(true);
+      expect(r.data!.view).toBe("unrealized");
+      expect(r.data!.count).toBe(0);
+    });
+  });
+
+  describe("summary with unrealized", () => {
+    it("aggregates prediction MTM + spot unrealized", async () => {
+      mockGetTotalUsd.mockResolvedValueOnce(1000);
+      mockGetOpen.mockResolvedValueOnce([]);
+      mockGetLatestSnapshot.mockResolvedValueOnce(null);
+      mockGetTotalRealizedPnl.mockResolvedValueOnce("50.00");
+      const { query } = await import("@echo-agent/db/client.js");
+      // prediction MTM aggregate
+      (query as any).mockResolvedValueOnce([{ total: "12.50" }]);
+      // spot unrealized aggregate
+      (query as any).mockResolvedValueOnce([{ total: "7.25" }]);
+      const r = await handlePortfolioInspect({ view: "summary" }, ctx);
+      expect(r.data!.unrealizedPnlUsd).toBe(19.75);
     });
   });
 });

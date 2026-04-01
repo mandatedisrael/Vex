@@ -86,11 +86,12 @@ export function validateCaptureContract(
       }
     }
     if (missingMeta.length > 0) {
-      logger.warn("capture.validator.missing_meta_fields", {
+      logger.error("capture.validator.missing_meta_fields", {
         toolId,
         missingMetaFields: missingMeta,
         hint: `Required meta fields: [${contract.requiredMetaFields.join(", ")}]`,
       });
+      return false;
     }
   }
 

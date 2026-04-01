@@ -24,7 +24,7 @@ import { META_AGGREGATION_ROUTER_V2, DSLO_PROTOCOL, KS_ZAP_ROUTER_POSITION, NATI
 import { resolveTokenMetadata, resolveTokenAddress, requireFeature, resolveChainWithId } from "@commands/kyberswap/helpers.js";
 import { requireEvmWallet } from "@tools/wallet/multi-auth.js";
 
-import { parseUnits, getAddress, type Address, type Hex } from "viem";
+import { parseUnits, formatUnits, getAddress, type Address, type Hex } from "viem";
 import type { ToolResult } from "../../types.js";
 import type { ProtocolHandler } from "../types.js";
 
@@ -110,8 +110,8 @@ async function executeKyberSwap(p: Record<string, unknown>, side: "buy" | "sell"
       feeValueUsd: buildResp.data.gasUsd, valuationSource: "kyberswap_exact",
       benchmarkAssetKey: benchmarkAssetKey ?? undefined,
       settlementAssetKey: side === "buy" ? tokenIn.symbol : tokenOut.symbol,
-      // Native values: not available — KyberSwap buildResp has raw atomic amounts, not human-unit native.
-      // Benchmark-native PnL for KyberSwap requires decimals lookup at capture time — deferred.
+      inputValueNative: inputIsNative ? formatUnits(amountIn, tokenIn.decimals) : undefined,
+      outputValueNative: outputIsNative ? formatUnits(BigInt(buildResp.data.amountOut), tokenOut.decimals) : undefined,
       meta: { dex: "kyberswap", side },
     } },
   };

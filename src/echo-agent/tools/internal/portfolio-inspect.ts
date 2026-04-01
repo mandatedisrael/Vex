@@ -179,11 +179,41 @@ async function inspectSummary(): Promise<ToolResult> {
   const { getOpen } = await import("@echo-agent/db/repos/open-positions.js");
   const { getLatestSnapshot } = await import("@echo-agent/db/repos/balances.js");
   const { getTotalRealizedPnl } = await import("@echo-agent/db/repos/pnl-matches.js");
+  const { query: dbQuery } = await import("@echo-agent/db/client.js");
 
   const totalUsd = await getTotalUsd();
   const openPositions = await getOpen();
   const latestSnapshot = await getLatestSnapshot();
   const realizedPnlRaw = await getTotalRealizedPnl();
+
+  // Aggregate unrealized: prediction MTM + spot lots (if data available)
+  let unrealizedPnlUsd: number | null = null;
+
+  // 1. Prediction unrealized from MTM (positions with unrealized_pnl_usd set)
+  const mtmRow = await dbQuery<{ total: string | null }>(
+    "SELECT SUM(unrealized_pnl_usd) AS total FROM proj_open_positions WHERE status = 'open' AND unrealized_pnl_usd IS NOT NULL",
+    [],
+  );
+  const predictionUnrealized = mtmRow[0]?.total != null ? Number(mtmRow[0].total) : null;
+
+  // 2. Spot unrealized from lots + balances (simplified aggregate)
+  const spotRow = await dbQuery<{ total: string | null }>(
+    `WITH lot_vals AS (
+       SELECT l.cost_basis_usd * l.remaining_quantity_raw::numeric / l.quantity_raw::numeric AS remaining_cost,
+              l.remaining_quantity_raw::numeric / power(10, COALESCE(b.decimals, 18)) * b.price_usd AS current_val
+       FROM proj_pnl_lots l
+       LEFT JOIN proj_balances b ON b.wallet_address = l.wallet_address
+         AND b.token_address = split_part(l.instrument_key, ':', 2)
+       WHERE l.status IN ('open', 'partial') AND b.price_usd IS NOT NULL AND l.cost_basis_usd IS NOT NULL
+     )
+     SELECT SUM(current_val - remaining_cost) AS total FROM lot_vals`,
+    [],
+  );
+  const spotUnrealized = spotRow[0]?.total != null ? Number(spotRow[0].total) : null;
+
+  if (predictionUnrealized != null || spotUnrealized != null) {
+    unrealizedPnlUsd = (predictionUnrealized ?? 0) + (spotUnrealized ?? 0);
+  }
 
   return ok({
     view: "summary",
@@ -196,8 +226,8 @@ async function inspectSummary(): Promise<ToolResult> {
       at: latestSnapshot.createdAt,
     } : null,
     realizedPnlUsd: realizedPnlRaw != null ? Number(realizedPnlRaw) : null,
-    unrealizedPnl: "not_available_yet",
-    note: "Realized PnL from FIFO lot matching. Unrealized for predictions via MTM (portfolio_inspect unrealized for spot). Use 'unrealized' view for per-instrument spot unrealized.",
+    unrealizedPnlUsd,
+    note: "Realized PnL from FIFO lot matching. Unrealized from prediction MTM + spot lots × current prices. Use 'unrealized' view for per-instrument detail.",
   });
 }
 
