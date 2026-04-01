@@ -47,7 +47,7 @@ Defined in `registry.ts`. Each handler is a pure `(params, context) → ToolResu
 | `subagent_reply` | `internal/subagent.ts` | Parent replies to waiting child's request. Resumes child via shared lifecycle helper. Excluded for subagents. |
 | `subagent_request_parent` | `internal/subagent.ts` | Child requests parent help. Returns `wait_for_parent` engine signal. Excluded for parents. |
 | `subagent_report_complete` | `internal/subagent.ts` | Child submits structured final report. Returns `complete_subagent` engine signal. Excluded for parents. |
-| `portfolio_inspect` | `internal/portfolio-inspect.ts` | DB-backed self-inspection: open_positions, activity, executions, balances, snapshots, summary |
+| `portfolio_inspect` | `internal/portfolio-inspect.ts` | DB-backed self-inspection: open_positions, activity, executions, balances, snapshots, summary, lots, profits, closed_positions, non_trading_history |
 | `mission_stop` | `internal/mission.ts` | Model-driven mission stop — returns engineSignal to turn-loop. Guarded: requires active missionRunId. Excluded for subagents. |
 | `wallet_read` | `internal/wallet.ts` | Wallet address + multi-chain balances via Khalani |
 | `wallet_send_prepare` | `internal/wallet.ts` | Prepare transfer intent (no broadcast) |
@@ -111,7 +111,9 @@ This feeds the execution → sync → projection pipeline (see `db/DB.md` and `s
 
 Canonical source-of-truth: `protocols/mutation-matrix.ts` (`MUTATION_MATRIX`). Imported by runtime (validation, preview detection), tests (structural coverage), and replay (type correction).
 
-Each mutating tool has a `MutationContract`: `role`, `capture`, `expectedType`, `previewSupport`, `fanOut`, `requiredFields`.
+Each mutating tool has a `MutationContract`: `role`, `capture`, `expectedType`, `previewSupport`, `fanOut`, `requiredFields`, `valuationExpected`.
+
+`valuationExpected` (W4A): `"exact"` (always emits USD from source), `"conditional"` (path-dependent, e.g. Polymarket matched vs unmatched), `"none"` (no source USD — honest null). Soft contract for regression tests, not a runtime gate.
 
 - `pnl_spot` (7 tools): tradeSide + instrumentKey + atomic amounts required. `classifySolanaSwap()` in `src/tools/solana-ecosystem/shared/swap-classify.ts` for deterministic Solana classification.
 - `pnl_prediction`: positionKey + instrumentKey required. Polymarket buy/sell are dual-type (`["prediction","order"]`): matched → prediction position lifecycle, live → order lifecycle.

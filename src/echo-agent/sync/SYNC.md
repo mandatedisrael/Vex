@@ -133,6 +133,15 @@ The runtime records `protocol_capture_items` first, then calls `populateActivity
 - `position_key`: positionPubkey, orderKey, positionId
 - `capture_item_id`: FK to `protocol_capture_items` — enables per-position correlation for batch captures
 
+### Valuation fields (W4A)
+- `input_value_usd`: USD value of input leg (string → NUMERIC). From handler source API.
+- `output_value_usd`: USD value of output leg.
+- `fee_value_usd`: fees in USD.
+- `unit_price_usd`: per-human-unit price of tracked asset (best-effort for display).
+- `valuation_source`: `"jupiter_exact"`, `"kyberswap_exact"`, `"polymarket_exact"`, `"prediction_exact"`, `"none"`.
+
+Handlers with `MUTATION_MATRIX.valuationExpected: "exact"` emit exact USD from source API. `"none"` handlers (Jaine, Slop) leave valuation null honestly.
+
 ## Position projector
 
 `position-projector.ts` is called from `populateActivity()` after each activity insert. Dispatches by `product_type`:
@@ -143,7 +152,7 @@ The runtime records `protocol_capture_items` first, then calls `populateActivity
 | **prediction** | `proj_open_positions` | `captureStatus`: open → open, closed/claimed/cancelled → close |
 | **order** (DCA/limit) | `proj_open_positions` | `captureStatus`: open → open, cancelled → cancel (NOT FIFO lots) |
 | **lp** | `proj_open_positions` | `meta.action`: zap-in → open, zap-out → close, zap-migrate → close old + open new |
-| **spot** | `proj_pnl_lots` (FIFO) | `tradeSide`: buy → open lot, sell → reduce lots oldest-first |
+| **spot** | `proj_pnl_lots` + `proj_pnl_matches` (FIFO) | `tradeSide`: buy → open lot (with economics), sell → FIFO reduce + record matches with realized PnL |
 | bridge/lend/stake/reward | — | skipped |
 
 Key: `captureStatus` comes from `proj_activity.capture_status` which is set directly from `_tradeCapture.status` — not from meta.
@@ -155,7 +164,7 @@ Cross-protocol: slop.trade.buy + jaine.swap.sell match via shared `instrumentKey
 One-time projection correction tool. Reads immutable audit trail (`protocol_executions` + `protocol_capture_items`), truncates projection tables, re-runs `populateActivity()` with type correction from `MUTATION_MATRIX.expectedType`.
 
 **What it does:**
-1. `TRUNCATE proj_activity, proj_open_positions, proj_pnl_lots`
+1. `TRUNCATE proj_activity, proj_open_positions, proj_pnl_lots, proj_pnl_matches`
 2. Read all successful executions chronologically
 3. For each: read its `protocol_capture_items` (batch truth), apply type correction, skip previews
 4. Re-run `populateActivity()` per corrected item via `replayActivityFromCapture()`
@@ -173,10 +182,23 @@ const stats = await replayProjections(); // { replayed, skipped, errors }
 
 **E2E verification:** `echo_replay_verify` MCP tool runs replay + compares before/after pipeline snapshots. See `e2e/E2E.md`.
 
+## PnL match ledger (W4A)
+
+`proj_pnl_matches` is the canonical realized PnL ledger. Each FIFO lot match records:
+- `match_kind`: `"matched"` (lot consumed) or `"shortfall"` (sell > inventory)
+- `cost_basis_usd`: pro-rata from lot (SQL NUMERIC math, not JS float)
+- `proceeds_usd`: pro-rata from sell's `output_value_usd`
+- `realized_pnl_usd`: proceeds - cost_basis (computed in SQL)
+
+Shortfall rows have `lot_id = NULL`, `cost_basis_usd = NULL`, `realized_pnl_usd = NULL`.
+
+**Precision model:** All pro-rata math is done in SQL (`NUMERIC` arithmetic). USD values flow as strings through the pipeline: handler → `_tradeCapture` → `proj_activity` → SQL `INSERT` with subquery. No JS `Number()` on USD or raw quantities in the write path.
+
 ## What's NOT in this module
 
-- **PnL reconcilers** (realized/unrealized calculation) — phase 4
-- **Read models for UI** (portfolio curve, PnL by protocol) — phase 4
+- **Unrealized PnL / mark-to-market** — requires live price feed (W4B)
+- **Benchmark/quote-asset PnL** (SOL/ETH/USDC/0G) — W4B
+- **Khalani fallback valuation** for Jaine/Slop — W4B
 - **Cron/timer** — engine responsibility, sync exposes `initSync()` and `syncTick()`
 - **UI/API endpoints** — transport layer
 

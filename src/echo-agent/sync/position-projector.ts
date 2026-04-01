@@ -14,6 +14,7 @@
 
 import * as openPositionsRepo from "@echo-agent/db/repos/open-positions.js";
 import * as pnlLotsRepo from "@echo-agent/db/repos/pnl-lots.js";
+import * as pnlMatchesRepo from "@echo-agent/db/repos/pnl-matches.js";
 import type { Activity } from "@echo-agent/db/repos/activity.js";
 import logger from "@utils/logger.js";
 
@@ -59,6 +60,9 @@ async function projectLifecyclePosition(activity: Activity): Promise<void> {
       walletAddress: walletAddress ?? "",
       instrumentKey: instrumentKey ?? undefined,
       positionKey,
+      entryPriceUsd: activity.unitPriceUsd ?? undefined,
+      notionalUsd: activity.inputValueUsd ?? undefined,
+      feeUsd: activity.feeValueUsd ?? undefined,
       status: "open",
       data: activity.meta,
     });
@@ -169,7 +173,8 @@ async function projectSpotLot(activity: Activity): Promise<void> {
       walletAddress,
       side: "buy",
       quantityRaw: quantity,
-      costBasisUsd: activity.valueUsd ?? undefined,
+      costBasisUsd: activity.inputValueUsd ?? undefined,
+      priceUsd: activity.unitPriceUsd ?? undefined,
       executionId: activity.executionId,
       activityId: activity.id,
       namespace: activity.namespace,
@@ -188,16 +193,38 @@ async function projectSpotLot(activity: Activity): Promise<void> {
       if (remaining <= 0n) break;
       const lotRemaining = BigInt(lot.remainingQuantityRaw);
       const toReduce = remaining < lotRemaining ? remaining : lotRemaining;
+
       await pnlLotsRepo.reduceLot(lot.id, toReduce);
+      await pnlMatchesRepo.recordMatchFromLot({
+        sellActivityId: activity.id,
+        lotId: lot.id,
+        instrumentKey,
+        walletAddress,
+        matchedQty: toReduce.toString(),
+        sellOutputValueUsd: activity.outputValueUsd,
+        totalSellQty: quantityToSell.toString(),
+        namespace: activity.namespace,
+        chain: activity.chain,
+      });
+
       remaining -= toReduce;
     }
 
     if (remaining > 0n) {
-      logger.warn("sync.lot.insufficient_inventory", {
+      await pnlMatchesRepo.recordShortfall({
+        sellActivityId: activity.id,
+        instrumentKey,
+        walletAddress,
+        shortfallQty: remaining.toString(),
+        sellOutputValueUsd: activity.outputValueUsd,
+        totalSellQty: quantityToSell.toString(),
+        namespace: activity.namespace,
+        chain: activity.chain,
+      });
+      logger.warn("sync.lot.shortfall", {
         instrumentKey,
         quantitySold: quantityToSell.toString(),
         shortfall: remaining.toString(),
-        hint: "Sold more than tracked lots — possible external deposit or missing capture",
       });
     }
 

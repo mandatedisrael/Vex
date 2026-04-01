@@ -20,6 +20,7 @@ interface ProjectionHashes {
   activity: string;
   positions: string;
   lots: string;
+  matches: string;
 }
 
 async function hashProjections(): Promise<ProjectionHashes> {
@@ -44,10 +45,18 @@ async function hashProjections(): Promise<ProjectionHashes> {
     [],
   );
 
+  const matchRows = await query(
+    `SELECT match_kind, sell_activity_id, lot_id, instrument_key, wallet_address,
+            quantity_matched, cost_basis_usd, proceeds_usd, realized_pnl_usd, namespace, chain
+     FROM proj_pnl_matches ORDER BY sell_activity_id, id`,
+    [],
+  );
+
   return {
     activity: createHash("sha256").update(JSON.stringify(activityRows)).digest("hex"),
     positions: createHash("sha256").update(JSON.stringify(positionRows)).digest("hex"),
     lots: createHash("sha256").update(JSON.stringify(lotRows)).digest("hex"),
+    matches: createHash("sha256").update(JSON.stringify(matchRows)).digest("hex"),
   };
 }
 
@@ -59,7 +68,7 @@ export interface ReplayCheckResult {
   replayStats: { replayed: number; skipped: number; errors: number };
   auditIntact: boolean;
   projectionsMatch: boolean;
-  hashesMatch: { activity: boolean; positions: boolean; lots: boolean };
+  hashesMatch: { activity: boolean; positions: boolean; lots: boolean; matches: boolean };
 }
 
 export async function runReplayCheck(): Promise<ReplayCheckResult> {
@@ -88,9 +97,10 @@ export async function runReplayCheck(): Promise<ReplayCheckResult> {
     activity: beforeHashes.activity === afterHashes.activity,
     positions: beforeHashes.positions === afterHashes.positions,
     lots: beforeHashes.lots === afterHashes.lots,
+    matches: beforeHashes.matches === afterHashes.matches,
   };
 
-  const projectionsMatch = hashesMatch.activity && hashesMatch.positions && hashesMatch.lots;
+  const projectionsMatch = hashesMatch.activity && hashesMatch.positions && hashesMatch.lots && hashesMatch.matches;
 
   if (!auditIntact) {
     logger.error("e2e.replay.audit_changed", { before: beforeCounts, after: afterCounts });

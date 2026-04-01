@@ -64,7 +64,7 @@ function parseRouteSummary(raw: unknown): SwapRouteSummary {
     route,
     routeID: asString(raw.routeID, "routeSummary.routeID"),
     checksum: asString(raw.checksum, "routeSummary.checksum"),
-    timestamp: asString(raw.timestamp, "routeSummary.timestamp"),
+    timestamp: asOptionalString(raw.timestamp),
   };
 }
 

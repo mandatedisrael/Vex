@@ -37,7 +37,7 @@ export async function replayProjections(): Promise<ReplayStats> {
 
   // 1. Truncate projection tables only (audit trail is immutable)
   logger.info("replay.truncating_projections");
-  await execute("TRUNCATE proj_activity, proj_open_positions, proj_pnl_lots");
+  await execute("TRUNCATE proj_activity, proj_open_positions, proj_pnl_lots, proj_pnl_matches");
 
   // 2. Read all successful executions chronologically
   const executions = await query<Record<string, unknown>>(

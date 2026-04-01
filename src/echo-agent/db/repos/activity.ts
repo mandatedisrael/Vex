@@ -21,6 +21,11 @@ export interface ActivityRow {
   outputToken: string | null;
   outputAmount: string | null;
   valueUsd: number | null;
+  inputValueUsd: string | null;
+  outputValueUsd: string | null;
+  feeValueUsd: string | null;
+  unitPriceUsd: string | null;
+  valuationSource: string | null;
   captureStatus: string | null;
   positionKey: string | null;
   instrumentKey: string | null;
@@ -39,13 +44,16 @@ export async function insertActivity(row: ActivityRow): Promise<number> {
     `INSERT INTO proj_activity
      (namespace, activity_type, product_type, trade_side, chain, execution_id, capture_item_id,
       wallet_address, input_token, input_amount, output_token, output_amount,
-      value_usd, capture_status, position_key, instrument_key, external_refs, meta)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      value_usd, input_value_usd, output_value_usd, fee_value_usd, unit_price_usd, valuation_source,
+      capture_status, position_key, instrument_key, external_refs, meta)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
      RETURNING id`,
     [
       row.namespace, row.activityType, row.productType, row.tradeSide, row.chain,
       row.executionId, row.captureItemId, row.walletAddress, row.inputToken, row.inputAmount,
-      row.outputToken, row.outputAmount, row.valueUsd, row.captureStatus, row.positionKey,
+      row.outputToken, row.outputAmount, row.valueUsd,
+      row.inputValueUsd, row.outputValueUsd, row.feeValueUsd, row.unitPriceUsd, row.valuationSource,
+      row.captureStatus, row.positionKey,
       row.instrumentKey, JSON.stringify(row.externalRefs), JSON.stringify(row.meta),
     ],
   );
@@ -106,6 +114,14 @@ export async function getByInstrumentKey(instrumentKey: string): Promise<Activit
 }
 
 function mapRow(r: Record<string, unknown>): Activity {
+  const inputValueUsd = r.input_value_usd != null ? String(r.input_value_usd) : null;
+  const outputValueUsd = r.output_value_usd != null ? String(r.output_value_usd) : null;
+  // Backwards compat: valueUsd computed from new fields
+  const legacyValueUsd = r.value_usd != null ? Number(r.value_usd)
+    : outputValueUsd != null ? Number(outputValueUsd)
+    : inputValueUsd != null ? Number(inputValueUsd)
+    : null;
+
   return {
     id: r.id as number,
     namespace: r.namespace as string,
@@ -120,7 +136,12 @@ function mapRow(r: Record<string, unknown>): Activity {
     inputAmount: r.input_amount as string | null,
     outputToken: r.output_token as string | null,
     outputAmount: r.output_amount as string | null,
-    valueUsd: r.value_usd != null ? Number(r.value_usd) : null,
+    valueUsd: legacyValueUsd,
+    inputValueUsd,
+    outputValueUsd,
+    feeValueUsd: r.fee_value_usd != null ? String(r.fee_value_usd) : null,
+    unitPriceUsd: r.unit_price_usd != null ? String(r.unit_price_usd) : null,
+    valuationSource: r.valuation_source as string | null,
     captureStatus: r.capture_status as string | null,
     positionKey: r.position_key as string | null,
     instrumentKey: r.instrument_key as string | null,

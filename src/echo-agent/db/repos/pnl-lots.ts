@@ -14,8 +14,8 @@ export interface Lot {
   walletAddress: string;
   side: string;
   quantityRaw: string;
-  costBasisUsd: number | null;
-  priceUsd: number | null;
+  costBasisUsd: string | null;
+  priceUsd: string | null;
   remainingQuantityRaw: string;
   executionId: number | null;
   activityId: number | null;
@@ -31,8 +31,8 @@ export interface OpenLotRow {
   walletAddress: string;
   side: string;
   quantityRaw: string;
-  costBasisUsd?: number;
-  priceUsd?: number;
+  costBasisUsd?: string;
+  priceUsd?: string;
   executionId?: number;
   activityId?: number;
   namespace: string;
@@ -113,8 +113,8 @@ function mapRow(r: Record<string, unknown>): Lot {
     walletAddress: r.wallet_address as string,
     side: r.side as string,
     quantityRaw: r.quantity_raw as string,
-    costBasisUsd: r.cost_basis_usd != null ? Number(r.cost_basis_usd) : null,
-    priceUsd: r.price_usd != null ? Number(r.price_usd) : null,
+    costBasisUsd: r.cost_basis_usd != null ? String(r.cost_basis_usd) : null,
+    priceUsd: r.price_usd != null ? String(r.price_usd) : null,
     remainingQuantityRaw: r.remaining_quantity_raw as string,
     executionId: r.execution_id as number | null,
     activityId: r.activity_id as number | null,

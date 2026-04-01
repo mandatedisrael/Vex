@@ -2,19 +2,11 @@
  * Portfolio inspect — DB-backed read-only self-inspection tool.
  *
  * Lets the agent inspect its own protocol history, open positions,
- * activity, executions, balances, and portfolio snapshots from
- * existing projection tables.
+ * activity, executions, balances, portfolio snapshots, lots, profits,
+ * closed positions, and non-trading audit history.
  *
- * Does NOT fabricate PnL — surfaces "not_available_yet" where
- * realized/unrealized profit reconciliation is incomplete.
- *
- * Repo signatures (verified 2026-03-29):
- *   open-positions: getOpen(walletAddress?, namespace?) → Position[]
- *   activity: getActivities({ walletAddress?, namespace?, productType?, limit? }) → Activity[]
- *   executions: getByNamespace(namespace, limit=50) → ExecutionRecord[]
- *   balances: getTotalUsd() → number
- *   balances: getLatestSnapshot() → PortfolioSnapshot | null
- *   balances: getSnapshotHistory("24h"|"7d"|"30d"|"all") → PortfolioSnapshot[]
+ * Realized PnL comes from proj_pnl_matches (FIFO lot match ledger).
+ * Unrealized PnL returns "not_available_yet" where mark-to-market is unavailable.
  */
 
 import type { ToolResult } from "../types.js";
@@ -23,6 +15,7 @@ import { str, num, ok, fail } from "./types.js";
 
 const VALID_VIEWS = new Set<string>([
   "open_positions", "activity", "executions", "balances", "snapshots", "summary",
+  "lots", "profits", "closed_positions", "non_trading_history",
 ]);
 
 export async function handlePortfolioInspect(
@@ -45,6 +38,10 @@ export async function handlePortfolioInspect(
     case "balances": return inspectBalances();
     case "snapshots": return inspectSnapshots();
     case "summary": return inspectSummary();
+    case "lots": return inspectLots(str(params, "instrumentKey") || undefined, namespace, str(params, "status") || undefined);
+    case "profits": return inspectProfits(str(params, "walletAddress") || undefined, namespace);
+    case "closed_positions": return inspectClosedPositions(namespace);
+    case "non_trading_history": return inspectNonTradingHistory(namespace, limit);
     default: return fail(`Unknown view: ${view}`);
   }
 }
@@ -69,9 +66,11 @@ async function inspectOpenPositions(namespace?: string): Promise<ToolResult> {
       wallet: p.walletAddress,
       instrument: p.instrumentKey,
       positionKey: p.positionKey,
-      entryPrice: p.entryPriceUsd,
-      currentValue: p.currentValueUsd,
-      unrealizedPnl: p.unrealizedPnlUsd ?? "not_available_yet",
+      entryPrice: p.entryPriceUsd != null ? Number(p.entryPriceUsd) : null,
+      notionalUsd: p.notionalUsd != null ? Number(p.notionalUsd) : null,
+      feeUsd: p.feeUsd != null ? Number(p.feeUsd) : null,
+      currentValue: p.currentValueUsd != null ? Number(p.currentValueUsd) : null,
+      unrealizedPnl: p.unrealizedPnlUsd != null ? Number(p.unrealizedPnlUsd) : "not_available_yet",
       status: p.status,
       openedAt: p.openedAt,
     })),
@@ -93,7 +92,9 @@ async function inspectActivity(namespace?: string, productType?: string, limit =
       chain: a.chain,
       input: a.inputToken ? `${a.inputAmount} ${a.inputToken}` : null,
       output: a.outputToken ? `${a.outputAmount} ${a.outputToken}` : null,
-      valueUsd: a.valueUsd,
+      inputValueUsd: a.inputValueUsd != null ? Number(a.inputValueUsd) : null,
+      outputValueUsd: a.outputValueUsd != null ? Number(a.outputValueUsd) : null,
+      valuationSource: a.valuationSource,
       captureStatus: a.captureStatus,
       createdAt: a.createdAt,
     })),
@@ -103,7 +104,25 @@ async function inspectActivity(namespace?: string, productType?: string, limit =
 async function inspectExecutions(namespace?: string, limit = 20): Promise<ToolResult> {
   const { getByNamespace } = await import("@echo-agent/db/repos/executions.js");
   if (!namespace) {
-    return fail("executions view requires namespace filter");
+    // Allow full history without namespace filter
+    const { query } = await import("@echo-agent/db/client.js");
+    const rows = await query<Record<string, unknown>>(
+      "SELECT id, tool_id, namespace, success, external_refs, duration_ms, created_at FROM protocol_executions ORDER BY created_at DESC LIMIT $1",
+      [limit],
+    );
+    return ok({
+      view: "executions",
+      count: rows.length,
+      executions: rows.map(e => ({
+        id: e.id,
+        toolId: e.tool_id,
+        namespace: e.namespace,
+        success: e.success,
+        externalRefs: e.external_refs,
+        durationMs: e.duration_ms,
+        createdAt: e.created_at,
+      })),
+    });
   }
   const executions = await getByNamespace(namespace, limit);
 
@@ -152,10 +171,12 @@ async function inspectSummary(): Promise<ToolResult> {
   const { getTotalUsd } = await import("@echo-agent/db/repos/balances.js");
   const { getOpen } = await import("@echo-agent/db/repos/open-positions.js");
   const { getLatestSnapshot } = await import("@echo-agent/db/repos/balances.js");
+  const { getTotalRealizedPnl } = await import("@echo-agent/db/repos/pnl-matches.js");
 
   const totalUsd = await getTotalUsd();
   const openPositions = await getOpen();
   const latestSnapshot = await getLatestSnapshot();
+  const realizedPnlRaw = await getTotalRealizedPnl();
 
   return ok({
     view: "summary",
@@ -167,8 +188,145 @@ async function inspectSummary(): Promise<ToolResult> {
       activeChains: latestSnapshot.activeChains,
       at: latestSnapshot.createdAt,
     } : null,
-    realizedPnl: "not_available_yet",
+    realizedPnlUsd: realizedPnlRaw != null ? Number(realizedPnlRaw) : null,
     unrealizedPnl: "not_available_yet",
-    note: "Full PnL reconciliation not yet implemented. Open positions and balances are accurate.",
+    note: "Realized PnL is from FIFO lot matching. Unrealized PnL requires live mark-to-market (not yet available).",
+  });
+}
+
+async function inspectLots(instrumentKey?: string, namespace?: string, status?: string): Promise<ToolResult> {
+  const { query } = await import("@echo-agent/db/client.js");
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  let idx = 1;
+
+  if (instrumentKey) { conditions.push(`instrument_key = $${idx++}`); params.push(instrumentKey); }
+  if (namespace) { conditions.push(`namespace = $${idx++}`); params.push(namespace); }
+  if (status) { conditions.push(`status = $${idx++}`); params.push(status); }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  params.push(50);
+  const rows = await query<Record<string, unknown>>(
+    `SELECT * FROM proj_pnl_lots ${where} ORDER BY opened_at DESC LIMIT $${idx}`,
+    params,
+  );
+
+  return ok({
+    view: "lots",
+    count: rows.length,
+    lots: rows.map(r => ({
+      id: r.id,
+      instrumentKey: r.instrument_key,
+      namespace: r.namespace,
+      chain: r.chain,
+      side: r.side,
+      quantityRaw: r.quantity_raw,
+      remainingQuantityRaw: r.remaining_quantity_raw,
+      costBasisUsd: r.cost_basis_usd != null ? Number(r.cost_basis_usd) : null,
+      priceUsd: r.price_usd != null ? Number(r.price_usd) : null,
+      status: r.status,
+      openedAt: r.opened_at,
+      closedAt: r.closed_at,
+    })),
+  });
+}
+
+async function inspectProfits(walletAddress?: string, namespace?: string): Promise<ToolResult> {
+  const { query } = await import("@echo-agent/db/client.js");
+
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  let idx = 1;
+
+  if (walletAddress) { conditions.push(`wallet_address = $${idx++}`); params.push(walletAddress); }
+  if (namespace) { conditions.push(`namespace = $${idx++}`); params.push(namespace); }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const rows = await query<Record<string, unknown>>(
+    `SELECT instrument_key,
+            COUNT(*) FILTER (WHERE match_kind = 'matched') AS matched_count,
+            COUNT(*) FILTER (WHERE match_kind = 'shortfall') AS shortfall_count,
+            SUM(realized_pnl_usd) FILTER (WHERE match_kind = 'matched') AS realized_pnl_usd,
+            SUM(cost_basis_usd) FILTER (WHERE match_kind = 'matched') AS total_cost_basis,
+            SUM(proceeds_usd) FILTER (WHERE match_kind = 'matched') AS total_proceeds
+     FROM proj_pnl_matches ${where}
+     GROUP BY instrument_key
+     ORDER BY realized_pnl_usd DESC NULLS LAST`,
+    params,
+  );
+
+  return ok({
+    view: "profits",
+    count: rows.length,
+    instruments: rows.map(r => ({
+      instrumentKey: r.instrument_key,
+      matchedCount: Number(r.matched_count),
+      shortfallCount: Number(r.shortfall_count),
+      realizedPnlUsd: r.realized_pnl_usd != null ? Number(r.realized_pnl_usd) : null,
+      totalCostBasis: r.total_cost_basis != null ? Number(r.total_cost_basis) : null,
+      totalProceeds: r.total_proceeds != null ? Number(r.total_proceeds) : null,
+    })),
+  });
+}
+
+async function inspectClosedPositions(namespace?: string): Promise<ToolResult> {
+  const { query } = await import("@echo-agent/db/client.js");
+  const conditions: string[] = ["status != 'open'"];
+  const params: unknown[] = [];
+  let idx = 1;
+
+  if (namespace) { conditions.push(`namespace = $${idx++}`); params.push(namespace); }
+  params.push(50);
+
+  const rows = await query<Record<string, unknown>>(
+    `SELECT * FROM proj_open_positions WHERE ${conditions.join(" AND ")} ORDER BY closed_at DESC NULLS LAST LIMIT $${idx}`,
+    params,
+  );
+
+  return ok({
+    view: "closed_positions",
+    count: rows.length,
+    positions: rows.map(r => ({
+      namespace: r.namespace,
+      type: r.position_type,
+      chain: r.chain,
+      instrument: r.instrument_key,
+      positionKey: r.position_key,
+      entryPrice: r.entry_price_usd != null ? Number(r.entry_price_usd) : null,
+      notionalUsd: r.notional_usd != null ? Number(r.notional_usd) : null,
+      status: r.status,
+      openedAt: r.opened_at,
+      closedAt: r.closed_at,
+    })),
+  });
+}
+
+async function inspectNonTradingHistory(namespace?: string, limit = 20): Promise<ToolResult> {
+  const { query } = await import("@echo-agent/db/client.js");
+  const conditions: string[] = ["product_type IN ('bridge', 'lend', 'wrap', 'allowance', 'reward', 'stake')"];
+  const params: unknown[] = [];
+  let idx = 1;
+
+  if (namespace) { conditions.push(`namespace = $${idx++}`); params.push(namespace); }
+  params.push(limit);
+
+  const rows = await query<Record<string, unknown>>(
+    `SELECT * FROM proj_activity WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC LIMIT $${idx}`,
+    params,
+  );
+
+  return ok({
+    view: "non_trading_history",
+    count: rows.length,
+    activities: rows.map(r => ({
+      namespace: r.namespace,
+      type: r.activity_type,
+      product: r.product_type,
+      chain: r.chain,
+      wallet: r.wallet_address,
+      captureStatus: r.capture_status,
+      createdAt: r.created_at,
+    })),
   });
 }

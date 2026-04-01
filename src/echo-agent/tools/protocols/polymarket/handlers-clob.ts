@@ -183,6 +183,7 @@ export const CLOB_HANDLERS: Record<string, ProtocolHandler> = {
         inputAmount: String(amount), walletAddress: wallet.address, tradeSide: "buy",
         positionKey: isMatched ? `polymarket:${conditionId}:${outcome}` : result.orderID,
         instrumentKey: `polymarket:${conditionId}:${outcome}`,
+        ...(isMatched ? { inputValueUsd: String(amount), unitPriceUsd: String(price), valuationSource: "polymarket_exact" } : { valuationSource: "none" }),
         meta: { dex: "polymarket", conditionId, outcome, price, orderID: result.orderID },
       } },
     };
@@ -231,6 +232,7 @@ export const CLOB_HANDLERS: Record<string, ProtocolHandler> = {
         inputAmount: String(shares), walletAddress: wallet.address, tradeSide: "sell",
         positionKey: isMatched ? `polymarket:${conditionId}:${outcome}` : result.orderID,
         instrumentKey: `polymarket:${conditionId}:${outcome}`,
+        ...(isMatched ? { outputValueUsd: String(shares * price), unitPriceUsd: String(price), valuationSource: "polymarket_exact" } : { valuationSource: "none" }),
         meta: { dex: "polymarket", conditionId, outcome, price, orderID: result.orderID },
       } },
     };

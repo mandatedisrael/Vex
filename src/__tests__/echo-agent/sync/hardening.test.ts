@@ -48,6 +48,11 @@ vi.mock("@echo-agent/db/repos/pnl-lots.js", () => ({
   reduceLot: (...args: unknown[]) => mockReduceLot(...args),
 }));
 
+vi.mock("@echo-agent/db/repos/pnl-matches.js", () => ({
+  recordMatchFromLot: vi.fn().mockResolvedValue(1),
+  recordShortfall: vi.fn().mockResolvedValue(1),
+}));
+
 // ── Catalog mock — inject fake mutating handler ─────────────────
 
 const fakeHandler = vi.fn();
@@ -186,8 +191,8 @@ describe("pre-engine hardening — runtime gate", () => {
       const { projectPosition } = await import("../../../echo-agent/sync/position-projector.js");
 
       mockGetOpenLots.mockResolvedValueOnce([
-        { id: 1, remainingQuantityRaw: "200" },
-        { id: 2, remainingQuantityRaw: "100" },
+        { id: 1, remainingQuantityRaw: "200", quantityRaw: "200", costBasisUsd: null },
+        { id: 2, remainingQuantityRaw: "100", quantityRaw: "100", costBasisUsd: null },
       ]);
 
       await projectPosition({

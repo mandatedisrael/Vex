@@ -26,6 +26,14 @@ db/
 | E. Protocol Pipeline | `protocol_executions`, `protocol_capture_items`, `protocol_sync_jobs`, `protocol_sync_runs`, `proj_balances`, `proj_portfolio_snapshots`, `proj_open_positions`, `proj_pnl_lots`, `proj_activity` | Execution audit, batch capture items, sync pipeline, projection tables, FIFO lot ledger |
 | F. Web Cache | `search_cache`, `fetch_cache` | Tavily search/fetch result cache with TTL |
 
+### 003_w4_pnl.sql (PnL extensions)
+
+| Table/Column | Purpose |
+|--------------|---------|
+| `proj_activity` +5 columns | `input_value_usd`, `output_value_usd`, `fee_value_usd`, `unit_price_usd`, `valuation_source` — USD valuation from source APIs |
+| `proj_pnl_matches` (new) | FIFO lot match ledger — `match_kind` (matched/shortfall), `lot_id` (nullable), `cost_basis_usd`, `proceeds_usd`, `realized_pnl_usd`. Pro-rata math in SQL NUMERIC. |
+| `proj_open_positions` +2 columns | `notional_usd`, `fee_usd` — prediction position economics |
+
 ### 002_engine_missions.sql (engine extensions)
 
 | Table | Purpose |
@@ -71,6 +79,7 @@ db/
 | `activity.ts` | Projection | `insertActivity()` (with `captureItemId`), `getActivities()`, `getByExecution()` (returns list — batch captures produce N rows), `getByPositionKey()`, `getByInstrumentKey()` |
 | `open-positions.ts` | Projection | `upsertPosition()`, `closePosition()`, `getOpen()`, `getByPositionKey()` |
 | `pnl-lots.ts` | Projection | `openLot()`, `getOpenLots()` (FIFO ordered), `reduceLot()`, `closeLot()` |
+| `pnl-matches.ts` | Projection | `recordMatchFromLot()` (SQL pro-rata), `recordShortfall()`, `getMatchesByInstrument()`, `getMatchesBySell()`, `getTotalRealizedPnl()` |
 | `usage.ts` | Inference | `logUsage()` (with cached/reasoning tokens), `getStats()` |
 | `billing.ts` | Inference | `insertSnapshot()`, `getLatest()`, `getHistory()` |
 | `missions.ts` | Engine | `createDraft()`, `updateDraft()`, `setStatus()`, `setApprovedAt()`, `getMission()`, `getMissionBySession()`, `getActiveMission()` |

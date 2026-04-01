@@ -131,6 +131,17 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
     if (!input || !output || amount == null) return fail("Missing required: inputToken, outputToken, amount");
     const result = await executeJupiterSwap(input, output, amount, walletSecret(), { slippageBps: num(p, "slippageBps") });
     const cls = classifySolanaSwap(result.inputToken.address, result.outputToken.address);
+
+    // Side-aware unitPriceUsd (best-effort, from human-readable amounts)
+    let unitPriceUsd: string | undefined;
+    if (cls.tradeSide === "buy" && result.order.inUsdValue != null) {
+      const outputUi = parseFloat(result.outputAmount);
+      if (outputUi > 0) unitPriceUsd = String(result.order.inUsdValue / outputUi);
+    } else if (cls.tradeSide === "sell" && result.order.outUsdValue != null) {
+      const inputUi = parseFloat(result.inputAmount);
+      if (inputUi > 0) unitPriceUsd = String(result.order.outUsdValue / inputUi);
+    }
+
     return {
       success: true,
       output: JSON.stringify(result, null, 2),
@@ -143,6 +154,10 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
           inputAmount: result.inputAmountRaw, outputAmount: result.outputAmountRaw,
           signature: result.signature, walletAddress: walletAddress(p),
           tradeSide: cls.tradeSide, instrumentKey: `solana:${cls.instrumentMint}`,
+          inputValueUsd: result.order.inUsdValue != null ? String(result.order.inUsdValue) : undefined,
+          outputValueUsd: result.order.outUsdValue != null ? String(result.order.outUsdValue) : undefined,
+          unitPriceUsd,
+          valuationSource: result.order.inUsdValue != null ? "jupiter_exact" : "none",
           meta: { inputAmountUi: result.inputAmount, outputAmountUi: result.outputAmount, ...cls.meta },
         },
       },
@@ -190,6 +205,7 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
       marketId, isYes, isBuy: true, depositAmount, depositMint: JUPITER_PREDICTION_USDC_MINT,
     });
     const positionPubkey = result.raw.order.positionPubkey;
+    const order = result.raw.order;
     return {
       success: true,
       output: JSON.stringify(result, null, 2),
@@ -200,7 +216,11 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
           type: "prediction", chain: "solana", status: "open",
           walletAddress: walletAddress(p), tradeSide: "buy",
           positionKey: positionPubkey, instrumentKey: `solana:predict:${marketId}:${normalizedSide}`,
-          meta: { marketId, side: normalizedSide },
+          inputValueUsd: order.orderCostUsd,
+          unitPriceUsd: order.newAvgPriceUsd,
+          feeValueUsd: order.estimatedTotalFeeUsd,
+          valuationSource: "prediction_exact",
+          meta: { marketId, side: normalizedSide, sizeUsd: order.newSizeUsd, payoutUsd: order.newPayoutUsd },
         },
       },
     };
@@ -221,7 +241,11 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
           walletAddress: walletAddress(p), tradeSide: "sell",
           positionKey: pk,
           instrumentKey: `solana:predict:${order.marketId}:${outcome}`,
-          meta: { positionPubkey: pk, marketId: order.marketId, side: outcome },
+          inputValueUsd: order.orderCostUsd,
+          unitPriceUsd: order.newAvgPriceUsd,
+          feeValueUsd: order.estimatedTotalFeeUsd,
+          valuationSource: "prediction_exact",
+          meta: { positionPubkey: pk, marketId: order.marketId, side: outcome, sizeUsd: order.newSizeUsd, payoutUsd: order.newPayoutUsd },
         },
       },
     };
@@ -240,6 +264,8 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
         _tradeCapture: {
           type: "prediction", chain: "solana", status: "claimed",
           walletAddress: walletAddress(p), positionKey: pk,
+          outputValueUsd: pos.payoutAmountUsd,
+          valuationSource: "prediction_exact",
           // No instrumentKey — claim response has marketPubkey (account address), not marketId.
           // Downstream matches via positionKey from the buy capture.
           meta: { positionPubkey: pk, side: outcome, payoutAmountUsd: pos.payoutAmountUsd },
@@ -255,14 +281,27 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
       let pk: string | undefined;
       let marketId: string | undefined;
       let outcome: string | undefined;
+      let itemValuation: Record<string, string | undefined> = {};
 
       if ("order" in item.raw) {
-        pk = item.raw.order.positionPubkey;
-        marketId = item.raw.order.marketId;
-        outcome = item.raw.order.isYes ? "yes" : "no";
+        const order = item.raw.order;
+        pk = order.positionPubkey;
+        marketId = order.marketId;
+        outcome = order.isYes ? "yes" : "no";
+        itemValuation = {
+          inputValueUsd: order.orderCostUsd,
+          unitPriceUsd: order.newAvgPriceUsd,
+          feeValueUsd: order.estimatedTotalFeeUsd,
+          valuationSource: "prediction_exact",
+        };
       } else if ("position" in item.raw) {
-        pk = item.raw.position.positionPubkey;
-        outcome = item.raw.position.isYes ? "yes" : "no";
+        const pos = item.raw.position;
+        pk = pos.positionPubkey;
+        outcome = pos.isYes ? "yes" : "no";
+        itemValuation = {
+          outputValueUsd: pos.payoutAmountUsd,
+          valuationSource: "prediction_exact",
+        };
       }
 
       return {
@@ -272,6 +311,7 @@ export const SOLANA_JUPITER_HANDLERS: Record<string, ProtocolHandler> = {
         signature: item.signature,
         positionKey: pk,
         instrumentKey: marketId && outcome ? `solana:predict:${marketId}:${outcome}` : undefined,
+        ...itemValuation,
         meta: { kind: item.kind, positionPubkey: pk, outcome },
       };
     });

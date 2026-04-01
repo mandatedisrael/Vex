@@ -21,6 +21,12 @@ vi.mock("@echo-agent/db/repos/balances.js", () => ({
   getLatestSnapshot: () => mockGetLatestSnapshot(),
   getSnapshotHistory: (...a: unknown[]) => mockGetSnapshotHistory(...a),
 }));
+
+const mockGetTotalRealizedPnl = vi.fn().mockResolvedValue(null);
+vi.mock("@echo-agent/db/repos/pnl-matches.js", () => ({
+  getTotalRealizedPnl: (...a: unknown[]) => mockGetTotalRealizedPnl(...a),
+}));
+
 vi.mock("@echo-agent/db/client.js", () => ({
   execute: vi.fn(), query: vi.fn().mockResolvedValue([]), queryOne: vi.fn().mockResolvedValue(null),
 }));
@@ -73,10 +79,9 @@ describe("portfolio_inspect tool", () => {
   });
 
   describe("executions", () => {
-    it("requires namespace", async () => {
+    it("works without namespace (full history)", async () => {
       const r = await handlePortfolioInspect({ view: "executions" }, ctx);
-      expect(r.success).toBe(false);
-      expect(r.output).toContain("requires namespace");
+      expect(r.success).toBe(true);
     });
 
     it("passes namespace and limit", async () => {
@@ -108,10 +113,21 @@ describe("portfolio_inspect tool", () => {
         totalUsd: 4900, pnlVsPrev: 100, pnlPctVsPrev: 2.08,
         activeChains: 3, createdAt: "2026-03-29",
       });
+      mockGetTotalRealizedPnl.mockResolvedValueOnce(null);
       const r = await handlePortfolioInspect({ view: "summary" }, ctx);
       expect(r.data!.totalBalanceUsd).toBe(5000);
       expect(r.data!.openPositionCount).toBe(2);
-      expect(r.data!.realizedPnl).toBe("not_available_yet");
+      expect(r.data!.realizedPnlUsd).toBeNull();
+      expect(r.data!.unrealizedPnl).toBe("not_available_yet");
+    });
+
+    it("shows realized PnL when matches exist", async () => {
+      mockGetTotalUsd.mockResolvedValueOnce(1000);
+      mockGetOpen.mockResolvedValueOnce([]);
+      mockGetLatestSnapshot.mockResolvedValueOnce(null);
+      mockGetTotalRealizedPnl.mockResolvedValueOnce("42.50");
+      const r = await handlePortfolioInspect({ view: "summary" }, ctx);
+      expect(r.data!.realizedPnlUsd).toBe(42.50);
     });
   });
 });

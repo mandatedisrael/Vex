@@ -64,7 +64,7 @@ export interface SwapRouteSummary {
   route: SwapRouteStep[][];
   routeID: string;
   checksum: string;
-  timestamp: string;
+  timestamp?: string;
 }
 
 export interface SwapRouteResponse {

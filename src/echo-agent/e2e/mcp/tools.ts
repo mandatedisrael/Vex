@@ -120,7 +120,7 @@ export function registerTools(server: McpServer): void {
     "echo_inspect_pipeline",
     "Read-only, whitelisted inspection of pipeline tables. Filters are per-table aware — only columns that exist in each table are applied.",
     {
-      table: z.enum(["protocol_executions", "protocol_capture_items", "proj_activity", "proj_open_positions", "proj_pnl_lots"]).describe("Table to inspect"),
+      table: z.enum(["protocol_executions", "protocol_capture_items", "proj_activity", "proj_open_positions", "proj_pnl_lots", "proj_pnl_matches"]).describe("Table to inspect"),
       limit: z.number().optional().describe("Max rows (default 20, max 50)"),
       executionId: z.number().optional().describe("Filter by execution_id (or id for protocol_executions)"),
       toolId: z.string().optional().describe("Filter by tool_id (protocol_executions only)"),

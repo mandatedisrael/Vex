@@ -305,9 +305,19 @@ LLM uses `discover_tools` to search, `execute_tool` to call. Each namespace has 
 - **E2E test harness**: Docker Postgres (port 5555, tmpfs) + local MCP server (9 echo_* tools). Automated discovery + preview smoke. Manual real-funds testing via Claude + `echo_execute`. Replay verification via `echo_replay_verify`.
 - Tests passing across 66 test files
 
+### W4A — USD-exact valuation + realized PnL (done)
+- **Valuation extraction**: handlers emit `inputValueUsd`, `outputValueUsd`, `unitPriceUsd`, `valuationSource` from source APIs (Jupiter, KyberSwap, Polymarket matched path, Jupiter prediction). Jaine/Slop: honest `"none"`.
+- **`valuationExpected` contract**: `MutationContract` extended with `"exact"` | `"conditional"` | `"none"` per tool. Regression-testable.
+- **Realized PnL**: `proj_pnl_matches` FIFO match ledger with SQL-side NUMERIC pro-rata math. `cost_basis_usd`, `proceeds_usd`, `realized_pnl_usd` per match. Shortfall evidence: `match_kind = 'shortfall'`, `lot_id = NULL`.
+- **Prediction valuation**: `entry_price_usd`, `notional_usd`, `fee_usd` on `proj_open_positions`.
+- **`portfolio_inspect`**: new views `lots`, `profits`, `closed_positions`, `non_trading_history`. Summary includes `realizedPnlUsd`.
+- **DB migration**: `003_w4_pnl.sql` — new columns + `proj_pnl_matches` table.
+
 ### Not yet implemented
-- **PnL reconcilers** (phase 4) — realized/unrealized PnL calculation from lots + positions
-- **Read models for UI** — portfolio curve, PnL by protocol, agent performance summary
+- **Unrealized PnL / mark-to-market** — requires live price feed (W4B)
+- **Benchmark/quote-asset PnL** (SOL/ETH/USDC/0G) — W4B
+- **Khalani fallback valuation** for Jaine/Slop — W4B
+- **Read models for UI** — portfolio curve, PnL by protocol
 - **Transport layer** — HTTP/SSE server, routes, UI
 
 ---

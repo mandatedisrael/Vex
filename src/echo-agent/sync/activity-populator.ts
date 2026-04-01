@@ -78,6 +78,10 @@ export async function populateActivity(
 
   const tradeSide = deriveTradeSide(tradeCapture, toolId, productType);
 
+  // Extract valuation fields as strings — preserve precision for NUMERIC columns
+  const inputValueUsd = typeof tradeCapture.inputValueUsd === "string" ? tradeCapture.inputValueUsd : null;
+  const outputValueUsd = typeof tradeCapture.outputValueUsd === "string" ? tradeCapture.outputValueUsd : null;
+
   const id = await activityRepo.insertActivity({
     namespace,
     activityType: type,
@@ -93,7 +97,12 @@ export async function populateActivity(
     outputToken: typeof tradeCapture.outputTokenAddress === "string" ? tradeCapture.outputTokenAddress
       : typeof tradeCapture.outputToken === "string" ? tradeCapture.outputToken : null,
     outputAmount: typeof tradeCapture.outputAmount === "string" ? tradeCapture.outputAmount : null,
-    valueUsd: null, // Calculated later by reconciler
+    valueUsd: null,
+    inputValueUsd,
+    outputValueUsd,
+    feeValueUsd: typeof tradeCapture.feeValueUsd === "string" ? tradeCapture.feeValueUsd : null,
+    unitPriceUsd: typeof tradeCapture.unitPriceUsd === "string" ? tradeCapture.unitPriceUsd : null,
+    valuationSource: typeof tradeCapture.valuationSource === "string" ? tradeCapture.valuationSource : null,
     captureStatus: typeof tradeCapture.status === "string" ? tradeCapture.status : null,
     positionKey: typeof tradeCapture.positionKey === "string" ? tradeCapture.positionKey : null,
     instrumentKey: typeof tradeCapture.instrumentKey === "string" ? tradeCapture.instrumentKey : null,
