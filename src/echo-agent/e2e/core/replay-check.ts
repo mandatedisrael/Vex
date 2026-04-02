@@ -24,8 +24,10 @@ interface ProjectionHashes {
 }
 
 async function hashProjections(): Promise<ProjectionHashes> {
+  // Hash business fields only — exclude capture_item_id (auto-increment FK that
+  // changes after TRUNCATE without RESTART IDENTITY, causing false hash drift)
   const activityRows = await query(
-    `SELECT execution_id, capture_item_id, namespace, activity_type, product_type,
+    `SELECT execution_id, namespace, activity_type, product_type,
             trade_side, chain, wallet_address, instrument_key, position_key, capture_status,
             input_value_usd, output_value_usd, fee_value_usd, unit_price_usd, valuation_source,
             benchmark_asset_key, settlement_asset_key, input_value_native, output_value_native
@@ -49,12 +51,14 @@ async function hashProjections(): Promise<ProjectionHashes> {
     [],
   );
 
+  // Hash business fields only — exclude sell_activity_id and lot_id (auto-increment FKs
+  // that change after TRUNCATE without RESTART IDENTITY, causing false hash drift)
   const matchRows = await query(
-    `SELECT match_kind, sell_activity_id, lot_id, instrument_key, wallet_address,
+    `SELECT match_kind, instrument_key, wallet_address,
             quantity_matched, cost_basis_usd, proceeds_usd, realized_pnl_usd,
             cost_basis_native, proceeds_native, realized_pnl_native, benchmark_asset_key,
             namespace, chain
-     FROM proj_pnl_matches ORDER BY sell_activity_id, id`,
+     FROM proj_pnl_matches ORDER BY instrument_key, namespace, id`,
     [],
   );
 

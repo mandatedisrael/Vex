@@ -93,7 +93,7 @@ export const KHALANI_TOOLS: readonly ProtocolToolManifest[] = [
       fromChain: "ethereum",
       fromToken: "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
       toChain: "solana",
-      toToken: "EPjFWdd5AufqSSqeM2qT6fP2J4wR1KjqP7q3QK5r6i7",
+      toToken: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       amount: "1000000",
     },
   },

@@ -89,14 +89,9 @@ export async function recordSyntheticCapture(opts: SyntheticCaptureOpts): Promis
   }
 
   // Push through capture pipeline → activity → position projector
-  try {
-    await populateCaptureItems(executionId, toolId, namespace, tradeCapture, undefined, externalRefs);
-  } catch (err) {
-    logger.warn("synthetic_capture.pipeline_failed", {
-      toolId, namespace, executionId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  // Let errors propagate — caller must know if projection failed so closed count is truthful.
+  // Audit row in protocol_executions remains (committed above) as evidence of attempt.
+  await populateCaptureItems(executionId, toolId, namespace, tradeCapture, undefined, externalRefs);
 
   logger.info("synthetic_capture.recorded", {
     toolId, namespace, executionId, source,

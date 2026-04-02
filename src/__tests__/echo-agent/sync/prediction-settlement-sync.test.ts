@@ -196,11 +196,30 @@ describe("reconcilePredictionSettlements — Polymarket", () => {
   });
 });
 
-describe("synthetic capture validation", () => {
-  it("rejects capture without required fields", async () => {
-    const { recordSyntheticCapture: realRecord } = await import("../../../echo-agent/sync/synthetic-capture.js");
-    // Unmocked — will throw from validateSyntheticCapture
-    // Can't easily test without removing our mock, so test the shape expectation
-    expect(mockRecordSyntheticCapture).toBeDefined();
+describe("settlement sync — pipeline failure path", () => {
+  const jupiterPosition = {
+    id: 1, namespace: "solana", instrument_key: "solana:predict:POLY-123:yes",
+    position_key: "PK_FAIL", wallet_address: "GoVYsnz...", contracts: "3",
+    notional_usd: "1680000", data: {},
+  };
+
+  it("counts errors (not closed) when recordSyntheticCapture throws", async () => {
+    mockQuery.mockResolvedValue([jupiterPosition]);
+    mockGetHistory.mockResolvedValue({
+      data: [{
+        positionPubkey: "PK_FAIL", eventType: "position_lost",
+        contractsSettled: "3", realizedPnl: "-1640000",
+        payoutAmountUsd: "0", grossProceedsUsd: "0",
+        totalCostUsd: "1680000", timestamp: 1712000000,
+      }],
+    });
+    mockGetPositions.mockResolvedValue({ data: [] });
+
+    // Simulate pipeline failure
+    mockRecordSyntheticCapture.mockRejectedValueOnce(new Error("populateCaptureItems failed"));
+
+    const result = await reconcilePredictionSettlements();
+    expect(result.closed).toBe(0);
+    expect(result.errors).toBe(1);
   });
 });

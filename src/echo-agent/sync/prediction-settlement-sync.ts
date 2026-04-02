@@ -102,13 +102,22 @@ async function reconcileJupiterSettlements(
     "@tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/service.js"
   );
 
-  // One API call per wallet — fetch history + positions
-  const [historyResp, positionsResp] = await Promise.all([
-    getJupiterPredictionHistory({ ownerPubkey: walletAddress, start: 0, end: 100 }),
-    getJupiterPredictionPositions({ ownerPubkey: walletAddress }),
-  ]);
+  // Fetch ALL history pages — settlement event may be beyond first 100 entries
+  const allHistoryEvents: Awaited<ReturnType<typeof getJupiterPredictionHistory>>["data"] = [];
+  const PAGE_SIZE = 100;
+  let historyStart = 0;
+  let hasMore = true;
+  while (hasMore) {
+    const page = await getJupiterPredictionHistory({ ownerPubkey: walletAddress, start: historyStart, end: historyStart + PAGE_SIZE });
+    const events = page.data ?? [];
+    allHistoryEvents.push(...events);
+    hasMore = page.pagination?.hasNext === true && events.length === PAGE_SIZE;
+    historyStart += PAGE_SIZE;
+  }
 
-  const historyEvents = historyResp.data ?? [];
+  const positionsResp = await getJupiterPredictionPositions({ ownerPubkey: walletAddress });
+
+  const historyEvents = allHistoryEvents;
   const apiPositions = positionsResp.data ?? [];
 
   // Build lookup maps
@@ -225,11 +234,11 @@ async function reconcilePolymarketSettlements(
   const { getPolyDataClient } = await import("@tools/polymarket/data/client.js");
   const closedPositions = await getPolyDataClient().getClosedPositions(proxyWallet);
 
-  // Build lookup: conditionId:outcome → closedPosition
+  // Build lookup: conditionId:outcome → closedPosition (case-insensitive on outcome)
   const closedByKey = new Map<string, typeof closedPositions[number]>();
   for (const cp of closedPositions) {
     if (cp.conditionId && cp.outcome) {
-      const key = `${cp.conditionId}:${cp.outcome}`;
+      const key = `${cp.conditionId}:${cp.outcome.toUpperCase()}`;
       closedByKey.set(key, cp);
     }
   }
@@ -242,8 +251,8 @@ async function reconcilePolymarketSettlements(
     const parsed = parseInstrumentKey(instrumentKey);
     if (parsed.kind !== "prediction" || !parsed.marketId || !parsed.side) { skipped++; continue; }
 
-    // Match: polymarket:{conditionId}:{outcome} → conditionId:outcome
-    const lookupKey = `${parsed.marketId}:${parsed.side}`;
+    // Match: polymarket:{conditionId}:{outcome} → conditionId:OUTCOME (normalized)
+    const lookupKey = `${parsed.marketId}:${parsed.side.toUpperCase()}`;
     const closedPos = closedByKey.get(lookupKey);
     if (!closedPos) { skipped++; continue; }
 

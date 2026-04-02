@@ -140,6 +140,10 @@ export async function processNextRun(): Promise<boolean> {
       const syncResult = await selectiveBalanceSync(chainHint);
       const resultObj: Record<string, unknown> = syncResult ? { ...syncResult } : { skipped: true };
       await syncRepo.completeRun(run.id, resultObj, syncResult?.tokensUpdated ?? 0);
+    } else if (job.syncType === "prediction_settlement") {
+      const { reconcilePredictionSettlements } = await import("./prediction-settlement-sync.js");
+      const settlementResult = await reconcilePredictionSettlements();
+      await syncRepo.completeRun(run.id, { ...settlementResult }, settlementResult.closed);
     } else {
       await syncRepo.completeRun(run.id, { skipped: true, reason: `Unknown: ${job.syncType}` }, 0);
     }
