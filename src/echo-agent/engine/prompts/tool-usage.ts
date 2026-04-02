@@ -36,6 +36,20 @@ Execute a discovered tool by toolId with required params.
 6. **Rate awareness** — don't call the same tool repeatedly in a loop. If you need to poll, use reasonable intervals.
 7. **Param types** — respect the declared param types (string, number, boolean). Don't pass numbers as strings or vice versa.
 
+## Token Verification Rule
+
+Before ANY mutating tool that takes a token address, symbol, or mint:
+1. Resolve via a read tool FIRST:
+   - Primary: khalani.tokens.search (symbol/name → address per chain, cross-chain)
+   - EVM confirmation: kyberswap.tokens.search (verify token visible on target chain)
+   - Solana: solana.tokens.search (verify mint on Solana)
+2. Use the address from the tool result — NOT from memory, examples, or prior conversations
+3. Never copy addresses from exampleParams — those demonstrate param format only
+4. If resolution fails, inform the user instead of guessing
+
+Note: this is behavioral guidance. The runtime validates tokens where possible
+but cannot prove that an address came from a prior read tool call.
+
 ## Self-Inspection
 
 Use \`portfolio_inspect\` to check your own state before making decisions:

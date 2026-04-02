@@ -26,7 +26,7 @@ import { slugToChainId } from "./chains.js";
 import logger from "../../utils/logger.js";
 import type { KyberChainSlug } from "./types.js";
 
-// ── ERC-20 ABI (minimal: allowance + approve) ──────────────────────
+// ── ERC-20 ABI (minimal: allowance + approve + metadata) ─────────────
 
 const ERC20_ABI = [
   {
@@ -41,6 +41,27 @@ const ERC20_ABI = [
     name: "approve",
     outputs: [{ name: "", type: "bool" }],
     stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "decimals",
+    outputs: [{ name: "", type: "uint8" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "symbol",
+    outputs: [{ name: "", type: "string" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "name",
+    outputs: [{ name: "", type: "string" }],
+    stateMutability: "view",
     type: "function",
   },
 ] as const;
@@ -112,6 +133,85 @@ export function getKyberEvmClients(slug: KyberChainSlug, privateKey: Hex): Kyber
   }) as WalletClient<Transport, Chain>;
 
   return { publicClient, walletClient };
+}
+
+// ── Read-only public client ─────────────────────────────────────────
+
+/**
+ * Get a read-only public client for a chain (no wallet needed).
+ * Used for on-chain token metadata reads.
+ */
+export function getKyberPublicClient(slug: KyberChainSlug): PublicClient<Transport, Chain> {
+  const chain = toViemChain(slug);
+  const rpcUrl = DEFAULT_RPC[slug]!;
+  return createPublicClient({
+    chain,
+    transport: http(rpcUrl, { timeout: RPC_TIMEOUT_MS, retryCount: RPC_RETRY_COUNT }),
+  }) as PublicClient<Transport, Chain>;
+}
+
+// ── On-chain ERC-20 metadata ────────────────────────────────────────
+
+export interface Erc20Metadata {
+  address: Address;
+  symbol: string;
+  name: string;
+  decimals: number;
+  isNative: false;
+}
+
+/**
+ * Read ERC-20 metadata directly from chain.
+ *
+ * Tolerant handling:
+ * - decimals() — mandatory, throw if missing (not a valid ERC-20)
+ * - symbol() — optional, some tokens return bytes32 or revert → "UNKNOWN"
+ * - name() — optional, some tokens revert → "Unknown Token"
+ */
+export async function readErc20Metadata(slug: KyberChainSlug, address: Address): Promise<Erc20Metadata> {
+  const client = getKyberPublicClient(slug);
+
+  // decimals — mandatory
+  let decimals: number;
+  try {
+    decimals = await client.readContract({
+      address,
+      abi: ERC20_ABI,
+      functionName: "decimals",
+    });
+  } catch (err) {
+    throw new EchoError(
+      ErrorCodes.KYBER_TOKEN_NOT_FOUND,
+      `Cannot read decimals for ${address} on ${slug} — not a valid ERC-20 contract`,
+      "Verify the token address and chain are correct.",
+    );
+  }
+
+  // symbol — optional, tolerant
+  let symbol = "UNKNOWN";
+  try {
+    symbol = await client.readContract({
+      address,
+      abi: ERC20_ABI,
+      functionName: "symbol",
+    });
+  } catch {
+    logger.debug({ event: "kyberswap.erc20.symbol_failed", address, slug });
+  }
+
+  // name — optional, tolerant
+  let name = "Unknown Token";
+  try {
+    name = await client.readContract({
+      address,
+      abi: ERC20_ABI,
+      functionName: "name",
+    });
+  } catch {
+    logger.debug({ event: "kyberswap.erc20.name_failed", address, slug });
+  }
+
+  return { address, symbol, name, decimals, isNative: false as const };
 }
 
 // ── Spender validation ──────────────────────────────────────────────

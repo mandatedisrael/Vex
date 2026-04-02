@@ -5,7 +5,7 @@ export const ZAP_TOOLS: readonly ProtocolToolManifest[] = [
     toolId: "kyberswap.zap.in",
     namespace: "kyberswap",
     lifecycle: "active",
-    description: "Add liquidity to a concentrated LP position via one-click zap. Handles routing, swaps, and position creation.",
+    description: "Add liquidity to a concentrated LP position via one-click zap. Handles routing, swaps, and position creation. Resolve tokenIn address via kyberswap.tokens.search first.",
     mutating: true,
     params: [
       { key: "chain", type: "string", required: true, description: "Chain slug or alias." },
@@ -26,7 +26,7 @@ export const ZAP_TOOLS: readonly ProtocolToolManifest[] = [
     toolId: "kyberswap.zap.out",
     namespace: "kyberswap",
     lifecycle: "active",
-    description: "Remove liquidity from a concentrated LP position — converts to a single output token.",
+    description: "Remove liquidity from a concentrated LP position — converts to a single output token. Resolve tokenOut address via kyberswap.tokens.search first.",
     mutating: true,
     params: [
       { key: "chain", type: "string", required: true, description: "Chain slug or alias." },

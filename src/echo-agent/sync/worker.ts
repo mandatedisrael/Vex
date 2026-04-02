@@ -75,6 +75,11 @@ export async function drainPendingRuns(): Promise<DrainResult> {
           result = { selective: true, families, tokensUpdated: totalTokens };
           rowsAffected = totalTokens;
         }
+      } else if (syncType === "prediction_settlement") {
+        const { reconcilePredictionSettlements } = await import("./prediction-settlement-sync.js");
+        const settlementResult = await reconcilePredictionSettlements();
+        result = { ...settlementResult };
+        rowsAffected = settlementResult.closed;
       } else {
         result = { skipped: true, reason: `Unknown sync type: ${syncType}` };
         logger.warn("sync.worker.unknown_type", { syncType, runCount: runs.length });

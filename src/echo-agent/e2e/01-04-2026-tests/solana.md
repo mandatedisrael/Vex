@@ -169,9 +169,48 @@ Initial attempts with `amountUsdc: 0.5` returned HTTP 400 — likely minimum ord
 | | `meta.contracts` | `"3"` | requiredMetaFields guard | ✅ |
 | | `meta.payoutUsd` | `"3000000"` | max payout | ✅ |
 
-### 4.3 Prediction Sell
+### 4.3 Prediction Settlement (Auto-Resolved)
 
-**Status: PENDING** — Position open, waiting for match result (Mets vs Cardinals game in progress at test time). Will test `predict.sell` in next session.
+**Result: CONFIRMED — position auto-settled by protocol**
+
+The Mets lost. Jupiter Prediction keeper automatically settled the position ~5h17m after purchase. **No user action required — no `execute_tool` call happened.**
+
+**On-chain settlement timeline** (from `solana.predict.history`):
+
+| # | Event | Timestamp (UTC) | Δ from buy |
+|---|-------|-----------------|------------|
+| 1 | `order_created` | Apr 1, 17:07:58 | — |
+| 2 | `order_filled` | Apr 1, 17:08:07 | +9s |
+| 3 | `position_lost` | Apr 1, 22:25:41 | +5h 17m |
+
+**Settlement data from API** (`eventType: "position_lost"`):
+
+| Field | Value | Notes |
+|-------|-------|-------|
+| `contractsSettled` | `3` | All contracts settled |
+| `realizedPnl` | `-1642665` | -$1.64 USDC (6 decimals) |
+| `grossProceedsUsd` | `0` | Lost — no payout |
+| `payoutAmountUsd` | `0` | Lost — no payout |
+| `keeperPubkey` | `8jhWXE...` | Protocol keeper executed settlement |
+| `marketMetadata.result` | `"no"` | Mets lost |
+| `marketMetadata.status` | `"no"` | Market resolved NO |
+
+**DB impact: NONE** — our pipeline never captured this event because settlement bypasses `execute_tool`. The position remains `open` in our DB (or missing entirely after tmpfs restart). This is the core problem documented in section 9.6.
+
+### 4.4 BTC ↑80,000 Prediction (Still Open)
+
+**Status: OPEN** — expires 2026-12-31.
+
+| Field | Value |
+|-------|-------|
+| `marketId` | `POLY-1345530` |
+| `contracts` | 3 |
+| `avgPriceUsd` | $0.64 |
+| `markPriceUsd` | $0.62 |
+| `pnlUsd` | -$0.06 (-3.12%) |
+| `pnlUsdAfterFees` | -$0.11 (-5.72%) |
+| `payoutUsd` | $3.00 (if BTC hits 80k) |
+| `closeTime` | Dec 31, 2026 |
 
 ---
 
@@ -253,12 +292,14 @@ The hash includes `sell_activity_id` — a FK pointing to `proj_activity.id`. Af
 | 4 | Spot sell (Punch→SOL) | ✅ PASS |
 | 5 | SOL→USDC swap | ✅ PASS |
 | 6 | Prediction buy (Jupiter) | ✅ PASS |
-| 7 | Prediction sell | ⏳ PENDING |
+| 7 | Prediction settlement | ⚠️ AUTO-RESOLVED (not captured) |
 | 8 | Lend deposit (USDC) | ✅ PASS |
 | 9 | Lend withdraw (USDC) | ✅ PASS |
 | 10 | Replay verify | ⚠️ PARTIAL |
 
-**9/10 PASS, 1 pending (prediction sell — game in progress).**
+**8/10 PASS, 1 design gap found (prediction settlement invisible), 1 partial (replay hash).**
+
+**Critical finding**: Prediction settlement (section 4.3) exposed a design gap — protocol auto-settlement bypasses our capture pipeline entirely. Applies to both Jupiter Prediction and Polymarket. Solution: scheduled settlement sync job (section 10, item 0).
 
 ---
 
@@ -279,9 +320,11 @@ The hash includes `sell_activity_id` — a FK pointing to `proj_activity.id`. Af
 - `benchmarkAssetKey: "SOL"` set only when SOL is actually one leg of the swap
 - Token↔USDC swaps correctly get `benchmarkAssetKey: null` (no SOL leg = no native PnL)
 
-### W4 Full: Prediction MTM
+### W4 Full: Prediction MTM + Settlement
 
 **PARTIALLY.** Position opened with all MTM-critical fields (`contracts`, `entry_price_usd`, `notional_usd`, `fee_usd`, `settlement_asset_key`). MTM refresh not yet triggered (requires `fullBalanceSync` or `drainPendingRuns`). `current_value_usd` / `unrealized_pnl_usd` remain null until MTM runs.
+
+**Critical gap discovered**: Protocol auto-settlement (keeper-driven `position_lost`/`position_won`) bypasses `execute_tool` entirely. Position remains zombie in DB. The `predict.history` API provides full settlement data (`realizedPnl`, `contractsSettled`, `payoutAmountUsd`) — a sync job can close these positions retroactively. Same problem applies to Polymarket. See section 9.6 and 10.0 for full analysis and proposed solution.
 
 ### Capture Pipeline Integrity
 
@@ -331,6 +374,23 @@ SOL deposit to Jupiter Lend requires pre-initialized wSOL Associated Token Accou
 
 NUMERIC pro-rata values differ marginally between initial computation and replay. Not data corruption — functional values are the same. Hash comparison is too strict for NUMERIC precision. Consider rounding before hashing or epsilon-based comparison.
 
+### 9.6 Prediction Settlement Invisible to Pipeline (CRITICAL DESIGN GAP)
+
+**Severity: High**
+
+Prediction markets (Jupiter Prediction, Polymarket) settle automatically via on-chain keepers. The settlement event (`position_lost`, `position_won`, `claim`) never passes through `execute_tool` — so our capture pipeline never sees it.
+
+**Consequence**: Prediction positions remain `open` in `proj_open_positions` forever. No `close` activity in `proj_activity`. No realized PnL in `proj_pnl_matches`. The position is a zombie.
+
+**Observed timeline** (Mets bet, section 4.3):
+- Buy via `execute_tool` at 17:08 → captured correctly (lot opened, position opened)
+- Protocol keeper settles at 22:25 → **invisible** to our pipeline
+- `predict.history` API has full settlement data: `eventType`, `realizedPnl`, `contractsSettled`
+
+**Same problem exists for Polymarket**: positions resolve on-chain, the CLOB API exposes resolution data via `GET /positions` and order history, but our pipeline never polls it.
+
+**Proposed solution: Prediction Settlement Sync Job** — see section 10, item 0.
+
 ### 9.5 Jupiter Lend Withdraw Share Conversion
 
 **Severity: Info**
@@ -340,6 +400,62 @@ Withdraw amount is in shares (jlUSDC), not underlying asset. Withdrawing the exa
 ---
 
 ## 10. Recommended Improvements
+
+### Critical
+
+0. **Prediction Settlement Sync Job** — auto-close resolved prediction positions.
+
+   **Problem**: Protocol keepers settle prediction markets on-chain. Our pipeline only captures events that flow through `execute_tool`. Settlement bypasses this entirely — positions become zombies (open forever in DB, closed on-chain).
+
+   **Applies to**: Jupiter Prediction (`solana.predict.*`) and Polymarket (`polymarket.*`). Both have the same architecture: buy goes through us, settlement happens externally.
+
+   **Data sources available**:
+
+   | Protocol | API | Key fields |
+   |----------|-----|-----------|
+   | Jupiter Prediction | `solana.predict.history` (per wallet) | `eventType: "position_lost" \| "position_won"`, `contractsSettled`, `realizedPnl`, `payoutAmountUsd`, `timestamp` |
+   | Jupiter Prediction | `solana.predict.positions` (per wallet) | `claimed`, `claimedUsd`, `claimable`, `claimableAt` — for win+claim flow |
+   | Polymarket | `GET /positions` (CLOB API) | `resolved`, `outcome`, `realizedPnl`, `settledAt` |
+
+   **Proposed architecture**:
+
+   ```
+   ┌─────────────────────────────────────────────────┐
+   │  prediction-settlement-sync (scheduled job)     │
+   │                                                 │
+   │  1. Query DB: SELECT open prediction positions  │
+   │  2. For each position:                          │
+   │     - Jupiter: predict.history → find matching  │
+   │       "position_lost" or "position_won" event   │
+   │     - Polymarket: GET /positions → check        │
+   │       resolved status                           │
+   │  3. If settled:                                 │
+   │     - Insert synthetic close activity           │
+   │     - Close position in proj_open_positions     │
+   │     - Close lot + insert pnl_match              │
+   │     - Use protocol-reported realizedPnl         │
+   │  4. Log settlement to protocol_executions       │
+   │     (synthetic, source: "settlement_sync")      │
+   └─────────────────────────────────────────────────┘
+   ```
+
+   **Sync interval strategy**:
+
+   | Condition | Interval | Rationale |
+   |-----------|----------|-----------|
+   | Position closeTime > 7 days away | Every 6 hours | Long-dated markets (BTC 80k), no urgency |
+   | Position closeTime < 7 days away | Every 30 min | Approaching resolution window |
+   | Position closeTime passed | Every 5 min | Should be settling now or already settled |
+   | No open prediction positions | Disabled | No work to do |
+
+   Adaptive interval based on `closeTime` of nearest open prediction. No wasted API calls for long-dated positions, fast detection when resolution is imminent.
+
+   **Implementation notes**:
+   - Reuse existing `schedule_create` internal tool (cron-based)
+   - Synthetic execution should have `source: "settlement_sync"` to distinguish from user-initiated trades
+   - `realizedPnl` comes from the protocol API (authoritative) — don't recompute from lot cost basis
+   - For `position_won` on Jupiter: may need to trigger `predict.claim` if not auto-claimed (check `claimed` field)
+   - For Polymarket: need authenticated CLOB client (API key already derived via `polymarket_setup`)
 
 ### High Priority
 

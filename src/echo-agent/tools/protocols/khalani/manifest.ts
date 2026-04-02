@@ -73,7 +73,7 @@ export const KHALANI_TOOLS: readonly ProtocolToolManifest[] = [
     toolId: "khalani.quote.get",
     namespace: "khalani",
     lifecycle: "active",
-    description: "Get cross-chain bridge quote with routes, pricing, and ETA.",
+    description: "Get cross-chain bridge quote with routes, pricing, and ETA. Resolve fromToken/toToken addresses via khalani.tokens.search first.",
     mutating: false,
     params: [
       { key: "fromChain", type: "string", required: true, description: "Source chain ID or alias." },
@@ -130,7 +130,7 @@ export const KHALANI_TOOLS: readonly ProtocolToolManifest[] = [
     toolId: "khalani.bridge",
     namespace: "khalani",
     lifecycle: "active",
-    description: "Execute a cross-chain bridge: quote → build deposit → sign → broadcast → submit. Requires wallet access.",
+    description: "Execute a cross-chain bridge: quote → build deposit → sign → broadcast → submit. Requires wallet access. Resolve fromToken/toToken addresses via khalani.tokens.search first.",
     mutating: true,
     params: [
       { key: "fromChain", type: "string", required: true, description: "Source chain ID or alias." },

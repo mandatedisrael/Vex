@@ -24,7 +24,7 @@ import { META_AGGREGATION_ROUTER_V2, DSLO_PROTOCOL, KS_ZAP_ROUTER_POSITION, NATI
 import { resolveTokenMetadata, resolveTokenAddress, requireFeature, resolveChainWithId } from "@commands/kyberswap/helpers.js";
 import { requireEvmWallet } from "@tools/wallet/multi-auth.js";
 
-import { parseUnits, formatUnits, getAddress, type Address, type Hex } from "viem";
+import { isAddress, parseUnits, formatUnits, getAddress, type Address, type Hex } from "viem";
 import type { ToolResult } from "../../types.js";
 import type { ProtocolHandler } from "../types.js";
 import { str, num, ok, fail } from "../handler-helpers.js";
@@ -416,6 +416,11 @@ export const KYBERSWAP_HANDLERS: Record<string, ProtocolHandler> = {
     const tokenIn = str(p, "tokenIn"), amountIn = str(p, "amountIn");
     if (!chain || !dex || !pool || !tokenIn || !amountIn) return fail("Missing required: chain, dex, pool, tokenIn, amountIn");
 
+    // Validate tokenIn is a properly formatted address
+    if (tokenIn.toLowerCase() !== NATIVE_TOKEN_ADDRESS.toLowerCase() && !isAddress(tokenIn)) {
+      return fail(`Invalid tokenIn address: "${tokenIn}". Resolve via kyberswap.tokens.search first.`);
+    }
+
     const slug = resolveChainSlug(chain);
     requireFeature(slug, "zaas");
     const wallet = requireEvmWallet();
@@ -453,6 +458,11 @@ export const KYBERSWAP_HANDLERS: Record<string, ProtocolHandler> = {
     const chain = str(p, "chain"), dex = str(p, "dex"), pool = str(p, "pool");
     const positionId = str(p, "positionId"), tokenOut = str(p, "tokenOut");
     if (!chain || !dex || !pool || !positionId || !tokenOut) return fail("Missing required: chain, dex, pool, positionId, tokenOut");
+
+    // Validate tokenOut is a properly formatted address
+    if (tokenOut.toLowerCase() !== NATIVE_TOKEN_ADDRESS.toLowerCase() && !isAddress(tokenOut)) {
+      return fail(`Invalid tokenOut address: "${tokenOut}". Resolve via kyberswap.tokens.search first.`);
+    }
 
     const slug = resolveChainSlug(chain);
     requireFeature(slug, "zaas");

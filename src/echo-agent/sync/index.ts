@@ -54,37 +54,45 @@ export async function initSync(): Promise<void> {
  * Periodic sync tick — called by engine every ~60s.
  *
  * 1. Drain any pending post-mutation runs
- * 2. Check if periodic full refresh is due
+ * 2. Check if periodic jobs are due (balances, prediction_settlement, etc.)
  */
 export async function syncTick(): Promise<void> {
   // 1. Drain post-mutation runs
   const drain = await drainPendingRuns();
 
-  // 2. Check periodic full refresh
-  const periodicJob = (await syncRepo.getAllJobs()).find(
-    j => j.namespace === "_global" && j.syncType === "balances" && j.strategy === "periodic",
+  // 2. Check all periodic jobs
+  const periodicJobs = (await syncRepo.getAllJobs()).filter(
+    j => j.strategy === "periodic" && j.namespace === "_global",
   );
 
-  if (periodicJob) {
-    const intervalMs = (periodicJob.intervalSeconds ?? 300) * 1000;
+  for (const job of periodicJobs) {
+    const intervalMs = (job.intervalSeconds ?? 300) * 1000;
 
-    // Use sync run history as source of truth, not snapshot age
-    const lastRun = await syncRepo.getLastCompletedRun(periodicJob.id);
+    const lastRun = await syncRepo.getLastCompletedRun(job.id);
     const lastRunAge = lastRun?.endedAt
       ? Date.now() - new Date(lastRun.endedAt).getTime()
       : Infinity;
 
-    if (lastRunAge > intervalMs) {
-      try {
+    if (lastRunAge <= intervalMs) continue;
+
+    try {
+      if (job.syncType === "balances") {
         const result = await fullBalanceSync();
-        // Record as a completed run for this periodic job
-        const runId = await syncRepo.enqueueRun(periodicJob.id);
+        const runId = await syncRepo.enqueueRun(job.id);
         await syncRepo.completeRun(runId, { periodic: true, totalUsd: result.totalUsd }, result.wallets.reduce((s, w) => s + w.tokensUpdated, 0));
-      } catch (err) {
-        logger.warn("sync.tick.periodic_failed", {
-          error: err instanceof Error ? err.message : String(err),
-        });
+      } else if (job.syncType === "prediction_settlement") {
+        const { reconcilePredictionSettlements } = await import("./prediction-settlement-sync.js");
+        const settlementResult = await reconcilePredictionSettlements();
+        const runId = await syncRepo.enqueueRun(job.id);
+        await syncRepo.completeRun(runId, { ...settlementResult }, settlementResult.closed);
+      } else {
+        logger.debug("sync.tick.unknown_periodic", { syncType: job.syncType });
       }
+    } catch (err) {
+      logger.warn("sync.tick.periodic_failed", {
+        syncType: job.syncType,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 }

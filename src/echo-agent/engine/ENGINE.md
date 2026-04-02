@@ -108,7 +108,7 @@ Defined in `engine/prompts/`.
 
 **Constant** (always present, identical in every mode):
 - `base.ts` — identity ("crypto and world-native agent with self-learning"), date, session context, loaded documents
-- `tool-usage.ts` — discover/execute contract, 2-step transfer rule, portfolio_inspect self-inspection guide
+- `tool-usage.ts` — discover/execute contract, 2-step transfer rule, token verification rule (resolve before mutate), portfolio_inspect self-inspection guide
 - `protocols.ts` — auto-generated namespace map + families + discovery examples per namespace
 
 **Variable** (per mode):

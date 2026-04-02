@@ -6,17 +6,19 @@ Balance sync pipeline: Khalani API → `proj_balances` → `proj_portfolio_snaps
 
 ```
 sync/
-  index.ts               — Public API: initSync(), syncTick()
-  balance-sync.ts        — Khalani → proj_balances → snapshot → MTM refresh
-  activity-populator.ts  — _tradeCapture → proj_activity (from capture-pipeline)
-  position-projector.ts  — activity → proj_open_positions + proj_pnl_lots + proj_pnl_matches (transactional FIFO)
-  mtm.ts                 — Mark-to-market: Jupiter Prediction + Polymarket exit prices
-  replay.ts              — One-time projection correction from immutable audit trail
-  worker.ts              — Claims pending sync runs, deduplicates, dispatches → MTM refresh
-  seed.ts                — Seeds default protocol_sync_jobs
-  chains.ts              — Canonical chain hint resolution
-  benchmark.ts           — Chain → benchmark asset key resolution (SOL, ETH, 0G, etc.)
-  instrument-key.ts      — parseInstrumentKey() typed helper for all instrumentKey patterns
+  index.ts                         — Public API: initSync(), syncTick()
+  balance-sync.ts                  — Khalani → proj_balances → snapshot → MTM refresh
+  activity-populator.ts            — _tradeCapture → proj_activity (from capture-pipeline)
+  position-projector.ts            — activity → proj_open_positions + proj_pnl_lots + proj_pnl_matches (transactional FIFO)
+  mtm.ts                           — Mark-to-market: Jupiter Prediction + Polymarket exit prices
+  prediction-settlement-sync.ts    — Auto-close settled prediction positions (Jupiter + Polymarket)
+  synthetic-capture.ts             — Record settlement/reconciliation events through capture pipeline
+  replay.ts                        — One-time projection correction from immutable audit trail
+  worker.ts                        — Claims pending sync runs, deduplicates, dispatches → MTM refresh
+  seed.ts                          — Seeds default protocol_sync_jobs
+  chains.ts                        — Canonical chain hint resolution
+  benchmark.ts                     — Chain → benchmark asset key resolution (SOL, ETH, 0G, etc.)
+  instrument-key.ts                — parseInstrumentKey() typed helper for all instrumentKey patterns
 ```
 
 ## Data flow
@@ -27,7 +29,8 @@ Trigger                        Pipeline                              Projection
 Startup (initSync)        →  drain backlog → fullBalanceSync()  →  proj_balances + snapshot
 Post-mutation             →  runtime.ts enqueues sync run       →  worker dedup → selective refresh
   (capture hook)             per namespace                         (only affected chains)
-Periodic (syncTick)       →  check last snapshot age            →  fullBalanceSync() if stale
+Periodic (syncTick)       →  check all _global periodic jobs    →  balances: fullBalanceSync()
+                                                                   prediction_settlement: reconcile
 ```
 
 ## How it works
@@ -48,7 +51,9 @@ When `runtime.ts` captures a mutating execution, it enqueues sync runs for all m
 
 Called by engine every ~60s:
 1. Drain any pending post-mutation runs
-2. If last snapshot is older than `intervalSeconds` (default 300s/5min) → full refresh
+2. For each `_global` periodic job: if last run is older than `intervalSeconds` → execute
+   - `balances` → `fullBalanceSync()`
+   - `prediction_settlement` → `reconcilePredictionSettlements()`
 
 ## Source of truth: Khalani
 
@@ -80,6 +85,7 @@ Fallback: if resolution fails, assumes eip155 full refresh.
 | Namespace | Type | Strategy | Interval |
 |-----------|------|----------|----------|
 | `_global` | balances | periodic | 300s (5min) |
+| `_global` | prediction_settlement | periodic | 300s (5min) |
 | `khalani` | balances | post_mutation | — |
 | `solana` | balances | post_mutation | — |
 | `kyberswap` | balances | post_mutation | — |
@@ -219,6 +225,29 @@ Spot unrealized is read-model only — CTE join `proj_pnl_lots` × `proj_balance
 Native values (`input_value_native`, `output_value_native`) = human-unit amount of native leg. NULL when swap doesn't touch native asset.
 
 Native pro-rata in FIFO match ledger: `cost_basis_native`, `proceeds_native`, `realized_pnl_native`.
+
+## Prediction settlement sync
+
+`prediction-settlement-sync.ts` auto-closes prediction positions settled by on-chain keepers (bypasses `execute_tool`).
+
+**Problem**: Jupiter Prediction and Polymarket settle via protocol keepers. Our pipeline only captures events through `execute_tool`. Settled positions become zombies (`status: 'open'` in DB, closed on-chain).
+
+**Solution**: Periodic reconciliation via `reconcilePredictionSettlements()`:
+1. Query open prediction positions from `proj_open_positions`
+2. Group by namespace + wallet (one API call per wallet)
+3. Match against protocol read APIs for settlement events
+4. Create synthetic captures via `synthetic-capture.ts` → standard pipeline → position closed
+
+**Jupiter** — `getJupiterPredictionHistory()` + `getJupiterPredictionPositions()`:
+- `position_lost` → `status: "closed"`, no `outputValueUsd`
+- `position_won + claimed=false` → `status: "closed"`, payout in `meta` only
+- `position_won + claimed=true` → `status: "claimed"`, `outputValueUsd = payoutAmountUsd`
+
+**Polymarket** — `getPolyDataClient().getClosedPositions(proxyWallet)`:
+- Proxy wallet derived via `getRelayPayload(eoa, "SAFE")` from relayer API
+- `status: "closed"`, `meta.realizedPnl` from API, no `outputValueUsd`
+
+**Synthetic captures** use toolIds not in MUTATION_MATRIX (`settlement_sync.jupiter`, `settlement_sync.polymarket`). The capture validator returns `true` for unknown toolIds. `synthetic-capture.ts` has its own local validation boundary (type, status, walletAddress, positionKey).
 
 ## What's NOT in this module
 

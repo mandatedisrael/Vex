@@ -10,7 +10,7 @@ export const CORE_TOOLS: readonly ProtocolToolManifest[] = [
     params: [
       { key: "mints", type: "string", required: true, description: "Comma-separated mint addresses." },
     ],
-    exampleParams: { mints: "So11111111111111111111111111111111111111112,EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" },
+    exampleParams: { mints: "So11111111111111111111111111111111111111112" },
     requiresEnv: "JUPITER_API_KEY",
   },
   {

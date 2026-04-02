@@ -16,9 +16,9 @@ describe("seedSyncJobs", () => {
     vi.clearAllMocks();
   });
 
-  it("inserts 7 sync jobs (1 global + 6 per-namespace)", async () => {
+  it("inserts 8 sync jobs (2 global + 6 per-namespace)", async () => {
     await seedSyncJobs();
-    expect(mockExecute).toHaveBeenCalledTimes(7);
+    expect(mockExecute).toHaveBeenCalledTimes(8);
   });
 
   it("uses ON CONFLICT DO NOTHING (idempotent)", async () => {
@@ -50,10 +50,25 @@ describe("seedSyncJobs", () => {
     }
   });
 
-  it("all jobs reference khalani.tokens.balances as readToolId", async () => {
+  it("balance jobs reference khalani.tokens.balances as readToolId", async () => {
     await seedSyncJobs();
-    for (const call of mockExecute.mock.calls) {
+    const balanceCalls = mockExecute.mock.calls.filter(
+      (call: unknown[]) => (call[1] as unknown[])[1] === "balances",
+    );
+    for (const call of balanceCalls) {
       expect((call[1] as unknown[])[2]).toBe("khalani.tokens.balances");
     }
+  });
+
+  it("seeds prediction_settlement periodic job", async () => {
+    await seedSyncJobs();
+    const settlementCall = mockExecute.mock.calls.find(
+      (call: unknown[]) => (call[1] as unknown[])[1] === "prediction_settlement",
+    );
+    expect(settlementCall).toBeDefined();
+    expect((settlementCall![1] as unknown[])[0]).toBe("_global");
+    expect((settlementCall![1] as unknown[])[2]).toBeNull(); // no readToolId
+    expect((settlementCall![1] as unknown[])[3]).toBe("periodic");
+    expect((settlementCall![1] as unknown[])[4]).toBe(300);
   });
 });

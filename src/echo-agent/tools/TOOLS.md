@@ -136,6 +136,14 @@ Handlers that touch N logical entities in one execution emit `_tradeCaptureItems
 
 Used by: `solana.predict.closeAll`, `kyberswap.limitOrder.batchFill`, `kyberswap.limitOrder.cancelAll`, `polymarket.clob.cancelOrders`, `polymarket.clob.cancelAll`, `polymarket.clob.cancelMarket`.
 
+### Token verification policy
+
+Agent-facing manifests include token resolution guidance in descriptions. Prompt layer (`tool-usage.ts`) defines the Token Verification Rule: resolve tokens via read tools before mutating. Canonical resolver: `khalani.tokens.search` (cross-chain). `kyberswap.tokens.search` is confirmation only (same Token API name search). `solana.tokens.search` for Solana mints.
+
+Runtime-level: `resolveTokenMetadata()` reads ERC-20 metadata on-chain for address input, Token API fallback for symbol. Zap handlers validate address format before passing to ZaaS API.
+
+Synthetic captures from settlement sync use toolIds not in MUTATION_MATRIX (`settlement_sync.jupiter`, `settlement_sync.polymarket`). `capture-validator.ts` returns `true` for unknown toolIds. `synthetic-capture.ts` has its own local validation boundary.
+
 ### History replay
 
 `sync/replay.ts` — one-time projection correction. Reads immutable `protocol_executions` + `protocol_capture_items`, truncates projection tables, re-runs `populateActivity()` with type correction from `MUTATION_MATRIX.expectedType`. Idempotent.

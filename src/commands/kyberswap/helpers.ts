@@ -4,9 +4,10 @@
 
 import { isAddress, getAddress, type Address } from "viem";
 import { EchoError, ErrorCodes } from "../../errors.js";
-import { resolveChainSlug, slugToChainId, getChainFeatures } from "../../tools/kyberswap/chains.js";
+import { resolveChainSlug, slugToChainId, chainIdToSlug, getChainFeatures } from "../../tools/kyberswap/chains.js";
 import { NATIVE_TOKEN_ADDRESS } from "../../tools/kyberswap/constants.js";
 import { getKyberTokenApiClient } from "../../tools/kyberswap/token-api/client.js";
+import { readErc20Metadata } from "../../tools/kyberswap/evm-utils.js";
 import type { KyberChainSlug } from "../../tools/kyberswap/types.js";
 import type { KyberToken } from "../../tools/kyberswap/token-api/types.js";
 
@@ -55,13 +56,20 @@ export async function resolveTokenAddress(input: string, chainId: number): Promi
     return getAddress(input);
   }
 
-  // Search by symbol via Token API
+  // Search by symbol via Token API — whitelisted first, then broader fallback
   const client = getKyberTokenApiClient();
-  const tokens = await client.searchTokens(String(chainId), {
+  let tokens = await client.searchTokens(String(chainId), {
     name: input,
     isWhitelisted: true,
     pageSize: 1,
   });
+
+  if (tokens.length === 0) {
+    tokens = await client.searchTokens(String(chainId), {
+      name: input,
+      pageSize: 5,
+    });
+  }
 
   if (tokens.length === 0) {
     throw new EchoError(
@@ -106,37 +114,35 @@ export async function resolveTokenMetadata(input: string, chainId: number): Prom
     };
   }
 
-  const client = getKyberTokenApiClient();
-
+  // Address input → read metadata directly from chain (authoritative for decimals/symbol/name)
   if (isAddress(input)) {
-    const address = getAddress(input);
-    const tokens = await client.searchTokens(String(chainId), {
-      name: address,
-      pageSize: 20,
-    });
-    const match = pickBestTokenMatch(tokens, input, address);
-    if (!match) {
+    const slug = chainIdToSlug(chainId);
+    if (!slug) {
       throw new EchoError(
         ErrorCodes.KYBER_TOKEN_NOT_FOUND,
-        `Token metadata for "${address}" not found on chain ${chainId}`,
-        "Provide a known symbol or a token address indexed by KyberSwap Token API.",
+        `Cannot resolve chain slug for chainId ${chainId}`,
       );
     }
-    return {
-      address,
-      symbol: match.symbol,
-      name: match.name,
-      decimals: match.decimals,
-      isNative: false,
-    };
+    return readErc20Metadata(slug, getAddress(input));
   }
 
-  const tokens = await client.searchTokens(String(chainId), {
+  // Symbol input → Token API search, whitelisted first, then broader fallback
+  const client = getKyberTokenApiClient();
+  let tokens = await client.searchTokens(String(chainId), {
     name: input,
     isWhitelisted: true,
     pageSize: 10,
   });
-  const match = pickBestTokenMatch(tokens, input);
+  let match = pickBestTokenMatch(tokens, input);
+
+  if (!match) {
+    tokens = await client.searchTokens(String(chainId), {
+      name: input,
+      pageSize: 10,
+    });
+    match = pickBestTokenMatch(tokens, input);
+  }
+
   if (!match) {
     throw new EchoError(
       ErrorCodes.KYBER_TOKEN_NOT_FOUND,

@@ -8,9 +8,12 @@
 import { execute } from "@echo-agent/db/client.js";
 import logger from "@utils/logger.js";
 
-const BALANCE_SYNC_JOBS = [
+const SYNC_JOBS = [
   // Canonical periodic full refresh — every 5 minutes
   { namespace: "_global", syncType: "balances", readToolId: "khalani.tokens.balances", strategy: "periodic", intervalSeconds: 300 },
+
+  // Prediction settlement reconciliation — every 5 minutes
+  { namespace: "_global", syncType: "prediction_settlement", readToolId: null, strategy: "periodic", intervalSeconds: 300 },
 
   // Per-namespace post_mutation triggers (runtime.ts capture hook finds these by namespace)
   { namespace: "khalani", syncType: "balances", readToolId: "khalani.tokens.balances", strategy: "post_mutation", intervalSeconds: null },
@@ -26,7 +29,7 @@ const BALANCE_SYNC_JOBS = [
  */
 export async function seedSyncJobs(): Promise<void> {
   let seeded = 0;
-  for (const job of BALANCE_SYNC_JOBS) {
+  for (const job of SYNC_JOBS) {
     const result = await execute(
       `INSERT INTO protocol_sync_jobs (namespace, sync_type, read_tool_id, strategy, interval_seconds)
        VALUES ($1, $2, $3, $4, $5) ON CONFLICT (namespace, sync_type) DO NOTHING`,
@@ -36,7 +39,7 @@ export async function seedSyncJobs(): Promise<void> {
   }
 
   if (seeded > 0) {
-    logger.info("sync.seed.completed", { seeded, total: BALANCE_SYNC_JOBS.length });
+    logger.info("sync.seed.completed", { seeded, total: SYNC_JOBS.length });
   } else {
     logger.debug("sync.seed.up_to_date");
   }

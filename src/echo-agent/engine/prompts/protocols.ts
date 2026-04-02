@@ -16,21 +16,23 @@ import type { ProtocolToolManifest } from "@echo-agent/tools/protocols/types.js"
 
 const NAMESPACE_EXAMPLES: Record<string, string[]> = {
   khalani: [
-    'discover_tools(query="cross-chain balances", namespace="khalani")',
-    'discover_tools(query="bridge quote usdc", namespace="khalani")',
+    'discover_tools(query="token search", namespace="khalani")',
+    'discover_tools(query="bridge quote", namespace="khalani")',
   ],
   dexscreener: [
     'discover_tools(query="trending pairs", namespace="dexscreener")',
     'discover_tools(query="token search", namespace="dexscreener")',
   ],
   solana: [
-    'discover_tools(query="swap sol to usdc", namespace="solana")',
-    'discover_tools(query="token prices", namespace="solana")',
+    'discover_tools(query="token search", namespace="solana")',
+    'discover_tools(query="swap", namespace="solana")',
     'discover_tools(query="prediction markets", namespace="solana")',
   ],
   kyberswap: [
-    'discover_tools(query="swap on ethereum", namespace="kyberswap")',
+    'discover_tools(query="token search", namespace="kyberswap")',
+    'discover_tools(query="swap", namespace="kyberswap")',
     'discover_tools(query="limit order", namespace="kyberswap")',
+    'discover_tools(query="zap liquidity", namespace="kyberswap")',
   ],
   polymarket: [
     'discover_tools(query="prediction markets", namespace="polymarket")',
@@ -55,10 +57,10 @@ const NAMESPACE_EXAMPLES: Record<string, string[]> = {
 };
 
 const NAMESPACE_DESCRIPTIONS: Record<string, string> = {
-  khalani: "Cross-chain balances, token discovery, bridge quotes and execution (40+ chains)",
+  khalani: "Cross-chain balances, token discovery, bridge quotes and execution (40+ chains). Resolve tokens via khalani.tokens.search before bridge/quote",
   dexscreener: "DEX analytics, trending pairs, token profiles, price research",
-  solana: "Jupiter swaps, token prices, token discovery, lending, prediction markets (requires JUPITER_API_KEY)",
-  kyberswap: "Multi-chain EVM swaps, token safety, limit orders, LP zap",
+  solana: "Jupiter swaps, token prices, token discovery, lending, prediction markets (requires JUPITER_API_KEY). Resolve mints via solana.tokens.search before swap/predict",
+  kyberswap: "Multi-chain EVM swaps, token safety, limit orders, LP zap. Resolve tokens via kyberswap.tokens.search before swap/order/zap",
   polymarket: "Prediction markets, positions, CLOB trading, analytics, orderbook",
   jaine: "0G DEX swaps, LP management, wrap/unwrap A0GI",
   slop: "0G bonding curve token creation, trading, discovery",
