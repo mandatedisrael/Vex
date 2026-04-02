@@ -142,6 +142,18 @@ Agent-facing manifests include token resolution guidance in descriptions. Prompt
 
 Runtime-level: `resolveTokenMetadata()` reads ERC-20 metadata on-chain for address input, Token API fallback for symbol. Zap handlers validate address format before passing to ZaaS API.
 
+### EVM on-chain reads (`evm_read`)
+
+Internal read-only tool for direct on-chain data access. Uses khalani chain registry (`getChains()` → `rpcUrls`) + `createDynamicPublicClient()` from `khalani/evm-client.ts`.
+
+4 scoped actions:
+- `tx_receipt` — transaction receipt (status, gasUsed, logs count, block number)
+- `erc721_mint` — extract minted NFT IDs from receipt logs (filtered by recipient)
+- `erc20_metadata` — decimals, symbol, name from ERC-20 contract
+- `balance` — native token balance in wei
+
+Not a generic RPC gateway — actions are whitelisted and validated. Chain resolved via khalani aliases (e.g. "polygon", "137", "ethereum").
+
 ### LP position capture (zap.in)
 
 `kyberswap.zap.in` uses `sendKyberTransactionWithReceipt()` to get tx receipt, then `extractMintedNftId()` parses ERC-721 Transfer mint logs filtered by recipient address. Extracted `positionId` (NFT token ID) is stored in `_tradeCapture.positionKey`, enabling projection into `proj_open_positions` and subsequent `zap.out`.

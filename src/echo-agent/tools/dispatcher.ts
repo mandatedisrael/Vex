@@ -203,6 +203,12 @@ async function routeInternalTool(
       return handleSubagentReportComplete(call.args, context);
     }
 
+    // EVM on-chain reads
+    case "evm_read": {
+      const { handleEvmRead } = await import("./internal/evm-read.js");
+      return handleEvmRead(call.args, context);
+    }
+
     // Wallet
     case "wallet_read": {
       const { handleWalletRead } = await import("./internal/wallet.js");
