@@ -17,6 +17,8 @@ import { LINEA_ZAP_DEXES } from "./chains/linea.js";
 import { SONIC_ZAP_DEXES } from "./chains/sonic.js";
 import { BERACHAIN_ZAP_DEXES } from "./chains/berachain.js";
 import { RONIN_ZAP_DEXES } from "./chains/ronin.js";
+import { SCROLL_ZAP_DEXES } from "./chains/scroll.js";
+import { ZKSYNC_ZAP_DEXES } from "./chains/zksync.js";
 
 const CATALOG = new Map<string, ChainZapDexConfig>([
   ["polygon", POLYGON_ZAP_DEXES],
@@ -30,6 +32,8 @@ const CATALOG = new Map<string, ChainZapDexConfig>([
   ["sonic", SONIC_ZAP_DEXES],
   ["berachain", BERACHAIN_ZAP_DEXES],
   ["ronin", RONIN_ZAP_DEXES],
+  ["scroll", SCROLL_ZAP_DEXES],
+  ["zksync", ZKSYNC_ZAP_DEXES],
 ]);
 
 export function getZapDexConfig(chain: string): ChainZapDexConfig | undefined {

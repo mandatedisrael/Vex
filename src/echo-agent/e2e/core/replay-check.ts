@@ -21,6 +21,8 @@ interface ProjectionHashes {
   positions: string;
   lots: string;
   matches: string;
+  lpEvents: string;
+  lpLegs: string;
 }
 
 async function hashProjections(): Promise<ProjectionHashes> {
@@ -62,11 +64,34 @@ async function hashProjections(): Promise<ProjectionHashes> {
     [],
   );
 
+  // Hash LP events — business fields only, no timestamps
+  const lpEventRows = await query(
+    `SELECT execution_id, capture_item_id, namespace, chain, action, dex, pool,
+            position_key, instrument_key, wallet_address, total_value_usd,
+            fee_collected_usd, valuation_source
+     FROM proj_lp_events ORDER BY execution_id, id`,
+    [],
+  );
+
+  // Hash LP legs — join with events to avoid unstable lp_event_id FK (auto-increment,
+  // changes after TRUNCATE without RESTART IDENTITY). Same pattern as capture_item_id
+  // exclusion in activity and lot_id exclusion in matches.
+  const lpLegRows = await query(
+    `SELECT e.execution_id, e.action, l.leg_type, l.token_address, l.token_symbol,
+            l.amount_raw, l.amount_usd
+     FROM proj_lp_event_legs l
+     JOIN proj_lp_events e ON l.lp_event_id = e.id
+     ORDER BY e.execution_id, e.id, l.id`,
+    [],
+  );
+
   return {
     activity: createHash("sha256").update(JSON.stringify(activityRows)).digest("hex"),
     positions: createHash("sha256").update(JSON.stringify(positionRows)).digest("hex"),
     lots: createHash("sha256").update(JSON.stringify(lotRows)).digest("hex"),
     matches: createHash("sha256").update(JSON.stringify(matchRows)).digest("hex"),
+    lpEvents: createHash("sha256").update(JSON.stringify(lpEventRows)).digest("hex"),
+    lpLegs: createHash("sha256").update(JSON.stringify(lpLegRows)).digest("hex"),
   };
 }
 
@@ -78,7 +103,7 @@ export interface ReplayCheckResult {
   replayStats: { replayed: number; skipped: number; errors: number };
   auditIntact: boolean;
   projectionsMatch: boolean;
-  hashesMatch: { activity: boolean; positions: boolean; lots: boolean; matches: boolean };
+  hashesMatch: { activity: boolean; positions: boolean; lots: boolean; matches: boolean; lpEvents: boolean; lpLegs: boolean };
 }
 
 export async function runReplayCheck(): Promise<ReplayCheckResult> {
@@ -108,9 +133,12 @@ export async function runReplayCheck(): Promise<ReplayCheckResult> {
     positions: beforeHashes.positions === afterHashes.positions,
     lots: beforeHashes.lots === afterHashes.lots,
     matches: beforeHashes.matches === afterHashes.matches,
+    lpEvents: beforeHashes.lpEvents === afterHashes.lpEvents,
+    lpLegs: beforeHashes.lpLegs === afterHashes.lpLegs,
   };
 
-  const projectionsMatch = hashesMatch.activity && hashesMatch.positions && hashesMatch.lots && hashesMatch.matches;
+  const projectionsMatch = hashesMatch.activity && hashesMatch.positions && hashesMatch.lots && hashesMatch.matches
+    && hashesMatch.lpEvents && hashesMatch.lpLegs;
 
   if (!auditIntact) {
     logger.error("e2e.replay.audit_changed", { before: beforeCounts, after: afterCounts });

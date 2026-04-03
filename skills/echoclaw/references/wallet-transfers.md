@@ -10,7 +10,7 @@ This module is the authoritative guide for `wallet`, `send`, and wallet-adjacent
 - [Solana Wallet Specifics](#solana-wallet-specifics)
 - [Config Commands](#config-commands)
 - [Native Transfer Commands — 0G (2-step)](#native-transfer-commands-0g-2-step)
-- [Solana Transfer Commands (single-step)](#solana-transfer-commands-single-step)
+- [Solana Transfer Commands (2-step)](#solana-transfer-commands-2-step-same-as-0g)
 - [Headless Guardrail](#headless-guardrail)
 - [Agent-safe execution flow](#agent-safe-execution-flow)
 - [JSON examples](#json-examples)
@@ -319,6 +319,33 @@ Error format:
 - `SOLANA_RPC_ERROR`
 - `KHALANI_SOLANA_KEYSTORE_NOT_FOUND`
 - `KHALANI_ADDRESS_MISMATCH`
+
+## Agent Wallet Transfers (`wallet_send_*`)
+
+The echo-agent has its own wallet transfer surface via internal tools, separate from the CLI `send` commands:
+
+### `wallet_send_prepare`
+
+Builds a transfer intent without broadcasting. Returns an `intentId` for confirmation.
+
+- **EVM**: supports dynamic chains (polygon, arbitrum, base, etc. — not just 0G), native tokens, ERC-20 (`transfer()`), ERC-721 (`safeTransferFrom()`)
+- **Solana**: SOL native + SPL tokens only. **pNFT and cNFT are NOT supported** — they require Metaplex instruction set not present in this module
+- Token format: `"native"`, contract address (ERC-20), `"nft:{contract}:{tokenId}"` (ERC-721), symbol/mint (Solana SPL)
+
+### `wallet_send_confirm`
+
+Signs and broadcasts a prepared intent. Mutating — requires approval in restricted/off mode. Intent is one-time use and expires after 10 minutes.
+
+### Differences vs CLI
+
+| Feature | CLI (`echoclaw send`) | Agent (`wallet_send_*`) |
+|---------|----------------------|------------------------|
+| EVM chains | 0G only | Any EVM chain via khalani |
+| ERC-20 | Not supported | Supported (dynamic decimals) |
+| ERC-721 | Not supported | Supported (`nft:{contract}:{tokenId}`) |
+| Solana | SOL + SPL (2-step) | SOL + SPL (2-step, same model) |
+| Approval | `--yes` flag | Engine approval gate |
+| Capture | No pipeline | `_tradeCapture` → pipeline |
 
 ## Cross-references
 

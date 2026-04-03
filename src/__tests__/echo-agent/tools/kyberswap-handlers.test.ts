@@ -1,4 +1,42 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// ── Mocks for zap.in positionKey regression test ──────────────────
+
+vi.mock("@tools/wallet/multi-auth.js", () => ({
+  requireEvmWallet: () => ({
+    family: "eip155",
+    address: "0x1234567890abcdef1234567890abcdef12345678",
+    privateKey: "0x" + "ab".repeat(32),
+  }),
+}));
+
+const mockGetZapInRoute = vi.fn();
+const mockBuildZapIn = vi.fn();
+
+vi.mock("@tools/kyberswap/zaas/client.js", () => ({
+  getKyberZaasClient: () => ({
+    getZapInRoute: (...args: unknown[]) => mockGetZapInRoute(...args),
+    buildZapIn: (...args: unknown[]) => mockBuildZapIn(...args),
+  }),
+}));
+
+const mockExtractMintedNftId = vi.fn();
+
+vi.mock("@tools/kyberswap/evm-utils.js", () => ({
+  getKyberEvmClients: () => ({
+    publicClient: {},
+    walletClient: {},
+  }),
+  ensureKyberAllowance: vi.fn().mockResolvedValue(undefined),
+  sendKyberTransaction: vi.fn().mockResolvedValue("0xmockhash"),
+  sendKyberTransactionWithReceipt: vi.fn().mockResolvedValue({
+    hash: "0xzaphash",
+    receipt: { logs: [{ topics: ["0xddf252ad"], data: "0x" }] },
+  }),
+  extractMintedNftId: (...args: unknown[]) => mockExtractMintedNftId(...args),
+  verifyRouterAddress: vi.fn(),
+}));
+
 import { KYBERSWAP_HANDLERS } from "../../../echo-agent/tools/protocols/kyberswap/handlers.js";
 import { KYBERSWAP_TOOLS } from "../../../echo-agent/tools/protocols/kyberswap/manifest.js";
 
@@ -198,5 +236,43 @@ describe("kyberswap handlers", () => {
     expect(data[0].slug).toBeDefined();
     expect(data[0].chainId).toBeDefined();
     expect(data[0].aggregator).toBeDefined();
+  });
+
+  // ── zap.in positionKey regression ───────────────────────────────
+
+  it("kyberswap.zap.in captures positionKey from receipt NFT mint", async () => {
+    mockGetZapInRoute.mockResolvedValueOnce({
+      data: {
+        route: { some: "route" },
+        routerAddress: "0x2f1E23e0A5A56e7746E1Ae42d5c3112B2d0cf09B",
+        zapDetails: { initialAmountUsd: "50.00", actions: [] },
+      },
+    });
+    mockBuildZapIn.mockResolvedValueOnce({
+      data: {
+        routerAddress: "0x2f1E23e0A5A56e7746E1Ae42d5c3112B2d0cf09B",
+        callData: "0xdeadbeef",
+        value: "0",
+      },
+    });
+    mockExtractMintedNftId.mockReturnValueOnce("12345");
+
+    const result = await KYBERSWAP_HANDLERS["kyberswap.zap.in"]!(
+      {
+        chain: "polygon", dex: "DEX_UNISWAPV3", pool: "0xPoolAddress",
+        tokenIn: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+        amountIn: "1000000000000000000",
+      },
+      { loopMode: "full", approved: true },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data).toBeDefined();
+    const capture = result.data!._tradeCapture as Record<string, unknown>;
+    expect(capture.type).toBe("lp");
+    expect(capture.positionKey).toBe("12345");
+    expect(capture.instrumentKey).toBe("polygon:lp:0xPoolAddress");
+    expect(capture.valuationSource).toBe("zaas_estimate");
+    expect(mockExtractMintedNftId).toHaveBeenCalledTimes(1);
   });
 });

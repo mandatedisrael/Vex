@@ -107,7 +107,7 @@ src/echo-agent/
       relay.ts             — Parent ↔ child message passing
   e2e/                     — E2E test harness (Docker Postgres + local MCP)
     core/                  — Scenario runner, DB assertions, discovery/preview smoke, replay check
-    mcp/                   — Local stdio MCP server (9 echo_* tools)
+    mcp/                   — Local stdio MCP server (10 echo_* tools)
     scenarios/             — Scenario registry
     TESTSCENARIO.md        — Runbook for Claude as manual debugger
     E2E.md                 — Module docs
@@ -317,7 +317,7 @@ LLM uses `discover_tools` to search, `execute_tool` to call. Each namespace has 
   - Mission patch parser: untrusted model output → validated domain → row conversion → DB
   - Subagent engine runner wired into `tools/internal/subagent.ts` (replaces placeholder)
   - Stop conditions: 6 business stops (terminal) + 6 runtime pauses (resumable)
-- **E2E test harness**: Docker Postgres (port 5555, tmpfs) + local MCP server (9 echo_* tools). Automated discovery + preview smoke. Manual real-funds testing via Claude + `echo_execute`. Replay verification via `echo_replay_verify`.
+- **E2E test harness**: Docker Postgres (port 5555, tmpfs) + local MCP server (10 echo_* tools). Automated discovery + preview smoke (8 pipeline tables incl. LP). Manual real-funds testing via Claude + `echo_execute`. Replay verification via `echo_replay_verify` (content hashes incl. LP events/legs).
 - Tests passing across 203 test files (2800+ tests)
 
 ### W4A — USD-exact valuation + realized PnL (done)
@@ -348,7 +348,7 @@ LLM uses `discover_tools` to search, `execute_tool` to call. Each namespace has 
 - **DeFi Safety Rules** in tool-usage.ts, mode.ts, mission-run.ts.
 - **Resolver alignment**: khalani canonical, kyberswap is visibility check only. All manifests updated.
 - **KyberSwap swap semantics**: buy/sell both described as exact-input.
-- **Zap DEX IDs**: `DEX_*` format in examples, structured DEX catalog in `src/tools/kyberswap/zaas/zap-dexes/` (11 chains, capability-aware: Curve/Balancer source-only).
+- **Zap DEX IDs**: `DEX_*` format in examples, structured DEX catalog in `src/tools/kyberswap/zaas/zap-dexes/` (13 chains incl. scroll/zksync, capability-aware: Curve/Balancer source-only).
 - **`kyberswap.zap.list`**: returns structured entries per chain (id, name, supports, verification, dexscreenerIds).
 - **ChainScan**: described as "0G-only explorer" in prompts.
 - **LP NFT capture**: `sendKyberTransactionWithReceipt()` + `extractMintedNftId()` filtered by recipient. `positionKey` now captured for new zap.in positions.

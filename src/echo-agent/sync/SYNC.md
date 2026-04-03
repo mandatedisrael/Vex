@@ -174,7 +174,7 @@ Cross-protocol: slop.trade.buy + jaine.swap.sell match via shared `instrumentKey
 One-time projection correction tool. Reads immutable audit trail (`protocol_executions` + `protocol_capture_items`), truncates projection tables, re-runs `populateActivity()` with type correction from `MUTATION_MATRIX.expectedType`.
 
 **What it does:**
-1. `TRUNCATE proj_activity, proj_open_positions, proj_pnl_lots, proj_pnl_matches`
+1. `TRUNCATE proj_activity, proj_open_positions, proj_pnl_lots, proj_pnl_matches, proj_lp_events, proj_lp_event_legs`
 2. Read all successful executions chronologically
 3. For each: read its `protocol_capture_items` (batch truth), apply type correction, skip previews
 4. Re-run `populateActivity()` per corrected item via `replayActivityFromCapture()`

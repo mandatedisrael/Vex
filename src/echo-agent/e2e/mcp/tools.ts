@@ -125,14 +125,15 @@ export function registerTools(server: McpServer): void {
     "echo_inspect_pipeline",
     "Read-only, whitelisted inspection of pipeline tables. Filters are per-table aware — only columns that exist in each table are applied.",
     {
-      table: z.enum(["protocol_executions", "protocol_capture_items", "proj_activity", "proj_open_positions", "proj_pnl_lots", "proj_pnl_matches"]).describe("Table to inspect"),
+      table: z.enum(["protocol_executions", "protocol_capture_items", "proj_activity", "proj_open_positions", "proj_pnl_lots", "proj_pnl_matches", "proj_lp_events", "proj_lp_event_legs"]).describe("Table to inspect"),
       limit: z.number().optional().describe("Max rows (default 20, max 50)"),
       executionId: z.number().optional().describe("Filter by execution_id (or id for protocol_executions)"),
       toolId: z.string().optional().describe("Filter by tool_id (protocol_executions only)"),
       sessionId: z.string().optional().describe("Filter by session_id (protocol_executions only)"),
       positionKey: z.string().optional().describe("Filter by position_key (proj_activity, proj_open_positions)"),
       instrumentKey: z.string().optional().describe("Filter by instrument_key (proj_activity, proj_open_positions, proj_pnl_lots)"),
-      namespace: z.string().optional().describe("Filter by namespace (protocol_executions, proj_activity, proj_open_positions, proj_pnl_lots)"),
+      namespace: z.string().optional().describe("Filter by namespace (protocol_executions, proj_activity, proj_open_positions, proj_pnl_lots, proj_lp_events)"),
+      lpEventId: z.number().optional().describe("Filter by lp_event_id (proj_lp_event_legs only)"),
     },
     async (params) => {
       const rows = await inspectTable(params.table, {
@@ -143,6 +144,7 @@ export function registerTools(server: McpServer): void {
         positionKey: params.positionKey,
         instrumentKey: params.instrumentKey,
         namespace: params.namespace,
+        lpEventId: params.lpEventId,
       });
       return { content: [{ type: "text" as const, text: JSON.stringify({ table: params.table, count: rows.length, rows }, null, 2) }] };
     },

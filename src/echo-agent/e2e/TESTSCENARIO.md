@@ -82,18 +82,29 @@ For each: execute buy → inspect DB → execute sell → inspect FIFO close
 - `polymarket.clob.cancelAll` → bulk all
 - `polymarket.clob.cancelMarket` → market-wide cancel, check _tradeCaptureItems
 
-### 5. Audit Flows
+### 5. LP Flows (pnl_lp)
+- `kyberswap.zap.in` → `echo_inspect_pipeline proj_open_positions` (LP open) + `echo_inspect_pipeline proj_lp_events` (event recorded) + `echo_inspect_pipeline proj_lp_event_legs` (deposit legs)
+- `kyberswap.zap.out` → position closed, LP event with withdraw legs, `collectFee` recorded
+- `kyberswap.zap.migrate` → old position closed (migrated), new opened with carried notionalUsd, LP events for both legs
+- `kyberswap.zap.list` → verify catalog returns structured data for supported chain (e.g. polygon)
+
+**DB check after zap.in:**
+- `echo_inspect_pipeline proj_lp_events` — event with action='zap-in', dex, pool, positionKey present
+- `echo_inspect_pipeline proj_lp_event_legs` — deposit legs with token addresses and amounts
+- `echo_portfolio_inspect lp_history` — LP history shows the zap-in event
+
+### 6. Audit Flows
 - `khalani.bridge` — audit capture in protocol_executions
 - `jaine.w0g.wrap` + `jaine.w0g.unwrap`
 - `jaine.allowance.approve` + `jaine.allowance.revoke`
 - `solana.lend.deposit` + `solana.lend.withdraw`
 - `slop.fees.claimCreator`, `slop.reward.claim` (if applicable)
 
-### 6. Cross-Protocol
+### 7. Cross-Protocol
 - `slop.trade.buy` (0G token) → `jaine.swap.sell` (same token)
 - Verify: `echo_inspect_pipeline proj_pnl_lots` — both lots share same `instrumentKey` (`0g:{addr}`)
 
-### 7. Replay Closeout
+### 8. Replay Closeout
 - `echo_replay_verify` — audit trail intact, projections rebuilt, counts match
 
 ## Checklist Per Flow
@@ -108,6 +119,8 @@ After each mutating execution, check:
 | `proj_open_positions` | Lifecycle: open/closed/cancelled (prediction, order, lp) | `echo_inspect_pipeline proj_open_positions` |
 | `proj_pnl_lots` | Lot opened on buy with cost_basis_usd, FIFO reduced on sell | `echo_inspect_pipeline proj_pnl_lots` |
 | `proj_pnl_matches` | Match with realized_pnl_usd on sell, shortfall evidence if sell > inventory | `echo_inspect_pipeline proj_pnl_matches` |
+| `proj_lp_events` | LP event with action, dex, pool, positionKey (zap flows only) | `echo_inspect_pipeline proj_lp_events` |
+| `proj_lp_event_legs` | Deposit/withdraw/fee/refund legs with token amounts (zap flows only) | `echo_inspect_pipeline proj_lp_event_legs` |
 
 ## Report Format
 

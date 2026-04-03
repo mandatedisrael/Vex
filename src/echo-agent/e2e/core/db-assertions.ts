@@ -105,6 +105,8 @@ const ALLOWED_TABLES = new Set([
   "proj_open_positions",
   "proj_pnl_lots",
   "proj_pnl_matches",
+  "proj_lp_events",
+  "proj_lp_event_legs",
 ]);
 
 // Per-table filterable columns (from 001_initial.sql schema).
@@ -116,6 +118,8 @@ const TABLE_FILTERS: Record<string, Record<string, string>> = {
   proj_open_positions:    { positionKey: "position_key", instrumentKey: "instrument_key", namespace: "namespace" },
   proj_pnl_lots:          { executionId: "execution_id", instrumentKey: "instrument_key", namespace: "namespace" },
   proj_pnl_matches:       { instrumentKey: "instrument_key", namespace: "namespace" },
+  proj_lp_events:         { executionId: "execution_id", positionKey: "position_key", instrumentKey: "instrument_key", namespace: "namespace" },
+  proj_lp_event_legs:     { lpEventId: "lp_event_id" },
 };
 
 export interface InspectOpts {
@@ -126,6 +130,7 @@ export interface InspectOpts {
   positionKey?: string;
   instrumentKey?: string;
   namespace?: string;
+  lpEventId?: number;
 }
 
 export async function inspectTable(
@@ -149,6 +154,7 @@ export async function inspectTable(
     positionKey: opts?.positionKey,
     instrumentKey: opts?.instrumentKey,
     namespace: opts?.namespace,
+    lpEventId: opts?.lpEventId,
   };
 
   for (const [optKey, column] of Object.entries(filters)) {
@@ -171,13 +177,25 @@ export async function inspectTable(
 
 // ── Reset helpers (operator-only, not exposed via MCP) ─────────
 
+// ── LP event assertions ───────────────────────────────────────
+
+export async function countLpEvents(): Promise<number> {
+  const row = await queryOne<{ count: string }>("SELECT COUNT(*) as count FROM proj_lp_events", []);
+  return parseInt(row?.count ?? "0", 10);
+}
+
+export async function countLpLegs(): Promise<number> {
+  const row = await queryOne<{ count: string }>("SELECT COUNT(*) as count FROM proj_lp_event_legs", []);
+  return parseInt(row?.count ?? "0", 10);
+}
+
 export async function resetProjections(): Promise<void> {
-  await execute("TRUNCATE proj_activity, proj_open_positions, proj_pnl_lots, proj_pnl_matches RESTART IDENTITY");
+  await execute("TRUNCATE proj_activity, proj_open_positions, proj_pnl_lots, proj_pnl_matches, proj_lp_events, proj_lp_event_legs RESTART IDENTITY");
 }
 
 export async function resetAll(): Promise<void> {
   await execute(
-    "TRUNCATE protocol_executions, protocol_capture_items, proj_activity, proj_open_positions, proj_pnl_lots, proj_pnl_matches, protocol_sync_jobs, protocol_sync_runs RESTART IDENTITY CASCADE",
+    "TRUNCATE protocol_executions, protocol_capture_items, proj_activity, proj_open_positions, proj_pnl_lots, proj_pnl_matches, proj_lp_events, proj_lp_event_legs, protocol_sync_jobs, protocol_sync_runs RESTART IDENTITY CASCADE",
   );
 }
 
@@ -195,17 +213,21 @@ export interface PipelineSnapshot {
   openPositions: number;
   lots: number;
   matches: number;
+  lpEvents: number;
+  lpLegs: number;
 }
 
 export async function takePipelineSnapshot(): Promise<PipelineSnapshot> {
-  const [executions, activities, openPositions, lots, matches] = await Promise.all([
+  const [executions, activities, openPositions, lots, matches, lpEvents, lpLegs] = await Promise.all([
     countExecutions(),
     countActivities(),
     countOpenPositions(),
     countLots(),
     countMatches(),
+    countLpEvents(),
+    countLpLegs(),
   ]);
   const ciRow = await queryOne<{ count: string }>("SELECT COUNT(*) as count FROM protocol_capture_items", []);
   const captureItems = parseInt(ciRow?.count ?? "0", 10);
-  return { executions, captureItems, activities, openPositions, lots, matches };
+  return { executions, captureItems, activities, openPositions, lots, matches, lpEvents, lpLegs };
 }

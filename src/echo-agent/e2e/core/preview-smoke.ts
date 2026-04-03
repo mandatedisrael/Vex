@@ -71,7 +71,9 @@ export async function runPreviewSmoke(): Promise<PreviewSmokeResult> {
     && before.activities === after.activities
     && before.openPositions === after.openPositions
     && before.lots === after.lots
-    && before.matches === after.matches;
+    && before.matches === after.matches
+    && before.lpEvents === after.lpEvents
+    && before.lpLegs === after.lpLegs;
 
   logger.info("e2e.preview_smoke.result", { pass, before, after });
 

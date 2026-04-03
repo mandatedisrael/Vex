@@ -41,14 +41,20 @@ vi.mock("@echo-agent/db/client.js", () => ({
 }));
 
 // LP economics mocks (lazy-imported by projectLpLifecycle → recordLpEconomics)
+const mockInsertLpEvent = vi.fn().mockResolvedValue(1);
+const mockInsertLpLegs = vi.fn().mockResolvedValue(undefined);
+
 vi.mock("@echo-agent/db/repos/lp-events.js", () => ({
-  insertLpEvent: vi.fn().mockResolvedValue(1),
-  insertLpLegs: vi.fn().mockResolvedValue(undefined),
+  insertLpEvent: (...args: unknown[]) => mockInsertLpEvent(...args),
+  insertLpLegs: (...args: unknown[]) => mockInsertLpLegs(...args),
 }));
 
+const mockExtractLpLegs = vi.fn().mockReturnValue([]);
+const mockExtractFeeCollectedUsd = vi.fn().mockReturnValue(undefined);
+
 vi.mock("../../../echo-agent/sync/lp-economics.js", () => ({
-  extractLpLegs: vi.fn().mockReturnValue([]),
-  extractFeeCollectedUsd: vi.fn().mockReturnValue(undefined),
+  extractLpLegs: (...args: unknown[]) => mockExtractLpLegs(...args),
+  extractFeeCollectedUsd: (...args: unknown[]) => mockExtractFeeCollectedUsd(...args),
 }));
 
 const { projectPosition } = await import("../../../echo-agent/sync/position-projector.js");
@@ -286,6 +292,68 @@ describe("position-projector", () => {
       // Verify transaction happened
       const beginCall = mockClientQuery.mock.calls.find((c: unknown[]) => String(c[0]).includes("BEGIN"));
       expect(beginCall).toBeTruthy();
+    });
+  });
+
+  // ── LP economics record path ────────────────────────────────────
+
+  describe("LP economics", () => {
+    it("zap-in with zapDetails records LP event and extracts legs", async () => {
+      const zapDetails = {
+        actions: [{ type: "ACTION_TYPE_ADD_LIQUIDITY", addLiquidity: { token0: { address: "0xA", amount: "1000" }, token1: { address: "0xB", amount: "2000" } } }],
+        initialAmountUsd: "100.00",
+      };
+      mockExtractLpLegs.mockReturnValueOnce([
+        { lpEventId: 1, legType: "deposit", tokenAddress: "0xA", amountRaw: "1000" },
+      ]);
+
+      await projectPosition(makeActivity({
+        productType: "lp", positionKey: "LP_ECO_1", instrumentKey: "ethereum:lp:0xpool",
+        meta: { action: "zap-in", dex: "uniswapv3", pool: "0xpool", zapDetails },
+        namespace: "kyberswap", chain: "ethereum", inputValueUsd: "100.00",
+      }));
+
+      // Position should be opened
+      expect(mockUpsertPosition).toHaveBeenCalledTimes(1);
+      // LP event should be recorded
+      expect(mockInsertLpEvent).toHaveBeenCalledTimes(1);
+      const eventArgs = mockInsertLpEvent.mock.calls[0][0];
+      expect(eventArgs.action).toBe("zap-in");
+      expect(eventArgs.dex).toBe("uniswapv3");
+      expect(eventArgs.positionKey).toBe("LP_ECO_1");
+      expect(eventArgs.totalValueUsd).toBe("100.00");
+      // Legs should be extracted and inserted
+      expect(mockExtractLpLegs).toHaveBeenCalledTimes(1);
+      expect(mockInsertLpLegs).toHaveBeenCalledTimes(1);
+    });
+
+    it("zap-in without zapDetails skips LP economics", async () => {
+      await projectPosition(makeActivity({
+        productType: "lp", positionKey: "LP_NO_ZAP", instrumentKey: "ethereum:lp:0xpool",
+        meta: { action: "zap-in" },
+        namespace: "kyberswap", chain: "ethereum",
+      }));
+
+      // Position still opened
+      expect(mockUpsertPosition).toHaveBeenCalledTimes(1);
+      // LP economics skipped — no zapDetails
+      expect(mockInsertLpEvent).not.toHaveBeenCalled();
+    });
+
+    it("zap-migrate carries cost basis from old position", async () => {
+      mockGetByPositionKey.mockResolvedValueOnce({ notionalUsd: "500.00" });
+
+      await projectPosition(makeActivity({
+        productType: "lp", positionKey: "LP_MIGRATE", instrumentKey: "ethereum:lp:0xNewPool",
+        meta: { action: "zap-migrate", poolTo: "0xNewPool" },
+        namespace: "kyberswap", chain: "ethereum",
+      }));
+
+      // Old position closed
+      expect(mockClosePosition).toHaveBeenCalledWith("kyberswap", "lp", "LP_MIGRATE", "migrated");
+      // New position opened with carried notionalUsd
+      expect(mockUpsertPosition).toHaveBeenCalledTimes(1);
+      expect(mockUpsertPosition.mock.calls[0][0].notionalUsd).toBe("500.00");
     });
   });
 });

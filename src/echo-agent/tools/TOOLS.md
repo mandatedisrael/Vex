@@ -89,7 +89,7 @@ protocols/
   runtime.ts     — discover + execute logic + execution capture hook
   khalani/       — 9 tools: bridge, balances, orders, chains, tokens
   solana-jupiter/— 20 tools: prices, tokens, swap, predict, lend (requires JUPITER_API_KEY)
-  kyberswap/     — 16 tools: swap, limit orders (maker+taker), zap LP, chains, tokens
+  kyberswap/     — 21 tools: swap, limit orders (maker+taker), zap LP (in/out/migrate/list), chains, tokens
   polymarket/    — 69 tools: bridge, CLOB trading, data/positions, gamma discovery
   dexscreener/   — 11 tools: search, pairs, trending, orders (all read-only)
   0g/chainscan/  — 17 tools: account, transaction, contract, decode, token, stats
@@ -169,6 +169,8 @@ LP positions tracked via `proj_lp_events` + `proj_lp_event_legs` (projection tab
 ### EVM wallet transfers
 
 `wallet_send_prepare/confirm` supports dynamic EVM chains (not just 0G): native tokens, ERC-20 (`transfer()`), ERC-721 (`safeTransferFrom()`). Uses khalani chain discovery (`createDynamicPublicClient/WalletClient`) for RPC resolution. Token format: `"native"`, contract address (ERC-20), `"nft:{contract}:{tokenId}"` (ERC-721).
+
+Solana transfers: SOL native + SPL tokens. Standard SPL NFT transfer may incidentally work as a token transfer, but is NOT first-class. pNFT and cNFT require Metaplex instruction set not present in this module.
 
 ### DeFi safety policy
 

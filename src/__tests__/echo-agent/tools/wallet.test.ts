@@ -30,19 +30,27 @@ vi.mock("@tools/khalani/client.js", () => ({
   }),
 }));
 
+const mockResolveChainId = vi.fn().mockReturnValue(16661);
+const mockGetChain = vi.fn().mockReturnValue(MOCK_CHAIN);
+
 vi.mock("@tools/khalani/chains.js", () => ({
-  resolveChainId: () => 16661,
-  getChain: () => MOCK_CHAIN,
+  resolveChainId: (...args: unknown[]) => mockResolveChainId(...args),
+  getChain: (...args: unknown[]) => mockGetChain(...args),
 }));
+
+const mockSendTransaction = vi.fn().mockResolvedValue("0xmockhash" as `0x${string}`);
+const mockWriteContract = vi.fn().mockResolvedValue("0xmockhash" as `0x${string}`);
+const mockReadContract = vi.fn().mockResolvedValue(18);
+const mockWaitForReceipt = vi.fn().mockResolvedValue({ status: "success", blockNumber: 123n });
 
 vi.mock("@tools/khalani/evm-client.js", () => ({
   createDynamicPublicClient: () => ({
-    waitForTransactionReceipt: async () => ({ status: "success", blockNumber: 123n }),
-    readContract: async () => 18, // decimals fallback
+    waitForTransactionReceipt: (...args: unknown[]) => mockWaitForReceipt(...args),
+    readContract: (...args: unknown[]) => mockReadContract(...args),
   }),
   createDynamicWalletClient: () => ({
-    sendTransaction: async () => "0xmockhash" as `0x${string}`,
-    writeContract: async () => "0xmockhash" as `0x${string}`,
+    sendTransaction: (...args: unknown[]) => mockSendTransaction(...args),
+    writeContract: (...args: unknown[]) => mockWriteContract(...args),
     account: { address: "0x1234567890abcdef1234567890abcdef12345678" },
   }),
 }));
@@ -387,5 +395,96 @@ describe("wallet_send_confirm", () => {
     expect(result.success).toBe(false);
     // Without JUPITER_API_KEY, resolution fails with key error; with key, it fails with "Token not found"
     expect(result.output).toMatch(/Token not found|JUPITER_API_KEY/);
+  });
+});
+
+describe("wallet_send_confirm — EVM branches", () => {
+  beforeEach(() => {
+    mockSendTransaction.mockClear();
+    mockWriteContract.mockClear();
+    mockReadContract.mockClear();
+    mockResolveChainId.mockClear();
+    mockGetChain.mockClear();
+    mockWaitForReceipt.mockClear();
+  });
+
+  it("resolves non-default chain via resolveChainId", async () => {
+    const prepResult = await handleWalletSendPrepare(
+      { network: "eip155", chain: "polygon", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "0.1" },
+      baseContext,
+    );
+    const intentId = JSON.parse(prepResult.output).intentId;
+
+    await handleWalletSendConfirm(
+      { network: "eip155", intentId },
+      { ...baseContext, approved: true },
+    );
+    expect(mockResolveChainId).toHaveBeenCalledWith("polygon", expect.anything());
+  });
+
+  it("ERC-20 branch calls writeContract with transfer ABI", async () => {
+    const tokenAddress = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+    const prepResult = await handleWalletSendPrepare(
+      { network: "eip155", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "100", token: tokenAddress },
+      baseContext,
+    );
+    const intentId = JSON.parse(prepResult.output).intentId;
+
+    const result = await handleWalletSendConfirm(
+      { network: "eip155", intentId },
+      { ...baseContext, approved: true },
+    );
+    expect(result.success).toBe(true);
+    // Should read decimals first
+    expect(mockReadContract).toHaveBeenCalledTimes(1);
+    // Should call writeContract (not sendTransaction) for ERC-20
+    expect(mockWriteContract).toHaveBeenCalledTimes(1);
+    expect(mockSendTransaction).not.toHaveBeenCalled();
+    // Verify ABI contains "transfer" functionName
+    const writeArgs = mockWriteContract.mock.calls[0][0];
+    expect(writeArgs.functionName).toBe("transfer");
+    // _tradeCapture type is "transfer" for ERC-20
+    expect((result.data!._tradeCapture as Record<string, unknown>).type).toBe("transfer");
+  });
+
+  it("ERC-721 branch calls writeContract with safeTransferFrom ABI", async () => {
+    const prepResult = await handleWalletSendPrepare(
+      { network: "eip155", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "1", token: "nft:0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D:42" },
+      baseContext,
+    );
+    const intentId = JSON.parse(prepResult.output).intentId;
+
+    const result = await handleWalletSendConfirm(
+      { network: "eip155", intentId },
+      { ...baseContext, approved: true },
+    );
+    expect(result.success).toBe(true);
+    // Should call writeContract (not sendTransaction) for ERC-721
+    expect(mockWriteContract).toHaveBeenCalledTimes(1);
+    expect(mockSendTransaction).not.toHaveBeenCalled();
+    // Verify ABI contains "safeTransferFrom" and tokenId
+    const writeArgs = mockWriteContract.mock.calls[0][0];
+    expect(writeArgs.functionName).toBe("safeTransferFrom");
+    expect(writeArgs.args[2]).toBe(42n);
+    // _tradeCapture type is "send" for ERC-721
+    expect((result.data!._tradeCapture as Record<string, unknown>).type).toBe("send");
+  });
+
+  it("native branch calls sendTransaction (not writeContract)", async () => {
+    const prepResult = await handleWalletSendPrepare(
+      { network: "eip155", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "0.5" },
+      baseContext,
+    );
+    const intentId = JSON.parse(prepResult.output).intentId;
+
+    const result = await handleWalletSendConfirm(
+      { network: "eip155", intentId },
+      { ...baseContext, approved: true },
+    );
+    expect(result.success).toBe(true);
+    expect(mockSendTransaction).toHaveBeenCalledTimes(1);
+    expect(mockWriteContract).not.toHaveBeenCalled();
+    expect((result.data!._tradeCapture as Record<string, unknown>).type).toBe("transfer");
+    expect((result.data!._tradeCapture as Record<string, unknown>).chain).toBeTruthy();
   });
 });

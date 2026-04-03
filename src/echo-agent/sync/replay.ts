@@ -6,7 +6,8 @@
  * type correction from MUTATION_MATRIX.
  *
  * Does NOT modify protocol_executions or protocol_capture_items.
- * TRUNCATES only: proj_activity, proj_open_positions, proj_pnl_lots.
+ * TRUNCATES: proj_activity, proj_open_positions, proj_pnl_lots, proj_pnl_matches,
+ *            proj_lp_events, proj_lp_event_legs.
  *
  * Idempotent: can run multiple times with same result.
  * Run once after W3 handler fixes are deployed.
@@ -27,7 +28,7 @@ interface ReplayStats {
  * Replay all projections from protocol_executions + protocol_capture_items.
  *
  * Steps:
- * 1. TRUNCATE projection tables (proj_activity, proj_open_positions, proj_pnl_lots)
+ * 1. TRUNCATE projection tables (proj_activity, proj_open_positions, proj_pnl_lots, proj_pnl_matches, proj_lp_events, proj_lp_event_legs)
  * 2. Read all successful executions chronologically
  * 3. For each execution: read its capture_items (batch truth), apply type correction, replay
  * 4. Return stats

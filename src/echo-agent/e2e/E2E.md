@@ -25,6 +25,8 @@ ClaudeCode ──MCP stdio──> LocalTestMcp (pnpm exec tsx)
                                    proj_open_positions
                                    proj_pnl_lots
                                    proj_pnl_matches
+                                   proj_lp_events
+                                   proj_lp_event_legs
 ```
 
 **Key decision:** Mutating flows tested manually by Claude via `echo_execute`. Automated smoke only for discovery, read-only, and preview (dryRun).
@@ -68,7 +70,7 @@ src/echo-agent/e2e/
     replay-check.ts        — Replay smoke (snapshot before/after)
   mcp/
     server.ts              — MCP stdio server with startup smoke
-    tools.ts               — 9 MCP tools (echo_* prefixed)
+    tools.ts               — 10 MCP tools (echo_* prefixed)
   scenarios/
     index.ts               — Scenario registry (ALL_SCENARIOS)
     pnl-roundtrip.ts       — Spot buy → sell → verify PnL scenario
@@ -84,13 +86,14 @@ src/echo-agent/e2e/
 |------|------|---------|
 | `echo_discover` | Core | Search protocol capabilities (via dispatchTool) |
 | `echo_execute` | Core | Execute protocol tool (via dispatchTool, with capture pipeline) |
+| `echo_internal` | Core | Generic internal tool access (excludes subagent tools) |
 | `echo_wallet_address` | Read-only | Wallet address per chain family |
 | `echo_wallet_balances` | Read-only | Multi-chain token balances via Khalani (source of truth for wallet state) |
 | `echo_portfolio_inspect` | Read-only | DB inspection: 14 views — positions, activity, executions, lots, profits, closed_positions, non_trading_history, bridges, lp_history, orders, unrealized + balances/snapshots/summary. |
-| `echo_inspect_pipeline` | Operator | Whitelisted read-only query on 6 pipeline tables (incl. proj_pnl_matches). Filters: executionId, toolId, positionKey, sessionId. |
-| `echo_replay_verify` | Operator | Run replayProjections() + compare before/after counts and content hashes (including valuation fields) |
+| `echo_inspect_pipeline` | Operator | Whitelisted read-only query on 8 pipeline tables (incl. proj_pnl_matches, proj_lp_events, proj_lp_event_legs). Filters: executionId, toolId, positionKey, sessionId, lpEventId. |
+| `echo_replay_verify` | Operator | Run replayProjections() + compare before/after counts and content hashes (including LP economics and valuation fields) |
 | `echo_discovery_smoke` | Smoke | Automated discovery check for all active namespaces |
-| `echo_preview_smoke` | Smoke | Automated dryRun zero-write verification |
+| `echo_preview_smoke` | Smoke | Automated dryRun zero-write verification (8 pipeline tables) |
 
 ---
 

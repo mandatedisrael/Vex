@@ -158,6 +158,16 @@ describe("getKyberChains", () => {
   });
 });
 
+describe("zaas catalog consistency", () => {
+  it("every zaas:true chain has an entry in zap-dexes catalog", async () => {
+    const { getSupportedZapChains } = await import("@tools/kyberswap/zaas/zap-dexes/index.js");
+    const zaasChains = getKyberChains().filter(c => c.zaas).map(c => c.slug);
+    const catalogChains = getSupportedZapChains();
+    const missing = zaasChains.filter(slug => !catalogChains.includes(slug));
+    expect(missing).toEqual([]);
+  });
+});
+
 describe("dynamic chain cache", () => {
   beforeEach(() => {
     clearDynamicChainsCache();
