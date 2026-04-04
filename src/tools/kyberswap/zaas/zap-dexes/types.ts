@@ -78,6 +78,13 @@ export interface ZapDexEntry {
   /** How to build positionKey for projection */
   positionKeyStrategy: PositionKeyStrategy;
 
+  /**
+   * Concrete address of the NonfungiblePositionManager (or PositionManager for V4).
+   * Required when approvalTargetKind === "positionManager" — the NFPM is a separate
+   * contract from the pool. Per-DEX per-chain (immutable deployed contracts).
+   */
+  positionManagerAddress?: string;
+
   /** DexScreener dexId values for matching pair.dexId. */
   dexscreenerIds?: string[];
   /** DexScreener label values for matching pair.labels (e.g. ["v3"]). */

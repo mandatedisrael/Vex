@@ -1,19 +1,17 @@
 import type { ChainZapDexConfig } from "../types.js";
-const ALL_OPS = ["zap-in", "zap-out", "zap-migrate-source", "zap-migrate-destination"] as const;
+import { getNfpm, NFT_CL, V2_BASIC } from "../nfpm-registry.js";
 
-const NFT_CL = { positionRefKind: "tokenId", approvalStandard: "erc721", approvalTargetKind: "positionManager", captureKind: "receiptNftMint", positionKeyStrategy: "nftTokenId" } as const;
-const V2_BASIC = { positionRefKind: "ownerAddress", approvalStandard: "erc20", approvalTargetKind: "poolAddress", captureKind: "shareBalance", positionKeyStrategy: "chainPoolWallet" } as const;
+const ALL_OPS = ["zap-in", "zap-out", "zap-migrate-source", "zap-migrate-destination"] as const;
+const C = "berachain";
 
 export const BERACHAIN_ZAP_DEXES: ChainZapDexConfig = {
-  chain: "berachain", lastVerified: "2026-04-03", source: "KyberSwap ZaaS docs",
+  chain: C, lastVerified: "2026-04-04", source: "KyberSwap ZaaS docs",
   dexes: [
     { id: "DEX_KODIAK_V2", name: "Kodiak V2", supports: [...ALL_OPS], verification: "verified", ...V2_BASIC },
-    { id: "DEX_KODIAK_V3", name: "Kodiak V3", supports: [...ALL_OPS], verification: "verified", ...NFT_CL },
-    { id: "DEX_BERAHUB", name: "BeraHub", supports: [...ALL_OPS], verification: "tbd", ...NFT_CL },
-    { id: "DEX_9MM_V2", name: "9MM V2", supports: [...ALL_OPS], verification: "tbd", ...V2_BASIC },
-    { id: "DEX_9MM_V3", name: "9MM V3", supports: [...ALL_OPS], verification: "tbd", ...NFT_CL },
-    { id: "DEX_ARBERA", name: "Arbera", supports: [...ALL_OPS], verification: "tbd", ...V2_BASIC },
+    { id: "DEX_KODIAK_V3", name: "Kodiak V3", supports: [...ALL_OPS], verification: "verified", ...NFT_CL, positionManagerAddress: getNfpm(C, "DEX_KODIAK_V3") },
+    // BeraHub removed — not a CL DEX (Balancer-style weighted AMM)
+    // 9MM V3/V2 removed — not deployed on Berachain per official docs
+    // QuickSwap V4 removed — not deployed on Berachain per official docs
     { id: "DEX_BROWNFI", name: "BrownFi V2", supports: [...ALL_OPS], verification: "verified", ...V2_BASIC },
-    { id: "DEX_QUICKSWAPV4", name: "QuickSwap V4", supports: [...ALL_OPS], verification: "tbd", ...NFT_CL },
   ],
 };

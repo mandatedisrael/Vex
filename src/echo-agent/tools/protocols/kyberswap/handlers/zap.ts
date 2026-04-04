@@ -37,12 +37,16 @@ function resolveZapApprovalTarget(
   switch (entry.approvalTargetKind) {
     case "poolAddress":
       return getAddress(pool);
-    case "positionManager":
-      // NFT Position Manager — ZaaS API doesn't reliably return PM address.
-      // For known NFT DEXes the pool param IS the position manager contract.
-      // This is correct for UniV3/V4 NFPM, Algebra NFPM, etc.
-      // If ZaaS ever returns a distinct PM address, prefer that.
-      return getAddress(pool);
+    case "positionManager": {
+      if (!entry.positionManagerAddress) {
+        throw new EchoError(
+          ErrorCodes.KYBER_API_ERROR,
+          `NFPM address not configured for DEX ${entry.id} on ${pool}. Cannot determine ERC-721 approval target.`,
+          "Add positionManagerAddress to this DEX entry in zap-dexes/chains/.",
+        );
+      }
+      return getAddress(entry.positionManagerAddress as `0x${string}`);
+    }
     case "vaultShare": {
       // Vault share address MUST come from ZaaS poolDetails, not from pool param
       const vaultAddr = routeResp?.data?.poolDetails?.address;
@@ -142,7 +146,7 @@ export const ZAP_HANDLERS: Record<string, ProtocolHandler> = {
     if (!positionRef) {
       switch (zapDexEntry.captureKind) {
         case "receiptNftMint":
-          positionRef = extractMintedNftId(receipt.logs, wallet.address, pool) ?? undefined;
+          positionRef = extractMintedNftId(receipt.logs, wallet.address) ?? undefined;
           break;
         case "receiptErc1155":
           positionRef = extractErc1155Position(receipt.logs, wallet.address) ?? undefined;
