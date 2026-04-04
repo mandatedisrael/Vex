@@ -97,8 +97,8 @@ export class PolyGammaClient {
     return this.request("/markets", validateMarketsResponse, params ? this.toQuery(params) : undefined);
   }
 
-  getMarket(id: number | string): Promise<GammaMarket> {
-    return this.request(`/markets/${encodeURIComponent(id)}`, validateMarketResponse);
+  getMarket(id: number | string, opts?: { include_tag?: boolean }): Promise<GammaMarket> {
+    return this.request(`/markets/${encodeURIComponent(id)}`, validateMarketResponse, opts ? this.toQuery(opts) : undefined);
   }
 
   /**
@@ -125,8 +125,8 @@ export class PolyGammaClient {
     return this.getMarket(idOrConditionId);
   }
 
-  getMarketBySlug(slug: string): Promise<GammaMarket> {
-    return this.request(`/markets/slug/${encodeURIComponent(slug)}`, validateMarketResponse);
+  getMarketBySlug(slug: string, opts?: { include_tag?: boolean }): Promise<GammaMarket> {
+    return this.request(`/markets/slug/${encodeURIComponent(slug)}`, validateMarketResponse, opts ? this.toQuery(opts) : undefined);
   }
 
   getMarketTags(id: number | string): Promise<GammaTag[]> {

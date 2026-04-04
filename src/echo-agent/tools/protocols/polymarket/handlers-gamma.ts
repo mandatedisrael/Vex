@@ -80,8 +80,33 @@ export const GAMMA_HANDLERS: Record<string, ProtocolHandler> = {
       offset: num(p, "offset"),
       order: str(p, "order") || undefined,
       ascending: bool(p, "ascending"),
+      // Identifiers
+      slug: str(p, "slug") ? str(p, "slug").split(",").map(s => s.trim()) : undefined,
+      clob_token_ids: str(p, "clobTokenIds") ? str(p, "clobTokenIds").split(",").map(s => s.trim()) : undefined,
+      condition_ids: str(p, "conditionIds") ? str(p, "conditionIds").split(",").map(s => s.trim()) : undefined,
+      question_ids: str(p, "questionIds") ? str(p, "questionIds").split(",").map(s => s.trim()) : undefined,
+      // Status / filtering
       closed: bool(p, "closed"),
       tag_id: num(p, "tagId"),
+      related_tags: bool(p, "relatedTags"),
+      cyom: bool(p, "cyom"),
+      include_tag: bool(p, "includeTag"),
+      uma_resolution_status: str(p, "umaResolutionStatus") || undefined,
+      // Market data bounds
+      liquidity_num_min: num(p, "liquidityMin"),
+      liquidity_num_max: num(p, "liquidityMax"),
+      volume_num_min: num(p, "volumeMin"),
+      volume_num_max: num(p, "volumeMax"),
+      // Date range
+      start_date_min: str(p, "startDateMin") || undefined,
+      start_date_max: str(p, "startDateMax") || undefined,
+      end_date_min: str(p, "endDateMin") || undefined,
+      end_date_max: str(p, "endDateMax") || undefined,
+      // Sports
+      game_id: str(p, "gameId") || undefined,
+      sports_market_types: str(p, "sportsMarketTypes") ? str(p, "sportsMarketTypes").split(",").map(s => s.trim()) : undefined,
+      // Rewards
+      rewards_min_size: num(p, "rewardsMinSize"),
     });
     return ok({ count: markets.length, markets });
   },
@@ -89,13 +114,16 @@ export const GAMMA_HANDLERS: Record<string, ProtocolHandler> = {
   "polymarket.gamma.market": async (p) => {
     const id = str(p, "id");
     if (!id) return fail("Missing required: id");
+    // resolveMarket handles conditionId→numeric ID resolution internally
     return ok(await getPolyGammaClient().resolveMarket(id));
   },
 
   "polymarket.gamma.marketBySlug": async (p) => {
     const slug = str(p, "slug");
     if (!slug) return fail("Missing required: slug");
-    return ok(await getPolyGammaClient().getMarketBySlug(slug));
+    return ok(await getPolyGammaClient().getMarketBySlug(slug, {
+      include_tag: bool(p, "includeTag"),
+    }));
   },
 
   "polymarket.gamma.marketTags": async (p) => {

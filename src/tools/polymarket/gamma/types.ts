@@ -182,14 +182,39 @@ export interface ListEventsParams {
   include_template?: boolean;
 }
 
-/** Query params for listMarkets. */
+/** Query params for listMarkets. Full parity with Polymarket Gamma API. */
 export interface ListMarketsParams {
   limit?: number;
   offset?: number;
   order?: string;
   ascending?: boolean;
-  closed?: boolean;
-  tag_id?: number;
+  // Identifiers
+  id?: number[];
+  slug?: string[];
   clob_token_ids?: string[];
   condition_ids?: string[];
+  question_ids?: string[];
+  market_maker_address?: string[];
+  // Status / filtering
+  closed?: boolean;
+  tag_id?: number;
+  related_tags?: boolean;
+  cyom?: boolean;
+  include_tag?: boolean;
+  uma_resolution_status?: string;
+  // Market data bounds
+  liquidity_num_min?: number;
+  liquidity_num_max?: number;
+  volume_num_min?: number;
+  volume_num_max?: number;
+  // Date range
+  start_date_min?: string;
+  start_date_max?: string;
+  end_date_min?: string;
+  end_date_max?: string;
+  // Sports
+  game_id?: string;
+  sports_market_types?: string[];
+  // Rewards
+  rewards_min_size?: number;
 }
