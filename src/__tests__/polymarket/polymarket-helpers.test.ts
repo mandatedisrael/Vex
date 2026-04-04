@@ -1,6 +1,5 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { parseOutcomePrices, parseOutcomes, parseClobTokenIds, formatUsd, formatProbability, requirePolyAuth } from "@commands/polymarket/helpers.js";
-import { EchoError } from "../../errors.js";
+import { describe, it, expect } from "vitest";
+import { parseOutcomePrices, parseOutcomes, parseClobTokenIds } from "@tools/polymarket/helpers.js";
 
 describe("parseOutcomePrices", () => {
   it("parses valid JSON", () => {
@@ -31,45 +30,5 @@ describe("parseClobTokenIds", () => {
   });
   it("returns empty for null", () => {
     expect(parseClobTokenIds(null)).toEqual({ yes: "", no: "" });
-  });
-});
-
-describe("formatUsd", () => {
-  it("formats number", () => {
-    expect(formatUsd(1234.5)).toContain("1,234.50");
-  });
-  it("returns placeholder for NaN", () => {
-    expect(formatUsd(NaN)).toBe("$—");
-  });
-  it("returns placeholder for null", () => {
-    expect(formatUsd(null)).toBe("$—");
-  });
-});
-
-describe("formatProbability", () => {
-  it("formats price as percentage", () => {
-    expect(formatProbability(0.65)).toBe("65.0%");
-  });
-  it("returns placeholder for null", () => {
-    expect(formatProbability(null)).toBe("—%");
-  });
-});
-
-describe("requirePolyAuth", () => {
-  const originalEnv = { ...process.env };
-  afterEach(() => { process.env = { ...originalEnv }; });
-
-  it("throws when not configured", () => {
-    delete process.env.POLYMARKET_API_KEY;
-    delete process.env.POLYMARKET_API_SECRET;
-    delete process.env.POLYMARKET_PASSPHRASE;
-    expect(() => requirePolyAuth()).toThrow(EchoError);
-  });
-
-  it("does not throw when configured", () => {
-    process.env.POLYMARKET_API_KEY = "k";
-    process.env.POLYMARKET_API_SECRET = "s";
-    process.env.POLYMARKET_PASSPHRASE = "p";
-    expect(() => requirePolyAuth()).not.toThrow();
   });
 });

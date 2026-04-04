@@ -11,7 +11,7 @@ import { requirePolyClobCredentials } from "@tools/polymarket/auth.js";
 import { getPolyGammaClient } from "@tools/polymarket/gamma/client.js";
 import { USDC_E_DECIMALS } from "@tools/polymarket/constants.js";
 import { requireEvmWallet } from "@tools/wallet/multi-auth.js";
-import { parseClobTokenIds } from "@commands/polymarket/helpers.js";
+import { parseClobTokenIds } from "@tools/polymarket/helpers.js";
 import type { Hex } from "viem";
 import type { ProtocolHandler } from "../types.js";
 import { str, num, ok, fail } from "../handler-helpers.js";

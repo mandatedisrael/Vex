@@ -11,7 +11,6 @@ import { parseUnits } from "viem";
 import { withSuppressedConsole } from "./bridge.js";
 import { normalizeSubAccount, normalizeLedger, type NormalizedSubAccount, type NormalizedLedger } from "./account.js";
 import { calculateProviderPricing, formatPricePerMTokens, type ProviderPricing } from "./pricing.js";
-import { patchOpenclawConfig, type PatchResult } from "../../openclaw/config.js";
 import { saveComputeState } from "./readiness.js";
 import logger from "../../utils/logger.js";
 
@@ -151,56 +150,6 @@ export async function createApiKey(
       expiresIn: 0,
     })
   ) as ApiKeyInfo;
-}
-
-// ── OpenClaw integration ─────────────────────────────────────────────
-
-export interface ConfigureOpenclawResult {
-  providerPatch: PatchResult;
-  modePatch: PatchResult;
-  defaultPatch?: PatchResult;
-}
-
-export async function configureOpenclawProvider(
-  broker: ZGComputeNetworkBroker,
-  provider: string,
-  apiKey: string,
-  opts?: { force?: boolean; setDefault?: boolean; fallback?: string },
-): Promise<ConfigureOpenclawResult> {
-  const metadata = await getServiceMetadata(broker, provider);
-
-  const providerConfig = {
-    baseUrl: metadata.endpoint,
-    apiKey,
-    api: "openai-completions",
-    models: [{
-      id: metadata.model,
-      name: `${metadata.model} (0G Compute)`,
-      contextWindow: 128000,
-      maxTokens: 8192,
-    }],
-  };
-
-  const providerPatch = patchOpenclawConfig("models.providers.zg", providerConfig, { force: opts?.force ?? true });
-  const modePatch = patchOpenclawConfig("models.mode", "merge", { force: false });
-
-  let defaultPatch: PatchResult | undefined;
-  if (opts?.setDefault !== false) {
-    const defaultModel: Record<string, unknown> = { primary: `zg/${metadata.model}` };
-    if (opts?.fallback) defaultModel.fallbacks = [opts.fallback];
-    defaultPatch = patchOpenclawConfig("agents.defaults.model", defaultModel, { force: opts?.force ?? true });
-  }
-
-  // Persist compute state
-  saveComputeState({
-    activeProvider: provider,
-    model: metadata.model,
-    configuredAt: Date.now(),
-  });
-
-  logger.info(`[0G Compute] OpenClaw configured: provider=${provider.slice(0, 10)}..., model=${metadata.model}`);
-
-  return { providerPatch, modePatch, defaultPatch };
 }
 
 // ── ACK with readback ────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { Keypair } from "@solana/web3.js";
 import { loadConfig, saveConfig } from "../../config/store.js";
-import { autoBackup } from "../../commands/wallet/index.js";
+import { autoBackup } from "./backup.js";
 import { EchoError, ErrorCodes } from "../../errors.js";
 import { requireKeystorePassword } from "../../utils/env.js";
 import { deriveSolanaAddress, encryptSolanaSecretKey, saveSolanaKeystore, solanaKeystoreExists } from "./solana-keystore.js";

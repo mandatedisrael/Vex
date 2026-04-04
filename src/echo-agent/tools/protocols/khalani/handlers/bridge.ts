@@ -7,9 +7,9 @@ import {
   getCachedKhalaniChains,
   getChain,
 } from "@tools/khalani/chains.js";
-import { resolveRouteBestIndex } from "@commands/khalani/helpers.js";
-import { prepareQuoteRequest } from "@commands/khalani/request.js";
-import { executeDepositPlan } from "@commands/khalani/bridge-executor.js";
+import { resolveRouteBestIndex } from "@tools/khalani/helpers.js";
+import { prepareQuoteRequest } from "@tools/khalani/request.js";
+import { executeDepositPlan } from "@tools/khalani/bridge-executor.js";
 import type { DepositMethod, QuoteRoute } from "@tools/khalani/types.js";
 import type { ToolResult } from "../../../types.js";
 import type { ProtocolHandler, ProtocolExecutionContext } from "../../types.js";

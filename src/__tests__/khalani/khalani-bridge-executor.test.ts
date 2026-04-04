@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { EchoError, ErrorCodes } from "../../errors.js";
-import { parseBigintish } from "@commands/khalani/bridge-executor.js";
+import { parseBigintish } from "@tools/khalani/bridge-executor.js";
 import type {
   ContractCallDepositPlan,
   DepositPlan,
@@ -104,7 +104,7 @@ describe("parseBigintish", () => {
 });
 
 describe("executeDepositPlan", () => {
-  let executeDepositPlan: typeof import("@commands/khalani/bridge-executor.js").executeDepositPlan;
+  let executeDepositPlan: typeof import("@tools/khalani/bridge-executor.js").executeDepositPlan;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -112,7 +112,7 @@ describe("executeDepositPlan", () => {
       orderId: "order-123",
       txHash: "0xdeadbeef",
     });
-    const mod = await import("@commands/khalani/bridge-executor.js");
+    const mod = await import("@tools/khalani/bridge-executor.js");
     executeDepositPlan = mod.executeDepositPlan;
   });
 

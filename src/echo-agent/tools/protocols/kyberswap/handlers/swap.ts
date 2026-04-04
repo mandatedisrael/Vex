@@ -15,7 +15,7 @@ import {
   verifyRouterAddress,
 } from "@tools/kyberswap/evm-utils.js";
 import { META_AGGREGATION_ROUTER_V2, NATIVE_TOKEN_ADDRESS } from "@tools/kyberswap/constants.js";
-import { resolveTokenMetadata, resolveTokenMetadataStrict, requireFeature, resolveChainWithId } from "@commands/kyberswap/helpers.js";
+import { resolveTokenMetadata, resolveTokenMetadataStrict, requireFeature, resolveChainWithId } from "@tools/kyberswap/helpers.js";
 import logger from "@utils/logger.js";
 import { requireEvmWallet } from "@tools/wallet/multi-auth.js";
 

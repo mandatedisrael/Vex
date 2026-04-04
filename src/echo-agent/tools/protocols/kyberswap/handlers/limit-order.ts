@@ -10,7 +10,7 @@ import {
   sendKyberTransaction,
 } from "@tools/kyberswap/evm-utils.js";
 import { DSLO_PROTOCOL } from "@tools/kyberswap/constants.js";
-import { resolveTokenMetadataStrict, requireFeature, resolveChainWithId } from "@commands/kyberswap/helpers.js";
+import { resolveTokenMetadataStrict, requireFeature, resolveChainWithId } from "@tools/kyberswap/helpers.js";
 import { requireEvmWallet } from "@tools/wallet/multi-auth.js";
 
 import { parseUnits, getAddress, type Hex } from "viem";

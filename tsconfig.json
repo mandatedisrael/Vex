@@ -16,12 +16,11 @@
     "baseUrl": "src",
     "paths": {
       "@tools/*": ["tools/*"],
-      "@commands/*": ["commands/*"],
       "@utils/*": ["utils/*"],
       "@config/*": ["config/*"],
       "@echo-agent/*": ["echo-agent/*"]
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/__tests__", "src/launcher/ui", "src/agent/ui"]
+  "exclude": ["node_modules", "dist", "src/__tests__"]
 }

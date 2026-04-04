@@ -10,7 +10,7 @@
 
 import { parseArgs } from "node:util";
 import { formatUnits, getAddress } from "ethers";
-import { requireWalletAndKeystore } from "../../bot/executor.js";
+import { requireWalletAndKeystore } from "../wallet/auth.js";
 import { createBrokerFromKey } from "./sdk-bridge.cjs";
 import { withSuppressedConsole } from "./bridge.js";
 import { loadConfig } from "../../config/store.js";

@@ -13,8 +13,7 @@ import { getAuthenticatedBroker } from "./broker-factory.js";
 import { normalizeSubAccount, normalizeInferTuple } from "./account.js";
 import { calculateProviderPricing } from "./pricing.js";
 import { ZG_COMPUTE_DIR, ZG_COMPUTE_STATE_FILE } from "./constants.js";
-import { requireWalletAndKeystore } from "../../bot/executor.js";
-import { loadOpenclawConfig } from "../../openclaw/config.js";
+import { requireWalletAndKeystore } from "../wallet/auth.js";
 import logger from "../../utils/logger.js";
 
 // ── Compute state persistence ────────────────────────────────────────
@@ -64,7 +63,6 @@ export interface ReadinessResult {
     ledger: ReadinessCheck;
     subAccount: ReadinessCheck;
     ack: ReadinessCheck;
-    openclawConfig: ReadinessCheck;
   };
 }
 
@@ -113,7 +111,6 @@ export async function checkComputeReadiness(): Promise<ReadinessResult> {
       ledger: fail("Not checked"),
       subAccount: fail("Not checked"),
       ack: fail("Not checked"),
-      openclawConfig: fail("Not checked"),
     },
   };
 
@@ -189,35 +186,6 @@ export async function checkComputeReadiness(): Promise<ReadinessResult> {
     }
   }
 
-  // Fallback 3: recover provider from OpenClaw config baseUrl → match service endpoint
-  if (!provider) {
-    try {
-      const config = loadOpenclawConfig();
-      const zgBaseUrl = (config as any)?.models?.providers?.zg?.baseUrl;
-      if (zgBaseUrl) {
-        const services = await withSuppressedConsole(() =>
-          broker.inference.listServiceWithDetail(),
-        ) as unknown as Array<{ provider: string; [k: string]: unknown }>;
-
-        for (const svc of services) {
-          try {
-            const meta = await withSuppressedConsole(() =>
-              broker.inference.getServiceMetadata(svc.provider),
-            ) as { endpoint?: string };
-            if (meta.endpoint && normalizeUrl(meta.endpoint) === normalizeUrl(zgBaseUrl)) {
-              provider = svc.provider;
-              break;
-            }
-          } catch {
-            // Skip — try next service
-          }
-        }
-      }
-    } catch {
-      // Fallback failed — provider stays null
-    }
-  }
-
   if (!provider) {
     result.checks.subAccount = fail(
       "No active provider found",
@@ -288,44 +256,6 @@ export async function checkComputeReadiness(): Promise<ReadinessResult> {
     result.checks.ack = fail(
       "Could not verify ACK status",
       "Run: echoclaw 0g-compute provider <addr> ack",
-    );
-    return result;
-  }
-
-  // 6. OpenClaw config
-  try {
-    const config = loadOpenclawConfig();
-    const zgProvider = (config as any)?.models?.providers?.zg;
-    if (zgProvider && zgProvider.baseUrl && zgProvider.apiKey) {
-      // Cross-check: verify OpenClaw baseUrl matches detected provider's endpoint
-      if (result.provider) {
-        try {
-          const meta = await withSuppressedConsole(() =>
-            broker.inference.getServiceMetadata(result.provider!),
-          ) as { endpoint?: string };
-          if (meta.endpoint && normalizeUrl(meta.endpoint) !== normalizeUrl(zgProvider.baseUrl)) {
-            result.checks.openclawConfig = fail(
-              `OpenClaw baseUrl does not match provider endpoint (expected ${meta.endpoint})`,
-              "Run: echoclaw echo",
-            );
-            return result;
-          }
-        } catch {
-          // Can't verify — pass anyway (best-effort cross-check)
-        }
-      }
-      result.checks.openclawConfig = pass();
-    } else {
-      result.checks.openclawConfig = fail(
-        "OpenClaw config missing models.providers.zg (or missing baseUrl/apiKey)",
-        "Run: echoclaw echo",
-      );
-      return result;
-    }
-  } catch {
-    result.checks.openclawConfig = fail(
-      "Could not read OpenClaw config",
-      "Check ~/.openclaw/openclaw.json",
     );
     return result;
   }

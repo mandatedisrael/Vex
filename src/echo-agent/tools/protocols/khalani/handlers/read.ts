@@ -8,7 +8,7 @@ import {
   resolveChainId,
 } from "@tools/khalani/chains.js";
 import { requireEvmWallet, requireSolanaWallet } from "@tools/wallet/multi-auth.js";
-import { prepareQuoteRequest } from "@commands/khalani/request.js";
+import { prepareQuoteRequest } from "@tools/khalani/request.js";
 
 import type { ProtocolHandler } from "../../types.js";
 import { str } from "../../handler-helpers.js";

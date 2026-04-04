@@ -18,7 +18,7 @@ import {
 } from "@tools/kyberswap/evm-utils.js";
 import { KS_ZAP_ROUTER_POSITION, NATIVE_TOKEN_ADDRESS } from "@tools/kyberswap/constants.js";
 import { resolveChainSlug } from "@tools/kyberswap/chains.js";
-import { requireFeature } from "@commands/kyberswap/helpers.js";
+import { requireFeature } from "@tools/kyberswap/helpers.js";
 import type { ZapDexEntry } from "@tools/kyberswap/zaas/zap-dexes/types.js";
 import type { ZapRouteResponse } from "@tools/kyberswap/zaas/types.js";
 import { EchoError, ErrorCodes } from "../../../../../errors.js";

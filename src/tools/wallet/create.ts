@@ -2,7 +2,7 @@ import type { Address } from "viem";
 import { generatePrivateKey, privateKeyToAddress } from "viem/accounts";
 import { loadConfig, saveConfig } from "../../config/store.js";
 import { encryptPrivateKey, saveKeystore, keystoreExists } from "./keystore.js";
-import { autoBackup } from "../../commands/wallet/index.js";
+import { autoBackup } from "./backup.js";
 import { requireKeystorePassword } from "../../utils/env.js";
 import { EchoError, ErrorCodes } from "../../errors.js";
 

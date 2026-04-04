@@ -1,5 +1,0 @@
-services:
-  agent:
-    build:
-      context: ../..
-      dockerfile: docker/echo-agent/Dockerfile
