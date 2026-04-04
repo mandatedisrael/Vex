@@ -7,6 +7,7 @@ import { getPolyDataClient } from "@tools/polymarket/data/client.js";
 import type { ProtocolHandler } from "../types.js";
 import { str, num, bool, ok, fail } from "../handler-helpers.js";
 
+
 export const DATA_HANDLERS: Record<string, ProtocolHandler> = {
   // ── User Data ─────────────────────────────────────────────────
 
@@ -32,12 +33,15 @@ export const DATA_HANDLERS: Record<string, ProtocolHandler> = {
   "polymarket.data.closedPositions": async (p) => {
     const user = str(p, "user");
     if (!user) return fail("Missing required: user");
-    const positions = await getPolyDataClient().getClosedPositions(user, {
+    const positions = await getPolyDataClient().getClosedPositions({
+      user,
+      market: str(p, "market") || undefined,
+      eventId: num(p, "eventId"),
+      title: str(p, "title") || undefined,
       limit: num(p, "limit"),
       offset: num(p, "offset"),
-      sortBy: str(p, "sortBy") || undefined,
-      sortDirection: str(p, "sortDirection") || undefined,
-      title: str(p, "title") || undefined,
+      sortBy: (str(p, "sortBy") || undefined) as any,
+      sortDirection: (str(p, "sortDirection") || undefined) as any,
     });
     return ok({ count: positions.length, positions });
   },
@@ -45,12 +49,18 @@ export const DATA_HANDLERS: Record<string, ProtocolHandler> = {
   "polymarket.data.activity": async (p) => {
     const user = str(p, "user");
     if (!user) return fail("Missing required: user");
-    const activity = await getPolyDataClient().getActivity(user, {
-      limit: num(p, "limit"),
-      offset: num(p, "offset"),
+    const activity = await getPolyDataClient().getActivity({
+      user,
+      market: str(p, "market") || undefined,
+      eventId: num(p, "eventId"),
       type: str(p, "type") || undefined,
       side: str(p, "side") || undefined,
-      market: str(p, "market") || undefined,
+      start: num(p, "start"),
+      end: num(p, "end"),
+      limit: num(p, "limit"),
+      offset: num(p, "offset"),
+      sortBy: (str(p, "sortBy") || undefined) as any,
+      sortDirection: (str(p, "sortDirection") || undefined) as any,
     });
     return ok({ count: activity.length, activity });
   },
@@ -59,7 +69,11 @@ export const DATA_HANDLERS: Record<string, ProtocolHandler> = {
     const trades = await getPolyDataClient().getTrades({
       user: str(p, "user") || undefined,
       market: str(p, "market") || undefined,
+      eventId: num(p, "eventId"),
       side: str(p, "side") || undefined,
+      takerOnly: bool(p, "takerOnly"),
+      filterType: (str(p, "filterType") || undefined) as any,
+      filterAmount: num(p, "filterAmount"),
       limit: num(p, "limit"),
       offset: num(p, "offset"),
     });

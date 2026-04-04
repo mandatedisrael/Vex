@@ -232,7 +232,7 @@ async function reconcilePolymarketSettlements(
 
   // One API call per proxy wallet
   const { getPolyDataClient } = await import("@tools/polymarket/data/client.js");
-  const closedPositions = await getPolyDataClient().getClosedPositions(proxyWallet);
+  const closedPositions = await getPolyDataClient().getClosedPositions({ user: proxyWallet });
 
   // Build lookup: conditionId:outcome → closedPosition (case-insensitive on outcome)
   const closedByKey = new Map<string, typeof closedPositions[number]>();

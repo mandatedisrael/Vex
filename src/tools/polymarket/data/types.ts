@@ -48,7 +48,7 @@ export interface DataActivity {
   proxyWallet: string;
   timestamp: number;
   conditionId: string;
-  type: "TRADE" | "SPLIT" | "MERGE" | "REDEEM" | "REWARD" | "CONVERSION" | "MAKER_REBATE";
+  type: "TRADE" | "SPLIT" | "MERGE" | "REDEEM" | "REWARD" | "CONVERSION" | "MAKER_REBATE" | "REFERRAL_REWARD";
   size: number;
   usdcSize: number;
   price: number;
@@ -158,6 +158,46 @@ export interface DataMarketPositionV1 {
 export interface DataMetaMarketPosition {
   token: string;
   positions: DataMarketPositionV1[];
+}
+
+/** Query params for getClosedPositions. Full parity with Data API. */
+export interface ClosedPositionsParams {
+  user: string;
+  market?: string;
+  eventId?: number;
+  title?: string;
+  limit?: number;
+  offset?: number;
+  sortBy?: "REALIZEDPNL" | "TITLE" | "PRICE" | "AVGPRICE" | "TIMESTAMP";
+  sortDirection?: "ASC" | "DESC";
+}
+
+/** Query params for getActivity. Full parity with Data API. */
+export interface ActivityParams {
+  user: string;
+  market?: string;
+  eventId?: number;
+  type?: string;
+  side?: string;
+  start?: number;
+  end?: number;
+  limit?: number;
+  offset?: number;
+  sortBy?: "TIMESTAMP" | "TOKENS" | "CASH";
+  sortDirection?: "ASC" | "DESC";
+}
+
+/** Query params for getTrades (Data API). Full parity. */
+export interface TradesParams {
+  user?: string;
+  market?: string;
+  eventId?: number;
+  side?: string;
+  takerOnly?: boolean;
+  filterType?: "CASH" | "TOKENS";
+  filterAmount?: number;
+  limit?: number;
+  offset?: number;
 }
 
 export interface PositionsParams {

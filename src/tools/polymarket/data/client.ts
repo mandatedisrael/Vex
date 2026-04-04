@@ -26,7 +26,7 @@ import type {
   DataPosition, DataClosedPosition, DataActivity, DataTrade,
   DataMetaHolder, DataOpenInterest, DataLiveVolume,
   DataLeaderboardEntry, DataBuilderEntry, DataBuilderVolumeEntry,
-  DataMetaMarketPosition, PositionsParams,
+  DataMetaMarketPosition, PositionsParams, ClosedPositionsParams, ActivityParams, TradesParams,
 } from "./types.js";
 
 export class PolyDataClient {
@@ -80,16 +80,16 @@ export class PolyDataClient {
     return this.request("/positions", validatePositionsResponse, this.qs(params));
   }
 
-  getClosedPositions(user: string, opts?: { limit?: number; offset?: number; sortBy?: string; sortDirection?: string; title?: string }): Promise<DataClosedPosition[]> {
-    return this.request("/closed-positions", validateClosedPositionsResponse, this.qs({ user, ...opts }));
+  getClosedPositions(params: ClosedPositionsParams): Promise<DataClosedPosition[]> {
+    return this.request("/closed-positions", validateClosedPositionsResponse, this.qs(params));
   }
 
-  getActivity(user: string, opts?: { limit?: number; offset?: number; type?: string; side?: string; market?: string }): Promise<DataActivity[]> {
-    return this.request("/activity", validateActivityResponse, this.qs({ user, ...opts }));
+  getActivity(params: ActivityParams): Promise<DataActivity[]> {
+    return this.request("/activity", validateActivityResponse, this.qs(params));
   }
 
-  getTrades(opts: { user?: string; market?: string; side?: string; limit?: number; offset?: number }): Promise<DataTrade[]> {
-    return this.request("/trades", validateTradesResponse, this.qs(opts));
+  getTrades(params: TradesParams): Promise<DataTrade[]> {
+    return this.request("/trades", validateTradesResponse, this.qs(params));
   }
 
   getValue(user: string, opts?: { market?: string }): Promise<{ user: string; value: number }> {

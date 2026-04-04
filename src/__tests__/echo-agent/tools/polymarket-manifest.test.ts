@@ -2,22 +2,22 @@ import { describe, it, expect } from "vitest";
 import { POLYMARKET_TOOLS } from "../../../echo-agent/tools/protocols/polymarket/manifest.js";
 
 describe("polymarket manifest (bridge + clob + data + gamma)", () => {
-  it("has 69 tools total", () => {
-    expect(POLYMARKET_TOOLS).toHaveLength(69);
+  it("has 79 tools total", () => {
+    expect(POLYMARKET_TOOLS).toHaveLength(79);
   });
 
   const EXPECTED_TOOL_IDS = [
     // Bridge (5)
     "polymarket.bridge.assets", "polymarket.bridge.deposit", "polymarket.bridge.withdraw",
     "polymarket.bridge.quote", "polymarket.bridge.status",
-    // CLOB Market Data (14)
+    // CLOB Market Data (15)
     "polymarket.clob.orderbook", "polymarket.clob.orderbooks",
     "polymarket.clob.price", "polymarket.clob.prices",
     "polymarket.clob.midpoint", "polymarket.clob.midpoints",
     "polymarket.clob.spread", "polymarket.clob.spreads",
     "polymarket.clob.lastTrade", "polymarket.clob.lastTrades",
-    "polymarket.clob.priceHistory", "polymarket.clob.tickSize",
-    "polymarket.clob.feeRate", "polymarket.clob.serverTime",
+    "polymarket.clob.priceHistory", "polymarket.clob.batchPriceHistory",
+    "polymarket.clob.tickSize", "polymarket.clob.feeRate", "polymarket.clob.serverTime",
     // CLOB Trading (11)
     "polymarket.clob.buy", "polymarket.clob.sell",
     "polymarket.clob.cancel", "polymarket.clob.cancelOrders",
@@ -25,6 +25,8 @@ describe("polymarket manifest (bridge + clob + data + gamma)", () => {
     "polymarket.clob.orders", "polymarket.clob.order",
     "polymarket.clob.trades", "polymarket.clob.heartbeat",
     "polymarket.clob.orderScoring",
+    // CLOB Misc (2)
+    "polymarket.clob.simplifiedMarkets", "polymarket.clob.rebates",
     // Data (14)
     "polymarket.data.positions", "polymarket.data.closedPositions",
     "polymarket.data.activity", "polymarket.data.trades",
@@ -44,9 +46,13 @@ describe("polymarket manifest (bridge + clob + data + gamma)", () => {
     "polymarket.gamma.comments", "polymarket.gamma.comment", "polymarket.gamma.commentsByUser",
     "polymarket.gamma.profile",
     "polymarket.gamma.sportsMetadata", "polymarket.gamma.sportsMarketTypes", "polymarket.gamma.teams",
+    // Rewards (7)
+    "polymarket.rewards.active", "polymarket.rewards.market", "polymarket.rewards.multi",
+    "polymarket.rewards.earnings", "polymarket.rewards.totalEarnings",
+    "polymarket.rewards.percentages", "polymarket.rewards.userMarkets",
   ];
 
-  it("expected count matches", () => { expect(EXPECTED_TOOL_IDS).toHaveLength(69); });
+  it("expected count matches", () => { expect(EXPECTED_TOOL_IDS).toHaveLength(79); });
 
   for (const toolId of EXPECTED_TOOL_IDS) {
     it(`declares ${toolId}`, () => {

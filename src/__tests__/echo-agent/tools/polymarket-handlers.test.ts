@@ -14,8 +14,8 @@ describe("polymarket handlers (bridge + clob + data + gamma)", () => {
     expect(Object.keys(POLYMARKET_HANDLERS).filter(k => !ids.has(k))).toEqual([]);
   });
 
-  it("handler count matches manifest (69)", () => {
-    expect(Object.keys(POLYMARKET_HANDLERS)).toHaveLength(69);
+  it("handler count matches manifest (79)", () => {
+    expect(Object.keys(POLYMARKET_HANDLERS)).toHaveLength(79);
   });
 
   it("every handler is a function", () => {

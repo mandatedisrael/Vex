@@ -167,7 +167,7 @@ describe("reconcilePredictionSettlements — Polymarket", () => {
     const result = await reconcilePredictionSettlements();
     expect(result.closed).toBe(1);
     expect(mockGetRelayPayload).toHaveBeenCalledWith("0xEOA123", "SAFE");
-    expect(mockGetClosedPositions).toHaveBeenCalledWith("0xPROXY456");
+    expect(mockGetClosedPositions).toHaveBeenCalledWith({ user: "0xPROXY456" });
 
     const capture = mockRecordSyntheticCapture.mock.calls[0][0].tradeCapture;
     expect(capture.status).toBe("closed");
