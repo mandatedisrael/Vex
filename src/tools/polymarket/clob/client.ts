@@ -239,6 +239,44 @@ export class PolyClobClient {
     return this.requestPublic("/rebates/current", (raw) => raw, { date, maker_address: makerAddress });
   }
 
+  // ── Rewards (public) ───────────────────────────────────────────────
+
+  getActiveRewards(opts?: { sponsored?: boolean; next_cursor?: string }): Promise<unknown> {
+    return this.requestPublic("/rewards/markets/current", (raw) => raw, {
+      sponsored: opts?.sponsored != null ? String(opts.sponsored) : undefined,
+      next_cursor: opts?.next_cursor,
+    });
+  }
+
+  getMarketRewards(conditionId: string, opts?: { sponsored?: boolean; next_cursor?: string }): Promise<unknown> {
+    return this.requestPublic(`/rewards/markets/${encodeURIComponent(conditionId)}`, (raw) => raw, {
+      sponsored: opts?.sponsored != null ? String(opts.sponsored) : undefined,
+      next_cursor: opts?.next_cursor,
+    });
+  }
+
+  getMultiMarketRewards(opts?: Record<string, string | undefined>): Promise<unknown> {
+    return this.requestPublic("/rewards/markets/multi", (raw) => raw, opts);
+  }
+
+  // ── Rewards (authenticated) ────────────────────────────────────────
+
+  getUserEarnings(opts: Record<string, string | undefined>): Promise<unknown> {
+    return this.requestAuth("GET", "/rewards/user", (raw) => raw, undefined, opts);
+  }
+
+  getUserTotalEarnings(opts: Record<string, string | undefined>): Promise<unknown> {
+    return this.requestAuth("GET", "/rewards/user/total", (raw) => raw, undefined, opts);
+  }
+
+  getUserRewardPercentages(opts?: Record<string, string | undefined>): Promise<unknown> {
+    return this.requestAuth("GET", "/rewards/user/percentages", (raw) => raw, undefined, opts);
+  }
+
+  getUserEarningsMarkets(opts?: Record<string, string | undefined>): Promise<unknown> {
+    return this.requestAuth("GET", "/rewards/user/markets", (raw) => raw, undefined, opts);
+  }
+
   getOrderScoring(orderId: string): Promise<OrderScoringResponse> {
     return this.requestAuth("GET", "/order-scoring", validateOrderScoringResponse, undefined, { order_id: orderId });
   }
