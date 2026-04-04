@@ -3,156 +3,17 @@
  * Plain strings — zero npm dependencies.
  */
 
-const POOL_FIELDS = `
-  id
-  createdAtTimestamp
-  createdAtBlockNumber
-  token0 { id symbol name decimals }
-  token1 { id symbol name decimals }
-  feeTier
-  liquidity
-  sqrtPrice
-  token0Price
-  token1Price
-  tick
-  observationIndex
-  volumeToken0
-  volumeToken1
-  volumeUSD
-  feesUSD
-  txCount
-  totalValueLockedToken0
-  totalValueLockedToken1
-  totalValueLockedUSD
-  totalValueLockedETH
-  liquidityProviderCount
-`;
-
-const TOKEN_FIELDS = `
-  id
-  symbol
-  name
-  decimals
-  totalSupply
-  volume
-  volumeUSD
-  untrackedVolumeUSD
-  feesUSD
-  txCount
-  poolCount
-  totalValueLocked
-  totalValueLockedUSD
-  totalValueLockedUSDUntracked
-  derivedETH
-`;
-
-const POOL_DAY_DATA_FIELDS = `
-  id
-  date
-  pool { id }
-  liquidity
-  sqrtPrice
-  token0Price
-  token1Price
-  tick
-  tvlUSD
-  volumeToken0
-  volumeToken1
-  volumeUSD
-  feesUSD
-  txCount
-  open high low close
-`;
-
-const POOL_HOUR_DATA_FIELDS = `
-  id
-  periodStartUnix
-  pool { id }
-  liquidity
-  sqrtPrice
-  token0Price
-  token1Price
-  tick
-  tvlUSD
-  volumeToken0
-  volumeToken1
-  volumeUSD
-  feesUSD
-  txCount
-  open high low close
-`;
-
-const SWAP_FIELDS = `
-  id
-  timestamp
-  pool { id }
-  token0 { id symbol }
-  token1 { id symbol }
-  sender
-  recipient
-  origin
-  amount0
-  amount1
-  amountUSD
-  sqrtPriceX96
-  tick
-`;
-
-const MINT_FIELDS = `
-  id
-  timestamp
-  pool { id }
-  token0 { id symbol }
-  token1 { id symbol }
-  owner
-  sender
-  origin
-  amount
-  amount0
-  amount1
-  amountUSD
-  tickLower
-  tickUpper
-`;
-
-const BURN_FIELDS = `
-  id
-  timestamp
-  pool { id }
-  token0 { id symbol }
-  token1 { id symbol }
-  owner
-  origin
-  amount
-  amount0
-  amount1
-  amountUSD
-  tickLower
-  tickUpper
-`;
-
-const COLLECT_FIELDS = `
-  id
-  timestamp
-  pool { id }
-  owner
-  amount0
-  amount1
-  amountUSD
-  tickLower
-  tickUpper
-`;
-
-const DEX_DAY_DATA_FIELDS = `
-  id
-  date
-  volumeETH
-  volumeUSD
-  volumeUSDUntracked
-  feesUSD
-  txCount
-  tvlUSD
-`;
+import {
+  POOL_FIELDS,
+  TOKEN_FIELDS,
+  POOL_DAY_DATA_FIELDS,
+  POOL_HOUR_DATA_FIELDS,
+  SWAP_FIELDS,
+  MINT_FIELDS,
+  BURN_FIELDS,
+  COLLECT_FIELDS,
+  DEX_DAY_DATA_FIELDS,
+} from "./queries-fragments.js";
 
 // --- Queries ---
 

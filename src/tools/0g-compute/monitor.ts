@@ -30,46 +30,15 @@ import {
 } from "./constants.js";
 import { EchoError, ErrorCodes } from "../../errors.js";
 import logger from "../../utils/logger.js";
+import {
+  ALERT_COOLDOWN_MS,
+  ALERT_DROP_THRESHOLD,
+  type MonitorState,
+  type BalanceMonitorOptions,
+  type MonitorMode,
+} from "./monitor-types.js";
 
-// ── Anti-spam state ──────────────────────────────────────────────────
-
-interface ProviderAlertState {
-  lastAlertAt: number;
-  lastAlertBalance: string; // stringified for JSON
-}
-
-interface ProviderThresholdState {
-  threshold: number;
-  recommendedMin: number;
-}
-
-interface MonitorState {
-  providers: string[];
-  mode: MonitorMode;
-  threshold?: number;
-  buffer?: number;
-  alertRatio?: number;
-  intervalSec: number;
-  lastCheckAt: number;
-  alerts: Record<string, ProviderAlertState>;
-  providerThresholds?: Record<string, ProviderThresholdState>;
-}
-
-const ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
-const ALERT_DROP_THRESHOLD = 0.5; // alert again if balance dropped another 50%
-
-// ── Monitor ──────────────────────────────────────────────────────────
-
-export type MonitorMode = "fixed" | "recommended";
-
-export interface BalanceMonitorOptions {
-  providers: Address[];
-  mode: MonitorMode;
-  threshold?: number;      // required for fixed
-  buffer?: number;         // default 0, extra 0G above recommended
-  alertRatio?: number;     // default 1.2
-  intervalSec: number;
-}
+export type { MonitorMode, BalanceMonitorOptions } from "./monitor-types.js";
 
 export class BalanceMonitor {
   private readonly providers: Address[];

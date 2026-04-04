@@ -5,10 +5,20 @@ const PREDICTION_FILES = [
   "src/tools/solana-ecosystem/jupiter/jupiter-prediction/constants.ts",
   "src/tools/solana-ecosystem/jupiter/jupiter-prediction/index.ts",
   "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/client.ts",
+  "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/client/url.ts",
+  "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/client/read.ts",
+  "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/client/write.ts",
   "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/index.ts",
   "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/service.ts",
   "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/types.ts",
+  "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/types/base.ts",
+  "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/types/events-markets.ts",
+  "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/types/orders-positions.ts",
+  "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/types/profiles-tx.ts",
   "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/validation.ts",
+  "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/validation/helpers.ts",
+  "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/validation/params.ts",
+  "src/tools/solana-ecosystem/jupiter/jupiter-prediction/prediction-api/validation/body.ts",
 ];
 
 describe("jupiter prediction shelf regression guards", () => {
