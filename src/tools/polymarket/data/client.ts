@@ -120,7 +120,7 @@ export class PolyDataClient {
 
   // ── Leaderboard ─────────────────────────────────────────────────
 
-  getLeaderboard(opts?: { category?: string; timePeriod?: string; orderBy?: string; limit?: number; offset?: number; user?: string }): Promise<DataLeaderboardEntry[]> {
+  getLeaderboard(opts?: { category?: string; timePeriod?: string; orderBy?: string; limit?: number; offset?: number; user?: string; userName?: string }): Promise<DataLeaderboardEntry[]> {
     return this.request("/v1/leaderboard", validateLeaderboardResponse, opts ? this.qs(opts) : undefined);
   }
 

@@ -142,6 +142,16 @@ export const GAMMA_HANDLERS: Record<string, ProtocolHandler> = {
       limit_per_type: num(p, "limitPerType"),
       page: num(p, "page"),
       events_status: str(p, "eventsStatus") || undefined,
+      cache: bool(p, "cache"),
+      events_tag: strArray(p, "eventsTag"),
+      keep_closed_markets: num(p, "keepClosedMarkets"),
+      sort: str(p, "sort") || undefined,
+      ascending: bool(p, "ascending"),
+      search_tags: bool(p, "searchTags"),
+      search_profiles: bool(p, "searchProfiles"),
+      recurrence: str(p, "recurrence") || undefined,
+      exclude_tag_id: numArray(p, "excludeTagId"),
+      optimized: bool(p, "optimized"),
     }));
   },
 

@@ -142,6 +142,7 @@ export const DATA_HANDLERS: Record<string, ProtocolHandler> = {
       limit: num(p, "limit"),
       offset: num(p, "offset"),
       user: str(p, "user") || undefined,
+      userName: str(p, "userName") || undefined,
     });
     return ok({ count: entries.length, leaderboard: entries });
   },

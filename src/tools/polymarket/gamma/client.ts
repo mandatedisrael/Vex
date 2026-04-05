@@ -135,7 +135,13 @@ export class PolyGammaClient {
 
   // ── Search ──────────────────────────────────────────────────────
 
-  search(query: string, opts?: { limit_per_type?: number; page?: number; events_status?: string }): Promise<GammaSearchResult> {
+  search(query: string, opts?: {
+    limit_per_type?: number; page?: number; events_status?: string;
+    cache?: boolean; events_tag?: string[]; keep_closed_markets?: number;
+    sort?: string; ascending?: boolean; search_tags?: boolean;
+    search_profiles?: boolean; recurrence?: string; exclude_tag_id?: number[];
+    optimized?: boolean;
+  }): Promise<GammaSearchResult> {
     return this.request("/public-search", validateSearchResponse, {
       q: query,
       ...opts ? this.toQuery(opts) : {},
