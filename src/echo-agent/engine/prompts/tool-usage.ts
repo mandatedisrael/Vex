@@ -43,7 +43,7 @@ Before ANY mutating tool that takes a token address, symbol, or mint:
    - Primary: khalani.tokens.search (symbol/name → address per chain, cross-chain)
    - EVM confirmation: kyberswap.tokens.search (verify token visible on target chain)
    - Solana: solana.tokens.search (verify mint on Solana)
-2. Use the address from the tool result — NOT from memory, examples, or prior conversations
+2. Use the address from the tool result — NOT from memory, knowledge, examples, or prior conversations
 3. Never copy addresses from exampleParams — those demonstrate param format only
 4. If resolution fails, inform the user instead of guessing
 
@@ -87,5 +87,17 @@ Use \`portfolio_inspect\` to check your own state before making decisions:
 - \`portfolio_inspect(view="activity", namespace="solana")\` — recent trading activity
 - \`portfolio_inspect(view="executions")\` — execution audit log
 
-This reads from your own DB projections — faster and more reliable than re-querying protocols.`;
+This reads from your own DB projections — faster and more reliable than re-querying protocols.
+
+## Knowledge Layer Rules
+
+The \`knowledge_*\` tools are your canonical, retrievable memory. Treat them differently from \`document_*\` (freeform notes).
+
+1. **English-only**. All \`knowledge_write\` calls (\`title\`, \`summary\`, \`content_md\`) AND all \`knowledge_recall\` queries MUST be in English, regardless of the user's conversation language. The embedding model (EmbeddingGemma 300M) achieves significantly better retrieval on English text. Trading terminology (pump, holder, liquidity, entry, exit, risk, slippage, MEV) is English by convention even in non-English conversations. Translate observations into English before calling the tool. This rule does NOT apply to \`document_*\` notes — those can be in any language.
+
+2. **Reuse kinds before creating new ones.** \`kind\` is free-form (you define your own taxonomy organically). Before creating a new kind, check the \`Known kinds\` section in Active Knowledge above. Only create a new kind when truly distinct from every existing one. Use \`snake_case\`, descriptive English (e.g. \`pumpfun_entry_pattern\`, NOT \`pumpFunPattern\` or \`pump-fun-pattern\`). If a memo, observation, or rule already fits an existing kind, reuse it — that is how the recall layer learns to cluster similar wisdom.
+
+3. **TTL choice.** For evergreen rules (risk policies, protocol facts, hard limits) use \`pinned: true\` — these never expire. For time-bounded observations (market conditions, ephemeral patterns) use \`ttl_hours\` to override the default 7-day TTL. After TTL expiry an entry is no longer auto-injected into Active Knowledge but remains retrievable via \`knowledge_recall\` until you explicitly invalidate or archive it.
+
+4. **knowledge vs documents.** Use \`knowledge_write\` for distilled rules, observations, strategies — anything that should be retrievable later. Use \`document_write\` (notes space) only for freeform scratchpad work that does not need semantic recall.`;
 }

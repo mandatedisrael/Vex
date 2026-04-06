@@ -2,7 +2,7 @@
 
 > Real-money tests on Solana mainnet via MCP E2E harness.
 > Wallet: `GoVYsnzegMxCmco53bMBb1k3tsCkdEa8PCfh1PFa11E5`
-> DB: Docker Postgres on port 5555 (tmpfs, ephemeral)
+> DB: Docker Postgres (pgvector) on port 5777 (tmpfs, ephemeral); embeddings via Docker Model Runner on port 12434
 > Session: `manual-2026-04-03-solana`
 
 ---

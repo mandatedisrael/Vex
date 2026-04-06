@@ -22,6 +22,13 @@ export interface PromptStackOptions {
   missionSetupContext?: MissionSetupContext;
   missionRunContext?: MissionRunContext;
   subagentContext?: SubagentContext;
+  /**
+   * Pre-formatted Active Knowledge block (hot context entries + Known kinds).
+   * Built by `formatActiveKnowledgeBlock` after pre-fetching repo state in
+   * `executeTurn`. Empty string omits the section entirely.
+   * Kept as a sync option (not a fetch hook) so this builder remains pure.
+   */
+  activeKnowledgeBlock?: string;
 }
 
 /**
@@ -37,6 +44,11 @@ export function buildPromptStack(
 
   // ── CONSTANT — always present ─────────────────────────────
   layers.push(buildBasePrompt(context));
+  // Active Knowledge block is pre-fetched in executeTurn (sync option here).
+  // Empty string means "no entries and no known kinds yet" → skip the layer entirely.
+  if (options.activeKnowledgeBlock && options.activeKnowledgeBlock.length > 0) {
+    layers.push(options.activeKnowledgeBlock);
+  }
   layers.push(buildToolUsagePrompt());
   layers.push(buildProtocolsPrompt());
 

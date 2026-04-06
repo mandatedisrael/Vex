@@ -169,7 +169,7 @@ export function registerTools(server: McpServer): void {
 
   server.tool(
     "echo_internal",
-    "Call any internal tool directly (same as engine dispatch). Excludes subagent tools. Examples: polymarket_setup, wallet_read, memory_manage, document_read, schedule_create, web_search, mission_stop.",
+    "Call any internal tool directly (same as engine dispatch). Excludes subagent tools. Examples: polymarket_setup, wallet_read, knowledge_write, knowledge_recall, knowledge_get, document_read, schedule_create, web_search, mission_stop.",
     {
       tool: z.string().describe("Internal tool name (e.g. polymarket_setup, wallet_read)"),
       params: z.record(z.string(), z.unknown()).optional().describe("Tool parameters"),

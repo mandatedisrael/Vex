@@ -143,10 +143,26 @@ async function routeInternalTool(
       return handleDocumentDelete(call.args, context);
     }
 
-    // Memory
-    case "memory_manage": {
-      const { handleMemoryManage } = await import("./internal/memory.js");
-      return handleMemoryManage(call.args, context);
+    // Knowledge — canonical agent memory layer (replaces memory_manage)
+    case "knowledge_write": {
+      const { handleKnowledgeWrite } = await import("./internal/knowledge.js");
+      return handleKnowledgeWrite(call.args, context);
+    }
+    case "knowledge_recall": {
+      const { handleKnowledgeRecall } = await import("./internal/knowledge.js");
+      return handleKnowledgeRecall(call.args, context);
+    }
+    case "knowledge_recall_overflow": {
+      const { handleKnowledgeRecallOverflow } = await import("./internal/knowledge.js");
+      return handleKnowledgeRecallOverflow(call.args, context);
+    }
+    case "knowledge_get": {
+      const { handleKnowledgeGet } = await import("./internal/knowledge.js");
+      return handleKnowledgeGet(call.args, context);
+    }
+    case "knowledge_update_status": {
+      const { handleKnowledgeUpdateStatus } = await import("./internal/knowledge.js");
+      return handleKnowledgeUpdateStatus(call.args, context);
     }
 
     // Scheduling

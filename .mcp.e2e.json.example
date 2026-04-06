@@ -4,7 +4,11 @@
       "command": "pnpm",
       "args": ["exec", "tsx", "src/echo-agent/e2e/mcp/server.ts"],
       "env": {
-        "ECHO_AGENT_DB_URL": "postgresql://echo_agent:echo_agent@localhost:5555/echo_agent_test"
+        "ECHO_AGENT_DB_URL": "postgresql://echo_agent:echo_agent@localhost:5777/echo_agent_test",
+        "EMBEDDING_BASE_URL": "http://localhost:12434/engines/llama.cpp/v1",
+        "EMBEDDING_MODEL": "ai/embeddinggemma:300M-Q8_0",
+        "EMBEDDING_DIM": "768",
+        "EMBEDDING_PROVIDER": "local"
       }
     }
   }

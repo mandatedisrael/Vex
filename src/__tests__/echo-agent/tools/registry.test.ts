@@ -63,7 +63,11 @@ describe("registry", () => {
     "document_write",
     "document_list",
     "document_delete",
-    "memory_manage",
+    "knowledge_write",
+    "knowledge_recall",
+    "knowledge_recall_overflow",
+    "knowledge_get",
+    "knowledge_update_status",
     "schedule_create",
     "schedule_remove",
     "subagent_spawn",
@@ -91,6 +95,10 @@ describe("registry", () => {
 
   it("does NOT have memory_update (deprecated)", () => {
     expect(getToolDef("memory_update")).toBeUndefined();
+  });
+
+  it("does NOT have memory_manage (replaced by knowledge_*)", () => {
+    expect(getToolDef("memory_manage")).toBeUndefined();
   });
 
   it("does NOT have wallet_backup (deferred)", () => {

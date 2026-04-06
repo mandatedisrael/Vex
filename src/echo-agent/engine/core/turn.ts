@@ -9,9 +9,16 @@ import type { EngineContext, TurnResult, MessageMetadata } from "../types.js";
 import type { InferenceProvider, InferenceConfig, InferenceResponse, ProviderMessage, ParsedToolCall, ToolDefinition } from "@echo-agent/inference/types.js";
 import type { Message } from "@echo-agent/db/repos/messages.js";
 import { buildPromptStack, type PromptStackOptions } from "../prompts/index.js";
+import { formatActiveKnowledgeBlock } from "../prompts/knowledge.js";
 import * as messagesRepo from "@echo-agent/db/repos/messages.js";
 import * as usageRepo from "@echo-agent/db/repos/usage.js";
 import * as sessionsRepo from "@echo-agent/db/repos/sessions.js";
+import * as knowledgeRepo from "@echo-agent/db/repos/knowledge.js";
+import {
+  ACTIVE_KNOWLEDGE_ENTRY_LIMIT,
+  KNOWN_KINDS_LIMIT,
+} from "@echo-agent/knowledge/policy.js";
+import logger from "@utils/logger.js";
 
 export interface SingleTurnResult {
   /** Text content from model — null when only tool calls. */
@@ -44,8 +51,24 @@ export async function executeTurn(
   tools: ToolDefinition[],
   promptOptions: PromptStackOptions = {},
 ): Promise<SingleTurnResult> {
+  // Pre-fetch Active Knowledge inputs (hot context entries + known kinds taxonomy).
+  // Both queries are indexed and cheap; failure here is non-fatal — we just render
+  // an empty Active Knowledge block instead of crashing the turn.
+  let activeKnowledgeBlock = "";
+  try {
+    const [activeEntries, knownKinds] = await Promise.all([
+      knowledgeRepo.listActiveForHotContext({ limit: ACTIVE_KNOWLEDGE_ENTRY_LIMIT }),
+      knowledgeRepo.listKnownKinds({ limit: KNOWN_KINDS_LIMIT }),
+    ]);
+    activeKnowledgeBlock = formatActiveKnowledgeBlock(activeEntries, knownKinds);
+  } catch (err) {
+    logger.warn("turn.active_knowledge.fetch_failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   // Build prompt
-  const promptLayers = buildPromptStack(context, promptOptions);
+  const promptLayers = buildPromptStack(context, { ...promptOptions, activeKnowledgeBlock });
   const systemPrompt = promptLayers.join("\n\n---\n\n");
 
   // Convert to provider format

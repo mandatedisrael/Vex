@@ -60,10 +60,28 @@ describe("requiresEnv filtering", () => {
       const tools = getOpenAITools("off");
       const hasDiscover = tools.some(t => t.function.name === "discover_tools");
       const hasFileRead = tools.some(t => t.function.name === "document_read");
-      const hasMemory = tools.some(t => t.function.name === "memory_manage");
       expect(hasDiscover).toBe(true);
       expect(hasFileRead).toBe(true);
-      expect(hasMemory).toBe(true);
+    });
+
+    it("all knowledge_* tools are visible without EMBEDDING_BASE_URL (decision #10: no requiresEnv)", () => {
+      delete process.env.EMBEDDING_BASE_URL;
+      const tools = getOpenAITools("off");
+      const names = tools.map(t => t.function.name);
+      expect(names).toContain("knowledge_write");
+      expect(names).toContain("knowledge_recall");
+      expect(names).toContain("knowledge_recall_overflow");
+      expect(names).toContain("knowledge_get");
+      expect(names).toContain("knowledge_update_status");
+    });
+
+    it("knowledge_* tools have NO requiresEnv field (visible always, fail loud at runtime)", () => {
+      const all = getAllTools();
+      const knowledgeTools = all.filter(t => t.name.startsWith("knowledge_"));
+      expect(knowledgeTools.length).toBe(5);
+      for (const tool of knowledgeTools) {
+        expect(tool.requiresEnv).toBeUndefined();
+      }
     });
 
     it("getAllTools still returns all tools including ENV-gated ones", () => {

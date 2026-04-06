@@ -14,8 +14,17 @@ let pool: pg.Pool | null = null;
 
 export function getPool(): pg.Pool {
   if (!pool) {
-    const connectionString = process.env.ECHO_AGENT_DB_URL
-      ?? "postgresql://echo_agent:echo_agent@localhost:5432/echo_agent";
+    const explicitUrl = process.env.ECHO_AGENT_DB_URL;
+    if (!explicitUrl) {
+      // Loud warning: the fallback exists for dev convenience but the canonical
+      // expectation is that ECHO_AGENT_DB_URL is set explicitly (matches the
+      // compose stack on port 5777). A future PR may remove the fallback entirely.
+      logger.warn("echo-db.pool.using_fallback_url", {
+        hint: "ECHO_AGENT_DB_URL not set — using fallback postgresql://echo_agent:echo_agent@localhost:5777/echo_agent_test. Set explicitly to silence this warning.",
+      });
+    }
+    const connectionString = explicitUrl
+      ?? "postgresql://echo_agent:echo_agent@localhost:5777/echo_agent_test";
     pool = new Pool({ connectionString, max: 10, idleTimeoutMillis: 30_000 });
     pool.on("error", (err) => {
       logger.error("echo-db.pool.error", { error: err.message });

@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS schema_version (
   applied_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- pgvector extension — required for knowledge_entries.embedding column
+-- Image must be pgvector/pgvector:0.8.2-pg18-trixie (or compatible) which has the extension preinstalled.
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- Soul — singleton agent identity
 CREATE TABLE soul (
   id INTEGER PRIMARY KEY DEFAULT 1,
@@ -22,23 +26,41 @@ CREATE TABLE soul (
 );
 INSERT INTO soul (id) VALUES (1) ON CONFLICT DO NOTHING;
 
--- Memory — append log with hash-based dedup
-CREATE TABLE memory_entries (
-  id SERIAL PRIMARY KEY,
-  content_md TEXT NOT NULL,
-  category TEXT,
-  source TEXT DEFAULT 'agent',
-  content_hash TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+-- Knowledge — canonical agent memory with embeddings + tiered TTL.
+-- Replaces former memory_entries. Free-form `kind` (snake_case, agent-defined),
+-- English-only title/summary/content_md, embedding-on-write via Docker Model Runner.
+CREATE TABLE knowledge_entries (
+  id              SERIAL PRIMARY KEY,
+  kind            TEXT NOT NULL,            -- free-form, agent-defined snake_case (e.g. pumpfun_entry_pattern, risk_rule)
+  title           TEXT NOT NULL,
+  summary         TEXT NOT NULL,            -- 1-3 sentences, embedding input together with title
+  content_md      TEXT NOT NULL DEFAULT '', -- full text, returned by recall (inline or via cache overflow)
+  tags            TEXT[] DEFAULT '{}',
+  source_refs     JSONB DEFAULT '{}',       -- { protocol_executions:[ids], proj_activity:[ids], proj_pnl_lots:[ids] }
+  confidence      REAL,                     -- 0..1, optional
+  status          TEXT NOT NULL DEFAULT 'active', -- active | superseded | invalidated | archived
+  pinned          BOOLEAN NOT NULL DEFAULT FALSE,
+  valid_from      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  valid_until     TIMESTAMPTZ,              -- NULL = pinned/evergreen, bypasses TTL filter
+  embedding_model TEXT NOT NULL,            -- audit: which model produced the embedding
+  embedding_dim   INTEGER NOT NULL,         -- audit: model dim (locked at 768 in MVP)
+  embedding       vector(768) NOT NULL,     -- embedding-on-write — entry never created without sidecar
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE UNIQUE INDEX idx_memory_hash ON memory_entries(content_hash) WHERE content_hash IS NOT NULL;
-CREATE INDEX idx_memory_created ON memory_entries(created_at DESC);
+CREATE INDEX idx_ke_status_validity ON knowledge_entries(status, valid_until DESC);
+CREATE INDEX idx_ke_kind ON knowledge_entries(kind);
+CREATE INDEX idx_ke_pinned ON knowledge_entries(pinned) WHERE pinned = TRUE;
+CREATE INDEX idx_ke_tags ON knowledge_entries USING GIN (tags);
+CREATE INDEX idx_ke_source_refs ON knowledge_entries USING GIN (source_refs jsonb_path_ops);
+-- No vector index in MVP. Exact cosine scan after status/kind/validity prefilter is OK to ~5k entries.
 
 -- Folders — first-class directory tree
+-- Default space 'notes' (canonical knowledge layer is now knowledge_entries, not documents).
+-- 'cache' is a system-only space used by knowledge_recall overflow — not exposed via document_* tools.
 CREATE TABLE folders (
   id SERIAL PRIMARY KEY,
-  space TEXT NOT NULL DEFAULT 'knowledge',
+  space TEXT NOT NULL DEFAULT 'notes',
   parent_id INTEGER REFERENCES folders(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   slug TEXT NOT NULL,
@@ -54,9 +76,11 @@ CREATE INDEX idx_folders_space ON folders(space);
 CREATE INDEX idx_folders_parent ON folders(parent_id);
 
 -- Documents — DB-first markdown content with folder FK
+-- Default space 'notes' (freeform agent scratchpad). Canonical structured wisdom lives in knowledge_entries.
+-- 'cache' is reserved for knowledge_recall overflow (system-only, not exposed via document_* tools).
 CREATE TABLE documents (
   id SERIAL PRIMARY KEY,
-  space TEXT NOT NULL DEFAULT 'knowledge',
+  space TEXT NOT NULL DEFAULT 'notes',
   folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   slug TEXT NOT NULL,

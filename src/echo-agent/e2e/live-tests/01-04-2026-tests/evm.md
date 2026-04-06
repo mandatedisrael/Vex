@@ -3,7 +3,7 @@
 > Real-money tests on EVM chains via MCP E2E harness.
 > EVM Wallet: `0x18b467Cb28FC07Ca6E17A964b3319051B3072B79`
 > Solana Wallet: `GoVYsnzegMxCmco53bMBb1k3tsCkdEa8PCfh1PFa11E5`
-> DB: Docker Postgres on port 5555 (tmpfs, ephemeral)
+> DB: Docker Postgres (pgvector) on port 5777 (tmpfs, ephemeral); embeddings via Docker Model Runner on port 12434
 
 ---
 

@@ -1,16 +1,32 @@
-# E2E Test Stack — Postgres only (no agent container)
-# Port 5555 to avoid collision with production 5432
-# tmpfs for fast ephemeral storage — data lost on `down`
+# E2E Test Stack — pgvector Postgres + EmbeddingGemma in Model Runner.
+# Postgres on host port 5777 (was 5555) so MCP E2E + dev share the same port.
+# Postgres uses tmpfs — data is wiped on `down` for fast scenario rebuilds.
+# Embeddings runtime uses Docker Model Runner (port 12434, fixed by runner).
+#
+# Requires: Docker Engine >=4.40, Compose >=2.38.1, Model Runner active.
+
+models:
+  embeddings:
+    # Pinned tag — same as docker-compose.dev.yml so the embedding contract is shared.
+    # Distributed under the Gemma Terms of Use — see https://ai.google.dev/gemma/terms.
+    model: ai/embeddinggemma:300M-Q8_0
 
 services:
-  postgres:
-    image: postgres:16-alpine
+  echo-agent-db:
+    build: ./postgres
     ports:
-      - "5555:5432"
+      - "5777:5432"
     environment:
       POSTGRES_DB: echo_agent_test
       POSTGRES_USER: echo_agent
       POSTGRES_PASSWORD: echo_agent
+    # Dummy puller carrier — see docker-compose.dev.yml for the rationale.
+    # Per Compose docs, top-level `models:` alone does not trigger pull;
+    # at least one service must explicitly grant itself access via `models:`.
+    # Postgres ignores the auto-injected env vars but Compose now pulls
+    # ai/embeddinggemma:300M-Q8_0 as part of `compose up`.
+    models:
+      - embeddings
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U echo_agent -d echo_agent_test"]
       interval: 3s

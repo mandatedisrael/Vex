@@ -33,12 +33,17 @@ make lint           # tsc --noEmit (includes tests)
 make check          # lint + test
 ```
 
-## E2E (requires Docker)
+## E2E (requires Docker + Docker Model Runner)
 
 ```bash
-make e2e-db-up      # start tmpfs Postgres on port 5555
-make e2e-db-down    # stop
+make e2e-up         # start pgvector Postgres on port 5777 + pull EmbeddingGemma model
+make e2e-down       # stop
+make e2e-smoke      # POST /v1/embeddings against the local Model Runner (returns 768-dim vector)
 ```
+
+The E2E stack uses **Docker Model Runner** to host `ai/embeddinggemma:300M-Q8_0`
+on the fixed runner port `12434`. No HF token required — the model is distributed
+through Docker Hub under the [Gemma Terms of Use](https://ai.google.dev/gemma/terms).
 
 MCP E2E server: `pnpm exec tsx src/echo-agent/e2e/mcp/server.ts`
 
@@ -46,4 +51,6 @@ MCP E2E server: `pnpm exec tsx src/echo-agent/e2e/mcp/server.ts`
 
 - Node >= 22
 - pnpm 10+
-- Docker (for E2E tests only)
+- Docker Engine >= 4.40 (for E2E tests only)
+- Docker Compose >= 2.38.1 (for the `models:` block)
+- Docker Model Runner active (`docker model status` should be green)

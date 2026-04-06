@@ -17,7 +17,9 @@ ClaudeCode ──MCP stdio──> LocalTestMcp (pnpm exec tsx)
                     │                    │
               dispatchTool()        db-assertions
                     │                    │
-              ProtocolRuntime      TestPostgres:5555
+              ProtocolRuntime      TestPostgres:5777 (pgvector)
+                    │                    │
+                    │              ModelRunner:12434 (ai/embeddinggemma:300M-Q8_0)
                     │                    │
               capture pipeline ──> protocol_executions
                                    protocol_capture_items
@@ -27,6 +29,7 @@ ClaudeCode ──MCP stdio──> LocalTestMcp (pnpm exec tsx)
                                    proj_pnl_matches
                                    proj_lp_events
                                    proj_lp_event_legs
+                                   knowledge_entries  (canonical agent memory + embeddings)
 ```
 
 **Key decision:** Mutating flows tested manually by Claude via `echo_execute`. Automated smoke only for discovery, read-only, and preview (dryRun).
@@ -35,25 +38,55 @@ ClaudeCode ──MCP stdio──> LocalTestMcp (pnpm exec tsx)
 
 ## Quick Start
 
-```bash
-# 1. Start test Postgres (port 5555, tmpfs — ephemeral)
-docker compose -f docker/echo-agent/docker-compose.e2e.yml up -d
+Requires Docker Engine ≥4.40, Compose ≥2.38.1, and **Docker Model Runner active**
+(`docker model status` should be green; on Linux/WSL2 without Docker Desktop enable
+the standalone model-runner project).
 
-# 2. Verify startup smoke (alias resolve + DB connect + migrations)
-ECHO_AGENT_DB_URL=postgresql://echo_agent:echo_agent@localhost:5555/echo_agent_test \
+```bash
+# 1. Start test Postgres (pgvector, port 5777, tmpfs — ephemeral) +
+#    pull EmbeddingGemma into Docker Model Runner.
+make e2e-up
+
+# 2. Smoke-test the embeddings runtime (real POST against port 12434, expects 768-dim).
+make e2e-smoke
+
+# 3. Verify startup smoke (alias resolve + DB connect + migrations).
+ECHO_AGENT_DB_URL=postgresql://echo_agent:echo_agent@localhost:5777/echo_agent_test \
+  EMBEDDING_BASE_URL=http://localhost:12434/engines/llama.cpp/v1 \
+  EMBEDDING_MODEL=ai/embeddinggemma:300M-Q8_0 \
+  EMBEDDING_DIM=768 \
+  EMBEDDING_PROVIDER=local \
   pnpm exec tsx src/echo-agent/e2e/mcp/server.ts --smoke
 
-# 3. Copy MCP config
-cp .mcp.e2e.json.example .mcp.e2e.json
-
-# 4. Register MCP in Claude Code (option A: --env flag)
-claude mcp add --transport stdio \
-  --env ECHO_AGENT_DB_URL=postgresql://echo_agent:echo_agent@localhost:5555/echo_agent_test \
-  echo-agent-e2e -- pnpm exec tsx src/echo-agent/e2e/mcp/server.ts
-
-# 4. Or use config file (option B, recommended — works on all platforms)
+# 4. Copy MCP config and register.
 cp .mcp.e2e.json.example .mcp.e2e.json
 claude --strict-mcp-config --mcp-config .mcp.e2e.json
+```
+
+## Embeddings via Docker Model Runner
+
+The E2E stack uses **Docker Model Runner** to host the embedding model.
+Endpoint and port are dictated by the runner — both fixed, neither configurable:
+
+| Setting | Value |
+|---|---|
+| Model | `ai/embeddinggemma:300M-Q8_0` (pinned, llama.cpp Q8_0, 768 dim) |
+| Port | `12434` (Model Runner standard) |
+| Endpoint | `POST http://localhost:12434/engines/llama.cpp/v1/embeddings` |
+| Auth | none (no `HF_TOKEN`, no gated terms acceptance) |
+| License | [Gemma Terms of Use](https://ai.google.dev/gemma/terms) |
+
+The runtime is wired into compose via the `models:` block (Compose ≥2.38.1)
+and shared between `docker-compose.dev.yml` and `docker-compose.e2e.yml`.
+
+Verify it is healthy with `make e2e-smoke` or directly:
+
+```bash
+curl -fsS -X POST http://localhost:12434/engines/llama.cpp/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{"input":"ping","model":"ai/embeddinggemma:300M-Q8_0"}' \
+  | jq '.data[0].embedding | length'
+# expected: 768
 ```
 
 ---
@@ -101,7 +134,11 @@ src/echo-agent/e2e/
 
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
-| `ECHO_AGENT_DB_URL` | Yes | — | Test Postgres connection string |
+| `ECHO_AGENT_DB_URL` | Yes | — | Test Postgres connection string (port 5777) |
+| `EMBEDDING_BASE_URL` | Yes | — | `http://localhost:12434/engines/llama.cpp/v1` (Model Runner) |
+| `EMBEDDING_MODEL` | Yes | — | `ai/embeddinggemma:300M-Q8_0` (pinned tag) |
+| `EMBEDDING_DIM` | Yes | — | `768` (locked at schema level — fail-fast on any other value) |
+| `EMBEDDING_PROVIDER` | Yes | — | Tag for logs, e.g. `local` |
 | `JUPITER_API_KEY` | For Solana tools | — | Jupiter API access |
 | `POLYMARKET_API_KEY` | For Polymarket | — | CLOB trading auth |
 | `TAVILY_API_KEY` | No | — | Web search (not needed for E2E) |
@@ -112,10 +149,11 @@ src/echo-agent/e2e/
 
 ```bash
 # Full DB reset (destroy + recreate — tmpfs makes this instant)
-docker compose -f docker/echo-agent/docker-compose.e2e.yml down
-docker compose -f docker/echo-agent/docker-compose.e2e.yml up -d
+make e2e-down
+make e2e-up
 
 # After reset: MCP server runs migrations on next startup automatically
+# (knowledge_entries with pgvector extension is part of the baseline 001_initial.sql)
 ```
 
 **Important:** After `resetAll()` (operator CLI), call `initSync()` to reseed `protocol_sync_jobs`.

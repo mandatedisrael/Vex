@@ -3,7 +3,7 @@
 > Retest after token resolution + prediction settlement + agent guardrails deployment.
 > Commits tested: `e063fae` (main fix) + `31500d4` (follow-up hardening)
 > EVM Wallet: `0x18b467Cb28FC07Ca6E17A964b3319051B3072B79`
-> DB: Docker Postgres on port 5555 (tmpfs, ephemeral)
+> DB: Docker Postgres (pgvector) on port 5777 (tmpfs, ephemeral); embeddings via Docker Model Runner on port 12434
 
 ---
 

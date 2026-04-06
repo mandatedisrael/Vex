@@ -63,7 +63,7 @@ export async function handleDocumentRead(
   const slug = str(params, "slug");
   if (!slug) return fail("Missing required parameter: slug");
 
-  const space = str(params, "space") || "knowledge";
+  const space = str(params, "space") || "notes";
   const folderSlug = str(params, "folder") || undefined;
   const isPreview = bool(params, "preview");
   const folderId = await resolveFolderPath(space, folderSlug);
@@ -105,7 +105,7 @@ export async function handleDocumentWrite(
   const content = str(params, "content");
   if (!title || !content) return fail("Missing required: title, content");
 
-  const space = str(params, "space") || "knowledge";
+  const space = str(params, "space") || "notes";
   const slug = str(params, "slug") || slugify(title);
   const folderSlug = str(params, "folder") || undefined;
 
@@ -139,7 +139,7 @@ export async function handleDocumentList(
   params: Record<string, unknown>,
   _context: InternalToolContext,
 ): Promise<ToolResult> {
-  const space = str(params, "space") || "knowledge";
+  const space = str(params, "space") || "notes";
   const folderSlug = str(params, "folder") || undefined;
   const folderId = await resolveFolderPath(space, folderSlug);
 
@@ -165,7 +165,7 @@ export async function handleDocumentDelete(
   const slug = str(params, "slug");
   if (!slug) return fail("Missing required parameter: slug");
 
-  const space = str(params, "space") || "knowledge";
+  const space = str(params, "space") || "notes";
   const folderSlug = str(params, "folder") || undefined;
   const folderId = await resolveFolderPath(space, folderSlug);
 

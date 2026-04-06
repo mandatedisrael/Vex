@@ -5,7 +5,7 @@
  * (discover_tools, execute_tool) that give access to protocol capabilities.
  *
  * No trade_log — runtime captures automatically.
- * No memory_update — deprecated, use memory_manage.
+ * No memory_manage / memory_update — replaced by knowledge_* (canonical agent memory layer).
  */
 
 import type { ToolDef, JsonSchema, OpenAITool } from "./types.js";
@@ -59,12 +59,12 @@ const TOOLS: readonly ToolDef[] = [
     }, required: ["url"] },
   },
 
-  // Documents (DB-first, replaces file_*)
+  // Documents (DB-first, freeform agent scratchpad — canonical structured memory lives in knowledge_*)
   {
     name: "document_read", kind: "internal", mutating: false,
-    description: "Read a document from knowledge or notes. Use preview=true for first 1000 chars without context load.",
+    description: "Read a freeform note from the notes space. For canonical structured memory use knowledge_get. Use preview=true for first 1000 chars without context load.",
     parameters: { type: "object", properties: {
-      space: { type: "string", enum: ["knowledge", "notes"], description: "Document space (default: knowledge)" },
+      space: { type: "string", enum: ["notes"], description: "Document space (only 'notes' is exposed)" },
       slug: { type: "string", description: "Document slug" },
       folder: { type: "string", description: "Folder slug (optional, default: root)" },
       preview: { type: "boolean", description: "Preview mode (first 1000 chars, no context load)" },
@@ -72,9 +72,9 @@ const TOOLS: readonly ToolDef[] = [
   },
   {
     name: "document_write", kind: "internal", mutating: false,
-    description: "Create or update a document in knowledge or notes.",
+    description: "Create or update a freeform note in the notes space. For canonical structured memory (rules, observations, strategies) use knowledge_write instead — it embeds and is retrievable.",
     parameters: { type: "object", properties: {
-      space: { type: "string", enum: ["knowledge", "notes"], description: "Document space (default: knowledge)" },
+      space: { type: "string", enum: ["notes"], description: "Document space (only 'notes' is exposed)" },
       folder: { type: "string", description: "Folder slug (optional)" },
       title: { type: "string", description: "Document title" },
       slug: { type: "string", description: "URL-safe identifier (auto-generated from title if omitted)" },
@@ -83,32 +83,83 @@ const TOOLS: readonly ToolDef[] = [
   },
   {
     name: "document_list", kind: "internal", mutating: false,
-    description: "List documents in a space, optionally filtered by folder.",
+    description: "List notes in a space, optionally filtered by folder.",
     parameters: { type: "object", properties: {
-      space: { type: "string", enum: ["knowledge", "notes"], description: "Document space (default: knowledge)" },
+      space: { type: "string", enum: ["notes"], description: "Document space (only 'notes' is exposed)" },
       folder: { type: "string", description: "Folder slug filter" },
     } },
   },
   {
     name: "document_delete", kind: "internal", mutating: false,
-    description: "Archive (soft-delete) a document.",
+    description: "Archive (soft-delete) a note.",
     parameters: { type: "object", properties: {
-      space: { type: "string", enum: ["knowledge", "notes"], description: "Document space" },
+      space: { type: "string", enum: ["notes"], description: "Document space" },
       slug: { type: "string", description: "Document slug" },
       folder: { type: "string", description: "Folder slug" },
     }, required: ["slug"] },
   },
 
-  // Memory
+  // Knowledge — canonical agent memory with embeddings + tiered TTL.
+  // Free-form `kind`, English-only contents, embedding-on-write via local Docker Model Runner.
+  // All five tools are visible regardless of EMBEDDING_BASE_URL (no requiresEnv) — write/recall
+  // fail loud at runtime if the embeddings service is unavailable, while get/update_status
+  // and recall_overflow continue to work without it.
   {
-    name: "memory_manage", kind: "internal", mutating: false,
-    description: "Manage persistent memory — list, append, replace, or delete entries. Memory is in every prompt, keep entries short (1-2 lines).",
+    name: "knowledge_write", kind: "internal", mutating: false,
+    description:
+      "Write a canonical knowledge entry: a distilled rule, observation, or fact that should be retrievable later. " +
+      "title, summary, and content_md MUST be in English regardless of conversation language — the embedding model achieves significantly better retrieval on English text. " +
+      "kind is free-form snake_case (e.g. pumpfun_entry_pattern, risk_rule). Reuse a kind from Active Knowledge → Known kinds before creating a new one. " +
+      "Use pinned=true for evergreen rules (no TTL), or ttl_hours to override the default 7-day TTL for time-bounded observations. " +
+      "Fails loud if the local embeddings service is unavailable.",
     parameters: { type: "object", properties: {
-      action: { type: "string", enum: ["list", "append", "replace", "delete"], description: "Action to perform" },
-      append: { type: "string", description: "Text to append (action=append)" },
-      id: { type: "number", description: "Entry ID (action=replace/delete)" },
-      content: { type: "string", description: "New content (action=replace)" },
-    }, required: ["action"] },
+      kind: { type: "string", description: "Free-form snake_case kind, English. Reuse from Known kinds when possible (e.g. pumpfun_entry_pattern, risk_rule, bridge_observation)." },
+      title: { type: "string", description: "Single thesis or rule, in English." },
+      summary: { type: "string", description: "1-3 sentences in English. This is the embedding input together with title — write for retrieval." },
+      content_md: { type: "string", description: "Optional full markdown body in English (defaults to summary). Returned by recall and knowledge_get." },
+      tags: { type: "array", description: "Optional string tags (e.g. ['solana', 'memecoin'])." },
+      confidence: { type: "number", description: "Agent confidence in 0..1." },
+      source_refs: { type: "object", description: "Provenance: { protocol_executions:[ids], proj_activity:[ids], proj_pnl_lots:[ids] }." },
+      ttl_hours: { type: "number", description: "Override default 7-day TTL (1..8760). Ignored if pinned=true." },
+      pinned: { type: "boolean", description: "Evergreen rule — bypasses TTL and stays in Active Knowledge." },
+    }, required: ["kind", "title", "summary"] },
+  },
+  {
+    name: "knowledge_recall", kind: "internal", mutating: false,
+    description:
+      "Semantic recall over canonical knowledge. Returns up to 10 entries inline (with full content_md) and writes any overflow to a tmp cache (see overflow.cacheKey, readable via knowledge_recall_overflow for ~15 minutes). " +
+      "query MUST be in English (translate intent first) — the embedding model achieves best retrieval on English text. " +
+      "NOT 100% read-only: lazily cleans up expired cache entries and writes overflow when results exceed 10 entries or 50000 chars. " +
+      "Fails loud if the local embeddings service is unavailable.",
+    parameters: { type: "object", properties: {
+      query: { type: "string", description: "Search query in English (translate user's intent first)." },
+      k: { type: "number", description: "Max results (default 8, hard max 15)." },
+      kind: { type: "string", description: "Optional kind filter — reuse from Active Knowledge → Known kinds." },
+      include_expired: { type: "boolean", description: "Include entries past their TTL (default true; TTL is hot-context cutoff, not existence)." },
+    }, required: ["query"] },
+  },
+  {
+    name: "knowledge_recall_overflow", kind: "internal", mutating: false,
+    description: "Read overflow results from a previous knowledge_recall by cacheKey. Cache lives ~15 minutes after the originating recall. Does not require the embeddings service.",
+    parameters: { type: "object", properties: {
+      cacheKey: { type: "string", description: "Overflow cacheKey returned by a previous knowledge_recall response." },
+    }, required: ["cacheKey"] },
+  },
+  {
+    name: "knowledge_get", kind: "internal", mutating: false,
+    description: "Fetch a canonical knowledge entry by id. Loads content_md into the engine context. Does not require the embeddings service.",
+    parameters: { type: "object", properties: {
+      id: { type: "number", description: "Knowledge entry id." },
+    }, required: ["id"] },
+  },
+  {
+    name: "knowledge_update_status", kind: "internal", mutating: false,
+    description: "Mark a knowledge entry as invalidated or archived. Both remove the entry from recall and Active Knowledge. Cannot transition back to active — write a new entry instead. Does not require the embeddings service.",
+    parameters: { type: "object", properties: {
+      id: { type: "number", description: "Knowledge entry id." },
+      status: { type: "string", enum: ["invalidated", "archived"], description: "New status. Both remove the entry from semantic recall and Active Knowledge." },
+      reason: { type: "string", description: "Optional human-readable reason (logged, not persisted in MVP)." },
+    }, required: ["id", "status"] },
   },
 
   // Scheduling

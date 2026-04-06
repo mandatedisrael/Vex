@@ -42,7 +42,7 @@ describe("document handlers", () => {
     vi.clearAllMocks();
     mockGetDocument.mockResolvedValue(null);
     mockUpsertDocument.mockResolvedValue({
-      id: 1, space: "knowledge", folderId: null, title: "Test", slug: "test",
+      id: 1, space: "notes", folderId: null, title: "Test", slug: "test",
       contentMd: "content", sizeBytes: 7, createdAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z",
     });
   });
@@ -64,7 +64,7 @@ describe("document handlers", () => {
 
     it("returns preview without loading into context", async () => {
       mockGetDocument.mockResolvedValueOnce({
-        id: 1, space: "knowledge", folderId: null, title: "Test", slug: "test",
+        id: 1, space: "notes", folderId: null, title: "Test", slug: "test",
         contentMd: "A".repeat(2000), sizeBytes: 2000, createdAt: "2024-01-01", updatedAt: "2024-01-01",
       });
 
@@ -79,7 +79,7 @@ describe("document handlers", () => {
 
     it("loads full document into context", async () => {
       mockGetDocument.mockResolvedValueOnce({
-        id: 1, space: "knowledge", folderId: null, title: "Test", slug: "test",
+        id: 1, space: "notes", folderId: null, title: "Test", slug: "test",
         contentMd: "full content", sizeBytes: 12, createdAt: "2024-01-01", updatedAt: "2024-01-01",
       });
 
@@ -93,7 +93,7 @@ describe("document handlers", () => {
 
     it("defaults to knowledge space", async () => {
       await handleDocumentRead({ slug: "test" }, makeContext());
-      expect(mockGetDocument).toHaveBeenCalledWith("knowledge", null, "test");
+      expect(mockGetDocument).toHaveBeenCalledWith("notes", null, "test");
     });
 
     it("respects notes space", async () => {
@@ -124,7 +124,7 @@ describe("document handlers", () => {
       );
       expect(result.success).toBe(true);
       expect(mockUpsertDocument).toHaveBeenCalledWith(
-        "knowledge", null, "My Test Document", "my-test-document", "hello world",
+        "notes", null, "My Test Document", "my-test-document", "hello world",
       );
     });
 
@@ -134,13 +134,13 @@ describe("document handlers", () => {
         makeContext(),
       );
       expect(mockUpsertDocument).toHaveBeenCalledWith(
-        "knowledge", null, "My Doc", "custom-slug", "content",
+        "notes", null, "My Doc", "custom-slug", "content",
       );
     });
 
     it("auto-creates folder when folder slug provided and not found", async () => {
       mockCreateFolder.mockResolvedValueOnce({
-        id: 42, space: "knowledge", parentId: null, name: "research", slug: "research", createdAt: "2024-01-01",
+        id: 42, space: "notes", parentId: null, name: "research", slug: "research", createdAt: "2024-01-01",
       });
 
       await handleDocumentWrite(
@@ -148,13 +148,13 @@ describe("document handlers", () => {
         makeContext(),
       );
 
-      expect(mockCreateFolder).toHaveBeenCalledWith("knowledge", null, "research", "research");
-      expect(mockUpsertDocument).toHaveBeenCalledWith("knowledge", 42, "Report", "report", "data");
+      expect(mockCreateFolder).toHaveBeenCalledWith("notes", null, "research", "research");
+      expect(mockUpsertDocument).toHaveBeenCalledWith("notes", 42, "Report", "report", "data");
     });
 
     it("reuses existing folder", async () => {
       mockGetFolderBySlug.mockResolvedValueOnce({
-        id: 10, space: "knowledge", parentId: null, name: "existing", slug: "existing", createdAt: "2024-01-01",
+        id: 10, space: "notes", parentId: null, name: "existing", slug: "existing", createdAt: "2024-01-01",
       });
 
       await handleDocumentWrite(
@@ -163,12 +163,12 @@ describe("document handlers", () => {
       );
 
       expect(mockCreateFolder).not.toHaveBeenCalled();
-      expect(mockUpsertDocument).toHaveBeenCalledWith("knowledge", 10, "Note", "note", "text");
+      expect(mockUpsertDocument).toHaveBeenCalledWith("notes", 10, "Note", "note", "text");
     });
 
     it("includes size warning for large documents", async () => {
       mockUpsertDocument.mockResolvedValueOnce({
-        id: 1, space: "knowledge", folderId: null, title: "Big", slug: "big",
+        id: 1, space: "notes", folderId: null, title: "Big", slug: "big",
         contentMd: "x", sizeBytes: 5000, createdAt: "2024-01-01", updatedAt: "2024-01-01",
       });
 
@@ -188,10 +188,10 @@ describe("document handlers", () => {
   describe("handleDocumentList", () => {
     it("returns documents and folders", async () => {
       mockListDocuments.mockResolvedValueOnce([
-        { id: 1, space: "knowledge", folderId: null, title: "Doc1", slug: "doc1", sizeBytes: 100, updatedAt: "2024-01-01" },
+        { id: 1, space: "notes", folderId: null, title: "Doc1", slug: "doc1", sizeBytes: 100, updatedAt: "2024-01-01" },
       ]);
       mockListFolders.mockResolvedValueOnce([
-        { id: 1, space: "knowledge", parentId: null, name: "research", slug: "research", createdAt: "2024-01-01" },
+        { id: 1, space: "notes", parentId: null, name: "research", slug: "research", createdAt: "2024-01-01" },
       ]);
 
       const result = await handleDocumentList({}, makeContext());
@@ -199,12 +199,12 @@ describe("document handlers", () => {
       const parsed = JSON.parse(result.output);
       expect(parsed.documents).toHaveLength(1);
       expect(parsed.folders).toHaveLength(1);
-      expect(parsed.space).toBe("knowledge");
+      expect(parsed.space).toBe("notes");
     });
 
     it("defaults to knowledge space", async () => {
       await handleDocumentList({}, makeContext());
-      expect(mockListDocuments).toHaveBeenCalledWith("knowledge", null);
+      expect(mockListDocuments).toHaveBeenCalledWith("notes", null);
     });
   });
 
@@ -225,7 +225,7 @@ describe("document handlers", () => {
 
     it("soft deletes document and removes from context", async () => {
       mockGetDocument.mockResolvedValueOnce({
-        id: 5, space: "knowledge", folderId: null, title: "To Delete", slug: "to-delete",
+        id: 5, space: "notes", folderId: null, title: "To Delete", slug: "to-delete",
         contentMd: "content", sizeBytes: 7, createdAt: "2024-01-01", updatedAt: "2024-01-01",
       });
 
@@ -245,24 +245,24 @@ describe("document handlers", () => {
     it("resolves nested folder path for read", async () => {
       // "research/2024" → first call returns research (id=10), second call returns 2024 (id=20)
       mockGetFolderBySlug
-        .mockResolvedValueOnce({ id: 10, space: "knowledge", parentId: null, name: "research", slug: "research", createdAt: "2024-01-01" })
-        .mockResolvedValueOnce({ id: 20, space: "knowledge", parentId: 10, name: "2024", slug: "2024", createdAt: "2024-01-01" });
+        .mockResolvedValueOnce({ id: 10, space: "notes", parentId: null, name: "research", slug: "research", createdAt: "2024-01-01" })
+        .mockResolvedValueOnce({ id: 20, space: "notes", parentId: 10, name: "2024", slug: "2024", createdAt: "2024-01-01" });
 
       await handleDocumentRead({ slug: "report", folder: "research/2024" }, makeContext());
 
       // Should resolve folder path by walking: research (null) → 2024 (10)
       expect(mockGetFolderBySlug).toHaveBeenCalledTimes(2);
-      expect(mockGetFolderBySlug).toHaveBeenCalledWith("knowledge", null, "research");
-      expect(mockGetFolderBySlug).toHaveBeenCalledWith("knowledge", 10, "2024");
-      expect(mockGetDocument).toHaveBeenCalledWith("knowledge", 20, "report");
+      expect(mockGetFolderBySlug).toHaveBeenCalledWith("notes", null, "research");
+      expect(mockGetFolderBySlug).toHaveBeenCalledWith("notes", 10, "2024");
+      expect(mockGetDocument).toHaveBeenCalledWith("notes", 20, "report");
     });
 
     it("auto-creates nested folder chain on write", async () => {
       // Neither "research" nor "2024" exist → both created
       mockGetFolderBySlug.mockResolvedValue(null);
       mockCreateFolder
-        .mockResolvedValueOnce({ id: 10, space: "knowledge", parentId: null, name: "research", slug: "research", createdAt: "2024-01-01" })
-        .mockResolvedValueOnce({ id: 20, space: "knowledge", parentId: 10, name: "2024", slug: "2024", createdAt: "2024-01-01" });
+        .mockResolvedValueOnce({ id: 10, space: "notes", parentId: null, name: "research", slug: "research", createdAt: "2024-01-01" })
+        .mockResolvedValueOnce({ id: 20, space: "notes", parentId: 10, name: "2024", slug: "2024", createdAt: "2024-01-01" });
 
       await handleDocumentWrite(
         { title: "Deep Report", content: "data", folder: "research/2024" },
@@ -270,21 +270,21 @@ describe("document handlers", () => {
       );
 
       expect(mockCreateFolder).toHaveBeenCalledTimes(2);
-      expect(mockCreateFolder).toHaveBeenCalledWith("knowledge", null, "research", "research");
-      expect(mockCreateFolder).toHaveBeenCalledWith("knowledge", 10, "2024", "2024");
-      expect(mockUpsertDocument).toHaveBeenCalledWith("knowledge", 20, "Deep Report", "deep-report", "data");
+      expect(mockCreateFolder).toHaveBeenCalledWith("notes", null, "research", "research");
+      expect(mockCreateFolder).toHaveBeenCalledWith("notes", 10, "2024", "2024");
+      expect(mockUpsertDocument).toHaveBeenCalledWith("notes", 20, "Deep Report", "deep-report", "data");
     });
 
     it("single-level folder still works (backward compat)", async () => {
       mockGetFolderBySlug.mockResolvedValueOnce({
-        id: 5, space: "knowledge", parentId: null, name: "notes", slug: "notes", createdAt: "2024-01-01",
+        id: 5, space: "notes", parentId: null, name: "notes", slug: "notes", createdAt: "2024-01-01",
       });
 
       await handleDocumentRead({ slug: "todo", folder: "notes" }, makeContext());
 
       expect(mockGetFolderBySlug).toHaveBeenCalledTimes(1);
-      expect(mockGetFolderBySlug).toHaveBeenCalledWith("knowledge", null, "notes");
-      expect(mockGetDocument).toHaveBeenCalledWith("knowledge", 5, "todo");
+      expect(mockGetFolderBySlug).toHaveBeenCalledWith("notes", null, "notes");
+      expect(mockGetDocument).toHaveBeenCalledWith("notes", 5, "todo");
     });
   });
 });
