@@ -14,8 +14,14 @@ import { buildOverview, buildProtocolList } from "./registry-projection.js";
 export function buildInstructions(): string {
   const overview = buildOverview();
   const namespaces = buildProtocolList();
+  // R5: render one-liner per namespace so the model knows what each does
+  // before calling discover_tools. Description copy comes from
+  // `tools/protocols/descriptions.ts` (shared with Echo Agent system prompt).
   const namespaceList = namespaces
-    .map((n) => `- \`${n.namespace}\` (${n.activeToolCount} active tools)`)
+    .map(
+      (n) =>
+        `- **\`${n.namespace}\`** — ${n.description} _(${n.activeToolCount} active tools)_`,
+    )
     .join("\n");
 
   return `# EchoClaw MCP

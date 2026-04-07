@@ -64,4 +64,23 @@ describe("mcp docs — buildInstructions", () => {
     expect(text).toContain("solana");
     expect(text).toContain("polymarket");
   });
+
+  // ── R5: per-namespace one-liner descriptions ────────────────────
+
+  it("renders a one-liner description per namespace, not just the name (R5)", () => {
+    const text = buildInstructions();
+    // Anchor on real copy from descriptions.ts: khalani description must
+    // mention bridging, slop must mention bonding curve, echobook must
+    // mention social. If those substrings disappear from the preamble it
+    // means the renderer dropped descriptions and the model is back to
+    // seeing namespace names with no context.
+    expect(text.toLowerCase()).toContain("bridge");
+    expect(text.toLowerCase()).toContain("bonding curve");
+    expect(text.toLowerCase()).toContain("social");
+  });
+
+  it("shows tool counts alongside descriptions in italics (R5)", () => {
+    const text = buildInstructions();
+    expect(text).toMatch(/_\(\d+ active tools\)_/);
+  });
 });

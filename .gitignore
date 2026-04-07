@@ -5,10 +5,11 @@ dist/
 .env.*
 !.env.example
 
-# IDE
+# IDE / CLI tooling
 .idea/
 .vscode/
 .claude/
+.codex
 *.swp
 *.swo
 

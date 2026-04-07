@@ -21,6 +21,10 @@ import {
   PROTOCOL_NAMESPACE_ALLOWLIST,
   NAMESPACE_DEFAULTS,
 } from "@echo-agent/tools/protocols/catalog.js";
+import {
+  NAMESPACE_DESCRIPTIONS,
+  NAMESPACE_EXAMPLES,
+} from "@echo-agent/tools/protocols/descriptions.js";
 import { loadEmbeddingConfig } from "@echo-agent/embeddings/config.js";
 import type { ProtocolNamespace, ProtocolToolManifest } from "@echo-agent/tools/protocols/types.js";
 
@@ -117,6 +121,10 @@ export function buildOverview(): OverviewDoc {
 
 export interface ProtocolNamespaceDoc {
   namespace: ProtocolNamespace;
+  /** One-line description of what this namespace does (R5 — shared with Echo Agent prompt). */
+  description: string;
+  /** Concrete `discover_tools(...)` queries the model can copy to find tools. May be empty. */
+  exampleQueries: readonly string[];
   defaultPortfolioRole: string;
   activeToolCount: number;
 }
@@ -124,6 +132,8 @@ export interface ProtocolNamespaceDoc {
 export function buildProtocolList(): ProtocolNamespaceDoc[] {
   return PROTOCOL_NAMESPACE_ALLOWLIST.map((ns) => ({
     namespace: ns,
+    description: NAMESPACE_DESCRIPTIONS[ns],
+    exampleQueries: NAMESPACE_EXAMPLES[ns] ?? [],
     defaultPortfolioRole: NAMESPACE_DEFAULTS[ns],
     activeToolCount: PROTOCOL_TOOLS.filter((t) => t.namespace === ns && t.lifecycle === "active").length,
   }));
@@ -137,10 +147,17 @@ export interface ProtocolToolDoc {
   lifecycle: string;
 }
 
-export function buildProtocolNamespace(namespace: string): {
-  namespace: string;
+export interface ProtocolNamespaceDetailDoc {
+  namespace: ProtocolNamespace;
+  /** Header description (R5 — shared with Echo Agent prompt via descriptions.ts). */
+  description: string;
+  exampleQueries: readonly string[];
   tools: ProtocolToolDoc[];
-} | null {
+}
+
+export function buildProtocolNamespace(
+  namespace: string,
+): ProtocolNamespaceDetailDoc | null {
   if (!PROTOCOL_NAMESPACE_ALLOWLIST.includes(namespace as ProtocolNamespace)) {
     return null;
   }
@@ -154,7 +171,12 @@ export function buildProtocolNamespace(namespace: string): {
       mutating: t.mutating,
       lifecycle: t.lifecycle,
     }));
-  return { namespace, tools };
+  return {
+    namespace: ns,
+    description: NAMESPACE_DESCRIPTIONS[ns],
+    exampleQueries: NAMESPACE_EXAMPLES[ns] ?? [],
+    tools,
+  };
 }
 
 // ── Surface manifest (machine-readable) ──────────────────────────

@@ -17,7 +17,11 @@
  */
 
 import { getPool } from "@echo-agent/db/client.js";
-import { loadEmbeddingConfig } from "@echo-agent/embeddings/config.js";
+import {
+  EMBEDDING_REQUEST_TIMEOUT_MS,
+  loadEmbeddingConfig,
+} from "@echo-agent/embeddings/config.js";
+import { fetchWithTimeout } from "@utils/http.js";
 import logger from "@utils/logger.js";
 
 export class McpHealthError extends Error {
@@ -72,16 +76,17 @@ export async function probeEmbeddings(): Promise<void> {
   const url = `${config.baseUrl}/embeddings`;
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetchWithTimeout(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ input: "ping", model: config.model }),
+      timeoutMs: EMBEDDING_REQUEST_TIMEOUT_MS,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new McpHealthError(
       `Embeddings probe POST failed: ${msg}`,
-      `Check that the embedding service is reachable at ${config.baseUrl} (Docker Model Runner status, model loaded).`,
+      `Check that the embedding service is reachable at ${config.baseUrl} within ${EMBEDDING_REQUEST_TIMEOUT_MS}ms (Docker Model Runner status, model loaded).`,
     );
   }
 

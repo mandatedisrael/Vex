@@ -127,6 +127,37 @@ describe("mcp docs — registry projection", () => {
         expect(ns.defaultPortfolioRole).toBeTruthy();
       }
     });
+
+    // ── R5: descriptions and example queries ──────────────────────
+
+    it("each namespace carries a non-empty description and an exampleQueries array", () => {
+      const list = buildProtocolList();
+      for (const ns of list) {
+        expect(typeof ns.description).toBe("string");
+        expect(ns.description.length).toBeGreaterThan(0);
+        expect(Array.isArray(ns.exampleQueries)).toBe(true);
+      }
+    });
+
+    it("khalani description mentions bridging (R5 — anchor on real copy)", () => {
+      const list = buildProtocolList();
+      const khalani = list.find((n) => n.namespace === "khalani");
+      expect(khalani).toBeDefined();
+      expect(khalani!.description.toLowerCase()).toContain("bridge");
+    });
+
+    it("namespaces with active tools also carry exampleQueries", () => {
+      const list = buildProtocolList();
+      // 0g-compute / 0g-storage are intentionally excluded — no active tools yet.
+      const withTools = list.filter((n) => n.activeToolCount > 0);
+      for (const ns of withTools) {
+        expect(ns.exampleQueries.length).toBeGreaterThan(0);
+        for (const example of ns.exampleQueries) {
+          expect(example).toContain("discover_tools");
+          expect(example).toContain(`namespace="${ns.namespace}"`);
+        }
+      }
+    });
   });
 
   // ── Protocol namespace detail ───────────────────────────────────
@@ -142,6 +173,15 @@ describe("mcp docs — registry projection", () => {
       expect(ns!.tools.length).toBeGreaterThan(0);
       const sorted = [...ns!.tools].sort((a, b) => a.toolId.localeCompare(b.toolId));
       expect(ns!.tools.map((t) => t.toolId)).toEqual(sorted.map((t) => t.toolId));
+    });
+
+    it("includes header description and exampleQueries before tools (R5)", () => {
+      const ns = buildProtocolNamespace("solana");
+      expect(ns).not.toBeNull();
+      expect(typeof ns!.description).toBe("string");
+      expect(ns!.description.length).toBeGreaterThan(0);
+      expect(Array.isArray(ns!.exampleQueries)).toBe(true);
+      expect(ns!.exampleQueries.length).toBeGreaterThan(0);
     });
 
     it("each tool carries namespace, description, mutating, lifecycle", () => {

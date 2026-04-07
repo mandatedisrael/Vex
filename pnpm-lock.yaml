@@ -14,6 +14,9 @@ importers:
       '@0glabs/0g-serving-broker':
         specifier: ^0.7.1
         version: 0.7.4(@types/circomlibjs@0.1.6)(@types/crypto-js@4.2.2)(circomlibjs@0.1.7(bufferutil@4.1.0)(utf-8-validate@6.0.6))(crypto-js@4.2.0)(ethers@6.16.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.3.6)
       '@openrouter/sdk':
         specifier: ^0.9.11
         version: 0.9.11
@@ -50,10 +53,10 @@ importers:
       winston:
         specifier: ^3.17.0
         version: 3.19.0
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.29.0
-        version: 1.29.0(zod@4.3.6)
       '@types/node':
         specifier: ^22.19.15
         version: 22.19.17
@@ -75,9 +78,6 @@ importers:
       vitest:
         specifier: ^4.1.1
         version: 4.1.2(@types/node@22.19.17)(vite@8.0.3(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@22.19.17)(esbuild@0.27.7)(tsx@4.21.0))
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
 
 packages:
 

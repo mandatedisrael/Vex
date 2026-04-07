@@ -20,10 +20,10 @@
  *     `mountHttpDocs(fastify)` so it inherits the same hooks (host validation
  *     + bearer).
  *
- * Session lifecycle in v1: one DB session per HTTP server boot. Created by
- * `createMcpSession({transport:"http"})` before the McpServer is built and
- * ended on graceful shutdown (SIGINT/SIGTERM). Per-MCP-session DB sessions
- * are a follow-up if multi-tenant deployments come into scope.
+ * Session lifecycle in v1: one Streamable HTTP transport + one McpServer per
+ * MCP session. The MCP-side session id is assigned by the SDK and mapped 1:1
+ * to a DB session id (`mcp-http-{externalId}`) during initialization, so
+ * audit/provenance stays isolated per connected client session.
  */
 
 import Fastify from "fastify";
@@ -34,10 +34,20 @@ import { createMcpServerInstance } from "../server/create-server.js";
 import { createMcpSession, endMcpSession } from "../sessions.js";
 import { mountHttpDocs } from "../docs/http-mirror.js";
 import { loadOrCreateHttpToken } from "../auth/token.js";
+import {
+  classifyHttpSessionRequest,
+  readMcpSessionId,
+} from "./http-session-routing.js";
 import logger from "@utils/logger.js";
 
 const DEFAULT_PORT = 4203;
 const BIND_HOST = "127.0.0.1";
+
+interface HttpSessionState {
+  transport: StreamableHTTPServerTransport;
+  dbSessionId?: string;
+  ready: Promise<string>;
+}
 
 function parsePort(): number {
   const raw = (process.env.MCP_HTTP_PORT ?? "").trim();
@@ -65,7 +75,7 @@ export async function startHttpTransport(): Promise<void> {
   const port = parsePort();
   const token = loadOrCreateHttpToken();
   const allowedHosts = buildAllowedHosts(port);
-  const sessionId = await createMcpSession({ transport: "http" });
+  const sessions = new Map<string, HttpSessionState>();
 
   const fastify: FastifyInstance = Fastify({
     // Quiet built-in pino logger; we already log via winston on stderr.
@@ -95,30 +105,111 @@ export async function startHttpTransport(): Promise<void> {
   // Mount docs mirror on the same instance — inherits hooks above.
   mountHttpDocs(fastify);
 
-  // ── McpServer + Streamable HTTP transport ─────────────────────────────
-  const server = createMcpServerInstance({
-    sessionIdProvider: () => sessionId,
-  });
-
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
-  });
-
-  transport.onclose = () => {
-    void endMcpSession(sessionId);
-    logger.info("mcp.http.transport_closed", { sessionId });
-  };
-
-  await server.connect(transport);
-
   // Pass raw Node req/res to the SDK transport. The SDK does not understand
   // Fastify's request/reply abstractions; it expects Node primitives.
   const handleMcp = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const mcpSessionId = readMcpSessionId(request.headers);
+    const route = classifyHttpSessionRequest(
+      mcpSessionId,
+      mcpSessionId ? sessions.has(mcpSessionId) : false,
+      request.body,
+    );
+
     try {
-      await transport.handleRequest(request.raw, reply.raw, request.body);
+      if (route === "existing" && mcpSessionId) {
+        const state = sessions.get(mcpSessionId)!;
+        await state.ready;
+        await state.transport.handleRequest(request.raw, reply.raw, request.body);
+        return;
+      }
+
+      if (route === "initialize") {
+        let state: HttpSessionState | undefined;
+
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (initializedSessionId) => {
+            state = {
+              transport,
+              ready: createMcpSession({
+                transport: "http",
+                externalId: initializedSessionId,
+              }).then((dbSessionId) => {
+                if (state) {
+                  state.dbSessionId = dbSessionId;
+                }
+                logger.info("mcp.http.session_bound", {
+                  mcpSessionId: initializedSessionId,
+                  dbSessionId,
+                });
+                return dbSessionId;
+              }).catch((err) => {
+                sessions.delete(initializedSessionId);
+                logger.error("mcp.http.session_bind_failed", {
+                  mcpSessionId: initializedSessionId,
+                  error: err instanceof Error ? err.message : String(err),
+                });
+                void transport.close().catch((closeErr) => {
+                  logger.warn("mcp.http.transport_close_failed_after_bind_error", {
+                    mcpSessionId: initializedSessionId,
+                    error: closeErr instanceof Error ? closeErr.message : String(closeErr),
+                  });
+                });
+                throw err;
+              }),
+            };
+            sessions.set(initializedSessionId, state);
+          },
+        });
+
+        const server = createMcpServerInstance({
+          sessionIdProvider: () => {
+            if (!state?.dbSessionId) {
+              throw new Error("HTTP MCP session is not bound to a DB session");
+            }
+            return state.dbSessionId;
+          },
+        });
+
+        transport.onclose = () => {
+          const closedSessionId = transport.sessionId;
+          if (!closedSessionId) return;
+
+          const closedState = sessions.get(closedSessionId);
+          sessions.delete(closedSessionId);
+
+          if (!closedState) return;
+
+          void closedState.ready
+            .then((dbSessionId) => endMcpSession(dbSessionId))
+            .catch((err) => {
+              logger.warn("mcp.http.session_close_without_db_session", {
+                mcpSessionId: closedSessionId,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            });
+
+          logger.info("mcp.http.transport_closed", { mcpSessionId: closedSessionId });
+        };
+
+        await server.connect(transport);
+        await transport.handleRequest(request.raw, reply.raw, request.body);
+        if (state) {
+          await state.ready;
+        }
+        return;
+      }
+
+      if (route === "not_found") {
+        reply.code(404).send({ error: "session_not_found" });
+        return;
+      }
+
+      reply.code(400).send({ error: "session_id_required" });
     } catch (err) {
       logger.warn("mcp.http.handle_failed", {
         method: request.method,
+        mcpSessionId,
         error: err instanceof Error ? err.message : String(err),
       });
       if (!reply.raw.headersSent) {
@@ -132,14 +223,26 @@ export async function startHttpTransport(): Promise<void> {
   fastify.delete("/mcp", handleMcp);
 
   await fastify.listen({ host: BIND_HOST, port });
-  logger.info("mcp.http.listening", { host: BIND_HOST, port, sessionId });
+  logger.info("mcp.http.listening", { host: BIND_HOST, port });
 
   // ── Graceful shutdown ─────────────────────────────────────────────────
   let shuttingDown = false;
   const shutdown = async (signal: string): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
-    logger.info("mcp.http.shutdown", { signal, sessionId });
+    logger.info("mcp.http.shutdown", { signal, activeSessions: sessions.size });
+
+    for (const [mcpSessionId, state] of Array.from(sessions.entries())) {
+      try {
+        await state.transport.close();
+      } catch (err) {
+        logger.warn("mcp.http.transport_close_failed", {
+          mcpSessionId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     try {
       await fastify.close();
     } catch (err) {
@@ -147,7 +250,6 @@ export async function startHttpTransport(): Promise<void> {
         error: err instanceof Error ? err.message : String(err),
       });
     }
-    await endMcpSession(sessionId);
     process.exit(0);
   };
   process.on("SIGINT", () => void shutdown("SIGINT"));

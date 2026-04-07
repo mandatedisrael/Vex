@@ -8,8 +8,9 @@
  *   - workflow prompts (trade-workflow, knowledge-guidelines, safety-rules)
  *
  * The session id provider is a callback so transports can supply different
- * sources: stdio passes the single-connection id; HTTP passes a per-request
- * lookup against the Streamable HTTP transport's session id.
+ * sources: stdio passes the single-connection id; HTTP creates one
+ * `McpServer` per MCP session and passes the DB session id bound to that
+ * transport instance.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";

@@ -2,74 +2,20 @@
  * Protocol prompt — constant layer, always present.
  *
  * Auto-generated from PROTOCOL_TOOLS manifests (catalog.ts).
- * Namespace descriptions are a frozen handwritten map (manifests have
- * descriptions per-tool, not per-namespace).
+ * Namespace descriptions and discover_tools example queries come from
+ * `tools/protocols/descriptions.ts` — a single source-of-truth shared
+ * with the production MCP server (so the same per-namespace copy ends
+ * up in both Echo Agent's mission loop prompt and MCP handshake +
+ * docs resources).
  * Capability families and tool counts are auto-generated from toolId patterns.
  */
 
 import { PROTOCOL_TOOLS } from "@echo-agent/tools/protocols/catalog.js";
-import type { ProtocolToolManifest } from "@echo-agent/tools/protocols/types.js";
-
-// ── Namespace descriptions — frozen, handwritten ────────────────
-
-// ── Discovery examples — frozen, handwritten ───────────────────
-
-const NAMESPACE_EXAMPLES: Record<string, string[]> = {
-  khalani: [
-    'discover_tools(query="token search", namespace="khalani")',
-    'discover_tools(query="bridge quote", namespace="khalani")',
-  ],
-  dexscreener: [
-    'discover_tools(query="trending pairs", namespace="dexscreener")',
-    'discover_tools(query="token search", namespace="dexscreener")',
-  ],
-  solana: [
-    'discover_tools(query="token search", namespace="solana")',
-    'discover_tools(query="swap", namespace="solana")',
-    'discover_tools(query="prediction markets", namespace="solana")',
-  ],
-  kyberswap: [
-    'discover_tools(query="token search", namespace="kyberswap")',
-    'discover_tools(query="swap", namespace="kyberswap")',
-    'discover_tools(query="limit order", namespace="kyberswap")',
-    'discover_tools(query="zap liquidity", namespace="kyberswap")',
-  ],
-  polymarket: [
-    'discover_tools(query="prediction markets", namespace="polymarket")',
-    'discover_tools(query="buy prediction", namespace="polymarket", includeMutating=true)',
-  ],
-  jaine: [
-    'discover_tools(query="0g swap", namespace="jaine")',
-  ],
-  slop: [
-    'discover_tools(query="bonding curve token", namespace="slop")',
-  ],
-  chainscan: [
-    'discover_tools(query="0g transaction lookup", namespace="chainscan")',
-  ],
-  echobook: [
-    'discover_tools(query="posts feed", namespace="echobook")',
-    'discover_tools(query="notifications", namespace="echobook")',
-  ],
-  "slop-app": [
-    'discover_tools(query="profile", namespace="slop-app")',
-  ],
-};
-
-const NAMESPACE_DESCRIPTIONS: Record<string, string> = {
-  khalani: "Cross-chain balances, token discovery, bridge quotes and execution (40+ chains). Resolve tokens via khalani.tokens.search before bridge/quote",
-  dexscreener: "DEX analytics, trending pairs, token profiles, price research",
-  solana: "Jupiter swaps, token prices, token discovery, lending, prediction markets (requires JUPITER_API_KEY). Resolve mints via solana.tokens.search before swap/predict",
-  kyberswap: "Multi-chain EVM swaps, token safety, limit orders, LP zap. Resolve tokens via khalani.tokens.search first, then pass address to kyberswap. kyberswap.tokens.search is for visibility checks only",
-  polymarket: "Prediction markets, positions, CLOB trading, analytics, orderbook",
-  jaine: "0G DEX swaps, LP management, wrap/unwrap A0GI",
-  slop: "0G bonding curve token creation, trading, discovery",
-  chainscan: "ChainScan — 0G-only explorer: transaction lookup, block data, token stats. Not a multi-chain explorer",
-  echobook: "Social graph — posts, comments, notifications, points, threads",
-  "slop-app": "0G social app — profiles, image generation, agent interactions, chat",
-  "0g-compute": "0G compute network",
-  "0g-storage": "0G storage network",
-};
+import {
+  NAMESPACE_DESCRIPTIONS,
+  NAMESPACE_EXAMPLES,
+} from "@echo-agent/tools/protocols/descriptions.js";
+import type { ProtocolNamespace, ProtocolToolManifest } from "@echo-agent/tools/protocols/types.js";
 
 // ── Auto-generation from manifests ──────────────────────────────
 
@@ -81,8 +27,10 @@ interface NamespaceSummary {
   hasMutating: boolean;
 }
 
-function groupByNamespace(tools: readonly ProtocolToolManifest[]): Map<string, ProtocolToolManifest[]> {
-  const map = new Map<string, ProtocolToolManifest[]>();
+function groupByNamespace(
+  tools: readonly ProtocolToolManifest[],
+): Map<ProtocolNamespace, ProtocolToolManifest[]> {
+  const map = new Map<ProtocolNamespace, ProtocolToolManifest[]>();
   for (const t of tools) {
     const arr = map.get(t.namespace) ?? [];
     arr.push(t);
@@ -110,13 +58,13 @@ function extractFamilies(tools: ProtocolToolManifest[]): string[] {
     .map(([prefix, count]) => count > 1 ? `${prefix}.*` : prefix);
 }
 
-function buildNamespaceSummaries(): Map<string, NamespaceSummary> {
+function buildNamespaceSummaries(): Map<ProtocolNamespace, NamespaceSummary> {
   const byNs = groupByNamespace(PROTOCOL_TOOLS);
-  const summaries = new Map<string, NamespaceSummary>();
+  const summaries = new Map<ProtocolNamespace, NamespaceSummary>();
 
   for (const [ns, tools] of byNs) {
     summaries.set(ns, {
-      description: NAMESPACE_DESCRIPTIONS[ns] ?? ns,
+      description: NAMESPACE_DESCRIPTIONS[ns],
       toolCount: tools.length,
       activeCount: tools.filter(t => t.lifecycle === "active").length,
       families: extractFamilies(tools),
