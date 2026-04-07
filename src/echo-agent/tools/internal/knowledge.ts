@@ -9,8 +9,9 @@
  *   - knowledge_update_status   marks an entry invalidated/archived, no sidecar required
  *
  * knowledge_recall is NOT 100% read-only: it lazily cleans up expired cache rows
- * and writes any overflow (>10 results or >50k chars total) into documents(space='cache').
- * This is documented in the tool description and surfaced in tests.
+ * and writes any overflow (>10 results or >50k chars total) into the dedicated
+ * recall_cache_entries table. This is documented in the tool description and
+ * surfaced in tests.
  *
  * All entries MUST be written in English regardless of conversation language —
  * see Knowledge Layer Rules in tool-usage.ts and registry tool descriptions.
@@ -19,6 +20,8 @@
 import * as knowledgeRepo from "@echo-agent/db/repos/knowledge.js";
 import * as recallCacheRepo from "@echo-agent/db/repos/recall-cache.js";
 import { embedDocument, embedQuery } from "@echo-agent/embeddings/client.js";
+import { loadEmbeddingConfig } from "@echo-agent/embeddings/config.js";
+import { computeContentHash } from "@echo-agent/knowledge/content-hash.js";
 import {
   computeValidUntil,
   isValidKind,
@@ -27,7 +30,6 @@ import {
 } from "@echo-agent/knowledge/policy.js";
 import { rerank, type RecallCandidate } from "@echo-agent/knowledge/ranking.js";
 import { splitInlineAndOverflow } from "@echo-agent/knowledge/recall-payload.js";
-import { REQUIRED_EMBEDDING_DIM } from "@echo-agent/embeddings/config.js";
 import type { ToolResult } from "../types.js";
 import type { InternalToolContext } from "./types.js";
 import { str, num, bool, ok, fail } from "./types.js";
@@ -60,9 +62,54 @@ export async function handleKnowledgeWrite(
 
   const validUntil = computeValidUntil(ttlHours, pinned, new Date());
 
-  let embedding: number[];
+  // Short-circuit on content_hash BEFORE loading the embedding config or
+  // calling the provider. Repeat writes of the same fact are common (the
+  // agent re-derives the same observation across sessions) — paying for an
+  // embed round-trip just to discover a duplicate is wasted budget. The CTE
+  // upsert in insertEntry is still a safety net for race conditions, but
+  // 99% of duplicates land here.
+  const contentHash = computeContentHash({ kind, title, summary, contentMd });
   try {
-    embedding = await embedDocument(title, summary);
+    const existing = await knowledgeRepo.findByContentHash(contentHash);
+    if (existing) {
+      logger.info("knowledge.write.duplicate_short_circuit", {
+        id: existing.id,
+        kind: existing.kind,
+        contentHash,
+      });
+      return ok({
+        id: existing.id,
+        kind: existing.kind,
+        validUntil: existing.validUntil,
+        pinned: existing.pinned,
+        embedded: true,
+        duplicate: true,
+      });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error("knowledge.write.lookup_failed", { error: msg });
+    return fail(`knowledge_write failed: ${msg}`);
+  }
+
+  // Load config once per call. We use it for the embedDocument call AND to
+  // stamp embeddingModel/embeddingDim authoritatively (no `?? "unknown"`,
+  // no compile-time constant).
+  let config;
+  try {
+    config = loadEmbeddingConfig();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn("knowledge.write.config_failed", { error: msg });
+    return fail(`embedding config invalid: ${msg}`);
+  }
+
+  let embedding: number[];
+  let providerModel: string;
+  try {
+    const result = await embedDocument(title, summary, config);
+    embedding = result.embedding;
+    providerModel = result.providerModel;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn("knowledge.write.embedding_failed", { error: msg });
@@ -70,7 +117,7 @@ export async function handleKnowledgeWrite(
   }
 
   try {
-    const entry = await knowledgeRepo.insertEntry({
+    const { entry, inserted } = await knowledgeRepo.insertEntry({
       kind,
       title,
       summary,
@@ -80,16 +127,28 @@ export async function handleKnowledgeWrite(
       confidence,
       pinned,
       validUntil,
-      embeddingModel: process.env.EMBEDDING_MODEL ?? "unknown",
-      embeddingDim: REQUIRED_EMBEDDING_DIM,
+      contentHash,
+      // Honest provenance: stamp the model the provider actually reported,
+      // NOT the requested config.model. The audit column and the recall
+      // filter both consume this — they must agree on the same source.
+      embeddingModel: providerModel,
+      embeddingDim: embedding.length,
       embedding,
     });
+    if (!inserted) {
+      logger.info("knowledge.write.duplicate", {
+        id: entry.id,
+        kind: entry.kind,
+        contentHash,
+      });
+    }
     return ok({
       id: entry.id,
       kind: entry.kind,
       validUntil: entry.validUntil,
       pinned: entry.pinned,
       embedded: true,
+      duplicate: !inserted,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -122,9 +181,21 @@ export async function handleKnowledgeRecall(
     });
   }
 
-  let queryEmbedding: number[];
+  let config;
   try {
-    queryEmbedding = await embedQuery(query);
+    config = loadEmbeddingConfig();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn("knowledge.recall.config_failed", { error: msg });
+    return fail(`embedding config invalid: ${msg}`);
+  }
+
+  let queryEmbedding: number[];
+  let providerModel: string;
+  try {
+    const result = await embedQuery(query, config);
+    queryEmbedding = result.embedding;
+    providerModel = result.providerModel;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn("knowledge.recall.embedding_failed", { error: msg });
@@ -135,7 +206,16 @@ export async function handleKnowledgeRecall(
   try {
     candidates = await knowledgeRepo.recallTopK(
       queryEmbedding,
-      { kind, includeExpired },
+      {
+        // Filter by what the provider actually reported on THIS call. Write
+        // path stamps the same providerModel, so write/read are self-consistent
+        // for the lifetime of one provider deployment. If the provider changes
+        // its name, the operator runs `make knowledge-reembed --force`.
+        embeddingModel: providerModel,
+        embeddingDim: config.dim,
+        kind,
+        includeExpired,
+      },
       k,
     );
   } catch (err) {

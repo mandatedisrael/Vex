@@ -38,3 +38,20 @@ services:
     # See docker-library/postgres PR #1259 — mounting on /data fails fast on pg18+.
     tmpfs:
       - /var/lib/postgresql
+
+  # WSL2 workaround: Docker Desktop's "Enable host-side TCP support" binds port
+  # 12434 to Windows localhost, which is NOT the same as WSL2 localhost (separate
+  # network namespace). The agent running in WSL2 cannot reach Windows localhost
+  # directly. This sidecar listens on 12434 inside the compose network, forwards
+  # to model-runner.docker.internal:80 (Docker Desktop's internal DNS for Model
+  # Runner, reachable from any container), and exposes 12434 on the WSL2 host via
+  # Docker's normal port publishing. Net effect: `curl localhost:12434/...` works
+  # from WSL2 host. No-op on native Linux or macOS where host-side TCP already
+  # binds to the correct loopback — but harmless (second process can't bind the
+  # same port there, so just remove this service or leave it stopped).
+  embeddings-proxy:
+    image: alpine/socat:1.8.0.3
+    command: ["-d", "TCP-LISTEN:12434,fork,reuseaddr", "TCP:model-runner.docker.internal:80"]
+    ports:
+      - "12434:12434"
+    restart: unless-stopped

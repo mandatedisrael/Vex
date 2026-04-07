@@ -29,6 +29,12 @@ INSERT INTO soul (id) VALUES (1) ON CONFLICT DO NOTHING;
 -- Knowledge — canonical agent memory with embeddings + tiered TTL.
 -- Replaces former memory_entries. Free-form `kind` (snake_case, agent-defined),
 -- English-only title/summary/content_md, embedding-on-write via Docker Model Runner.
+--
+-- Portability contract: vector column has NO typmod (any dim accepted at the type
+-- level). Per-row embedding_dim/embedding_model are authoritative — recall MUST
+-- filter on them (mixed-dim recall would crash on `<=>`). content_hash UNIQUE
+-- gives idempotent writes: same canonical text = same row, repeat write returns
+-- existing id (immutable; metadata is NOT silently merged).
 CREATE TABLE knowledge_entries (
   id              SERIAL PRIMARY KEY,
   kind            TEXT NOT NULL,            -- free-form, agent-defined snake_case (e.g. pumpfun_entry_pattern, risk_rule)
@@ -42,22 +48,26 @@ CREATE TABLE knowledge_entries (
   pinned          BOOLEAN NOT NULL DEFAULT FALSE,
   valid_from      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   valid_until     TIMESTAMPTZ,              -- NULL = pinned/evergreen, bypasses TTL filter
-  embedding_model TEXT NOT NULL,            -- audit: which model produced the embedding
-  embedding_dim   INTEGER NOT NULL,         -- audit: model dim (locked at 768 in MVP)
-  embedding       vector(768) NOT NULL,     -- embedding-on-write — entry never created without sidecar
+  content_hash    CHAR(64) NOT NULL,        -- sha256 hex of length-prefixed (kind|title|summary|content_md); idempotency key
+  embedding_model TEXT NOT NULL,            -- audit: which model produced the embedding (authoritative — recall filters on this)
+  embedding_dim   INTEGER NOT NULL,         -- audit: actual provider response dim, NOT a schema lock
+  embedding       vector NOT NULL,          -- embedding-on-write — entry never created without sidecar; no typmod (re-embed-friendly)
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT ke_embedding_dim_range CHECK (embedding_dim > 0 AND embedding_dim <= 8192),
+  CONSTRAINT ke_embedding_dim_matches_vector CHECK (vector_dims(embedding) = embedding_dim)
 );
 CREATE INDEX idx_ke_status_validity ON knowledge_entries(status, valid_until DESC);
 CREATE INDEX idx_ke_kind ON knowledge_entries(kind);
 CREATE INDEX idx_ke_pinned ON knowledge_entries(pinned) WHERE pinned = TRUE;
 CREATE INDEX idx_ke_tags ON knowledge_entries USING GIN (tags);
 CREATE INDEX idx_ke_source_refs ON knowledge_entries USING GIN (source_refs jsonb_path_ops);
+CREATE UNIQUE INDEX idx_ke_content_hash ON knowledge_entries(content_hash);
 -- No vector index in MVP. Exact cosine scan after status/kind/validity prefilter is OK to ~5k entries.
+-- The vector column uses no typmod; adding ANN (ivfflat/hnsw) later requires re-typing the column.
 
 -- Folders — first-class directory tree
 -- Default space 'notes' (canonical knowledge layer is now knowledge_entries, not documents).
--- 'cache' is a system-only space used by knowledge_recall overflow — not exposed via document_* tools.
 CREATE TABLE folders (
   id SERIAL PRIMARY KEY,
   space TEXT NOT NULL DEFAULT 'notes',
@@ -77,7 +87,7 @@ CREATE INDEX idx_folders_parent ON folders(parent_id);
 
 -- Documents — DB-first markdown content with folder FK
 -- Default space 'notes' (freeform agent scratchpad). Canonical structured wisdom lives in knowledge_entries.
--- 'cache' is reserved for knowledge_recall overflow (system-only, not exposed via document_* tools).
+-- Recall overflow cache lives in its own dedicated table (recall_cache_entries), not here.
 CREATE TABLE documents (
   id SERIAL PRIMARY KEY,
   space TEXT NOT NULL DEFAULT 'notes',
@@ -98,6 +108,19 @@ CREATE UNIQUE INDEX idx_documents_slug_folder ON documents(space, folder_id, slu
 CREATE INDEX idx_documents_space ON documents(space);
 CREATE INDEX idx_documents_folder ON documents(folder_id);
 CREATE INDEX idx_documents_updated ON documents(updated_at DESC);
+
+-- Recall overflow cache — dedicated system store for knowledge_recall overflow.
+-- Replaces the former documents(space='cache') hack. Pure system surface — agents
+-- never see these rows through any tool, only via knowledge_recall_overflow lookup
+-- by cache_key. Lifetime is controlled by expires_at; lazy cleanup runs at the
+-- start of every knowledge_recall call (no cron, no scheduler).
+CREATE TABLE recall_cache_entries (
+  cache_key   TEXT PRIMARY KEY,
+  payload     JSONB NOT NULL,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_recall_cache_expires ON recall_cache_entries(expires_at);
 
 -- ══════════════════════════════════════════════════════════════════
 -- B. Runtime & Sessions

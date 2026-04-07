@@ -2,8 +2,8 @@
  * Recall payload splitter — pure TS, no DB.
  *
  * Takes a reranked list and splits it into `inline` (returned in tool response)
- * and `overflow` (written to documents(space='cache') for later read via
- * knowledge_recall_overflow). Two caps apply, whichever fires first:
+ * and `overflow` (persisted to the dedicated recall_cache_entries table for
+ * later read via knowledge_recall_overflow). Two caps apply, whichever fires first:
  *
  *   - max RECALL_INLINE_CAP entries inline
  *   - max RECALL_INLINE_CHARS_CAP total chars across all inline content_md

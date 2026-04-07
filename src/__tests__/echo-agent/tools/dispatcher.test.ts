@@ -50,12 +50,19 @@ vi.mock("@echo-agent/db/repos/folders.js", () => ({
 }));
 
 const mockKnowledgeInsert = vi.fn().mockResolvedValue({
-  id: 42, kind: "memo", title: "test", summary: "test", contentMd: "test",
-  tags: [], sourceRefs: {}, confidence: null, status: "active", pinned: false,
-  validFrom: "2026-04-06T12:00:00Z", validUntil: "2026-04-13T12:00:00Z",
-  embeddingModel: "ai/embeddinggemma:300M-Q8_0", embeddingDim: 768,
-  createdAt: "2026-04-06T12:00:00Z", updatedAt: "2026-04-06T12:00:00Z",
+  entry: {
+    id: 42, kind: "memo", title: "test", summary: "test", contentMd: "test",
+    tags: [], sourceRefs: {}, confidence: null, status: "active", pinned: false,
+    validFrom: "2026-04-06T12:00:00Z", validUntil: "2026-04-13T12:00:00Z",
+    contentHash: "f".repeat(64),
+    embeddingModel: "ai/embeddinggemma:300M-Q8_0", embeddingDim: 768,
+    createdAt: "2026-04-06T12:00:00Z", updatedAt: "2026-04-06T12:00:00Z",
+  },
+  inserted: true,
 });
+// Default: short-circuit lookup misses (no duplicate). Tests that need
+// the duplicate path override this.
+const mockKnowledgeFindByContentHash = vi.fn().mockResolvedValue(null);
 const mockKnowledgeGetById = vi.fn().mockResolvedValue(null);
 const mockKnowledgeUpdateStatus = vi.fn().mockResolvedValue(true);
 const mockKnowledgeRecallTopK = vi.fn().mockResolvedValue([]);
@@ -64,6 +71,7 @@ const mockKnowledgeListKinds = vi.fn().mockResolvedValue([]);
 
 vi.mock("@echo-agent/db/repos/knowledge.js", () => ({
   insertEntry: (...args: unknown[]) => mockKnowledgeInsert(...args),
+  findByContentHash: (...args: unknown[]) => mockKnowledgeFindByContentHash(...args),
   getById: (...args: unknown[]) => mockKnowledgeGetById(...args),
   updateStatus: (...args: unknown[]) => mockKnowledgeUpdateStatus(...args),
   recallTopK: (...args: unknown[]) => mockKnowledgeRecallTopK(...args),
@@ -84,14 +92,33 @@ vi.mock("@echo-agent/db/repos/recall-cache.js", () => ({
   generateCacheKey: (...args: unknown[]) => mockGenerateCacheKey(...args),
 }));
 
-const mockEmbedDocument = vi.fn().mockResolvedValue(Array.from({ length: 768 }, () => 0.1));
-const mockEmbedQuery = vi.fn().mockResolvedValue(Array.from({ length: 768 }, () => 0.1));
+const TEST_EMBEDDING = Array.from({ length: 768 }, () => 0.1);
+const TEST_PROVIDER_MODEL = "ai/embeddinggemma:300M-Q8_0";
+const mockEmbedDocument = vi.fn().mockResolvedValue({
+  embedding: TEST_EMBEDDING,
+  providerModel: TEST_PROVIDER_MODEL,
+});
+const mockEmbedQuery = vi.fn().mockResolvedValue({
+  embedding: TEST_EMBEDDING,
+  providerModel: TEST_PROVIDER_MODEL,
+});
 
 vi.mock("@echo-agent/embeddings/client.js", () => ({
   embedDocument: (...args: unknown[]) => mockEmbedDocument(...args),
   embedQuery: (...args: unknown[]) => mockEmbedQuery(...args),
   formatDocumentInput: (t: string, s: string) => `title: ${t} | text: ${s}`,
   formatQueryInput: (q: string) => `task: search result | query: ${q}`,
+}));
+
+vi.mock("@echo-agent/embeddings/config.js", () => ({
+  loadEmbeddingConfig: () => ({
+    baseUrl: "http://localhost:12434/engines/llama.cpp/v1",
+    model: "ai/embeddinggemma:300M-Q8_0",
+    dim: 768,
+    provider: "local",
+  }),
+  MIN_EMBEDDING_DIM: 1,
+  MAX_EMBEDDING_DIM: 8192,
 }));
 
 vi.mock("@echo-agent/db/repos/schedules.js", () => ({
@@ -330,11 +357,16 @@ describe("dispatcher", () => {
       baseContext,
     );
     expect(result.success).toBe(true);
-    expect(mockEmbedDocument).toHaveBeenCalledWith("test title", "test summary");
+    // embedDocument is now called with config (configOverride argument)
+    expect(mockEmbedDocument).toHaveBeenCalledTimes(1);
+    const [embedTitle, embedSummary] = mockEmbedDocument.mock.calls[0];
+    expect(embedTitle).toBe("test title");
+    expect(embedSummary).toBe("test summary");
     expect(mockKnowledgeInsert).toHaveBeenCalledTimes(1);
     const parsed = JSON.parse(result.output);
     expect(parsed.id).toBe(42);
     expect(parsed.embedded).toBe(true);
+    expect(parsed.duplicate).toBe(false);
   });
 
   it("knowledge_write fails loud when embedding service throws", async () => {
@@ -396,7 +428,9 @@ describe("dispatcher", () => {
 
     expect(result.success).toBe(true);
     expect(mockCacheCleanup).toHaveBeenCalledTimes(1); // lazy cleanup
-    expect(mockEmbedQuery).toHaveBeenCalledWith("test");
+    // embedQuery is called with config (configOverride argument)
+    expect(mockEmbedQuery).toHaveBeenCalledTimes(1);
+    expect(mockEmbedQuery.mock.calls[0]?.[0]).toBe("test");
     expect(mockCacheWrite).not.toHaveBeenCalled(); // no overflow
     const parsed = JSON.parse(result.output);
     expect(parsed.count).toBe(5);
@@ -559,6 +593,7 @@ describe("dispatcher", () => {
       pinned: true,
       validFrom: "2026-04-06T12:00:00Z",
       validUntil: null,
+      contentHash: "a".repeat(64),
       embeddingModel: "ai/embeddinggemma:300M-Q8_0",
       embeddingDim: 768,
       createdAt: "2026-04-06T12:00:00Z",

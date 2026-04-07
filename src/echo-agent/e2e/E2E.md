@@ -47,7 +47,8 @@ the standalone model-runner project).
 #    pull EmbeddingGemma into Docker Model Runner.
 make e2e-up
 
-# 2. Smoke-test the embeddings runtime (real POST against port 12434, expects 768-dim).
+# 2. Smoke-test the embeddings runtime (POST against the configured endpoint;
+#    verifies the response length matches $EMBEDDING_DIM from env).
 make e2e-smoke
 
 # 3. Verify startup smoke (alias resolve + DB connect + migrations).
@@ -70,23 +71,26 @@ Endpoint and port are dictated by the runner — both fixed, neither configurabl
 
 | Setting | Value |
 |---|---|
-| Model | `ai/embeddinggemma:300M-Q8_0` (pinned, llama.cpp Q8_0, 768 dim) |
+| Default model | `ai/embeddinggemma:300M-Q8_0` (pinned, llama.cpp Q8_0, 768 dim) |
+| Model selection | `EMBEDDING_MODEL` env (config-driven, NOT schema-locked) |
+| Dimension | `EMBEDDING_DIM` env (any positive int in [1, 8192], must match model) |
 | Port | `12434` (Model Runner standard) |
-| Endpoint | `POST http://localhost:12434/engines/llama.cpp/v1/embeddings` |
+| Endpoint | `POST $EMBEDDING_BASE_URL/embeddings` |
 | Auth | none (no `HF_TOKEN`, no gated terms acceptance) |
 | License | [Gemma Terms of Use](https://ai.google.dev/gemma/terms) |
 
 The runtime is wired into compose via the `models:` block (Compose ≥2.38.1)
 and shared between `docker-compose.dev.yml` and `docker-compose.e2e.yml`.
 
-Verify it is healthy with `make e2e-smoke` or directly:
+Verify it is healthy with `make e2e-smoke` (which reads `$EMBEDDING_DIM` from
+env and fails on mismatch) or directly:
 
 ```bash
-curl -fsS -X POST http://localhost:12434/engines/llama.cpp/v1/embeddings \
+curl -fsS -X POST "$EMBEDDING_BASE_URL/embeddings" \
   -H "Content-Type: application/json" \
-  -d '{"input":"ping","model":"ai/embeddinggemma:300M-Q8_0"}' \
+  -d "{\"input\":\"ping\",\"model\":\"$EMBEDDING_MODEL\"}" \
   | jq '.data[0].embedding | length'
-# expected: 768
+# expected: $EMBEDDING_DIM
 ```
 
 ---
@@ -137,7 +141,7 @@ src/echo-agent/e2e/
 | `ECHO_AGENT_DB_URL` | Yes | — | Test Postgres connection string (port 5777) |
 | `EMBEDDING_BASE_URL` | Yes | — | `http://localhost:12434/engines/llama.cpp/v1` (Model Runner) |
 | `EMBEDDING_MODEL` | Yes | — | `ai/embeddinggemma:300M-Q8_0` (pinned tag) |
-| `EMBEDDING_DIM` | Yes | — | `768` (locked at schema level — fail-fast on any other value) |
+| `EMBEDDING_DIM` | Yes | — | Positive int in [1, 8192]; default `768` matches EmbeddingGemma. Config-driven, NOT schema-locked. |
 | `EMBEDDING_PROVIDER` | Yes | — | Tag for logs, e.g. `local` |
 | `JUPITER_API_KEY` | For Solana tools | — | Jupiter API access |
 | `POLYMARKET_API_KEY` | For Polymarket | — | CLOB trading auth |

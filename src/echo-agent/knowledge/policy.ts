@@ -9,7 +9,7 @@
  *   so the agent can reuse instead of creating variants.
  * - TTL is a single default for all kinds. Agent decides per entry via `ttl_hours`
  *   override or `pinned: true` (which bypasses TTL entirely).
- * - This module owns the recall constants (k caps, inline cap, cache TTL/folder/space)
+ * - This module owns the recall constants (k caps, inline cap, cache TTL)
  *   so they have one source of truth.
  */
 
@@ -124,12 +124,6 @@ export const RECALL_INLINE_CHARS_CAP = 50_000;
 
 /** Cache TTL for recall overflow entries (minutes). */
 export const RECALL_CACHE_TTL_MIN = 15;
-
-/** Folder slug used for recall overflow cache documents. */
-export const RECALL_CACHE_FOLDER = "tmp/retrieval";
-
-/** `documents.space` value reserved for recall overflow cache. System-only. */
-export const RECALL_CACHE_SPACE = "cache";
 
 /** Maximum number of distinct kinds shown in the Active Knowledge "Known kinds" section. */
 export const KNOWN_KINDS_LIMIT = 30;

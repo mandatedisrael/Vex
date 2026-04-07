@@ -6,24 +6,28 @@
  * Default runtime: Docker Model Runner with `ai/embeddinggemma:300M-Q8_0`,
  * exposed on http://localhost:12434/engines/llama.cpp/v1.
  *
- * EMBEDDING_DIM is locked at 768 in the MVP because the schema has
- * `vector(768)` hardcoded — we validate and fail-fast on any other value
- * rather than pretend to support a configurable dimension.
+ * EMBEDDING_DIM is config-driven. The schema's `vector` column has no typmod,
+ * so any positive integer in [MIN_EMBEDDING_DIM, MAX_EMBEDDING_DIM] is accepted.
+ * The actual response length is what gets stamped on each row's `embedding_dim`
+ * audit column at write time, and recall filters on it.
  *
  * @see Team Standards §16.1 Config as code, §16.2 Validation at startup
  */
 
 import logger from "@utils/logger.js";
 
-/** Schema-locked embedding dimension. Schema has `vector(768)` in 001_initial.sql. */
-export const REQUIRED_EMBEDDING_DIM = 768;
+/** Minimum sane embedding dimension (rejects 0 / negative). */
+export const MIN_EMBEDDING_DIM = 1;
+
+/** Maximum sane embedding dimension (rejects unrealistic dims; covers Qwen3-8B 8192). */
+export const MAX_EMBEDDING_DIM = 8192;
 
 export interface EmbeddingConfig {
   /** Base URL of the embeddings provider. Client appends `/embeddings`. */
   baseUrl: string;
   /** Model identifier passed in the `model` field of every request. */
   model: string;
-  /** Vector dimension. Locked at 768 in MVP — fail-fast on mismatch. */
+  /** Vector dimension. Must match what the provider actually returns at runtime. */
   dim: number;
   /** Provider tag for logging/observability. Free-form (e.g. "local", "openrouter"). */
   provider: string;
@@ -49,15 +53,19 @@ export function loadEmbeddingConfig(): EmbeddingConfig {
   }
 
   const rawDim = (process.env.EMBEDDING_DIM ?? "").trim();
-  let dim = REQUIRED_EMBEDDING_DIM;
+  let dim = 0;
   if (!rawDim) {
-    errors.push(`EMBEDDING_DIM is required and must be ${REQUIRED_EMBEDDING_DIM}`);
+    errors.push(
+      `EMBEDDING_DIM is required (positive integer in [${MIN_EMBEDDING_DIM}, ${MAX_EMBEDDING_DIM}], must match what your model returns)`,
+    );
   } else {
     const parsed = Number(rawDim);
-    if (!Number.isFinite(parsed) || parsed !== REQUIRED_EMBEDDING_DIM) {
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+      errors.push(`EMBEDDING_DIM="${rawDim}" must be a positive integer`);
+    } else if (parsed < MIN_EMBEDDING_DIM || parsed > MAX_EMBEDDING_DIM) {
       errors.push(
-        `EMBEDDING_DIM="${rawDim}" is invalid. The schema is locked at vector(${REQUIRED_EMBEDDING_DIM}); ` +
-          `re-embedding with a different dimension is out of MVP scope.`,
+        `EMBEDDING_DIM=${parsed} is out of range [${MIN_EMBEDDING_DIM}, ${MAX_EMBEDDING_DIM}]. ` +
+          `If your model genuinely needs a larger dim, raise MAX_EMBEDDING_DIM in src/echo-agent/embeddings/config.ts.`,
       );
     } else {
       dim = parsed;

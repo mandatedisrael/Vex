@@ -14,8 +14,6 @@ import {
   RECALL_INLINE_CAP,
   RECALL_INLINE_CHARS_CAP,
   RECALL_CACHE_TTL_MIN,
-  RECALL_CACHE_FOLDER,
-  RECALL_CACHE_SPACE,
   KNOWN_KINDS_LIMIT,
   clampRecallK,
 } from "@echo-agent/knowledge/policy.js";
@@ -204,11 +202,6 @@ describe("policy", () => {
 
     it("cache TTL is 15 minutes", () => {
       expect(RECALL_CACHE_TTL_MIN).toBe(15);
-    });
-
-    it("cache folder and space", () => {
-      expect(RECALL_CACHE_FOLDER).toBe("tmp/retrieval");
-      expect(RECALL_CACHE_SPACE).toBe("cache");
     });
 
     it("known kinds limit is 30", () => {

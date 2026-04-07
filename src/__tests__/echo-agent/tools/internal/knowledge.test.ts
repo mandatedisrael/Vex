@@ -11,11 +11,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { REQUIRED_EMBEDDING_DIM } from "@echo-agent/embeddings/config.js";
+
+const TEST_DIM = 768;
 
 // ── Mocks ────────────────────────────────────────────────────────
 
 const mockInsertEntry = vi.fn();
+const mockFindByContentHash = vi.fn();
 const mockGetById = vi.fn();
 const mockUpdateStatus = vi.fn();
 const mockRecallTopK = vi.fn();
@@ -24,6 +26,7 @@ const mockListKinds = vi.fn().mockResolvedValue([]);
 
 vi.mock("@echo-agent/db/repos/knowledge.js", () => ({
   insertEntry: (...args: unknown[]) => mockInsertEntry(...args),
+  findByContentHash: (...args: unknown[]) => mockFindByContentHash(...args),
   getById: (...args: unknown[]) => mockGetById(...args),
   updateStatus: (...args: unknown[]) => mockUpdateStatus(...args),
   recallTopK: (...args: unknown[]) => mockRecallTopK(...args),
@@ -53,6 +56,19 @@ vi.mock("@echo-agent/embeddings/client.js", () => ({
   formatQueryInput: (q: string) => `task: search result | query: ${q}`,
 }));
 
+const mockLoadEmbeddingConfig = vi.fn(() => ({
+  baseUrl: "http://localhost:12434/engines/llama.cpp/v1",
+  model: "ai/embeddinggemma:300M-Q8_0",
+  dim: TEST_DIM,
+  provider: "local",
+}));
+
+vi.mock("@echo-agent/embeddings/config.js", () => ({
+  loadEmbeddingConfig: () => mockLoadEmbeddingConfig(),
+  MIN_EMBEDDING_DIM: 1,
+  MAX_EMBEDDING_DIM: 8192,
+}));
+
 const {
   handleKnowledgeWrite,
   handleKnowledgeRecall,
@@ -65,11 +81,17 @@ import { makeTestContext } from "../_test-context.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
+const TEST_PROVIDER_MODEL = "ai/embeddinggemma:300M-Q8_0";
+
 function makeEmbedding(): number[] {
-  return Array.from({ length: REQUIRED_EMBEDDING_DIM }, () => 0.1);
+  return Array.from({ length: TEST_DIM }, () => 0.1);
 }
 
-function makeInsertResult(overrides: Record<string, unknown> = {}) {
+function makeEmbedResult(providerModel: string = TEST_PROVIDER_MODEL) {
+  return { embedding: makeEmbedding(), providerModel };
+}
+
+function makeInsertEntryRecord(overrides: Record<string, unknown> = {}) {
   return {
     id: 42,
     kind: "memo",
@@ -83,12 +105,20 @@ function makeInsertResult(overrides: Record<string, unknown> = {}) {
     pinned: false,
     validFrom: "2026-04-06T12:00:00Z",
     validUntil: "2026-04-13T12:00:00Z",
+    contentHash: "f".repeat(64),
     embeddingModel: "ai/embeddinggemma:300M-Q8_0",
-    embeddingDim: REQUIRED_EMBEDDING_DIM,
+    embeddingDim: TEST_DIM,
     createdAt: "2026-04-06T12:00:00Z",
     updatedAt: "2026-04-06T12:00:00Z",
     ...overrides,
   };
+}
+
+function makeInsertResult(
+  overrides: Record<string, unknown> = {},
+  inserted = true,
+) {
+  return { entry: makeInsertEntryRecord(overrides), inserted };
 }
 
 function makeCandidate(id: number, contentMd = "c") {
@@ -113,8 +143,11 @@ function makeCandidate(id: number, contentMd = "c") {
 beforeEach(() => {
   vi.clearAllMocks();
   mockInsertEntry.mockResolvedValue(makeInsertResult());
-  mockEmbedDocument.mockResolvedValue(makeEmbedding());
-  mockEmbedQuery.mockResolvedValue(makeEmbedding());
+  // Default: short-circuit lookup misses (no duplicate). Tests that need
+  // the duplicate path override this.
+  mockFindByContentHash.mockResolvedValue(null);
+  mockEmbedDocument.mockResolvedValue(makeEmbedResult());
+  mockEmbedQuery.mockResolvedValue(makeEmbedResult());
   mockCacheCleanup.mockResolvedValue(0);
   mockGenerateCacheKey.mockReturnValue("rcl-test-key");
   mockCacheWrite.mockResolvedValue({
@@ -122,7 +155,12 @@ beforeEach(() => {
     expiresAt: "2026-04-06T12:15:00Z",
   });
   mockUpdateStatus.mockResolvedValue(true);
-  process.env.EMBEDDING_MODEL = "ai/embeddinggemma:300M-Q8_0";
+  mockLoadEmbeddingConfig.mockReturnValue({
+    baseUrl: "http://localhost:12434/engines/llama.cpp/v1",
+    model: "ai/embeddinggemma:300M-Q8_0",
+    dim: TEST_DIM,
+    provider: "local",
+  });
 });
 
 // ── handleKnowledgeWrite ────────────────────────────────────────
@@ -187,14 +225,29 @@ describe("handleKnowledgeWrite", () => {
     expect(result.output).toContain("knowledge_write failed");
   });
 
-  it("happy path embeds title+summary and inserts with default 7-day TTL", async () => {
+  it("happy path embeds title+summary, computes content_hash, inserts with providerModel from response", async () => {
     const result = await handleKnowledgeWrite(
       { kind: "strategy_rule", title: "low-holder pump", summary: "Tokens with under 50 holders show momentum" },
       makeTestContext(),
     );
     expect(result.success).toBe(true);
 
-    expect(mockEmbedDocument).toHaveBeenCalledWith("low-holder pump", "Tokens with under 50 holders show momentum");
+    // findByContentHash is consulted FIRST (short-circuit)
+    expect(mockFindByContentHash).toHaveBeenCalledTimes(1);
+    expect(mockFindByContentHash.mock.calls[0]?.[0]).toMatch(/^[a-f0-9]{64}$/);
+
+    // embedDocument is called with config (configOverride argument), not just title/summary
+    expect(mockEmbedDocument).toHaveBeenCalledTimes(1);
+    const [embedTitle, embedSummary, embedConfig] = mockEmbedDocument.mock.calls[0];
+    expect(embedTitle).toBe("low-holder pump");
+    expect(embedSummary).toBe("Tokens with under 50 holders show momentum");
+    expect(embedConfig).toEqual({
+      baseUrl: "http://localhost:12434/engines/llama.cpp/v1",
+      model: "ai/embeddinggemma:300M-Q8_0",
+      dim: TEST_DIM,
+      provider: "local",
+    });
+
     expect(mockInsertEntry).toHaveBeenCalledTimes(1);
     const arg = mockInsertEntry.mock.calls[0]![0];
     expect(arg.kind).toBe("strategy_rule");
@@ -202,9 +255,95 @@ describe("handleKnowledgeWrite", () => {
     expect(arg.contentMd).toBe("Tokens with under 50 holders show momentum"); // defaults to summary when omitted
     expect(arg.pinned).toBe(false);
     expect(arg.validUntil).toBeInstanceOf(Date);
-    expect(arg.embedding).toHaveLength(REQUIRED_EMBEDDING_DIM);
-    expect(arg.embeddingDim).toBe(REQUIRED_EMBEDDING_DIM);
-    expect(arg.embeddingModel).toBe("ai/embeddinggemma:300M-Q8_0");
+    expect(arg.embedding).toHaveLength(TEST_DIM);
+    // embeddingDim is the actual response length (not a constant)
+    expect(arg.embeddingDim).toBe(TEST_DIM);
+    // embeddingModel comes from providerModel (response.model with config.model fallback)
+    expect(arg.embeddingModel).toBe(TEST_PROVIDER_MODEL);
+    // content_hash is sha256 hex (64 chars)
+    expect(arg.contentHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  // ── Fix 2: provenance honesty ────────────────────────────────
+
+  it("stamps embeddingModel from providerModel (response), NOT from config.model", async () => {
+    // Provider aliases the requested model to a different name in the response.
+    mockEmbedDocument.mockResolvedValueOnce(makeEmbedResult("provider-alias-name"));
+    await handleKnowledgeWrite(
+      { kind: "memo", title: "t", summary: "s" },
+      makeTestContext(),
+    );
+    const arg = mockInsertEntry.mock.calls[0]![0];
+    expect(arg.embeddingModel).toBe("provider-alias-name");
+    // Sanity: it really IS different from the requested config.model
+    expect(arg.embeddingModel).not.toBe("ai/embeddinggemma:300M-Q8_0");
+  });
+
+  // ── Fix 3: short-circuit on content_hash ─────────────────────
+
+  it("short-circuits a duplicate write before calling the provider", async () => {
+    mockFindByContentHash.mockResolvedValueOnce({
+      id: 99,
+      kind: "memo",
+      title: "t",
+      summary: "s",
+      contentMd: "s",
+      tags: [],
+      sourceRefs: {},
+      confidence: null,
+      status: "active",
+      pinned: false,
+      validFrom: "2026-04-06T12:00:00Z",
+      validUntil: "2026-04-13T12:00:00Z",
+      contentHash: "f".repeat(64),
+      embeddingModel: TEST_PROVIDER_MODEL,
+      embeddingDim: TEST_DIM,
+      createdAt: "2026-04-06T12:00:00Z",
+      updatedAt: "2026-04-06T12:00:00Z",
+    });
+
+    const result = await handleKnowledgeWrite(
+      { kind: "memo", title: "t", summary: "s" },
+      makeTestContext(),
+    );
+
+    expect(result.success).toBe(true);
+    // findByContentHash hit → embed and insert MUST be skipped
+    expect(mockFindByContentHash).toHaveBeenCalledTimes(1);
+    expect(mockEmbedDocument).not.toHaveBeenCalled();
+    expect(mockInsertEntry).not.toHaveBeenCalled();
+
+    const parsed = JSON.parse(result.output);
+    expect(parsed.duplicate).toBe(true);
+    expect(parsed.id).toBe(99);
+    expect(parsed.embedded).toBe(true);
+  });
+
+  it("returns duplicate: true via the CTE upsert race-condition fallback (when short-circuit missed)", async () => {
+    // Short-circuit lookup misses, embed + insert run, but the CTE upsert
+    // detects the row was inserted between our SELECT and our INSERT.
+    mockFindByContentHash.mockResolvedValueOnce(null);
+    mockInsertEntry.mockResolvedValueOnce(makeInsertResult({}, false));
+    const result = await handleKnowledgeWrite(
+      { kind: "memo", title: "t", summary: "s" },
+      makeTestContext(),
+    );
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.output);
+    expect(parsed.duplicate).toBe(true);
+    expect(parsed.id).toBe(42);
+  });
+
+  it("returns duplicate: false on a fresh insert", async () => {
+    mockFindByContentHash.mockResolvedValueOnce(null);
+    mockInsertEntry.mockResolvedValueOnce(makeInsertResult({}, true));
+    const result = await handleKnowledgeWrite(
+      { kind: "memo", title: "t2", summary: "s2" },
+      makeTestContext(),
+    );
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.output);
+    expect(parsed.duplicate).toBe(false);
   });
 
   it("uses content_md when explicitly provided (does not default to summary)", async () => {
@@ -408,6 +547,38 @@ describe("handleKnowledgeRecall", () => {
     expect(filters.kind).toBe("risk_rule");
   });
 
+  it("passes embeddingModel (from providerModel) + embeddingDim to recallTopK", async () => {
+    mockRecallTopK.mockResolvedValueOnce([]);
+    await handleKnowledgeRecall({ query: "test" }, makeTestContext());
+    const [, filters] = mockRecallTopK.mock.calls[0]!;
+    // Filter is the providerModel from THIS embedQuery call, not config.model.
+    expect(filters.embeddingModel).toBe(TEST_PROVIDER_MODEL);
+    expect(filters.embeddingDim).toBe(TEST_DIM);
+  });
+
+  it("recall filter uses providerModel from embedQuery (R2 Fix 2)", async () => {
+    // Provider aliases requested name to a different one in the response.
+    mockEmbedQuery.mockResolvedValueOnce(makeEmbedResult("aliased-recall-model"));
+    mockRecallTopK.mockResolvedValueOnce([]);
+    await handleKnowledgeRecall({ query: "test" }, makeTestContext());
+    const [, filters] = mockRecallTopK.mock.calls[0]!;
+    expect(filters.embeddingModel).toBe("aliased-recall-model");
+  });
+
+  it("embedQuery is called with config (configOverride)", async () => {
+    mockRecallTopK.mockResolvedValueOnce([]);
+    await handleKnowledgeRecall({ query: "test" }, makeTestContext());
+    expect(mockEmbedQuery).toHaveBeenCalledTimes(1);
+    const [q, cfg] = mockEmbedQuery.mock.calls[0]!;
+    expect(q).toBe("test");
+    expect(cfg).toEqual({
+      baseUrl: "http://localhost:12434/engines/llama.cpp/v1",
+      model: "ai/embeddinggemma:300M-Q8_0",
+      dim: TEST_DIM,
+      provider: "local",
+    });
+  });
+
   it("k is clamped to RECALL_MAX_K (15) when caller asks for more", async () => {
     mockRecallTopK.mockResolvedValueOnce([]);
     await handleKnowledgeRecall({ query: "test", k: 9999 }, makeTestContext());
@@ -506,8 +677,9 @@ describe("handleKnowledgeGet", () => {
       pinned: true,
       validFrom: "2026-04-06T12:00:00Z",
       validUntil: null,
+      contentHash: "a".repeat(64),
       embeddingModel: "ai/embeddinggemma:300M-Q8_0",
-      embeddingDim: REQUIRED_EMBEDDING_DIM,
+      embeddingDim: TEST_DIM,
       createdAt: "2026-04-06T12:00:00Z",
       updatedAt: "2026-04-06T12:00:00Z",
     });

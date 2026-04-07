@@ -5,16 +5,15 @@ import {
   embedDocument,
   embedQuery,
 } from "@echo-agent/embeddings/client.js";
-import { REQUIRED_EMBEDDING_DIM } from "@echo-agent/embeddings/config.js";
 
 const VALID_CONFIG = {
   baseUrl: "http://localhost:12434/engines/llama.cpp/v1",
   model: "ai/embeddinggemma:300M-Q8_0",
-  dim: REQUIRED_EMBEDDING_DIM,
+  dim: 768,
   provider: "local",
 };
 
-function makeEmbedding(dim: number = REQUIRED_EMBEDDING_DIM): number[] {
+function makeEmbedding(dim: number = VALID_CONFIG.dim): number[] {
   return Array.from({ length: dim }, (_, i) => i / dim);
 }
 
@@ -71,12 +70,50 @@ describe("embedDocument", () => {
     const body = JSON.parse(init.body);
     expect(body.input).toBe("title: title | text: summary");
     expect(body.model).toBe("ai/embeddinggemma:300M-Q8_0");
-    expect(result).toHaveLength(REQUIRED_EMBEDDING_DIM);
+    expect(result.embedding).toHaveLength(VALID_CONFIG.dim);
   });
 
-  it("throws on dim mismatch", async () => {
+  it("throws on dim mismatch against config.dim", async () => {
     mockFetchOk({ data: [{ embedding: makeEmbedding(1024) }] });
     await expect(embedDocument("t", "s", VALID_CONFIG)).rejects.toThrow(/dim 1024.*expected 768/);
+  });
+
+  it("respects a custom config.dim (1024 model returning 1024)", async () => {
+    const customConfig = { ...VALID_CONFIG, dim: 1024, model: "qwen3-embedding-0.6b" };
+    mockFetchOk({ data: [{ embedding: makeEmbedding(1024) }] });
+    const result = await embedDocument("t", "s", customConfig);
+    expect(result.embedding).toHaveLength(1024);
+  });
+
+  it("rejects a 768-dim response when config.dim=512", async () => {
+    const customConfig = { ...VALID_CONFIG, dim: 512 };
+    mockFetchOk({ data: [{ embedding: makeEmbedding(768) }] });
+    await expect(embedDocument("t", "s", customConfig)).rejects.toThrow(/dim 768.*expected 512/);
+  });
+
+  // ── providerModel (R2 Fix 2) ─────────────────────────────────
+
+  it("returns providerModel from response.model when present (honest provenance)", async () => {
+    mockFetchOk({
+      data: [{ embedding: makeEmbedding() }],
+      model: "ai/embeddinggemma:300M-Q8_0-actual",
+    });
+    const result = await embedDocument("t", "s", VALID_CONFIG);
+    expect(result.providerModel).toBe("ai/embeddinggemma:300M-Q8_0-actual");
+    // The audit value comes from the response, NOT the requested config.model.
+    expect(result.providerModel).not.toBe(VALID_CONFIG.model);
+  });
+
+  it("falls back to config.model when response omits model field", async () => {
+    mockFetchOk({ data: [{ embedding: makeEmbedding() }] });
+    const result = await embedDocument("t", "s", VALID_CONFIG);
+    expect(result.providerModel).toBe(VALID_CONFIG.model);
+  });
+
+  it("falls back to config.model when response.model is empty string", async () => {
+    mockFetchOk({ data: [{ embedding: makeEmbedding() }], model: "" });
+    const result = await embedDocument("t", "s", VALID_CONFIG);
+    expect(result.providerModel).toBe(VALID_CONFIG.model);
   });
 
   it("throws on malformed response (missing data[0].embedding)", async () => {
@@ -104,7 +141,7 @@ describe("embedDocument", () => {
       });
     });
     const result = await embedDocument("t", "s", VALID_CONFIG);
-    expect(result).toHaveLength(REQUIRED_EMBEDDING_DIM);
+    expect(result.embedding).toHaveLength(VALID_CONFIG.dim);
     expect(calls).toBeGreaterThanOrEqual(2);
   });
 

@@ -16,7 +16,10 @@
     "build": "pnpm run clean && tsc && tsc-alias",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "knowledge-export": "tsx src/echo-agent/scripts/knowledge-export.ts",
+    "knowledge-import": "tsx src/echo-agent/scripts/knowledge-import.ts",
+    "knowledge-reembed": "tsx src/echo-agent/scripts/knowledge-reembed.ts"
   },
   "dependencies": {
     "@0gfoundation/0g-ts-sdk": "^1.2.1",

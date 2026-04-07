@@ -40,7 +40,7 @@ function entry(id: number): RankedRecallResult {
   };
 }
 
-describe("recall-cache repo", () => {
+describe("recall-cache repo (recall_cache_entries backend)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -48,59 +48,46 @@ describe("recall-cache repo", () => {
   // ── writeCache ───────────────────────────────────────────────
 
   describe("writeCache", () => {
-    it("ensures cache folder then upserts cache row in documents(space='cache')", async () => {
-      // First call: SELECT folder by slug — miss
-      // Second call: INSERT folder, returns id
-      // Third call: INSERT into documents (via execute)
-      mockQueryOne
-        .mockResolvedValueOnce(null) // folder lookup miss
-        .mockResolvedValueOnce({ id: 7 }); // folder insert returning id
+    it("upserts directly into recall_cache_entries with computed expires_at", async () => {
       mockExecute.mockResolvedValueOnce(1);
-
+      const before = Date.now();
       const result = await writeCache("rcl-test-key", [entry(1), entry(2)]);
+      const after = Date.now();
 
-      expect(mockQueryOne).toHaveBeenCalledTimes(2);
-      // Folder lookup
-      const [lookupSql, lookupParams] = mockQueryOne.mock.calls[0];
-      expect(lookupSql).toContain("FROM folders");
-      expect(lookupSql).toContain("space = $1");
-      expect(lookupSql).toContain("parent_id IS NULL");
-      expect(lookupParams[0]).toBe("cache");
-
-      // Folder insert
-      const [insertFolderSql, insertFolderParams] = mockQueryOne.mock.calls[1];
-      expect(insertFolderSql).toContain("INSERT INTO folders");
-      expect(insertFolderParams[0]).toBe("cache");
-
-      // Document upsert
+      // No folder bootstrap any more — only ONE DB call (the upsert)
+      expect(mockQueryOne).not.toHaveBeenCalled();
       expect(mockExecute).toHaveBeenCalledTimes(1);
-      const [docSql, docParams] = mockExecute.mock.calls[0];
-      expect(docSql).toContain("INSERT INTO documents");
-      expect(docSql).toContain("ON CONFLICT (space, folder_id, slug)");
-      expect(docSql).toContain("DO UPDATE SET content_md");
-      expect(docParams[0]).toBe("cache");
-      expect(docParams[1]).toBe(7); // folder id
-      expect(docParams[3]).toBe("rcl-test-key"); // slug
 
-      // content_md is JSON
-      const contentMd = docParams[4] as string;
-      const parsed = JSON.parse(contentMd);
-      expect(parsed).toHaveLength(2);
-      expect(parsed[0].id).toBe(1);
-      expect(parsed[1].id).toBe(2);
+      const [sql, params] = mockExecute.mock.calls[0];
+      expect(sql).toContain("INSERT INTO recall_cache_entries");
+      expect(sql).toContain("ON CONFLICT (cache_key) DO UPDATE");
+      expect(sql).toContain("SET payload = EXCLUDED.payload");
+      expect(sql).toContain("expires_at = EXCLUDED.expires_at");
 
-      // expiresAt is ISO timestamp
-      expect(typeof result.expiresAt).toBe("string");
+      // Params: cache_key, payload (JSON string), expires_at (ISO)
+      expect(params[0]).toBe("rcl-test-key");
+      const payload = JSON.parse(params[1] as string);
+      expect(payload).toHaveLength(2);
+      expect(payload[0].id).toBe(1);
+      expect(payload[1].id).toBe(2);
+
+      // expires_at is ~15 minutes after the call, returned as ISO
+      const expiresMs = new Date(params[2] as string).getTime();
+      expect(expiresMs).toBeGreaterThanOrEqual(before + 15 * 60 * 1000 - 100);
+      expect(expiresMs).toBeLessThanOrEqual(after + 15 * 60 * 1000 + 100);
+
       expect(result.cacheKey).toBe("rcl-test-key");
+      expect(result.expiresAt).toBe(params[2]);
     });
 
-    it("reuses existing folder when present", async () => {
-      mockQueryOne.mockResolvedValueOnce({ id: 7 }); // folder lookup hit
+    it("payload is the same JSON written to the row (sanity)", async () => {
       mockExecute.mockResolvedValueOnce(1);
-
-      await writeCache("rcl-test-key", [entry(1)]);
-      // Only one queryOne call (lookup) — no folder insert
-      expect(mockQueryOne).toHaveBeenCalledTimes(1);
+      await writeCache("k", [entry(7)]);
+      const [, params] = mockExecute.mock.calls[0];
+      const payload = JSON.parse(params[1] as string);
+      expect(payload[0].id).toBe(7);
+      expect(payload[0].kind).toBe("memo");
+      expect(payload[0].title).toBe("entry 7");
     });
   });
 
@@ -108,96 +95,109 @@ describe("recall-cache repo", () => {
 
   describe("readCache", () => {
     it("returns parsed entries with expiresAt when fresh row exists", async () => {
-      const updatedAt = "2026-04-06T12:00:00Z";
+      const expiresAt = "2026-04-06T12:15:00Z";
       const cached = [
-        { id: 1, kind: "memo", title: "t", summary: "s", contentMd: "c", similarity: 0.5, confidence: null, status: "active", pinned: false, validUntil: null, sourceRefs: {}, tags: [] },
+        {
+          id: 1,
+          kind: "memo",
+          title: "t",
+          summary: "s",
+          contentMd: "c",
+          similarity: 0.5,
+          confidence: null,
+          status: "active",
+          pinned: false,
+          validUntil: null,
+          sourceRefs: {},
+          tags: [],
+        },
       ];
+      // node-postgres returns JSONB as parsed object — pass an array directly
       mockQueryOne.mockResolvedValueOnce({
-        content_md: JSON.stringify(cached),
-        updated_at: updatedAt,
+        payload: cached,
+        expires_at: expiresAt,
       });
       const result = await readCache("rcl-test-key");
       expect(result).not.toBeNull();
       expect(result?.results).toHaveLength(1);
       expect(result?.results[0]?.id).toBe(1);
-      expect(result?.expiresAt).toBeTruthy();
+      expect(result?.expiresAt).toBe(new Date(expiresAt).toISOString());
 
       const [sql, params] = mockQueryOne.mock.calls[0];
-      expect(sql).toContain("FROM documents");
-      expect(sql).toContain("space = $1");
-      expect(sql).toContain("slug = $2");
-      expect(sql).toContain("INTERVAL '15 minutes'");
-      expect(sql).toContain("updated_at > now() - INTERVAL");
-      expect(params).toEqual(["cache", "rcl-test-key"]);
+      expect(sql).toContain("FROM recall_cache_entries");
+      expect(sql).toContain("WHERE cache_key = $1");
+      expect(sql).toContain("expires_at > NOW()");
+      expect(params).toEqual(["rcl-test-key"]);
     });
 
-    it("returns null when row missing or expired", async () => {
+    it("returns null when row missing or expired (DB filters via WHERE expires_at > NOW())", async () => {
       mockQueryOne.mockResolvedValueOnce(null);
       expect(await readCache("missing")).toBeNull();
     });
 
-    it("returns null when content_md is invalid JSON", async () => {
+    it("returns empty results when payload is not an array (defensive)", async () => {
       mockQueryOne.mockResolvedValueOnce({
-        content_md: "not json",
-        updated_at: "2026-04-06T12:00:00Z",
+        payload: { not: "an array" },
+        expires_at: "2026-04-06T12:15:00Z",
       });
-      expect(await readCache("bad")).toBeNull();
+      const result = await readCache("bad");
+      expect(result).not.toBeNull();
+      expect(result?.results).toEqual([]);
     });
   });
 
   // ── cleanupExpired ───────────────────────────────────────────
 
   describe("cleanupExpired", () => {
-    it("issues DELETE on cache space older than TTL", async () => {
+    it("issues DELETE on expired recall_cache_entries", async () => {
       mockExecute.mockResolvedValueOnce(3);
       const deleted = await cleanupExpired();
       expect(deleted).toBe(3);
       expect(mockExecute).toHaveBeenCalledTimes(1);
       const [sql, params] = mockExecute.mock.calls[0];
-      expect(sql).toContain("DELETE FROM documents");
-      expect(sql).toContain("space = $1");
-      expect(sql).toContain("INTERVAL '15 minutes'");
-      expect(sql).toContain("updated_at < now() - INTERVAL");
-      expect(params).toEqual(["cache"]);
+      expect(sql).toContain("DELETE FROM recall_cache_entries");
+      expect(sql).toContain("WHERE expires_at < NOW()");
+      // No params now — DB time only
+      expect(params).toBeUndefined();
     });
   });
 
-  // ── generateCacheKey (post fix 2) ────────────────────────────
+  // ── generateCacheKey (unchanged — pure function) ─────────────
 
   describe("generateCacheKey", () => {
     const baseFilters = { k: 8, kind: undefined, includeExpired: true };
 
-    it("differs across queries (fix 2 — full filter set + ms precision)", () => {
+    it("differs across queries", () => {
       const a = generateCacheKey("hello", baseFilters, NOW);
       const b = generateCacheKey("world", baseFilters, NOW);
       expect(a).not.toBe(b);
     });
 
-    it("differs across `k` values for the same query (was a collision before fix 2)", () => {
+    it("differs across `k` values for the same query", () => {
       const a = generateCacheKey("hello", { ...baseFilters, k: 5 }, NOW);
       const b = generateCacheKey("hello", { ...baseFilters, k: 12 }, NOW);
       expect(a).not.toBe(b);
     });
 
-    it("differs across `kind` filters for the same query (was a collision before fix 2)", () => {
+    it("differs across `kind` filters for the same query", () => {
       const a = generateCacheKey("hello", { ...baseFilters, kind: "memo" }, NOW);
       const b = generateCacheKey("hello", { ...baseFilters, kind: "risk_rule" }, NOW);
       expect(a).not.toBe(b);
     });
 
-    it("differs across `includeExpired` for the same query (was a collision before fix 2)", () => {
+    it("differs across `includeExpired` for the same query", () => {
       const a = generateCacheKey("hello", { ...baseFilters, includeExpired: true }, NOW);
       const b = generateCacheKey("hello", { ...baseFilters, includeExpired: false }, NOW);
       expect(a).not.toBe(b);
     });
 
-    it("differs across milliseconds within the same minute (was a collision before fix 2)", () => {
+    it("differs across milliseconds within the same minute", () => {
       const a = generateCacheKey("hello", baseFilters, new Date("2026-04-06T12:00:00.000Z"));
       const b = generateCacheKey("hello", baseFilters, new Date("2026-04-06T12:00:00.001Z"));
       expect(a).not.toBe(b);
     });
 
-    it("is reproducible for fully-identical input (same query, filters, ms)", () => {
+    it("is reproducible for fully-identical input", () => {
       const t = new Date("2026-04-06T12:00:00.123Z");
       const a = generateCacheKey("hello", baseFilters, t);
       const b = generateCacheKey("hello", baseFilters, t);

@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { loadEmbeddingConfig, REQUIRED_EMBEDDING_DIM } from "@echo-agent/embeddings/config.js";
+import {
+  loadEmbeddingConfig,
+  MIN_EMBEDDING_DIM,
+  MAX_EMBEDDING_DIM,
+} from "@echo-agent/embeddings/config.js";
 
 const ENV_KEYS = ["EMBEDDING_BASE_URL", "EMBEDDING_MODEL", "EMBEDDING_DIM", "EMBEDDING_PROVIDER"] as const;
 
@@ -34,7 +38,7 @@ describe("loadEmbeddingConfig", () => {
     const config = loadEmbeddingConfig();
     expect(config.baseUrl).toBe("http://localhost:12434/engines/llama.cpp/v1");
     expect(config.model).toBe("ai/embeddinggemma:300M-Q8_0");
-    expect(config.dim).toBe(REQUIRED_EMBEDDING_DIM);
+    expect(config.dim).toBe(768);
     expect(config.provider).toBe("local");
   });
 
@@ -79,16 +83,60 @@ describe("loadEmbeddingConfig", () => {
     expect(() => loadEmbeddingConfig()).toThrow(/must start with http/);
   });
 
-  it("rejects EMBEDDING_DIM != 768 (schema lock)", () => {
+  // ── EMBEDDING_DIM range (was: schema-locked at 768) ──────────
+
+  it("accepts the EmbeddingGemma default (768)", () => {
+    setValid();
+    process.env.EMBEDDING_DIM = "768";
+    expect(loadEmbeddingConfig().dim).toBe(768);
+  });
+
+  it("accepts a different positive integer (1024 — Qwen3-Embedding 0.6B)", () => {
     setValid();
     process.env.EMBEDDING_DIM = "1024";
-    expect(() => loadEmbeddingConfig()).toThrow(/schema is locked at vector\(768\)/);
+    expect(loadEmbeddingConfig().dim).toBe(1024);
+  });
+
+  it("accepts the maximum allowed dim", () => {
+    setValid();
+    process.env.EMBEDDING_DIM = String(MAX_EMBEDDING_DIM);
+    expect(loadEmbeddingConfig().dim).toBe(MAX_EMBEDDING_DIM);
+  });
+
+  it("accepts the minimum allowed dim", () => {
+    setValid();
+    process.env.EMBEDDING_DIM = String(MIN_EMBEDDING_DIM);
+    expect(loadEmbeddingConfig().dim).toBe(MIN_EMBEDDING_DIM);
+  });
+
+  it("rejects 0", () => {
+    setValid();
+    process.env.EMBEDDING_DIM = "0";
+    expect(() => loadEmbeddingConfig()).toThrow(/out of range/);
+  });
+
+  it("rejects negative", () => {
+    setValid();
+    process.env.EMBEDDING_DIM = "-1";
+    expect(() => loadEmbeddingConfig()).toThrow(/out of range/);
+  });
+
+  it("rejects values above the cap", () => {
+    setValid();
+    process.env.EMBEDDING_DIM = String(MAX_EMBEDDING_DIM + 1);
+    expect(() => loadEmbeddingConfig()).toThrow(/out of range/);
+  });
+
+  it("rejects non-integer numeric (1.5)", () => {
+    setValid();
+    process.env.EMBEDDING_DIM = "1.5";
+    expect(() => loadEmbeddingConfig()).toThrow(/must be a positive integer/);
   });
 
   it("rejects non-numeric EMBEDDING_DIM", () => {
     setValid();
     process.env.EMBEDDING_DIM = "abc";
-    expect(() => loadEmbeddingConfig()).toThrow(/EMBEDDING_DIM/);
+    expect(() => loadEmbeddingConfig()).toThrow(/must be a positive integer/);
   });
 
   it("aggregates multiple errors into a single throw", () => {

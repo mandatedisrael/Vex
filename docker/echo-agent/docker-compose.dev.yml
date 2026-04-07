@@ -49,5 +49,17 @@ services:
       timeout: 2s
       retries: 10
 
+  # WSL2 workaround — see docker-compose.e2e.yml for full rationale.
+  # Docker Desktop's host-side TCP for Model Runner binds to Windows localhost
+  # only; WSL2 has a separate loopback. This sidecar bridges the gap by listening
+  # on 12434 inside compose network and forwarding to model-runner.docker.internal:80.
+  # Harmless on native Linux/macOS (remove the service there if you prefer).
+  embeddings-proxy:
+    image: alpine/socat:1.8.0.3
+    command: ["-d", "TCP-LISTEN:12434,fork,reuseaddr", "TCP:model-runner.docker.internal:80"]
+    ports:
+      - "12434:12434"
+    restart: unless-stopped
+
 volumes:
   echo-agent-db-data:
