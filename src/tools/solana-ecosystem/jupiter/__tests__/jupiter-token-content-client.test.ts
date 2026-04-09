@@ -8,11 +8,6 @@ vi.mock("@utils/http.js", () => ({
   fetchJson: (...args: unknown[]) => callMock(mockFetchJson, args),
 }));
 
-const mockLoadConfig = vi.fn();
-vi.mock("@config/store.js", () => ({
-  loadConfig: () => mockLoadConfig(),
-}));
-
 const {
   jupiterTokenContentByMints,
   jupiterTokenContentCooking,
@@ -25,9 +20,7 @@ describe("jupiter token content client", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = { ...originalEnv };
-    delete process.env.JUPITER_API_KEY;
-    mockLoadConfig.mockReturnValue({ solana: { jupiterApiKey: "test-jupiter-key" } });
+    process.env = { ...originalEnv, JUPITER_API_KEY: "test-jupiter-key" };
   });
 
   it("calls /tokens/v2/content with comma-separated mints", async () => {
@@ -74,6 +67,16 @@ describe("jupiter token content client", () => {
 
     const [url] = mockFetchJson.mock.calls[0];
     expect(url).toBe("https://api.jup.ag/tokens/v2/content/summaries?mints=JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN");
+  });
+
+  it("rejects when JUPITER_API_KEY is missing", async () => {
+    delete process.env.JUPITER_API_KEY;
+
+    await expect(
+      jupiterTokenContentCooking(),
+    ).rejects.toMatchObject({ code: "HTTP_REQUEST_FAILED" });
+
+    expect(mockFetchJson).not.toHaveBeenCalled();
   });
 
   it("rejects content mints batches larger than 50 before fetching", async () => {

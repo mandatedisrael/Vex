@@ -8,11 +8,6 @@ vi.mock("@utils/http.js", () => ({
   fetchJson: (...args: unknown[]) => callMock(mockFetchJson, args),
 }));
 
-const mockLoadConfig = vi.fn();
-vi.mock("@config/store.js", () => ({
-  loadConfig: () => mockLoadConfig(),
-}));
-
 const {
   jupiterSwapOrder,
   jupiterSwapBuild,
@@ -24,9 +19,7 @@ describe("jupiter swap v2 client", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = { ...originalEnv };
-    delete process.env.JUPITER_API_KEY;
-    mockLoadConfig.mockReturnValue({ solana: { jupiterApiKey: "test-jupiter-key" } });
+    process.env = { ...originalEnv, JUPITER_API_KEY: "test-jupiter-key" };
   });
 
   it("calls /swap/v2/order with normalized query params and x-api-key", async () => {
@@ -125,7 +118,7 @@ describe("jupiter swap v2 client", () => {
   });
 
   it("rejects when JUPITER_API_KEY is missing", async () => {
-    mockLoadConfig.mockReturnValue({ solana: { jupiterApiKey: "" } });
+    delete process.env.JUPITER_API_KEY;
 
     await expect(
       jupiterSwapOrder({

@@ -8,11 +8,6 @@ vi.mock("@utils/http.js", () => ({
   fetchJson: (...args: unknown[]) => callMock(mockFetchJson, args),
 }));
 
-const mockLoadConfig = vi.fn();
-vi.mock("@config/store.js", () => ({
-  loadConfig: () => mockLoadConfig(),
-}));
-
 const {
   jupiterTokenSearch,
   jupiterTokensByMint,
@@ -26,9 +21,7 @@ describe("jupiter tokens v2 client", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = { ...originalEnv };
-    delete process.env.JUPITER_API_KEY;
-    mockLoadConfig.mockReturnValue({ solana: { jupiterApiKey: "test-jupiter-key" } });
+    process.env = { ...originalEnv, JUPITER_API_KEY: "test-jupiter-key" };
   });
 
   it("calls /tokens/v2/search with x-api-key", async () => {
@@ -82,6 +75,16 @@ describe("jupiter tokens v2 client", () => {
 
     const [url] = mockFetchJson.mock.calls[0];
     expect(url).toBe("https://api.jup.ag/tokens/v2/recent");
+  });
+
+  it("rejects when JUPITER_API_KEY is missing", async () => {
+    delete process.env.JUPITER_API_KEY;
+
+    await expect(
+      jupiterTokenSearch({ query: "JUP" }),
+    ).rejects.toMatchObject({ code: "HTTP_REQUEST_FAILED" });
+
+    expect(mockFetchJson).not.toHaveBeenCalled();
   });
 
   it("rejects invalid token tag before fetching", async () => {

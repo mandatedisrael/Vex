@@ -9,11 +9,6 @@ vi.mock("@utils/http.js", () => ({
   fetchJson: (...args: unknown[]) => callMock(mockFetchJson, args),
 }));
 
-const mockLoadConfig = vi.fn();
-vi.mock("@config/store.js", () => ({
-  loadConfig: () => mockLoadConfig(),
-}));
-
 const {
   jupiterPrices,
   jupiterPricesByMint,
@@ -25,9 +20,7 @@ describe("jupiter prices v3 client", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = { ...originalEnv };
-    delete process.env.JUPITER_API_KEY;
-    mockLoadConfig.mockReturnValue({ solana: { jupiterApiKey: "test-jupiter-key" } });
+    process.env = { ...originalEnv, JUPITER_API_KEY: "test-jupiter-key" };
   });
 
   it("calls /price/v3 with x-api-key", async () => {
@@ -55,6 +48,18 @@ describe("jupiter prices v3 client", () => {
     expect(url).toBe(
       "https://api.jup.ag/price/v3?ids=So11111111111111111111111111111111111111112%2CEPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
     );
+  });
+
+  it("rejects when JUPITER_API_KEY is missing", async () => {
+    delete process.env.JUPITER_API_KEY;
+
+    await expect(
+      jupiterPrices({
+        ids: ["So11111111111111111111111111111111111111112"],
+      }),
+    ).rejects.toMatchObject({ code: ErrorCodes.HTTP_REQUEST_FAILED });
+
+    expect(mockFetchJson).not.toHaveBeenCalled();
   });
 
   it("rejects mint batches larger than 50 before fetching", async () => {

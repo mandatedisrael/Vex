@@ -10,6 +10,7 @@ vi.mock("../../cli/echo/package-assets.js", () => ({
 }));
 
 const { readGeneratedArtifact, writeConnectorArtifacts } = await import("../../cli/echo/connectors.js");
+const { buildQuickstartPrompt } = await import("../../cli/echo/quickstart.js");
 
 const tempDirs: string[] = [];
 
@@ -55,11 +56,8 @@ describe("echo connector generation", () => {
     expect(readGeneratedArtifact(join(outputDir, "default-http.txt"))).toContain(
       "http://127.0.0.1:4203/mcp",
     );
-    expect(readGeneratedArtifact(join(outputDir, "quickstart.prompt.md"))).toContain(
-      "Use the connected EchoClaw MCP in read-only mode first.",
-    );
-    expect(readGeneratedArtifact(join(outputDir, "quickstart.prompt.md"))).toContain(
-      "polymarket_setup can enable it later",
+    expect(readGeneratedArtifact(join(outputDir, "quickstart.prompt.md"))).toBe(
+      `${buildQuickstartPrompt()}\n`,
     );
   });
 
@@ -81,7 +79,6 @@ describe("echo connector generation", () => {
     expect(readme).toContain(
       "You can run it in this same terminal after `echoclaw echo` exits, or open a second terminal if you prefer.",
     );
-    expect(readme).toContain("Use the connected EchoClaw MCP in read-only mode first.");
-    expect(readme).toContain("polymarket_setup can enable it later");
+    expect(readme).toContain(buildQuickstartPrompt());
   });
 });

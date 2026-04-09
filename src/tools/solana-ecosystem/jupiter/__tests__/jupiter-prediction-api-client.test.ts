@@ -8,11 +8,6 @@ vi.mock("@utils/http.js", () => ({
   fetchJson: (...args: unknown[]) => callMock(mockFetchJson, args),
 }));
 
-const mockLoadConfig = vi.fn();
-vi.mock("@config/store.js", () => ({
-  loadConfig: () => mockLoadConfig(),
-}));
-
 const {
   jupiterPredictionEvents,
   jupiterPredictionSearchEvents,
@@ -54,9 +49,7 @@ describe("jupiter prediction api client", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = { ...originalEnv };
-    delete process.env.JUPITER_API_KEY;
-    mockLoadConfig.mockReturnValue({ solana: { jupiterApiKey: "test-jupiter-key" } });
+    process.env = { ...originalEnv, JUPITER_API_KEY: "test-jupiter-key" };
   });
 
   it("calls discovery and market endpoints with normalized query params and x-api-key", async () => {
@@ -269,10 +262,10 @@ describe("jupiter prediction api client", () => {
   });
 
   it("rejects invalid inputs and missing API key before fetching", async () => {
-    mockLoadConfig.mockReturnValue({ solana: { jupiterApiKey: "" } });
+    delete process.env.JUPITER_API_KEY;
     await expect(jupiterPredictionEvents()).rejects.toMatchObject({ code: "HTTP_REQUEST_FAILED" });
 
-    mockLoadConfig.mockReturnValue({ solana: { jupiterApiKey: "test-jupiter-key" } });
+    process.env.JUPITER_API_KEY = "test-jupiter-key";
 
     await expect(
       jupiterPredictionSearchEvents({ query: "", limit: 1 }),
