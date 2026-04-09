@@ -236,4 +236,10 @@ export function renderConnectorDetails(bundle: ConnectorBundle, artifactBaseDir:
   for (const step of bundle.nextSteps) {
     writeStderr(`- ${step}`);
   }
+
+  writeBlankLine();
+  writeStderr(bold("Quickstart prompt"));
+  for (const line of bundle.quickstartPrompt.split("\n")) {
+    writeStderr(line);
+  }
 }

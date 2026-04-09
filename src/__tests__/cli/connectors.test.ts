@@ -1,9 +1,15 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readGeneratedArtifact, writeConnectorArtifacts } from "../../cli/echo/connectors.js";
-import { getMcpCliEntryPath } from "../../cli/echo/package-assets.js";
+
+const MOCK_MCP_ENTRY_PATH = "/tmp/echoclaw-test/dist/mcp/index.js";
+
+vi.mock("../../cli/echo/package-assets.js", () => ({
+  getMcpCliEntryPath: () => MOCK_MCP_ENTRY_PATH,
+}));
+
+const { readGeneratedArtifact, writeConnectorArtifacts } = await import("../../cli/echo/connectors.js");
 
 const tempDirs: string[] = [];
 
@@ -23,7 +29,6 @@ describe("echo connector generation", () => {
   it("writes ready artifacts for all supported AI agent targets", () => {
     const outputDir = createTempDir();
     const generated = writeConnectorArtifacts(outputDir);
-    const mcpEntryPath = getMcpCliEntryPath();
 
     expect(generated.bundles.map((bundle) => bundle.id)).toEqual([
       "cursor",
@@ -35,7 +40,7 @@ describe("echo connector generation", () => {
 
     expect(existsSync(generated.readmePath)).toBe(true);
     expect(readGeneratedArtifact(join(outputDir, "cursor.mcp.json"))).toContain(`"command": "${process.execPath}"`);
-    expect(readGeneratedArtifact(join(outputDir, "cursor.mcp.json"))).toContain(`"${mcpEntryPath}"`);
+    expect(readGeneratedArtifact(join(outputDir, "cursor.mcp.json"))).toContain(`"${MOCK_MCP_ENTRY_PATH}"`);
     expect(readGeneratedArtifact(join(outputDir, "claude.add-json.txt"))).toContain(
       "claude mcp add-json --scope local echoclaw",
     );
@@ -43,12 +48,15 @@ describe("echo connector generation", () => {
       "codex mcp add echoclaw --",
     );
     expect(readGeneratedArtifact(join(outputDir, "codex.add.txt"))).toContain(process.execPath);
-    expect(readGeneratedArtifact(join(outputDir, "codex.add.txt"))).toContain(mcpEntryPath);
+    expect(readGeneratedArtifact(join(outputDir, "codex.add.txt"))).toContain(MOCK_MCP_ENTRY_PATH);
     expect(readGeneratedArtifact(join(outputDir, "openclaw.set.txt"))).toContain(
       "openclaw mcp set echoclaw",
     );
     expect(readGeneratedArtifact(join(outputDir, "default-http.txt"))).toContain(
       "http://127.0.0.1:4203/mcp",
+    );
+    expect(readGeneratedArtifact(join(outputDir, "quickstart.prompt.md"))).toContain(
+      "Use the connected EchoClaw MCP in read-only mode first.",
     );
   });
 
@@ -63,5 +71,8 @@ describe("echo connector generation", () => {
     expect(readme).toContain("## Codex");
     expect(readme).toContain("## OpenClaw");
     expect(readme).toContain("## Default MCP Client");
+    expect(readme).toContain("## Quickstart");
+    expect(readme).toContain("Prompt file: quickstart.prompt.md");
+    expect(readme).toContain("Use the connected EchoClaw MCP in read-only mode first.");
   });
 });

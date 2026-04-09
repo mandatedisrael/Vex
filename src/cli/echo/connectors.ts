@@ -3,7 +3,20 @@ import { dirname, join } from "node:path";
 import { CONNECTORS_DIR } from "../../config/paths.js";
 import { getHttpTokenPath } from "../../mcp/auth/token.js";
 import { EchoError, ErrorCodes } from "../../errors.js";
-import { getMcpCliEntryPath } from "./package-assets.js";
+import { buildConnectorReadme } from "./connector-readme.js";
+import {
+  buildClaudeServerConfig,
+  buildOpenClawServerConfig,
+  buildRootMcpConfig,
+  formatShellCommand,
+  getStdioInvocation,
+  shellQuote,
+} from "./connector-stdio.js";
+import {
+  buildQuickstartPrompt,
+  QUICKSTART_PROMPT_DESCRIPTION,
+  QUICKSTART_PROMPT_FILE_NAME,
+} from "./quickstart.js";
 
 export type ConnectorTarget = "cursor" | "claude" | "codex" | "openclaw" | "default";
 
@@ -21,64 +34,14 @@ export interface ConnectorBundle {
   clientConfigPath: string;
   commandPreview?: string;
   nextSteps: string[];
+  quickstartPrompt: string;
   artifacts: ConnectorArtifact[];
 }
 
 const MCP_SERVER_NAME = "echoclaw";
 
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
 function stableJson(value: unknown): string {
   return JSON.stringify(value, null, 2) + "\n";
-}
-
-interface StdioInvocation {
-  command: string;
-  args: string[];
-}
-
-function getStdioInvocation(): StdioInvocation {
-  return {
-    command: process.execPath,
-    args: [getMcpCliEntryPath()],
-  };
-}
-
-function formatShellCommand(command: string, args: readonly string[]): string {
-  return [shellQuote(command), ...args.map((arg) => shellQuote(arg))].join(" ");
-}
-
-function buildRootMcpConfig(
-  invocation: StdioInvocation,
-): { mcpServers: Record<string, { command: string; args?: string[] }> } {
-  return {
-    mcpServers: {
-      [MCP_SERVER_NAME]: {
-        command: invocation.command,
-        args: invocation.args,
-      },
-    },
-  };
-}
-
-function buildClaudeServerConfig(
-  invocation: StdioInvocation,
-): { type: "stdio"; command: string; args: string[]; env: Record<string, string> } {
-  return {
-    type: "stdio",
-    command: invocation.command,
-    args: invocation.args,
-    env: {},
-  };
-}
-
-function buildOpenClawServerConfig(invocation: StdioInvocation): { command: string; args: string[] } {
-  return {
-    command: invocation.command,
-    args: invocation.args,
-  };
 }
 
 function buildConnectorBundles(baseDir: string = CONNECTORS_DIR): ConnectorBundle[] {
@@ -92,6 +55,12 @@ function buildConnectorBundles(baseDir: string = CONNECTORS_DIR): ConnectorBundl
   const defaultHttpPath = join(baseDir, "default-http.txt");
   const tokenPath = getHttpTokenPath();
   const stdioInvocation = getStdioInvocation();
+  const quickstartPrompt = buildQuickstartPrompt();
+  const quickstartArtifact = {
+    fileName: QUICKSTART_PROMPT_FILE_NAME,
+    content: quickstartPrompt + "\n",
+    description: QUICKSTART_PROMPT_DESCRIPTION,
+  } satisfies ConnectorArtifact;
 
   const cursorConfig = stableJson(buildRootMcpConfig(stdioInvocation));
   const claudeServerConfig = stableJson(buildClaudeServerConfig(stdioInvocation));
@@ -121,12 +90,14 @@ function buildConnectorBundles(baseDir: string = CONNECTORS_DIR): ConnectorBundl
         "Open Cursor MCP settings or place the generated file in your preferred Cursor MCP config path.",
         "Reload Cursor after saving the config so the new server is picked up.",
       ],
+      quickstartPrompt,
       artifacts: [
         {
           fileName: "cursor.mcp.json",
           content: cursorConfig,
           description: "Project/global Cursor MCP config snippet.",
         },
+        quickstartArtifact,
       ],
     },
     {
@@ -141,6 +112,7 @@ function buildConnectorBundles(baseDir: string = CONNECTORS_DIR): ConnectorBundl
         "Run the generated command from your shell.",
         "Use `claude mcp list` to verify EchoClaw was registered.",
       ],
+      quickstartPrompt,
       artifacts: [
         {
           fileName: "claude.server.json",
@@ -152,6 +124,7 @@ function buildConnectorBundles(baseDir: string = CONNECTORS_DIR): ConnectorBundl
           content: claudeCommand,
           description: "Exact Claude Code command to register EchoClaw locally.",
         },
+        quickstartArtifact,
       ],
     },
     {
@@ -165,12 +138,14 @@ function buildConnectorBundles(baseDir: string = CONNECTORS_DIR): ConnectorBundl
         "Run the generated `codex mcp add` command from your shell.",
         "Use `codex mcp list` to confirm that EchoClaw is configured.",
       ],
+      quickstartPrompt,
       artifacts: [
         {
           fileName: "codex.add.txt",
           content: codexCommand,
           description: "Exact Codex CLI command to register EchoClaw.",
         },
+        quickstartArtifact,
       ],
     },
     {
@@ -185,6 +160,7 @@ function buildConnectorBundles(baseDir: string = CONNECTORS_DIR): ConnectorBundl
         "Run the generated `openclaw mcp set` command from your shell.",
         "Verify the server in your OpenClaw MCP registry before starting a session.",
       ],
+      quickstartPrompt,
       artifacts: [
         {
           fileName: "openclaw.server.json",
@@ -196,6 +172,7 @@ function buildConnectorBundles(baseDir: string = CONNECTORS_DIR): ConnectorBundl
           content: openClawCommand,
           description: "Exact OpenClaw command to register EchoClaw.",
         },
+        quickstartArtifact,
       ],
     },
     {
@@ -208,6 +185,7 @@ function buildConnectorBundles(baseDir: string = CONNECTORS_DIR): ConnectorBundl
         "Use the generated stdio JSON as the default connector for generic MCP clients.",
         "Use the HTTP notes only if your client explicitly supports streamable HTTP MCP.",
       ],
+      quickstartPrompt,
       artifacts: [
         {
           fileName: "default.mcp.json",
@@ -219,6 +197,7 @@ function buildConnectorBundles(baseDir: string = CONNECTORS_DIR): ConnectorBundl
           content: defaultHttpNotes,
           description: "Advanced HTTP endpoint and bearer token details.",
         },
+        quickstartArtifact,
       ],
     },
   ];
@@ -241,41 +220,6 @@ function writeTextFileAtomic(path: string, content: string): void {
   }
 }
 
-function buildConnectorReadme(bundles: readonly ConnectorBundle[]): string {
-  const lines: string[] = [
-    "# EchoClaw MCP connectors",
-    "",
-    `Generated for local MCP setup. Server command: \`${formatShellCommand(process.execPath, [getMcpCliEntryPath()])}\`.`,
-    "",
-  ];
-
-  for (const bundle of bundles) {
-    lines.push(`## ${bundle.title}`);
-    lines.push("");
-    lines.push(bundle.description);
-    lines.push("");
-    lines.push(`Client config target: ${bundle.clientConfigPath}`);
-    if (bundle.docsUrl) {
-      lines.push(`Docs: ${bundle.docsUrl}`);
-    }
-    if (bundle.commandPreview) {
-      lines.push("");
-      lines.push("Command:");
-      lines.push("```bash");
-      lines.push(bundle.commandPreview);
-      lines.push("```");
-    }
-    lines.push("");
-    lines.push("Artifacts:");
-    for (const artifact of bundle.artifacts) {
-      lines.push(`- ${artifact.fileName} — ${artifact.description}`);
-    }
-    lines.push("");
-  }
-
-  return lines.join("\n") + "\n";
-}
-
 export interface GeneratedConnectorOutput {
   directory: string;
   bundles: ConnectorBundle[];
@@ -295,7 +239,13 @@ export function writeConnectorArtifacts(baseDir: string = CONNECTORS_DIR): Gener
     }
 
     const readmePath = join(baseDir, "README.md");
-    writeTextFileAtomic(readmePath, buildConnectorReadme(bundles));
+    const quickstartArtifact = bundles[0]?.artifacts.find(
+      (artifact) => artifact.fileName === QUICKSTART_PROMPT_FILE_NAME,
+    );
+    if (!quickstartArtifact) {
+      throw new Error("Quickstart prompt artifact is missing from the generated connector bundles.");
+    }
+    writeTextFileAtomic(readmePath, buildConnectorReadme(bundles, quickstartArtifact));
 
     return { directory: baseDir, bundles, readmePath };
   } catch (err) {
