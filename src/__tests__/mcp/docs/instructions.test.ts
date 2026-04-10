@@ -71,12 +71,13 @@ describe("mcp docs — buildInstructions", () => {
 
   it("does not list schedule_* or mission_* in the internal tools blurb", () => {
     const text = buildInstructions();
-    // The "Internal tools (...)" line must NOT mention schedule_* or mission_*
-    // anymore — they live in Echo Agent only.
-    const internalToolsLine = text.match(/Internal tools \([^)]*\)/);
-    expect(internalToolsLine).not.toBeNull();
-    expect(internalToolsLine![0]).not.toMatch(/schedule_/);
-    expect(internalToolsLine![0]).not.toMatch(/mission_/);
+    const directToolsLine = text.split("\n").find((line) => line.includes("Use them by real name"));
+    expect(directToolsLine).toBeDefined();
+    expect(directToolsLine).toContain("knowledge_*");
+    expect(directToolsLine).toContain("document_*");
+    expect(directToolsLine).toContain("wallet_*");
+    expect(directToolsLine).not.toContain("schedule_*");
+    expect(directToolsLine).not.toContain("mission_*");
   });
 
   it("references docs:// resources for deeper reading", () => {
@@ -84,6 +85,30 @@ describe("mcp docs — buildInstructions", () => {
     expect(text).toContain("docs://overview");
     expect(text).toContain("docs://tools");
     expect(text).toContain("docs://protocols");
+    expect(text).toContain("docs://protocols/{namespace}");
+    expect(text).toContain("runtime://env");
+    expect(text).not.toContain("docs://routing");
+  });
+
+  it("uses the shared read order before protocol discovery", () => {
+    const text = buildInstructions();
+    expect(text.indexOf("docs://overview")).toBeLessThan(text.indexOf("docs://tools"));
+    expect(text.indexOf("docs://tools")).toBeLessThan(text.indexOf("docs://protocols"));
+    expect(text.indexOf("docs://protocols")).toBeLessThan(text.indexOf("docs://protocols/{namespace}"));
+    expect(text.indexOf("docs://protocols/{namespace}")).toBeLessThan(text.indexOf("runtime://env"));
+  });
+
+  it("tells the model to start from intent instead of brute-forcing every namespace", () => {
+    const text = buildInstructions();
+    expect(text).toContain("Do not scan every namespace by default");
+    expect(text).not.toContain("ALL 10 namespaces");
+  });
+
+  it("describes document_* as scratchpad and knowledge_* as durable memory", () => {
+    const text = buildInstructions();
+    expect(text).toContain("scratchpad");
+    expect(text).toContain("durable retrievable memory");
+    expect(text).not.toMatch(/Do not execute mutating tools, move funds, or write[\s\S]*knowledge\/documents/);
   });
 
   it("lists active protocol namespaces dynamically", () => {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { buildMcpOnboardingGuide } from "../../mcp/docs/onboarding.js";
 
 const MOCK_MCP_ENTRY_PATH = "/tmp/echoclaw-test/dist/mcp/index.js";
 
@@ -80,5 +81,25 @@ describe("echo connector generation", () => {
       "You can run it in this same terminal after `echoclaw echo` exits, or open a second terminal if you prefer.",
     );
     expect(readme).toContain(buildQuickstartPrompt());
+  });
+
+  it("writes a quickstart prompt that follows the shared onboarding flow", () => {
+    const guide = buildMcpOnboardingGuide();
+    const prompt = buildQuickstartPrompt();
+
+    expect(prompt).toContain(`${guide.internalToolCount} direct internal tools`);
+    expect(prompt).toContain(`${guide.metaToolCount} meta tools`);
+    expect(prompt).toContain(`${guide.protocolNamespaceCount} protocol namespaces`);
+    expect(prompt.indexOf("docs://overview")).toBeLessThan(prompt.indexOf("docs://tools"));
+    expect(prompt.indexOf("docs://tools")).toBeLessThan(prompt.indexOf("docs://protocols"));
+    expect(prompt.indexOf("docs://protocols")).toBeLessThan(prompt.indexOf("docs://protocols/{namespace}"));
+    expect(prompt.indexOf("docs://protocols/{namespace}")).toBeLessThan(prompt.indexOf("runtime://env"));
+    expect(prompt).toContain("Do not scan every namespace by default");
+    expect(prompt).toContain("knowledge_*");
+    expect(prompt).toContain("document_*");
+    expect(prompt).toContain("permission UX is the execution gate");
+    expect(prompt).not.toContain("ALL 10 namespaces");
+    expect(prompt).not.toContain("docs://routing");
+    expect(prompt).not.toMatch(/Do not execute mutating tools, move funds, or write[\s\S]*knowledge\/documents/);
   });
 });

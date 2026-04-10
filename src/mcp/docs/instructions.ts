@@ -9,10 +9,16 @@
  * reading. NO long workflow text — that lives in `prompts.ts`.
  */
 
-import { buildOverview, buildProtocolList } from "./registry-projection.js";
+import { buildProtocolList } from "./registry-projection.js";
+import {
+  buildDirectToolRoutingLines,
+  buildInstructionsSurfaceSummaryLine,
+  buildMemoryPolicyLines,
+  buildOnboardingReadOrderLines,
+} from "./onboarding.js";
 
 export function buildInstructions(): string {
-  const overview = buildOverview();
+  const memoryPolicyLines = buildMemoryPolicyLines();
   const namespaces = buildProtocolList();
   const namespaceGroups = namespaces
     .reduce<Array<{ label: string; lines: string[] }>>((groups, namespace) => {
@@ -38,20 +44,20 @@ export function buildInstructions(): string {
 
   return `# EchoClaw MCP
 
-EchoClaw MCP is a passive tool surface bridge over the EchoClaw stack. It
-exposes ${overview.surfaceSize} internal tools (knowledge, documents, wallet,
-portfolio, web, EVM, setup) plus two meta tools for protocol capabilities.
+EchoClaw MCP is a passive tool surface bridge over the EchoClaw stack.
+${buildInstructionsSurfaceSummaryLine()}
 
-## How to use this server
+## Start here
 
-- Call \`discover_tools\` to find protocol capabilities by query / namespace,
-  then \`execute_tool\` to invoke them with structured params. There are
-  ${overview.protocolNamespaceCount} protocol namespaces available — they are
-  NOT individually surfaced as MCP tools to keep \`tools/list\` manageable.
-- Internal tools (knowledge_*, document_*, wallet_*, portfolio_*, web_*,
-  evm_*) are surfaced individually with their real names — use them directly.
+${buildOnboardingReadOrderLines().join("\n")}
+
+## How to route tool calls
+
+${buildDirectToolRoutingLines().join("\n")}
 - Knowledge writes go to a shared local Postgres + pgvector store; entries
   written through this MCP are tagged \`source_surface = mcp_local\`.
+- ${memoryPolicyLines[0]!.slice(2)}
+- ${memoryPolicyLines[1]!.slice(2)}
 - If Polymarket trading is gated by missing credentials, use
   \`polymarket_setup\` to derive local CLOB credentials instead of telling the
   user to manually edit \`POLYMARKET_API_KEY\`.
@@ -63,10 +69,10 @@ portfolio, web, EVM, setup) plus two meta tools for protocol capabilities.
 
 - \`docs://overview\` — surface size, runtime, embedding model
 - \`docs://tools\` — full internal tool catalog grouped by capability
-- \`docs://protocols\` — protocol namespace overview
+- \`docs://protocols\` — namespace routing with \`Use when\` guidance
 - \`docs://protocols/{namespace}\` — per-namespace tool manifests
-- \`surface://manifest\` — machine-readable JSON snapshot
 - \`runtime://env\` — env presence flags (NOT values)
+- \`surface://manifest\` — machine-readable JSON snapshot
 
 ## Active protocol namespaces
 

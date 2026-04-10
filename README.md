@@ -13,7 +13,7 @@ Public npm package with local MCP launcher support. Primary entrypoints:
 ## Quickstart
 
 ```bash
-pnpm add -g @echoclaw/echo
+npm add -g @echoclaw/echo
 echoclaw echo
 ```
 
