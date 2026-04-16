@@ -28,6 +28,7 @@ import { computeValidUntil, isValidKind } from "@echo-agent/knowledge/policy.js"
 import type { ToolResult } from "../types.js";
 import type { InternalToolContext } from "./types.js";
 import { str, num, bool, ok, fail } from "./types.js";
+import { readStringArray, readObject, readClampedNumber } from "./knowledge-params.js";
 import logger from "@utils/logger.js";
 
 export async function handleKnowledgeSupersede(
@@ -147,29 +148,3 @@ export async function handleKnowledgeSupersede(
   }
 }
 
-// ── helpers (kept local — mirror knowledge.ts) ──────────────────
-
-function readStringArray(params: Record<string, unknown>, key: string): string[] {
-  const v = params[key];
-  if (!Array.isArray(v)) return [];
-  return v.filter((x): x is string => typeof x === "string");
-}
-
-function readObject(params: Record<string, unknown>, key: string): Record<string, unknown> {
-  const v = params[key];
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return {};
-  return v as Record<string, unknown>;
-}
-
-function readClampedNumber(
-  params: Record<string, unknown>,
-  key: string,
-  min: number,
-  max: number,
-): number | null {
-  const v = params[key];
-  if (typeof v !== "number" || !Number.isFinite(v)) return null;
-  if (v < min) return min;
-  if (v > max) return max;
-  return v;
-}

@@ -10,7 +10,7 @@
  *
  * Public interface (writeCache, readCache, cleanupExpired, generateCacheKey)
  * is unchanged from the previous documents(space='cache') backend — callers
- * in tools/internal/knowledge.ts do not require any changes.
+ * in tools/internal/knowledge-recall.ts do not require any changes.
  */
 
 import { createHash } from "node:crypto";
