@@ -166,10 +166,30 @@ describe("knowledge repo", () => {
       const [, params] = mockQueryOne.mock.calls[0];
       expect(params[7]).toBe("invalidated");
       expect(params[9]).toBe(validFrom.toISOString());
-      // After source_surface/source_session add: created_at moved 15 → 17,
-      // updated_at moved 16 → 18.
-      expect(params[17]).toBe(createdAt.toISOString());
-      expect(params[18]).toBe(updatedAt.toISOString());
+      // After lifecycle columns (supersedes_id/status_reason/change_summary/what_failed
+      // at params 17..20), created_at moved 17 → 21, updated_at 18 → 22.
+      expect(params[17]).toBeNull(); // supersedesId default
+      expect(params[18]).toBeNull(); // statusReason default
+      expect(params[19]).toBeNull(); // changeSummary default
+      expect(params[20]).toBeNull(); // whatFailed default
+      expect(params[21]).toBe(createdAt.toISOString());
+      expect(params[22]).toBe(updatedAt.toISOString());
+    });
+
+    it("passes lifecycle fields (supersedesId + reason + change_summary + what_failed) when provided", async () => {
+      mockQueryOne.mockResolvedValueOnce({ ...SAMPLE_ROW, inserted: true });
+      await insertEntry({
+        ...baseInsertInput(),
+        supersedesId: 7,
+        statusReason: "replaced by tighter rule",
+        changeSummary: "threshold 10% → 5%",
+        whatFailed: "3/24 days hit >7% drawdown",
+      });
+      const [, params] = mockQueryOne.mock.calls[0];
+      expect(params[17]).toBe(7);
+      expect(params[18]).toBe("replaced by tighter rule");
+      expect(params[19]).toBe("threshold 10% → 5%");
+      expect(params[20]).toBe("3/24 days hit >7% drawdown");
     });
 
     it("throws when embedding length does not match embeddingDim (pre-DB guard)", async () => {
@@ -186,16 +206,24 @@ describe("knowledge repo", () => {
   // ── getById ──────────────────────────────────────────────────
 
   describe("getById", () => {
-    it("returns mapped entry on hit", async () => {
-      mockQueryOne.mockResolvedValueOnce(SAMPLE_ROW);
+    it("returns mapped entry on hit with lineage LEFT JOIN", async () => {
+      mockQueryOne.mockResolvedValueOnce({ ...SAMPLE_ROW, superseded_by: null });
       const result = await getById(42);
       expect(mockQueryOne).toHaveBeenCalledTimes(1);
       const [sql, params] = mockQueryOne.mock.calls[0];
-      expect(sql).toContain("FROM knowledge_entries");
-      expect(sql).toContain("WHERE id = $1");
+      expect(sql).toContain("FROM knowledge_entries k");
+      expect(sql).toContain("LEFT JOIN knowledge_entries succ ON succ.supersedes_id = k.id");
+      expect(sql).toContain("WHERE k.id = $1");
       expect(params).toEqual([42]);
       expect(result?.id).toBe(42);
       expect(result?.contentHash).toBe(SAMPLE_HASH);
+      expect(result?.supersededBy).toBeNull();
+    });
+
+    it("returns supersededBy id when a successor exists", async () => {
+      mockQueryOne.mockResolvedValueOnce({ ...SAMPLE_ROW, superseded_by: 99 });
+      const result = await getById(42);
+      expect(result?.supersededBy).toBe(99);
     });
 
     it("returns null on miss", async () => {
@@ -237,14 +265,32 @@ describe("knowledge repo", () => {
   // ── updateStatus ─────────────────────────────────────────────
 
   describe("updateStatus", () => {
-    it("issues UPDATE with new status and id", async () => {
+    it("issues UPDATE with new status and id (no reason)", async () => {
       mockExecute.mockResolvedValueOnce(1);
       const result = await updateStatus(42, "invalidated");
       expect(result).toBe(true);
       const [sql, params] = mockExecute.mock.calls[0];
       expect(sql).toContain("UPDATE knowledge_entries");
       expect(sql).toContain("SET status = $1");
+      expect(sql).not.toContain("status_reason");
       expect(params).toEqual(["invalidated", 42]);
+    });
+
+    it("persists reason to status_reason when provided", async () => {
+      mockExecute.mockResolvedValueOnce(1);
+      const result = await updateStatus(42, "invalidated", "contradicted by Apr 12 data");
+      expect(result).toBe(true);
+      const [sql, params] = mockExecute.mock.calls[0];
+      expect(sql).toContain("status_reason = $2");
+      expect(params).toEqual(["invalidated", "contradicted by Apr 12 data", 42]);
+    });
+
+    it("explicit null clears status_reason", async () => {
+      mockExecute.mockResolvedValueOnce(1);
+      await updateStatus(42, "archived", null);
+      const [sql, params] = mockExecute.mock.calls[0];
+      expect(sql).toContain("status_reason = $2");
+      expect(params).toEqual(["archived", null, 42]);
     });
 
     it("returns false when no rows affected", async () => {
@@ -409,30 +455,40 @@ describe("knowledge repo", () => {
   // ── streamAllForExport ───────────────────────────────────────
 
   describe("streamAllForExport", () => {
-    it("paginates by id and yields all rows", async () => {
-      const rowA = { ...SAMPLE_ROW, id: 1 };
-      const rowB = { ...SAMPLE_ROW, id: 2 };
+    it("paginates by id, left-joins predecessor, yields supersedesContentHash", async () => {
+      const rowA = { ...SAMPLE_ROW, id: 1, supersedes_content_hash: null };
+      const rowB = {
+        ...SAMPLE_ROW,
+        id: 2,
+        supersedes_id: 1,
+        status: "active",
+        supersedes_content_hash: SAMPLE_HASH,
+      };
       // Two pages: first with 2 rows, second with 0
       mockQuery
         .mockResolvedValueOnce([rowA, rowB])
         .mockResolvedValueOnce([]);
-      const yielded: number[] = [];
+      const yielded: Array<{ id: number; supersedesContentHash: string | null }> = [];
       for await (const e of streamAllForExport(2)) {
-        yielded.push(e.id);
+        yielded.push({ id: e.id, supersedesContentHash: e.supersedesContentHash });
       }
-      expect(yielded).toEqual([1, 2]);
+      expect(yielded).toEqual([
+        { id: 1, supersedesContentHash: null },
+        { id: 2, supersedesContentHash: SAMPLE_HASH },
+      ]);
       // Two queries: first page + termination check
       expect(mockQuery).toHaveBeenCalledTimes(2);
       const [sqlA, paramsA] = mockQuery.mock.calls[0];
-      expect(sqlA).toContain("WHERE id > $1");
-      expect(sqlA).toContain("ORDER BY id ASC");
+      expect(sqlA).toContain("WHERE k.id > $1");
+      expect(sqlA).toContain("ORDER BY k.id ASC");
+      expect(sqlA).toContain("LEFT JOIN knowledge_entries pred ON pred.id = k.supersedes_id");
       expect(paramsA).toEqual([0, 2]);
       const [, paramsB] = mockQuery.mock.calls[1];
       expect(paramsB).toEqual([2, 2]);
     });
 
     it("stops after a partial page (rows.length < batchSize)", async () => {
-      mockQuery.mockResolvedValueOnce([{ ...SAMPLE_ROW, id: 1 }]);
+      mockQuery.mockResolvedValueOnce([{ ...SAMPLE_ROW, id: 1, supersedes_content_hash: null }]);
       const yielded: number[] = [];
       for await (const e of streamAllForExport(50)) {
         yielded.push(e.id);

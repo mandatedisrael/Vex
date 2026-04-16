@@ -170,6 +170,10 @@ async function routeInternalTool(
       const { handleKnowledgeUpdateStatus } = await import("./internal/knowledge.js");
       return handleKnowledgeUpdateStatus(call.args, context);
     }
+    case "knowledge_supersede": {
+      const { handleKnowledgeSupersede } = await import("./internal/knowledge-supersede.js");
+      return handleKnowledgeSupersede(call.args, context);
+    }
 
     // Scheduling
     case "schedule_create": {

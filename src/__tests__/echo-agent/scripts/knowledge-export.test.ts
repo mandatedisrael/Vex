@@ -76,6 +76,16 @@ function makeEntry(overrides: Record<string, unknown> = {}) {
     contentHash: "a".repeat(64),
     embeddingModel: "ai/embeddinggemma:300M-Q8_0",
     embeddingDim: 768,
+    sourceSurface: "echo_agent",
+    sourceSession: null,
+    // v2 lifecycle fields — default to null so plain makeEntry() acts like a
+    // fresh active entry with no lineage. Tests that exercise supersede
+    // roundtrip override these.
+    supersedesId: null,
+    statusReason: null,
+    changeSummary: null,
+    whatFailed: null,
+    supersedesContentHash: null,
     createdAt: "2026-04-06T12:00:00Z",
     updatedAt: "2026-04-06T12:00:00Z",
     ...overrides,
@@ -135,7 +145,7 @@ describe("exportKnowledge", () => {
     expect(lines.length).toBe(2); // manifest + 1 entry
     const manifest = JSON.parse(lines[0]!);
     expect(manifest.__type).toBe("echoclaw_knowledge_export");
-    expect(manifest.version).toBe(1);
+    expect(manifest.version).toBe(2);
     expect(manifest.schema_fields).toEqual(EXPORT_SCHEMA_FIELDS);
     expect(typeof manifest.exported_at).toBe("string");
   });
@@ -221,6 +231,48 @@ describe("exportKnowledge", () => {
     for (const field of EXPORT_SCHEMA_FIELDS) {
       expect(row).toHaveProperty(field);
     }
+  });
+
+  it("successor entry carries supersedes_content_hash + lifecycle fields", async () => {
+    mockQuery.mockResolvedValueOnce([{ embedding_model: "x" }]);
+    mockStreamAllForExport.mockReturnValueOnce(
+      asyncIterableOf([
+        makeEntry({
+          id: 2,
+          status: "active",
+          supersedesId: 1,
+          supersedesContentHash: "b".repeat(64),
+          changeSummary: "threshold tightened",
+          whatFailed: "false positives rose in Q1",
+        }),
+      ]),
+    );
+    const sink = new CapturingSink();
+    await exportKnowledge(sink);
+    const row = JSON.parse(sink.jsonlLines[1]!);
+    expect(row.supersedes_content_hash).toBe("b".repeat(64));
+    expect(row.change_summary).toBe("threshold tightened");
+    expect(row.what_failed).toBe("false positives rose in Q1");
+    expect(row.status_reason).toBeNull();
+  });
+
+  it("superseded predecessor row carries status_reason (no successor link from its side)", async () => {
+    mockQuery.mockResolvedValueOnce([{ embedding_model: "x" }]);
+    mockStreamAllForExport.mockReturnValueOnce(
+      asyncIterableOf([
+        makeEntry({
+          id: 1,
+          status: "superseded",
+          statusReason: "replaced by tighter rule",
+        }),
+      ]),
+    );
+    const sink = new CapturingSink();
+    await exportKnowledge(sink);
+    const row = JSON.parse(sink.jsonlLines[1]!);
+    expect(row.status).toBe("superseded");
+    expect(row.status_reason).toBe("replaced by tighter rule");
+    expect(row.supersedes_content_hash).toBeNull();
   });
 
   it("returns the count of entries written (manifest is not counted)", async () => {

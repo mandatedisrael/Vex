@@ -324,6 +324,13 @@ export async function handleKnowledgeGet(
     status: entry.status,
     pinned: entry.pinned,
     validUntil: entry.validUntil,
+    // Lifecycle lineage — both directions so the agent can diagnose historical
+    // entries (supersededBy) and new-version entries (supersedesId) symmetrically.
+    supersedesId: entry.supersedesId,
+    supersededBy: entry.supersededBy,
+    statusReason: entry.statusReason,
+    changeSummary: entry.changeSummary,
+    whatFailed: entry.whatFailed,
   });
 }
 
@@ -341,14 +348,20 @@ export async function handleKnowledgeUpdateStatus(
   if (!isUpdatableKnowledgeStatus(statusParam)) {
     return fail(
       `Invalid status "${statusParam}". Must be one of: invalidated, archived. ` +
-        `(Cannot transition back to active — write a new entry instead.)`,
+        `(Cannot transition back to active — write a new entry instead. ` +
+        `For replacing an entry with a new version, use knowledge_supersede.)`,
     );
   }
 
-  const updated = await knowledgeRepo.updateStatus(id, statusParam);
+  // `reason` is optional; when present we persist it to `status_reason` so the
+  // rationale stays with the row (previously only logged).
+  const rawReason = str(params, "reason");
+  const reason = rawReason.length > 0 ? rawReason : undefined;
+
+  const updated = await knowledgeRepo.updateStatus(id, statusParam, reason);
   if (!updated) return fail(`knowledge entry not found: ${id}`);
 
-  return ok({ id, status: statusParam, updated: true });
+  return ok({ id, status: statusParam, updated: true, reason: reason ?? null });
 }
 
 // ── helpers ─────────────────────────────────────────────────────

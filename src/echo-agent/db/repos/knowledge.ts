@@ -42,6 +42,10 @@ interface KnowledgeRow {
   embedding_dim: number;
   source_surface: string;
   source_session: string | null;
+  supersedes_id: number | null;
+  status_reason: string | null;
+  change_summary: string | null;
+  what_failed: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -73,8 +77,27 @@ export interface KnowledgeEntry {
   embeddingDim: number;
   sourceSurface: "echo_agent" | "mcp_local";
   sourceSession: string | null;
+  /** FK to predecessor row this entry replaces (set by knowledge_supersede), or null. */
+  supersedesId: number | null;
+  /** Short "why" for any non-active status transition (superseded / invalidated / archived). */
+  statusReason: string | null;
+  /** Supersede-only: what's different about this new version. NULL on predecessors and plain entries. */
+  changeSummary: string | null;
+  /** Supersede-only: evidence that invalidated the predecessor. NULL on predecessors and plain entries. */
+  whatFailed: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * getById() extension that also resolves the reverse lineage link:
+ * `supersededBy` — the id of the row whose `supersedes_id = this.id`, or null.
+ *
+ * Single-successor lineage is enforced by the partial unique index on
+ * `supersedes_id`, so this is at most one row.
+ */
+export interface KnowledgeEntryWithLineage extends KnowledgeEntry {
+  supersededBy: number | null;
 }
 
 export interface ActiveKnowledgeListItem {
@@ -117,6 +140,13 @@ export interface InsertEntryInput {
   validFrom?: Date;
   createdAt?: Date;
   updatedAt?: Date;
+  // ── Optional lifecycle fields. knowledge_write leaves all null; knowledge_supersede
+  // populates supersedesId + changeSummary + whatFailed on the new row; import v2
+  // may set any of them when restoring historical state.
+  supersedesId?: number | null;
+  statusReason?: string | null;
+  changeSummary?: string | null;
+  whatFailed?: string | null;
 }
 
 export interface InsertEntryResult {
@@ -157,6 +187,10 @@ function mapRow(r: KnowledgeRow): KnowledgeEntry {
     embeddingDim: r.embedding_dim,
     sourceSurface: (r.source_surface as "echo_agent" | "mcp_local") ?? "echo_agent",
     sourceSession: r.source_session,
+    supersedesId: r.supersedes_id,
+    statusReason: r.status_reason,
+    changeSummary: r.change_summary,
+    whatFailed: r.what_failed,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -244,6 +278,7 @@ export async function insertEntry(input: InsertEntryInput): Promise<InsertEntryR
          confidence, status, pinned, valid_from, valid_until,
          content_hash, embedding_model, embedding_dim, embedding,
          source_surface, source_session,
+         supersedes_id, status_reason, change_summary, what_failed,
          created_at, updated_at
        )
        VALUES (
@@ -251,7 +286,8 @@ export async function insertEntry(input: InsertEntryInput): Promise<InsertEntryR
          $7, COALESCE($8::text, 'active'), $9, COALESCE($10::timestamptz, NOW()), $11,
          $12, $13, $14, $15::vector,
          COALESCE($16::text, 'echo_agent'), $17,
-         COALESCE($18::timestamptz, NOW()), COALESCE($19::timestamptz, NOW())
+         $18, $19, $20, $21,
+         COALESCE($22::timestamptz, NOW()), COALESCE($23::timestamptz, NOW())
        )
        ON CONFLICT (content_hash) DO NOTHING
        RETURNING *
@@ -278,6 +314,10 @@ export async function insertEntry(input: InsertEntryInput): Promise<InsertEntryR
       vectorLiteral(input.embedding),
       input.sourceSurface ?? null,
       input.sourceSession ?? null,
+      input.supersedesId ?? null,
+      input.statusReason ?? null,
+      input.changeSummary ?? null,
+      input.whatFailed ?? null,
       toIsoOrNull(input.createdAt),
       toIsoOrNull(input.updatedAt),
     ],
@@ -289,13 +329,26 @@ export async function insertEntry(input: InsertEntryInput): Promise<InsertEntryR
 
 // ── Get by ID ────────────────────────────────────────────────────
 
-export async function getById(id: number): Promise<KnowledgeEntry | null> {
+/**
+ * Fetch an entry by id together with the reverse lineage link (`supersededBy`).
+ *
+ * The reverse link is resolved via a LEFT JOIN on the partial unique index
+ * `idx_ke_supersedes_id` — one extra indexed lookup, single round-trip. Returns
+ * `supersededBy: null` when no successor exists (i.e. this row is current or
+ * terminal — `active`, `invalidated`, `archived`, or a leaf of a superseded chain).
+ */
+export async function getById(id: number): Promise<KnowledgeEntryWithLineage | null> {
   if (!Number.isFinite(id) || id <= 0) return null;
-  const row = await queryOne<KnowledgeRow>(
-    "SELECT * FROM knowledge_entries WHERE id = $1",
+  const row = await queryOne<KnowledgeRow & { superseded_by: number | null }>(
+    `SELECT k.*, succ.id AS superseded_by
+     FROM knowledge_entries k
+     LEFT JOIN knowledge_entries succ ON succ.supersedes_id = k.id
+     WHERE k.id = $1`,
     [id],
   );
-  return row ? mapRow(row) : null;
+  if (!row) return null;
+  const { superseded_by, ...baseRow } = row;
+  return { ...mapRow(baseRow as KnowledgeRow), supersededBy: superseded_by };
 }
 
 // ── Find by content hash ─────────────────────────────────────────
@@ -311,14 +364,30 @@ export async function findByContentHash(hash: string): Promise<KnowledgeEntry | 
 
 // ── Update status ────────────────────────────────────────────────
 
+/**
+ * Update an entry's status to `invalidated` or `archived` and optionally persist
+ * a human-readable `reason` to `status_reason`.
+ *
+ * Passing `reason = undefined` (the default) leaves the existing `status_reason`
+ * untouched — callers that omit reason do NOT wipe a previously-stored reason.
+ * Pass an explicit `null` to clear it.
+ */
 export async function updateStatus(
   id: number,
   status: UpdatableKnowledgeStatus,
+  reason?: string | null,
 ): Promise<boolean> {
   if (!Number.isFinite(id) || id <= 0) return false;
+  if (reason === undefined) {
+    const rowCount = await execute(
+      "UPDATE knowledge_entries SET status = $1, updated_at = NOW() WHERE id = $2",
+      [status, id],
+    );
+    return rowCount === 1;
+  }
   const rowCount = await execute(
-    "UPDATE knowledge_entries SET status = $1, updated_at = NOW() WHERE id = $2",
-    [status, id],
+    "UPDATE knowledge_entries SET status = $1, status_reason = $2, updated_at = NOW() WHERE id = $3",
+    [status, reason, id],
   );
   return rowCount === 1;
 }
@@ -480,34 +549,56 @@ export async function listKnownKinds(opts: ListKnownKindsOptions): Promise<Known
 // ── Bulk read for export ─────────────────────────────────────────
 
 /**
+ * Export row shape: KnowledgeEntry plus the predecessor's content_hash (stable
+ * cross-DB identifier). `supersedes_id` (local integer FK) is deliberately NOT
+ * in the export — IDs are unstable across installations. The importer resolves
+ * `supersedesContentHash` back to a local id via `findByContentHash`.
+ */
+export interface KnowledgeEntryForExport extends KnowledgeEntry {
+  /** content_hash of the predecessor row (resolved via self-join), or null. */
+  supersedesContentHash: string | null;
+}
+
+/**
  * Stream every row in `knowledge_entries` for export.
  *
  * Paginated by id (`WHERE id > $cursor ORDER BY id LIMIT $batch`) so memory
  * stays bounded regardless of corpus size. The embedding column is NOT
  * fetched — exports never carry vectors (re-embed happens on import).
+ *
+ * LEFT JOIN resolves `supersedes_id -> predecessor.content_hash` so the export
+ * is cross-DB restorable. Order by id ASC guarantees every predecessor lands
+ * in the JSONL before its successor, so the import lookup always resolves.
  */
 export async function* streamAllForExport(
   batchSize = 100,
-): AsyncIterable<KnowledgeEntry> {
+): AsyncIterable<KnowledgeEntryForExport> {
   let cursor = 0;
   // ESLint: intentional infinite loop; the page-size guard breaks it.
   while (true) {
-    const rows = await query<KnowledgeRow>(
+    const rows = await query<KnowledgeRow & { supersedes_content_hash: string | null }>(
       `SELECT
-         id, kind, title, summary, content_md, tags, source_refs,
-         confidence, status, pinned, valid_from, valid_until,
-         content_hash, embedding_model, embedding_dim,
-         source_surface, source_session,
-         created_at, updated_at
-       FROM knowledge_entries
-       WHERE id > $1
-       ORDER BY id ASC
+         k.id, k.kind, k.title, k.summary, k.content_md, k.tags, k.source_refs,
+         k.confidence, k.status, k.pinned, k.valid_from, k.valid_until,
+         k.content_hash, k.embedding_model, k.embedding_dim,
+         k.source_surface, k.source_session,
+         k.supersedes_id, k.status_reason, k.change_summary, k.what_failed,
+         k.created_at, k.updated_at,
+         pred.content_hash AS supersedes_content_hash
+       FROM knowledge_entries k
+       LEFT JOIN knowledge_entries pred ON pred.id = k.supersedes_id
+       WHERE k.id > $1
+       ORDER BY k.id ASC
        LIMIT $2`,
       [cursor, batchSize],
     );
     if (rows.length === 0) break;
     for (const row of rows) {
-      yield mapRow(row);
+      const { supersedes_content_hash, ...baseRow } = row;
+      yield {
+        ...mapRow(baseRow as KnowledgeRow),
+        supersedesContentHash: supersedes_content_hash,
+      };
     }
     cursor = rows[rows.length - 1]!.id;
     if (rows.length < batchSize) break;

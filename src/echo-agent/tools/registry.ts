@@ -108,7 +108,8 @@ const TOOLS: readonly ToolDef[] = [
   {
     name: "knowledge_write", kind: "internal", mutating: false,
     description:
-      "Write a canonical knowledge entry: a distilled rule, observation, or fact that should be retrievable later. " +
+      "Write a NEW canonical knowledge entry: a distilled rule, observation, or fact that should be retrievable later. " +
+      "Use this ONLY for net-new facts — if you are replacing or updating an existing entry, use knowledge_supersede(previous_id) instead. " +
       "title, summary, and content_md MUST be in English regardless of conversation language — the embedding model achieves significantly better retrieval on English text. " +
       "kind is free-form snake_case (e.g. pumpfun_entry_pattern, risk_rule). Reuse a kind from Active Knowledge → Known kinds before creating a new one. " +
       "Use pinned=true for evergreen rules (no TTL), or ttl_hours to override the default 7-day TTL for time-bounded observations. " +
@@ -124,6 +125,31 @@ const TOOLS: readonly ToolDef[] = [
       ttl_hours: { type: "number", description: "Override default 7-day TTL (1..8760). Ignored if pinned=true." },
       pinned: { type: "boolean", description: "Evergreen rule — bypasses TTL and stays in Active Knowledge." },
     }, required: ["kind", "title", "summary"] },
+  },
+  {
+    name: "knowledge_supersede", kind: "internal", mutating: false,
+    description:
+      "Atomically replace an existing active knowledge entry with a new version. Use this whenever you are updating a rule, observation, or fact you previously wrote — a meaningful change in text, thresholds, or assessment means a new version, not an in-place edit. " +
+      "The old entry is flipped to status='superseded' (hidden from recall and Active Knowledge) with its explicit successor link; the new entry becomes the active one. " +
+      "previous_id is the id of the entry you are replacing (get it from knowledge_recall or Active Knowledge). reason explains why the old version stopped holding. " +
+      "Optionally include change_summary (what's new) and what_failed (evidence that invalidated the old version). " +
+      "Rejects if the predecessor is not active, already superseded, or if the new content is identical to the predecessor (or any other existing row). " +
+      "title, summary, content_md MUST be in English. Fails loud if the local embeddings service is unavailable.",
+    parameters: { type: "object", properties: {
+      previous_id: { type: "number", description: "Id of the active entry being replaced." },
+      kind: { type: "string", description: "Free-form snake_case kind for the NEW entry, English. Usually the same as the predecessor's kind." },
+      title: { type: "string", description: "Updated thesis/rule, in English." },
+      summary: { type: "string", description: "1-3 sentences, English. Embedding input together with title." },
+      content_md: { type: "string", description: "Optional full markdown body, English (defaults to summary)." },
+      tags: { type: "array", description: "Optional string tags." },
+      confidence: { type: "number", description: "Agent confidence in 0..1." },
+      source_refs: { type: "object", description: "Provenance for the new version." },
+      ttl_hours: { type: "number", description: "Override default 7-day TTL (1..8760). Ignored if pinned=true." },
+      pinned: { type: "boolean", description: "Evergreen rule — bypasses TTL." },
+      reason: { type: "string", description: "Short reason the old version stopped holding (stored on the old row's status_reason)." },
+      change_summary: { type: "string", description: "Optional: what's different about the new version (stored on the new row)." },
+      what_failed: { type: "string", description: "Optional: evidence that invalidated the old version (stored on the new row)." },
+    }, required: ["previous_id", "kind", "title", "summary", "reason"] },
   },
   {
     name: "knowledge_recall", kind: "internal", mutating: false,
@@ -155,11 +181,14 @@ const TOOLS: readonly ToolDef[] = [
   },
   {
     name: "knowledge_update_status", kind: "internal", mutating: false,
-    description: "Mark a knowledge entry as invalidated or archived. Both remove the entry from recall and Active Knowledge. Cannot transition back to active — write a new entry instead. Does not require the embeddings service.",
+    description:
+      "Mark a knowledge entry as invalidated or archived. Both remove the entry from recall and Active Knowledge. " +
+      "Use this for terminal lifecycle (this fact is just wrong / no longer relevant), NOT for replacing a fact with a new version — for replacement use knowledge_supersede(previous_id). " +
+      "Cannot transition back to active — write a new entry instead. Does not require the embeddings service.",
     parameters: { type: "object", properties: {
       id: { type: "number", description: "Knowledge entry id." },
       status: { type: "string", enum: ["invalidated", "archived"], description: "New status. Both remove the entry from semantic recall and Active Knowledge." },
-      reason: { type: "string", description: "Optional human-readable reason (logged, not persisted in MVP)." },
+      reason: { type: "string", description: "Optional human-readable reason — persisted to status_reason on the row." },
     }, required: ["id", "status"] },
   },
 

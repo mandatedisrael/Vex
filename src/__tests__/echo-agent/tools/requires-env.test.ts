@@ -73,12 +73,14 @@ describe("requiresEnv filtering", () => {
       expect(names).toContain("knowledge_recall_overflow");
       expect(names).toContain("knowledge_get");
       expect(names).toContain("knowledge_update_status");
+      expect(names).toContain("knowledge_supersede");
     });
 
     it("knowledge_* tools have NO requiresEnv field (visible always, fail loud at runtime)", () => {
       const all = getAllTools();
       const knowledgeTools = all.filter(t => t.name.startsWith("knowledge_"));
-      expect(knowledgeTools.length).toBe(5);
+      // 5 original (write / recall / recall_overflow / get / update_status) + 1 supersede.
+      expect(knowledgeTools.length).toBe(6);
       for (const tool of knowledgeTools) {
         expect(tool.requiresEnv).toBeUndefined();
       }

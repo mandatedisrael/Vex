@@ -680,6 +680,11 @@ describe("handleKnowledgeGet", () => {
       contentHash: "a".repeat(64),
       embeddingModel: "ai/embeddinggemma:300M-Q8_0",
       embeddingDim: TEST_DIM,
+      supersedesId: null,
+      supersededBy: null,
+      statusReason: null,
+      changeSummary: null,
+      whatFailed: null,
       createdAt: "2026-04-06T12:00:00Z",
       updatedAt: "2026-04-06T12:00:00Z",
     });
@@ -696,6 +701,72 @@ describe("handleKnowledgeGet", () => {
 
     // Side-effect: loadedDocuments has the prefixed key
     expect(ctx.loadedDocuments.get("knowledge:7")).toBe("## full markdown body\n\nwith more text");
+  });
+
+  it("returns both lineage directions for a superseded predecessor", async () => {
+    mockGetById.mockResolvedValueOnce({
+      id: 1,
+      kind: "risk_rule",
+      title: "cap 10%",
+      summary: "pos size ≤ 10%",
+      contentMd: "pos size ≤ 10%",
+      tags: [],
+      sourceRefs: {},
+      confidence: null,
+      status: "superseded",
+      pinned: false,
+      validFrom: "2026-04-01T00:00:00Z",
+      validUntil: null,
+      contentHash: "a".repeat(64),
+      embeddingModel: "ai/embeddinggemma:300M-Q8_0",
+      embeddingDim: TEST_DIM,
+      supersedesId: null,
+      supersededBy: 2,
+      statusReason: "drawdown Q1",
+      changeSummary: null,
+      whatFailed: null,
+      createdAt: "2026-04-01T00:00:00Z",
+      updatedAt: "2026-04-06T12:00:00Z",
+    });
+    const result = await handleKnowledgeGet({ id: 1 }, makeTestContext());
+    const parsed = JSON.parse(result.output);
+    expect(parsed.status).toBe("superseded");
+    expect(parsed.supersededBy).toBe(2);
+    expect(parsed.supersedesId).toBeNull();
+    expect(parsed.statusReason).toBe("drawdown Q1");
+  });
+
+  it("returns both lineage directions for the new successor entry", async () => {
+    mockGetById.mockResolvedValueOnce({
+      id: 2,
+      kind: "risk_rule",
+      title: "cap 5%",
+      summary: "pos size ≤ 5%",
+      contentMd: "pos size ≤ 5%",
+      tags: [],
+      sourceRefs: {},
+      confidence: null,
+      status: "active",
+      pinned: false,
+      validFrom: "2026-04-06T12:00:00Z",
+      validUntil: null,
+      contentHash: "b".repeat(64),
+      embeddingModel: "ai/embeddinggemma:300M-Q8_0",
+      embeddingDim: TEST_DIM,
+      supersedesId: 1,
+      supersededBy: null,
+      statusReason: null,
+      changeSummary: "tightened from 10% to 5%",
+      whatFailed: "3/24 days hit >7%",
+      createdAt: "2026-04-06T12:00:00Z",
+      updatedAt: "2026-04-06T12:00:00Z",
+    });
+    const result = await handleKnowledgeGet({ id: 2 }, makeTestContext());
+    const parsed = JSON.parse(result.output);
+    expect(parsed.supersedesId).toBe(1);
+    expect(parsed.supersededBy).toBeNull();
+    expect(parsed.changeSummary).toBe("tightened from 10% to 5%");
+    expect(parsed.whatFailed).toBe("3/24 days hit >7%");
   });
 });
 
@@ -738,22 +809,27 @@ describe("handleKnowledgeUpdateStatus", () => {
     expect(mockUpdateStatus).not.toHaveBeenCalled();
   });
 
-  it("invalidated is accepted and applied", async () => {
+  it("invalidated is accepted and reason is persisted via repo", async () => {
     const result = await handleKnowledgeUpdateStatus(
       { id: 5, status: "invalidated", reason: "no longer holds" },
       makeTestContext(),
     );
     expect(result.success).toBe(true);
-    expect(mockUpdateStatus).toHaveBeenCalledWith(5, "invalidated");
+    // Reason is now forwarded to the repo so it lands in status_reason.
+    expect(mockUpdateStatus).toHaveBeenCalledWith(5, "invalidated", "no longer holds");
+    const parsed = JSON.parse(result.output);
+    expect(parsed.reason).toBe("no longer holds");
   });
 
-  it("archived is accepted and applied", async () => {
+  it("archived without reason forwards undefined (repo preserves existing status_reason)", async () => {
     const result = await handleKnowledgeUpdateStatus(
       { id: 5, status: "archived" },
       makeTestContext(),
     );
     expect(result.success).toBe(true);
-    expect(mockUpdateStatus).toHaveBeenCalledWith(5, "archived");
+    expect(mockUpdateStatus).toHaveBeenCalledWith(5, "archived", undefined);
+    const parsed = JSON.parse(result.output);
+    expect(parsed.reason).toBeNull();
   });
 
   it("returns failure when entry not found in DB", async () => {

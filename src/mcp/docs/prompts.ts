@@ -79,7 +79,21 @@ export function registerWorkflowPrompts(server: McpServer): void {
               "## TTL and pinning\n\n" +
               "- Default TTL is 7 days for time-bounded observations.\n" +
               "- `pinned: true` for evergreen rules — bypasses TTL and stays in Active Knowledge.\n" +
-              "- `ttl_hours` overrides the default for a single entry.\n",
+              "- `ttl_hours` overrides the default for a single entry.\n\n" +
+              "## Updating existing knowledge → `knowledge_supersede`, not a second write\n\n" +
+              "Knowledge entries are immutable by content. When a rule or observation needs to change " +
+              "meaningfully (new evidence, tightened threshold, different assessment), call " +
+              "`knowledge_supersede(previous_id, ...new fields, reason, change_summary?, what_failed?)`. " +
+              "It atomically writes the new entry, links it to the old via lineage, and flips the old " +
+              "entry to `superseded` (hidden from recall / Active Knowledge, still retrievable via " +
+              "`knowledge_get` for history).\n\n" +
+              "Do NOT `knowledge_write` the new version and then `knowledge_update_status` the old — " +
+              "that leaves split-brain state.\n\n" +
+              "## Lifecycle vocabulary\n\n" +
+              "- `superseded` → \"same topic, new version\" (via `knowledge_supersede`).\n" +
+              "- `invalidated` (via `knowledge_update_status`) → \"this fact was wrong and no replacement exists yet.\"\n" +
+              "- `archived` (via `knowledge_update_status`) → \"still correct but no longer relevant to current work.\"\n" +
+              "All three are hidden from recall but remain fetchable by id.\n",
           },
         },
       ],

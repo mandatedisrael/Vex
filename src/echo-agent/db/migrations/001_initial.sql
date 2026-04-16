@@ -54,6 +54,22 @@ CREATE TABLE knowledge_entries (
   embedding       vector NOT NULL,          -- embedding-on-write — entry never created without sidecar; no typmod (re-embed-friendly)
   source_surface  TEXT NOT NULL DEFAULT 'echo_agent', -- 'echo_agent' (mission loop / chat) or 'mcp_local' (production MCP server)
   source_session  TEXT,                     -- session id of the writer (Echo Agent session id, MCP session id, or NULL for legacy / scripts)
+  -- ── Lifecycle lineage (knowledge_supersede) ──────────────────────
+  -- supersedes_id is the FK to the predecessor row this entry replaces. Populated only via
+  -- knowledge_supersede (atomic transaction): new row is INSERTed with supersedes_id set AND
+  -- predecessor is flipped to status='superseded' in the same COMMIT. Partial unique index
+  -- below enforces single-successor lineage (no branching versions in MVP).
+  supersedes_id   INTEGER REFERENCES knowledge_entries(id) ON DELETE SET NULL,
+  -- status_reason — short "why" for any non-active status transition. Written by:
+  --   * knowledge_supersede (for the predecessor row: why it was replaced)
+  --   * knowledge_update_status (for invalidated | archived)
+  status_reason   TEXT,
+  -- change_summary — supersede-only: what's different about the new version. Written on the
+  -- successor row (NULL on active/non-superseded entries).
+  change_summary  TEXT,
+  -- what_failed — supersede-only: evidence that invalidated the predecessor. Written on the
+  -- successor row so the agent can see, via knowledge_get(newId), why the old rule was wrong.
+  what_failed     TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT ke_embedding_dim_range CHECK (embedding_dim > 0 AND embedding_dim <= 8192),
@@ -66,6 +82,10 @@ CREATE INDEX idx_ke_tags ON knowledge_entries USING GIN (tags);
 CREATE INDEX idx_ke_source_refs ON knowledge_entries USING GIN (source_refs jsonb_path_ops);
 CREATE UNIQUE INDEX idx_ke_content_hash ON knowledge_entries(content_hash);
 CREATE INDEX idx_ke_source_surface ON knowledge_entries(source_surface);
+-- Single-successor lineage: at most one row may have supersedes_id = X for any given X.
+-- Partial (WHERE supersedes_id IS NOT NULL) so active/non-superseding rows are unaffected.
+-- Doubles as a reverse-lookup index for getById's supersededBy resolution.
+CREATE UNIQUE INDEX idx_ke_supersedes_id ON knowledge_entries(supersedes_id) WHERE supersedes_id IS NOT NULL;
 -- No vector index in MVP. Exact cosine scan after status/kind/validity prefilter is OK to ~5k entries.
 -- The vector column uses no typmod; adding ANN (ivfflat/hnsw) later requires re-typing the column.
 

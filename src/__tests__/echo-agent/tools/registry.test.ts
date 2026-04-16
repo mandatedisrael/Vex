@@ -69,6 +69,7 @@ describe("registry", () => {
     "knowledge_recall_overflow",
     "knowledge_get",
     "knowledge_update_status",
+    "knowledge_supersede",
     "schedule_create",
     "schedule_remove",
     "subagent_spawn",

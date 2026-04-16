@@ -55,7 +55,14 @@ interface ImportedRow {
   content_hash?: string;
   created_at?: string;
   updated_at?: string;
+  // ── v2 lifecycle fields (undefined on v1 input)
+  supersedes_content_hash?: string | null;
+  status_reason?: string | null;
+  change_summary?: string | null;
+  what_failed?: string | null;
 }
+
+type ManifestVersion = 1 | 2;
 
 function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every((x) => typeof x === "string");
@@ -123,6 +130,34 @@ function requireValidValidUntil(s: unknown, lineNumber: number): Date | null {
   return d;
 }
 
+function requireOptionalStringOrNull(
+  s: unknown,
+  field: string,
+  lineNumber: number,
+): string | null {
+  if (s === undefined || s === null) return null;
+  if (typeof s !== "string") {
+    throw new Error(`line ${lineNumber}: ${field} must be a string or null, got ${typeof s}`);
+  }
+  return s;
+}
+
+/** sha256 hex format — 64 hex chars. Rejects tampered / non-hex strings. */
+function requireValidHashOrNull(
+  s: unknown,
+  field: string,
+  lineNumber: number,
+): string | null {
+  if (s === undefined || s === null) return null;
+  if (typeof s !== "string") {
+    throw new Error(`line ${lineNumber}: ${field} must be a string or null, got ${typeof s}`);
+  }
+  if (!/^[a-f0-9]{64}$/.test(s)) {
+    throw new Error(`line ${lineNumber}: ${field}="${s}" is not a valid sha256 hex`);
+  }
+  return s;
+}
+
 /**
  * Programmatic entry point. Reads JSONL from `source` (any async-iterable of
  * strings) and writes a report to the returned promise.
@@ -141,6 +176,7 @@ export async function importKnowledge(source: AsyncIterable<string>): Promise<Im
 
   let lineNumber = 0;
   let manifestSeen = false;
+  let manifestVersion: ManifestVersion = 1;
 
   for await (const rawLine of source) {
     lineNumber++;
@@ -169,11 +205,14 @@ export async function importKnowledge(source: AsyncIterable<string>): Promise<Im
         );
       }
       const version = (parsed as Record<string, unknown>).version;
-      if (version !== 1) {
+      // v1 kept for backwards compat (old backups with no lifecycle fields).
+      // v2 adds supersedes_content_hash + status_reason + change_summary + what_failed.
+      if (version !== 1 && version !== 2) {
         throw new Error(
-          `line 1: unsupported manifest version ${String(version)} (expected 1)`,
+          `line 1: unsupported manifest version ${String(version)} (expected 1 or 2)`,
         );
       }
+      manifestVersion = version;
       manifestSeen = true;
       continue;
     }
@@ -210,6 +249,18 @@ export async function importKnowledge(source: AsyncIterable<string>): Promise<Im
       const createdAt = requireValidDateOrUndefined(row.created_at, "created_at", lineNumber);
       const updatedAt = requireValidDateOrUndefined(row.updated_at, "updated_at", lineNumber);
 
+      // v2 lifecycle fields — validated even on v1 manifests (defensive: if a
+      // v1 backup accidentally carries them, catch format errors). When absent
+      // they map to null and the DB defaults (or NULL) apply.
+      const statusReason = requireOptionalStringOrNull(row.status_reason, "status_reason", lineNumber);
+      const changeSummary = requireOptionalStringOrNull(row.change_summary, "change_summary", lineNumber);
+      const whatFailed = requireOptionalStringOrNull(row.what_failed, "what_failed", lineNumber);
+      const supersedesContentHash = requireValidHashOrNull(
+        row.supersedes_content_hash,
+        "supersedes_content_hash",
+        lineNumber,
+      );
+
       // Recompute content_hash locally — never trust the file's hash. A
       // tampered/corrupted hash in the backup is therefore a no-op.
       const contentHash = computeContentHash({
@@ -226,6 +277,23 @@ export async function importKnowledge(source: AsyncIterable<string>): Promise<Im
       if (existing) {
         report.skipped_duplicate++;
         continue;
+      }
+
+      // Resolve lineage FK: export carries predecessor's content_hash (stable
+      // cross-DB), we map it back to a local id. Export order is id ASC so the
+      // predecessor is guaranteed to already exist when we reach its successor.
+      // Missing predecessor is fail-loud — silently NULLing the FK would lose
+      // lineage for this successor and degrade the backup to v1 semantics.
+      let supersedesId: number | null = null;
+      if (supersedesContentHash !== null) {
+        const predecessor = await findByContentHash(supersedesContentHash);
+        if (!predecessor) {
+          throw new Error(
+            `supersedes_content_hash=${supersedesContentHash} does not resolve to any existing entry ` +
+              `(expected predecessor to appear earlier in the export)`,
+          );
+        }
+        supersedesId = predecessor.id;
       }
 
       const { embedding, providerModel } = await embedDocument(row.title, row.summary, config);
@@ -254,6 +322,11 @@ export async function importKnowledge(source: AsyncIterable<string>): Promise<Im
         validFrom,
         createdAt,
         updatedAt,
+        // ── lifecycle roundtrip (v2). On v1 input these are all null.
+        supersedesId,
+        statusReason,
+        changeSummary,
+        whatFailed,
       });
 
       if (inserted) {
@@ -265,7 +338,7 @@ export async function importKnowledge(source: AsyncIterable<string>): Promise<Im
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error("knowledge_import.row_failed", { lineNumber, error: msg });
+      logger.error("knowledge_import.row_failed", { lineNumber, error: msg, manifestVersion });
       report.failed++;
     }
   }

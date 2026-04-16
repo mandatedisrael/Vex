@@ -5,6 +5,7 @@ import {
   mockKnowledgeInsert,
   mockKnowledgeGetById,
   mockKnowledgeUpdateStatus,
+  mockKnowledgeSupersede,
 } from "./_dispatcher-test-mocks.js";
 import { makeTestContext } from "./_test-context.js";
 
@@ -140,12 +141,57 @@ describe("dispatcher — knowledge_write / get / update_status", () => {
     expect(mockKnowledgeUpdateStatus).not.toHaveBeenCalled();
   });
 
-  it("knowledge_update_status applies valid status", async () => {
+  it("knowledge_update_status applies valid status (no reason → undefined reason arg)", async () => {
     const result = await dispatchTool(
       { name: "knowledge_update_status", args: { id: 1, status: "invalidated" }, toolCallId: "call_ks_2" },
       baseContext,
     );
     expect(result.success).toBe(true);
-    expect(mockKnowledgeUpdateStatus).toHaveBeenCalledWith(1, "invalidated");
+    // Handler forwards reason (undefined when omitted) to repo so status_reason stays untouched.
+    expect(mockKnowledgeUpdateStatus).toHaveBeenCalledWith(1, "invalidated", undefined);
+  });
+
+  it("knowledge_update_status with reason forwards it to repo", async () => {
+    mockKnowledgeUpdateStatus.mockClear();
+    const result = await dispatchTool(
+      {
+        name: "knowledge_update_status",
+        args: { id: 1, status: "archived", reason: "not relevant anymore" },
+        toolCallId: "call_ks_2r",
+      },
+      baseContext,
+    );
+    expect(result.success).toBe(true);
+    expect(mockKnowledgeUpdateStatus).toHaveBeenCalledWith(1, "archived", "not relevant anymore");
+  });
+
+  it("routes knowledge_supersede to handler with embed + supersedeEntry call", async () => {
+    mockEmbedDocument.mockClear();
+    mockKnowledgeSupersede.mockClear();
+    const result = await dispatchTool(
+      {
+        name: "knowledge_supersede",
+        args: {
+          previous_id: 42,
+          kind: "risk_rule",
+          title: "cap 5%",
+          summary: "pos size ≤ 5%",
+          reason: "drawdown Q1",
+          change_summary: "tightened from 10% to 5%",
+        },
+        toolCallId: "call_ksup_1",
+      },
+      baseContext,
+    );
+    expect(result.success).toBe(true);
+    expect(mockEmbedDocument).toHaveBeenCalledTimes(1);
+    expect(mockKnowledgeSupersede).toHaveBeenCalledTimes(1);
+    const arg = mockKnowledgeSupersede.mock.calls[0]![0];
+    expect(arg.previousId).toBe(42);
+    expect(arg.reason).toBe("drawdown Q1");
+    expect(arg.changeSummary).toBe("tightened from 10% to 5%");
+    const parsed = JSON.parse(result.output);
+    expect(parsed.supersedesId).toBe(42);
+    expect(parsed.id).toBe(43);
   });
 });

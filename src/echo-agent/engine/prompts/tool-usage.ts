@@ -99,5 +99,13 @@ The \`knowledge_*\` tools are your canonical, retrievable memory. Treat them dif
 
 3. **TTL choice.** For evergreen rules (risk policies, protocol facts, hard limits) use \`pinned: true\` — these never expire. For time-bounded observations (market conditions, ephemeral patterns) use \`ttl_hours\` to override the default 7-day TTL. After TTL expiry an entry is no longer auto-injected into Active Knowledge but remains retrievable via \`knowledge_recall\` until you explicitly invalidate or archive it.
 
-4. **knowledge vs documents.** Use \`knowledge_write\` for distilled rules, observations, strategies — anything that should be retrievable later. Use \`document_write\` (notes space) only for freeform scratchpad work that does not need semantic recall.`;
+4. **knowledge vs documents.** Use \`knowledge_write\` for distilled rules, observations, strategies — anything that should be retrievable later. Use \`document_write\` (notes space) only for freeform scratchpad work that does not need semantic recall.
+
+5. **Updating existing knowledge → supersede, do NOT edit in place.** Knowledge entries are immutable by content. When a rule, threshold, or observation needs to change meaningfully (new evidence, tightened limit, different assessment), call \`knowledge_supersede(previous_id, ...new fields, reason, change_summary?, what_failed?)\`. That atomically writes the new entry, links it to the old one via lineage, and flips the old entry to \`superseded\` (hidden from recall / Active Knowledge). Never write the new version via \`knowledge_write\` and then try to hide the old one — that leaves split-brain state.
+
+6. **Lifecycle states — which tool to use:**
+   - \`knowledge_supersede\` → "same topic, new version." Old entry becomes \`superseded\`, new one is active. History preserved + reason + what_failed.
+   - \`knowledge_update_status\` with \`invalidated\` → "this fact was wrong and there is no replacement." Use when you lost confidence in it and don't have a successor.
+   - \`knowledge_update_status\` with \`archived\` → "still correct but no longer relevant to current work." Moves it out of recall without implying it was wrong.
+   \`superseded\`, \`invalidated\`, and \`archived\` are all hidden from \`knowledge_recall\` and Active Knowledge but remain retrievable by id via \`knowledge_get\`.`;
 }

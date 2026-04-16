@@ -68,6 +68,8 @@ export const mockKnowledgeInsert = vi.fn().mockResolvedValue({
     validFrom: "2026-04-06T12:00:00Z", validUntil: "2026-04-13T12:00:00Z",
     contentHash: "f".repeat(64),
     embeddingModel: "ai/embeddinggemma:300M-Q8_0", embeddingDim: 768,
+    sourceSurface: "echo_agent", sourceSession: null,
+    supersedesId: null, statusReason: null, changeSummary: null, whatFailed: null,
     createdAt: "2026-04-06T12:00:00Z", updatedAt: "2026-04-06T12:00:00Z",
   },
   inserted: true,
@@ -90,6 +92,44 @@ vi.mock("@echo-agent/db/repos/knowledge.js", () => ({
   listActiveForHotContext: (...args: unknown[]) => mockKnowledgeListActive(...args),
   listKnownKinds: (...args: unknown[]) => mockKnowledgeListKinds(...args),
 }));
+
+// knowledge_supersede repo — lazy-imported by the handler. Tests override
+// mockKnowledgeSupersede's resolved value to assert routing / param passing.
+export const mockKnowledgeSupersede = vi.fn().mockResolvedValue({
+  successor: {
+    id: 43, kind: "memo", title: "new", summary: "new", contentMd: "new",
+    tags: [], sourceRefs: {}, confidence: null, status: "active", pinned: false,
+    validFrom: "2026-04-06T12:00:00Z", validUntil: "2026-04-13T12:00:00Z",
+    contentHash: "b".repeat(64),
+    embeddingModel: "ai/embeddinggemma:300M-Q8_0", embeddingDim: 768,
+    sourceSurface: "echo_agent", sourceSession: null,
+    supersedesId: 42, statusReason: null,
+    changeSummary: null, whatFailed: null,
+    createdAt: "2026-04-06T12:00:00Z", updatedAt: "2026-04-06T12:00:00Z",
+  },
+  predecessor: {
+    id: 42, kind: "memo", title: "old", summary: "old", contentMd: "old",
+    tags: [], sourceRefs: {}, confidence: null, status: "superseded", pinned: false,
+    validFrom: "2026-04-01T00:00:00Z", validUntil: null,
+    contentHash: "a".repeat(64),
+    embeddingModel: "ai/embeddinggemma:300M-Q8_0", embeddingDim: 768,
+    sourceSurface: "echo_agent", sourceSession: null,
+    supersedesId: null, statusReason: "reason",
+    changeSummary: null, whatFailed: null,
+    createdAt: "2026-04-01T00:00:00Z", updatedAt: "2026-04-06T12:00:00Z",
+  },
+});
+
+vi.mock("@echo-agent/db/repos/knowledge-lifecycle.js", async () => {
+  // Keep SupersedeError as the real class so handler `instanceof` checks still work.
+  const actual = await vi.importActual<typeof import("@echo-agent/db/repos/knowledge-lifecycle.js")>(
+    "@echo-agent/db/repos/knowledge-lifecycle.js",
+  );
+  return {
+    ...actual,
+    supersedeEntry: (...args: unknown[]) => mockKnowledgeSupersede(...args),
+  };
+});
 
 export const mockCacheWrite = vi.fn().mockResolvedValue({ cacheKey: "rcl-test", expiresAt: "2026-04-06T12:15:00Z" });
 export const mockCacheRead = vi.fn().mockResolvedValue(null);

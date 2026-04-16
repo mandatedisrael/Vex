@@ -32,10 +32,19 @@ import type { WriteStream } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { runMigrations } from "@echo-agent/db/migrate.js";
 import { closePool, query } from "@echo-agent/db/client.js";
-import { streamAllForExport, type KnowledgeEntry } from "@echo-agent/db/repos/knowledge.js";
+import { streamAllForExport, type KnowledgeEntryForExport } from "@echo-agent/db/repos/knowledge.js";
 import { assertSchemaUpToDate } from "./_preflight.js";
 import logger from "@utils/logger.js";
 
+/**
+ * Export schema v2 — adds lifecycle lineage fields:
+ *   supersedes_content_hash — stable cross-DB link to predecessor (not local id).
+ *   status_reason / change_summary / what_failed — lifecycle audit text.
+ *
+ * Streaming order (by id ASC) guarantees every predecessor is emitted before its
+ * successor, so the importer's content_hash-based resolution always finds the
+ * predecessor row already inserted.
+ */
 export const EXPORT_SCHEMA_FIELDS = [
   "kind",
   "title",
@@ -49,13 +58,19 @@ export const EXPORT_SCHEMA_FIELDS = [
   "valid_from",
   "valid_until",
   "content_hash",
+  "supersedes_content_hash",
+  "status_reason",
+  "change_summary",
+  "what_failed",
   "created_at",
   "updated_at",
 ] as const;
 
+export const EXPORT_MANIFEST_VERSION = 2;
+
 export interface ExportManifest {
   __type: "echoclaw_knowledge_export";
-  version: 1;
+  version: typeof EXPORT_MANIFEST_VERSION;
   schema_fields: readonly string[];
   source_embedding_model: string;
   exported_at: string;
@@ -74,11 +89,15 @@ export interface ExportedRow {
   valid_from: string;
   valid_until: string | null;
   content_hash: string;
+  supersedes_content_hash: string | null;
+  status_reason: string | null;
+  change_summary: string | null;
+  what_failed: string | null;
   created_at: string;
   updated_at: string;
 }
 
-function entryToExportRow(e: KnowledgeEntry): ExportedRow {
+function entryToExportRow(e: KnowledgeEntryForExport): ExportedRow {
   return {
     kind: e.kind,
     title: e.title,
@@ -92,6 +111,10 @@ function entryToExportRow(e: KnowledgeEntry): ExportedRow {
     valid_from: e.validFrom,
     valid_until: e.validUntil,
     content_hash: e.contentHash,
+    supersedes_content_hash: e.supersedesContentHash,
+    status_reason: e.statusReason,
+    change_summary: e.changeSummary,
+    what_failed: e.whatFailed,
     created_at: e.createdAt,
     updated_at: e.updatedAt,
   };
@@ -119,7 +142,7 @@ export async function exportKnowledge(sink: {
 
   const manifest: ExportManifest = {
     __type: "echoclaw_knowledge_export",
-    version: 1,
+    version: EXPORT_MANIFEST_VERSION,
     schema_fields: EXPORT_SCHEMA_FIELDS,
     source_embedding_model: sourceModel,
     exported_at: new Date().toISOString(),

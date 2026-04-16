@@ -75,12 +75,11 @@ export function isKnowledgeStatus(value: unknown): value is KnowledgeStatus {
  * `active` is the initial state on insert and cannot be set via update — entries
  * never "come back" from invalidated/archived; the agent writes a new entry instead.
  *
- * `superseded` is intentionally **NOT** in this set in MVP. The schema enum keeps
- * it (so a future steward/distiller can write `superseded` directly), but the tool
- * surface does not expose it because the recall query filters hardcoded
- * `WHERE status = 'active'` — exposing `superseded` would lie to the agent about
- * having a soft lifecycle the code does not actually respect. When a distiller is
- * added in a follow-up plan, recall query and this enum can be expanded together.
+ * `superseded` is intentionally **NOT** in this set: it has its own dedicated tool
+ * surface (`knowledge_supersede`) because a correct supersede MUST be atomic with
+ * inserting a successor row and recording the `supersedes_id` lineage. Exposing
+ * `superseded` as a generic status transition would allow split-brain state
+ * (predecessor marked superseded without a successor, or vice versa).
  */
 export type UpdatableKnowledgeStatus = "invalidated" | "archived";
 
