@@ -19,10 +19,10 @@ import { embedDocument } from "@echo-agent/embeddings/client.js";
 import { loadEmbeddingConfig } from "@echo-agent/embeddings/config.js";
 import { computeContentHash } from "@echo-agent/knowledge/content-hash.js";
 import { computeValidUntil, isValidKind } from "@echo-agent/knowledge/policy.js";
-import type { ToolResult } from "../types.js";
-import type { InternalToolContext } from "./types.js";
-import { str, num, bool, ok, fail } from "./types.js";
-import { readStringArray, readObject, readClampedNumber } from "./knowledge-params.js";
+import type { ToolResult } from "../../types.js";
+import type { InternalToolContext } from "../types.js";
+import { str, num, bool, ok, fail } from "../types.js";
+import { readStringArray, readObject, readClampedNumber } from "./params.js";
 import logger from "@utils/logger.js";
 
 export async function handleKnowledgeWrite(

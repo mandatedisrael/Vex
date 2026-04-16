@@ -10,9 +10,9 @@
 
 import * as knowledgeRepo from "@echo-agent/db/repos/knowledge.js";
 import { isUpdatableKnowledgeStatus } from "@echo-agent/knowledge/policy.js";
-import type { ToolResult } from "../types.js";
-import type { InternalToolContext } from "./types.js";
-import { str, num, ok, fail } from "./types.js";
+import type { ToolResult } from "../../types.js";
+import type { InternalToolContext } from "../types.js";
+import { str, num, ok, fail } from "../types.js";
 
 export async function handleKnowledgeUpdateStatus(
   params: Record<string, unknown>,

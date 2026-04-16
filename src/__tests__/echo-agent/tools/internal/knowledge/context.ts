@@ -8,13 +8,13 @@
  */
 
 import type { Mock } from "vitest";
-import type { handleKnowledgeWrite } from "@echo-agent/tools/internal/knowledge-write.js";
 import type {
+  handleKnowledgeWrite,
   handleKnowledgeRecall,
   handleKnowledgeRecallOverflow,
-} from "@echo-agent/tools/internal/knowledge-recall.js";
-import type { handleKnowledgeGet } from "@echo-agent/tools/internal/knowledge-get.js";
-import type { handleKnowledgeUpdateStatus } from "@echo-agent/tools/internal/knowledge-update-status.js";
+  handleKnowledgeGet,
+  handleKnowledgeUpdateStatus,
+} from "@echo-agent/tools/internal/knowledge.js";
 import type { makeTestContext } from "../../_test-context.js";
 
 export interface SuiteCtx {

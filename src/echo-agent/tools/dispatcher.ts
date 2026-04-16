@@ -151,27 +151,27 @@ async function routeInternalTool(
 
     // Knowledge — canonical agent memory layer (replaces memory_manage)
     case "knowledge_write": {
-      const { handleKnowledgeWrite } = await import("./internal/knowledge-write.js");
+      const { handleKnowledgeWrite } = await import("./internal/knowledge.js");
       return handleKnowledgeWrite(call.args, context);
     }
     case "knowledge_recall": {
-      const { handleKnowledgeRecall } = await import("./internal/knowledge-recall.js");
+      const { handleKnowledgeRecall } = await import("./internal/knowledge.js");
       return handleKnowledgeRecall(call.args, context);
     }
     case "knowledge_recall_overflow": {
-      const { handleKnowledgeRecallOverflow } = await import("./internal/knowledge-recall.js");
+      const { handleKnowledgeRecallOverflow } = await import("./internal/knowledge.js");
       return handleKnowledgeRecallOverflow(call.args, context);
     }
     case "knowledge_get": {
-      const { handleKnowledgeGet } = await import("./internal/knowledge-get.js");
+      const { handleKnowledgeGet } = await import("./internal/knowledge.js");
       return handleKnowledgeGet(call.args, context);
     }
     case "knowledge_update_status": {
-      const { handleKnowledgeUpdateStatus } = await import("./internal/knowledge-update-status.js");
+      const { handleKnowledgeUpdateStatus } = await import("./internal/knowledge.js");
       return handleKnowledgeUpdateStatus(call.args, context);
     }
     case "knowledge_supersede": {
-      const { handleKnowledgeSupersede } = await import("./internal/knowledge-supersede.js");
+      const { handleKnowledgeSupersede } = await import("./internal/knowledge.js");
       return handleKnowledgeSupersede(call.args, context);
     }
 

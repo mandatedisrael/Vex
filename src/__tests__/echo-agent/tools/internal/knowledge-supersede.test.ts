@@ -47,7 +47,7 @@ vi.mock("@echo-agent/embeddings/config.js", () => ({
 }));
 
 const { handleKnowledgeSupersede } = await import(
-  "@echo-agent/tools/internal/knowledge-supersede.js"
+  "@echo-agent/tools/internal/knowledge.js"
 );
 const { SupersedeError } = await import("@echo-agent/db/repos/knowledge-lifecycle.js");
 

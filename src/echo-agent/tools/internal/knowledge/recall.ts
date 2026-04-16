@@ -18,9 +18,9 @@ import { loadEmbeddingConfig } from "@echo-agent/embeddings/config.js";
 import { clampRecallK } from "@echo-agent/knowledge/policy.js";
 import { rerank, type RecallCandidate } from "@echo-agent/knowledge/ranking.js";
 import { splitInlineAndOverflow } from "@echo-agent/knowledge/recall-payload.js";
-import type { ToolResult } from "../types.js";
-import type { InternalToolContext } from "./types.js";
-import { str, num, bool, ok, fail } from "./types.js";
+import type { ToolResult } from "../../types.js";
+import type { InternalToolContext } from "../types.js";
+import { str, num, bool, ok, fail } from "../types.js";
 import logger from "@utils/logger.js";
 
 export async function handleKnowledgeRecall(

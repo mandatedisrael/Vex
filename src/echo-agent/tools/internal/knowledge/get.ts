@@ -8,9 +8,9 @@
  */
 
 import * as knowledgeRepo from "@echo-agent/db/repos/knowledge.js";
-import type { ToolResult } from "../types.js";
-import type { InternalToolContext } from "./types.js";
-import { num, ok, fail } from "./types.js";
+import type { ToolResult } from "../../types.js";
+import type { InternalToolContext } from "../types.js";
+import { num, ok, fail } from "../types.js";
 
 export async function handleKnowledgeGet(
   params: Record<string, unknown>,

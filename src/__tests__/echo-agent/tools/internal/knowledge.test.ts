@@ -77,20 +77,15 @@ vi.mock("@echo-agent/embeddings/config.js", () => ({
   MAX_EMBEDDING_DIM: 8192,
 }));
 
-// ── Handler imports from new per-handler modules ────────────────
+// ── Handler imports via the barrel public API ───────────────────
 
-const { handleKnowledgeWrite } = await import(
-  "@echo-agent/tools/internal/knowledge-write.js"
-);
-const { handleKnowledgeRecall, handleKnowledgeRecallOverflow } = await import(
-  "@echo-agent/tools/internal/knowledge-recall.js"
-);
-const { handleKnowledgeGet } = await import(
-  "@echo-agent/tools/internal/knowledge-get.js"
-);
-const { handleKnowledgeUpdateStatus } = await import(
-  "@echo-agent/tools/internal/knowledge-update-status.js"
-);
+const {
+  handleKnowledgeWrite,
+  handleKnowledgeRecall,
+  handleKnowledgeRecallOverflow,
+  handleKnowledgeGet,
+  handleKnowledgeUpdateStatus,
+} = await import("@echo-agent/tools/internal/knowledge.js");
 
 import { makeTestContext } from "../_test-context.js";
 
