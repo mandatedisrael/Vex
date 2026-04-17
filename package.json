@@ -27,6 +27,8 @@
     "prepack": "pnpm run build:release",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:all": "pnpm test && pnpm test:integration",
     "mcp": "tsx src/mcp/index.ts",
     "knowledge-export": "tsx src/echo-agent/scripts/knowledge-export.ts",
     "knowledge-import": "tsx src/echo-agent/scripts/knowledge-import.ts",
@@ -51,6 +53,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "^11.14.0",
     "@types/node": "^22.19.15",
     "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.18.0",

@@ -134,8 +134,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   __resetCheckpointCooldownForTests();
   mockGetSession.mockResolvedValue({ id: "session-1", summary: null });
+  // Return one row per inserted spec, preserving episodeKind so the
+  // placeholder-picking logic in executeCheckpoint can find the right episode.
   mockInsertEpisodes.mockImplementation(async (rows: any[]) =>
-    rows.map((_, i) => ({ id: i + 100 })),
+    rows.map((r, i) => ({ id: i + 100, episodeKind: r.episodeKind })),
   );
   mockEmbedDocument.mockResolvedValue({
     embedding: [0.1, 0.2, 0.3, 0.4],
@@ -285,6 +287,59 @@ describe("executeCheckpoint: giant_tool mode", () => {
     const rows = mockInsertEpisodes.mock.calls[0][0];
     const hasToolSummary = rows.some((r: any) => r.episodeKind === "tool_result_summary");
     expect(hasToolSummary).toBe(true);
+  });
+
+  it("places the tool_result_summary episode id in the placeholder — not the first inserted episode", async () => {
+    const bloated = "X".repeat(9_000);
+    mockGetLiveMessagesWithId.mockResolvedValue([
+      msg(50, "user", "go"),
+      msg(51, "assistant", "", {
+        toolCalls: [{ id: "tc-big", command: "fetch", args: {} }],
+      }),
+      msg(52, "tool", bloated, { toolCallId: "tc-big" }),
+    ]);
+
+    // Extractor returns a mixed batch where the tool_result_summary is NOT first.
+    // Episode ids will therefore be 100=decision, 101=fact, 102=tool_result_summary.
+    const provider = makeProvider({
+      summary: "ok",
+      episodes: [
+        {
+          episode_kind: "decision",
+          summary_en: "decide Y",
+          facts: {},
+          decisions: {},
+          open_loops: {},
+          entities: [],
+          tool_outcomes: {},
+        },
+        {
+          episode_kind: "fact",
+          summary_en: "fact Z",
+          facts: {},
+          decisions: {},
+          open_loops: {},
+          entities: [],
+          tool_outcomes: {},
+        },
+        {
+          episode_kind: "tool_result_summary",
+          summary_en: "tool output summary",
+          facts: {},
+          decisions: {},
+          open_loops: {},
+          entities: [],
+          tool_outcomes: {},
+        },
+      ],
+    });
+
+    await executeCheckpoint("session-1", "scope-1", provider as any, {} as any);
+
+    const [, placeholder] = mockForkToolMessageToArchive.mock.calls[0];
+    expect(placeholder).toContain("tool_result_summary#102");
+    expect(placeholder).not.toContain("#100");
+    expect(placeholder).not.toContain("#101");
   });
 });
 

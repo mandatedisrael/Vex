@@ -103,12 +103,28 @@ export async function getLiveMessagesWithId(sessionId: string): Promise<MessageW
   return rows.map((r) => ({ ...mapRowToMessage(r), id: r.id }));
 }
 
-/** Get all messages including archived (for history views). Ordered by created_at + id for deterministic ordering. */
+/**
+ * Get all messages including archived (for history views). Ordered by
+ * `created_at + id` for deterministic ordering.
+ *
+ * When the giant-tool fallback forks a row into archive, the same `id` lives
+ * in BOTH tables: archive holds the original payload, messages holds a short
+ * placeholder. History view wants the canonical payload, so archive wins.
+ * We emit all archive rows, then only those live rows whose `id` is not
+ * already in archive.
+ */
 export async function getAllMessages(sessionId: string): Promise<Message[]> {
   const rows = await query<MessageRow>(
-    `(SELECT id, role, content, tool_call_id, tool_calls, created_at FROM messages WHERE session_id = $1)
+    `SELECT id, role, content, tool_call_id, tool_calls, created_at
+       FROM messages_archive
+      WHERE session_id = $1
      UNION ALL
-     (SELECT id, role, content, tool_call_id, tool_calls, created_at FROM messages_archive WHERE session_id = $1)
+     SELECT id, role, content, tool_call_id, tool_calls, created_at
+       FROM messages m
+      WHERE m.session_id = $1
+        AND NOT EXISTS (
+          SELECT 1 FROM messages_archive a WHERE a.id = m.id
+        )
      ORDER BY created_at ASC, id ASC`,
     [sessionId],
   );

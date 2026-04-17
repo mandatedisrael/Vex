@@ -1,20 +1,31 @@
 /**
- * Unit tests for `selectArchivePrefix` — pure helper, no DB.
+ * Unit tests for `selectArchivePrefix` — pure helper, no DB — and a thin
+ * structural test for `getAllMessages` to guard the giant-tool dedup path.
  *
- * The helper decides where to cut the live-message array for partial archive.
- * The only invariant the caller cares about is that an `assistant.tool_calls`
- * ↔ `role:'tool'` pair never gets split across the cutoff.
+ * The prefix helper decides where to cut the live-message array for partial
+ * archive. The only invariant the caller cares about is that an
+ * `assistant.tool_calls` ↔ `role:'tool'` pair never gets split across the
+ * cutoff.
+ *
+ * `getAllMessages` additionally has to handle the case where the giant-tool
+ * fallback forked a live row into archive under the same id — history view
+ * must prefer the archived full payload over the live placeholder and must
+ * never emit both for the same id.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const mockQuery = vi.fn().mockResolvedValue([]);
 
 vi.mock("@echo-agent/db/client.js", () => ({
   execute: vi.fn(),
-  query: vi.fn().mockResolvedValue([]),
+  query: (...args: unknown[]) => mockQuery(...args),
   queryOne: vi.fn().mockResolvedValue(null),
 }));
 
-const { selectArchivePrefix } = await import("../../../../echo-agent/db/repos/messages.js");
+const { selectArchivePrefix, getAllMessages } = await import(
+  "../../../../echo-agent/db/repos/messages.js"
+);
 
 type M = {
   id: number;
@@ -117,5 +128,47 @@ describe("selectArchivePrefix", () => {
     expect(plan.prefix).toEqual([]);
     expect(plan.tail.map((m) => m.id)).toEqual([1, 2]);
     expect(plan.cutoffMessageId).toBeNull();
+  });
+});
+
+describe("getAllMessages dedup (giant-tool fork guard)", () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+    mockQuery.mockResolvedValue([]);
+  });
+
+  it("issues a SQL statement that prefers archive over live for the same id", async () => {
+    await getAllMessages("session-1");
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    const [sql, params] = mockQuery.mock.calls[0] as [string, unknown[]];
+    expect(params).toEqual(["session-1"]);
+    // Archive side first, live side guarded by NOT EXISTS against archive.
+    // This is what prevents a forked placeholder row from duplicating the
+    // canonical archived payload in history views.
+    expect(sql).toMatch(/FROM messages_archive[\s\S]+UNION ALL[\s\S]+FROM messages\b/);
+    expect(sql).toMatch(/NOT EXISTS[\s\S]+messages_archive/);
+  });
+
+  it("returns archive row payload when live and archive share the same id (fork scenario)", async () => {
+    mockQuery.mockResolvedValueOnce([
+      {
+        id: 42,
+        role: "tool",
+        content: "full archived payload",
+        tool_call_id: "tc-big",
+        tool_calls: null,
+        created_at: "2026-04-01T00:00:00Z",
+        source: "tool",
+        message_type: "tool_result",
+        visibility: "internal",
+        origin_session_id: null,
+        subagent_id: null,
+      },
+    ]);
+
+    const result = await getAllMessages("session-1");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(42);
+    expect(result[0].content).toBe("full archived payload");
   });
 });

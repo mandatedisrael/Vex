@@ -88,8 +88,11 @@ export async function runTurnLoop(
   /**
    * Evaluate the checkpoint trigger against the DB-authoritative token count
    * and run `executeCheckpoint` if we're over the threshold. Returns `true`
-   * when the checkpoint fired so text-response branches can `continue` the
-   * loop instead of returning early.
+   * only when a real compaction happened (prefix or giant_tool) — the caller
+   * uses that to short-circuit normal turn bookkeeping (e.g. mission
+   * `[Engine: continue]` injection). A `noop` outcome (cooldown, empty
+   * session, no compactable content) leaves the loop on its normal path so
+   * the mission protocol stays consistent with any other text turn.
    */
   async function maybeRunCheckpoint(): Promise<boolean> {
     const freshSession = await sessionsRepo.getSession(context.sessionId);
@@ -100,11 +103,17 @@ export async function runTurnLoop(
       context.sessionId, context.memoryScopeKey, provider, config,
     );
 
+    if (result.mode === "noop") {
+      // Don't touch currentSummary (nothing produced), don't reload live
+      // messages (nothing changed), don't skip the caller's follow-up work.
+      return false;
+    }
+
     if (result.summary) {
       currentSummary = result.summary;
     }
 
-    if (context.missionRunId && result.mode !== "noop") {
+    if (context.missionRunId) {
       await missionRunsRepo.setLastCheckpoint(context.missionRunId);
     }
 

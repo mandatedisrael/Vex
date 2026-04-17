@@ -57,7 +57,7 @@ function buildCompactionPrompt(
 - Important data points (balances, prices, positions)
 - Any pending actions or next steps
 
-Drop superseded details. Do not re-output the previous summary verbatim — integrate it. Output plain text, no preamble.
+Drop superseded details. Do not re-output the previous summary verbatim — integrate it. Output plain text, no preamble. Output in English — if the archived conversation uses another language, translate to English; never mirror the source language.
 
 ${previousBlock}Archived prefix:
 ${conversation}`;

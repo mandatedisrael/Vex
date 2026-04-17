@@ -538,6 +538,45 @@ describe("turn-loop", () => {
 
       expect(mockExecuteCheckpoint).not.toHaveBeenCalled();
     });
+
+    it("noop checkpoint: [Engine: continue] fires in SAME iteration, not the next", async () => {
+      // Load-bearing invariant: when maybeRunCheckpoint sees `mode: "noop"`
+      // it must return false so the text branch falls through to the
+      // mission-continue injection — NOT short-circuit with `continue`.
+      // `maxIterations: 1` is deliberate: if continue appears in `order`,
+      // it cannot have come from a later iteration, so it must have fired
+      // in the SAME iteration as the noop checkpoint.
+      const order: string[] = [];
+      mockGetSessionForLoop.mockResolvedValue({ tokenCount: 120_000 });
+      mockExecuteCheckpoint.mockImplementationOnce(async () => {
+        order.push("ckpt");
+        return { mode: "noop" as const, summary: null, episodeIds: [] };
+      });
+      mockAddEngineMessage.mockImplementationOnce(async () => {
+        order.push("continue");
+      });
+
+      const chatCompletion = vi.fn().mockImplementationOnce(async () => {
+        order.push("turn");
+        return {
+          content: "assessing",
+          toolCalls: null,
+          usage: { promptTokens: 120_000, completionTokens: 200, cachedTokens: 0, reasoningTokens: 0 },
+        };
+      });
+      const provider = {
+        chatCompletion,
+        calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD" }),
+      };
+
+      await runTurnLoop(
+        makeContext({ sessionKind: "mission", missionRunId: "run-1" }),
+        [], null, 0, provider as any, makeConfig() as any, [],
+        { ...defaultLoopConfig, maxIterations: 1 },
+      );
+
+      expect(order).toEqual(["turn", "ckpt", "continue"]);
+    });
   });
 
   // ── complete_subagent engine signal ────────────────────────

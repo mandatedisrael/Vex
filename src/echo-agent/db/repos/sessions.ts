@@ -133,13 +133,20 @@ export async function archivePrefix(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // ON CONFLICT (id) DO NOTHING handles the giant-tool fork/copy case:
+    // forkToolMessageToArchive already copied the pre-placeholder payload into
+    // messages_archive under the same id, so when the (now placeholder) row
+    // later ages into a normal prefix and gets moved here, we must NOT collide
+    // with the already-archived full payload. Dropping the placeholder insert
+    // is correct — archive already holds the canonical content.
     await client.query(
       `WITH moved AS (
          DELETE FROM messages
          WHERE session_id = $1 AND id <= $2
          RETURNING *
        )
-       INSERT INTO messages_archive SELECT * FROM moved`,
+       INSERT INTO messages_archive SELECT * FROM moved
+       ON CONFLICT (id) DO NOTHING`,
       [sessionId, cutoffMessageId],
     );
     await client.query(
@@ -163,11 +170,9 @@ export async function archivePrefix(
  *
  * The live row keeps its `id` and `tool_call_id` so `assistant.tool_calls` ↔
  * `role:'tool'` pairing survives. The archive row carries the full payload
- * under the same `id`, so a future chunked-read tool can resolve the pointer.
- *
- * Retry safety: on repeat invocation the archive gets a duplicate row (archive
- * has no PK beyond the LIKE-inherited indexes). That's accepted — archive is
- * append-only by design and readers dedupe by id when needed.
+ * under the same `id`, so a future chunked-read tool can resolve the pointer
+ * and `archivePrefix` can later drop the placeholder row without colliding
+ * (both sides use `ON CONFLICT (id) DO NOTHING` to stay idempotent).
  */
 export async function forkToolMessageToArchive(
   messageId: number,
@@ -177,8 +182,13 @@ export async function forkToolMessageToArchive(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // ON CONFLICT (id) DO NOTHING makes this retry-safe: if a crash between
+    // the archive insert and the live UPDATE retries the whole fork, we'd
+    // otherwise trip the unique index `LIKE INCLUDING INDEXES` copied from
+    // `messages.id`'s PK.
     await client.query(
-      "INSERT INTO messages_archive SELECT * FROM messages WHERE id = $1",
+      `INSERT INTO messages_archive SELECT * FROM messages WHERE id = $1
+       ON CONFLICT (id) DO NOTHING`,
       [messageId],
     );
     await client.query(

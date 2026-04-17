@@ -115,19 +115,26 @@ export async function executeCheckpoint(
   }
 
   // 6. Embed + insert episodes.
-  const episodeIds = await embedAndInsertEpisodes({
+  const insertedEpisodes = await embedAndInsertEpisodes({
     extracted,
     sessionId,
     memoryScopeKey,
     sourceStartMessageId,
     sourceEndMessageId,
   });
+  const episodeIds = insertedEpisodes.map((r) => r.id);
 
   // 7. Apply the archive plan.
   if (plan.mode === "prefix") {
     await sessionsRepo.archivePrefix(sessionId, plan.cutoffMessageId, plan.tail.length);
   } else {
-    const placeholderEpisodeId = episodeIds[0];
+    // Use the *tool_result_summary* episode's id (not the first inserted, which
+    // could be a `decision` / `fact` when the extractor returns a mixed batch).
+    // If embedding failed for every tool_result_summary, fall through to a
+    // placeholder without an episode reference — better than a misleading one.
+    const placeholderEpisodeId = insertedEpisodes.find(
+      (r) => r.episodeKind === "tool_result_summary",
+    )?.id;
     const placeholder = buildGiantToolPlaceholder(plan.bloatedMessageId, placeholderEpisodeId);
     await sessionsRepo.forkToolMessageToArchive(plan.bloatedMessageId, placeholder);
   }
@@ -137,13 +144,18 @@ export async function executeCheckpoint(
 
 // ── Internals ──────────────────────────────────────────────────
 
+interface InsertedEpisodeRef {
+  id: number;
+  episodeKind: ExtractedEpisode["episodeKind"];
+}
+
 async function embedAndInsertEpisodes(args: {
   extracted: ExtractedEpisode[];
   sessionId: string;
   memoryScopeKey: string;
   sourceStartMessageId: number | null;
   sourceEndMessageId: number | null;
-}): Promise<number[]> {
+}): Promise<InsertedEpisodeRef[]> {
   if (args.extracted.length === 0) return [];
 
   const rows: NewEpisode[] = [];
@@ -181,7 +193,7 @@ async function embedAndInsertEpisodes(args: {
 
   try {
     const inserted = await episodesRepo.insertEpisodes(rows);
-    return inserted.map((r) => r.id);
+    return inserted.map((r) => ({ id: r.id, episodeKind: r.episodeKind }));
   } catch (err) {
     logger.warn("checkpoint.insert.failed", {
       error: err instanceof Error ? err.message : String(err),

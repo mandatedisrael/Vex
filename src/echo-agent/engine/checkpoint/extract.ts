@@ -126,13 +126,15 @@ Output a single JSON array (max 20 items). No prose, no markdown fences. Each it
 
 {
   "episode_kind": "decision" | "fact" | "preference" | "open_loop" | "tool_result_summary" | "lesson",
-  "summary_en": "English 1-2 sentence summary (required, <= 2000 chars)",
-  "facts": { ...arbitrary structured fields... },
-  "decisions": { ... },
-  "open_loops": { ... },
-  "entities": ["canonical names / ids that this episode is about"],
-  "tool_outcomes": { "tool_name": "outcome summary" }
+  "summary_en": "1-2 sentence summary in English (required, <= 2000 chars)",
+  "facts": { ...arbitrary structured fields, all text values in English... },
+  "decisions": { ...all text values in English... },
+  "open_loops": { ...all text values in English... },
+  "entities": ["canonical names / ids in English"],
+  "tool_outcomes": { "tool_name": "outcome summary in English" }
 }
+
+All text values — in summary_en, facts, decisions, open_loops, tool_outcomes, and entities — MUST be in English, regardless of the source conversation language. If a fact originates in another language, translate it to English; never mirror the source language in the output.
 
 Only emit episodes that carry value across sessions. Skip chitchat, repeated instructions, and ephemeral state. Prefer concise, self-contained facts over paragraphs. If nothing is worth saving, output [].
 

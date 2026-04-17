@@ -15,6 +15,11 @@ export default defineConfig({
       "src/__tests__/**/*.test.ts",
       "src/tools/solana-ecosystem/jupiter/__tests__/**/*.test.ts",
     ],
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "src/__tests__/integration/**",
+    ],
     globals: false,
     environment: "node",
     setupFiles: ["src/__tests__/setup.ts"],
