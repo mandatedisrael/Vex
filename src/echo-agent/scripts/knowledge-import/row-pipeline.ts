@@ -3,7 +3,15 @@
  *
  * Processes a single JSONL row: audit/lifecycle validation → recompute
  * content_hash → dedup via findByContentHash → resolve predecessor FK →
- * embed → insertEntry.
+ * embed → insertEntry (under maintenance-lease SHARE lock).
+ *
+ * The INSERT runs under `withLeaseSharedLock` so the importer honours the
+ * same authoritative write-gate as `knowledge_write` and promotion. A
+ * concurrent reembed flips `maintenance_leases.active = TRUE`, which makes
+ * this call fail fast with `MaintenanceActiveError` — the orchestrator
+ * distinguishes that case in its log for operator clarity. Lookup/lineage
+ * reads (`findByContentHash`) stay outside the lease: they are pure reads
+ * and blocking them would add latency for no correctness benefit.
  *
  * Throws on validation or downstream failure. The orchestrator catches and
  * increments report.failed; returning "skipped_duplicate" or "inserted" is
@@ -14,7 +22,9 @@
  * async transformation.
  */
 
+import { getPool } from "@echo-agent/db/client.js";
 import { findByContentHash, insertEntry } from "@echo-agent/db/repos/knowledge.js";
+import { withLeaseSharedLock } from "@echo-agent/db/repos/maintenance-lease.js";
 import { embedDocument } from "@echo-agent/embeddings/client.js";
 import type { EmbeddingConfig } from "@echo-agent/embeddings/config.js";
 import { computeContentHash } from "@echo-agent/knowledge/content-hash.js";
@@ -98,40 +108,49 @@ export async function processRow(
 
   const { embedding, providerModel } = await embedDocument(row.title, row.summary, config);
 
-  const { inserted } = await insertEntry({
-    kind: row.kind,
-    title: row.title,
-    summary: row.summary,
-    contentMd: row.content_md,
-    tags: isStringArray(row.tags) ? row.tags : [],
-    sourceRefs:
-      row.source_refs && typeof row.source_refs === "object" && !Array.isArray(row.source_refs)
-        ? (row.source_refs as Record<string, unknown>)
-        : {},
-    confidence: typeof row.confidence === "number" ? row.confidence : null,
-    pinned: row.pinned === true,
-    validUntil,
-    contentHash,
-    // Honest provenance: stamp the model the provider actually reported
-    // for THIS row, NOT the requested config.model.
-    embeddingModel: providerModel,
-    embeddingDim: embedding.length,
-    embedding,
-    // ── audit roundtrip
-    status,
-    validFrom,
-    createdAt,
-    updatedAt,
-    // ── lifecycle roundtrip (v2). On v1 input these are all null.
-    supersedesId,
-    statusReason,
-    changeSummary,
-    whatFailed,
-    // ── provenance roundtrip (v2). Undefined → insertEntry defaults apply
-    // ('echo_agent' / NULL); explicit values preserve the original writer.
-    sourceSurface,
-    sourceSession: sourceSession ?? undefined,
-  });
+  // INSERT runs under the maintenance-lease SHARE lock so a concurrent
+  // reembed (FOR UPDATE on the same singleton row) cannot flip the gate
+  // mid-import. `MaintenanceActiveError` propagates up — the orchestrator
+  // logs it under a dedicated event for operator clarity.
+  const { inserted } = await withLeaseSharedLock(getPool(), (tx) =>
+    insertEntry(
+      {
+        kind: row.kind,
+        title: row.title,
+        summary: row.summary,
+        contentMd: row.content_md,
+        tags: isStringArray(row.tags) ? row.tags : [],
+        sourceRefs:
+          row.source_refs && typeof row.source_refs === "object" && !Array.isArray(row.source_refs)
+            ? (row.source_refs as Record<string, unknown>)
+            : {},
+        confidence: typeof row.confidence === "number" ? row.confidence : null,
+        pinned: row.pinned === true,
+        validUntil,
+        contentHash,
+        // Honest provenance: stamp the model the provider actually reported
+        // for THIS row, NOT the requested config.model.
+        embeddingModel: providerModel,
+        embeddingDim: embedding.length,
+        embedding,
+        // ── audit roundtrip
+        status,
+        validFrom,
+        createdAt,
+        updatedAt,
+        // ── lifecycle roundtrip (v2). On v1 input these are all null.
+        supersedesId,
+        statusReason,
+        changeSummary,
+        whatFailed,
+        // ── provenance roundtrip (v2). Undefined → insertEntry defaults apply
+        // ('echo_agent' / NULL); explicit values preserve the original writer.
+        sourceSurface,
+        sourceSession: sourceSession ?? undefined,
+      },
+      tx,
+    ),
+  );
 
   if (inserted) return "inserted";
   // Race condition: someone else wrote the same hash between our

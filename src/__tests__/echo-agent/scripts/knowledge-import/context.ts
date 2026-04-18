@@ -11,12 +11,18 @@ import type { Mock } from "vitest";
 import type { importKnowledge } from "@echo-agent/scripts/knowledge-import.js";
 import type { computeContentHash } from "@echo-agent/knowledge/content-hash.js";
 
+export interface MaintenanceActiveErrorMockCtor {
+  new (ownerId: string): Error & { ownerId: string; code: "MAINTENANCE_ACTIVE" };
+}
+
 export interface SuiteCtx {
   importKnowledge: typeof importKnowledge;
   computeContentHash: typeof computeContentHash;
   mockInsertEntry: Mock;
   mockFindByContentHash: Mock;
   mockEmbedDocument: Mock;
+  mockWithLeaseSharedLock: Mock;
+  MaintenanceActiveErrorMock: MaintenanceActiveErrorMockCtor;
   makeManifestLine: () => string;
   makeRowLine: (overrides?: Record<string, unknown>) => string;
   makeEmbedding: () => number[];

@@ -357,7 +357,7 @@ describe("runPromotionForSession", () => {
     expect(report.inserted).toBe(0);
   });
 
-  it("maintenance lease active → skip with embedding_unavailable, pipeline continues", async () => {
+  it("maintenance lease active → skip with maintenance_active, pipeline continues", async () => {
     mockListPromotable.mockResolvedValueOnce([makeCandidate(), makeCandidate({ id: 99 })]);
     mockCountSimilar.mockResolvedValue(3);
     mockGetMemoryLanguageCode.mockResolvedValue("en");
@@ -368,7 +368,10 @@ describe("runPromotionForSession", () => {
     });
     const report = await runPromotionForSession("session-1", {} as never, {} as never);
     // First candidate hits the lease error; pipeline continues to second.
-    expect(report.skipped.embedding_unavailable).toBe(1);
+    // Reembed contention is tracked separately from embed-sidecar outages
+    // so ops can tell them apart in `report.skipped`.
+    expect(report.skipped.maintenance_active).toBe(1);
+    expect(report.skipped.embedding_unavailable).toBeUndefined();
     expect(report.inserted).toBe(1);
   });
 });

@@ -15,6 +15,7 @@ import { shortCircuitSuite } from "./knowledge-import/short-circuit-suite.js";
 import { v2LifecycleSuite } from "./knowledge-import/v2-lifecycle-suite.js";
 import { v2ProvenanceSuite } from "./knowledge-import/v2-provenance-suite.js";
 import { countersSuite } from "./knowledge-import/counters-suite.js";
+import { leaseSuite } from "./knowledge-import/lease-suite.js";
 
 const TEST_DIM = 768;
 const TEST_PROVIDER_MODEL = "ai/embeddinggemma:300M-Q8_0";
@@ -25,6 +26,17 @@ const mockRunMigrations = vi.fn().mockResolvedValue(undefined);
 const mockClosePool = vi.fn().mockResolvedValue(undefined);
 const mockEmbedDocument = vi.fn();
 const mockLoadEmbeddingConfig = vi.fn();
+const mockWithLeaseSharedLock = vi.fn();
+
+class MaintenanceActiveErrorMock extends Error {
+  readonly code = "MAINTENANCE_ACTIVE" as const;
+  readonly ownerId: string;
+  constructor(ownerId: string) {
+    super(`maintenance active: ${ownerId}`);
+    this.name = "MaintenanceActiveError";
+    this.ownerId = ownerId;
+  }
+}
 
 vi.mock("@echo-agent/db/repos/knowledge.js", () => ({
   insertEntry: (...args: unknown[]) => mockInsertEntry(...args),
@@ -45,10 +57,15 @@ vi.mock("@echo-agent/scripts/_preflight.js", () => ({
 
 vi.mock("@echo-agent/db/client.js", () => ({
   closePool: () => mockClosePool(),
-  getPool: vi.fn(),
+  getPool: () => ({}),
   query: vi.fn(),
   queryOne: vi.fn(),
   execute: vi.fn(),
+}));
+
+vi.mock("@echo-agent/db/repos/maintenance-lease.js", () => ({
+  MaintenanceActiveError: MaintenanceActiveErrorMock,
+  withLeaseSharedLock: (...args: unknown[]) => mockWithLeaseSharedLock(...args),
 }));
 
 vi.mock("@echo-agent/embeddings/client.js", () => ({
@@ -139,6 +156,12 @@ beforeEach(() => {
     entry: { id: 1 },
     inserted: true,
   });
+  // Default: lease helper passes through to fn with a fake tx. The lease
+  // suite overrides this to simulate an active reembed (MaintenanceActiveError).
+  mockWithLeaseSharedLock.mockImplementation(
+    async (_pool: unknown, fn: (tx: unknown) => Promise<unknown>) =>
+      fn({ query: vi.fn() }),
+  );
 });
 
 describe("importKnowledge", () => {
@@ -148,6 +171,8 @@ describe("importKnowledge", () => {
     mockInsertEntry,
     mockFindByContentHash,
     mockEmbedDocument,
+    mockWithLeaseSharedLock,
+    MaintenanceActiveErrorMock,
     makeManifestLine,
     makeRowLine,
     makeEmbedding,
@@ -162,4 +187,5 @@ describe("importKnowledge", () => {
   v2LifecycleSuite(ctx);
   v2ProvenanceSuite(ctx);
   countersSuite(ctx);
+  leaseSuite(ctx);
 });

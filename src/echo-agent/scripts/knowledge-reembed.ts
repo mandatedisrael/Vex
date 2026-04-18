@@ -20,10 +20,8 @@
  *     UPDATE maintenance_leases SET active = FALSE WHERE id = 1;
  *   TTL-based stale-owner recovery is deferred to v2 per plan v5.
  *
- *   `runtime_state.active` is no longer a gate — kept as an observability
- *   signal for UI / CLI status but NOT read here. Soft-guard mode is
- *   available via `--force-legacy-soft-guard` for the grace period
- *   (removed once the rollout stabilises).
+ *   `runtime_state.active` is NOT a gate. It is retained as a pure
+ *   observability signal for UI / CLI status and is not read here.
  *
  * Usage:
  *   pnpm exec tsx src/echo-agent/scripts/knowledge-reembed.ts [--force] [--dry-run]
@@ -208,10 +206,16 @@ function parseArgs(argv: readonly string[]): ReembedArgs {
           "Usage: knowledge-reembed [--force] [--dry-run]\n\n" +
           "  --force     re-embed ALL rows, not just rows from a different model\n" +
           "  --dry-run   count what would be re-embedded; do not call provider or DB\n\n" +
-          "OPERATOR REQUIREMENT: stop the FULL stack of writers before running this\n" +
-          "(loop engine, MCP server, internal tools, subagents, CLI). The script's\n" +
-          "runtime_state.active check is a SOFT guard, not a write lock. A race with\n" +
-          "any writer during reembed can corrupt rows silently.\n\n" +
+          "WRITE GATE: this script acquires the authoritative lease on\n" +
+          "maintenance_leases for the full duration of the reembed loop. Every\n" +
+          "normal writer (knowledge_write, supersede, promotion inserts, import)\n" +
+          "runs under withLeaseSharedLock and fails fast with MaintenanceActiveError\n" +
+          "while the lease is held — operators no longer need to stop the writer\n" +
+          "stack by hand. If a prior reembed crashed and left the lease active,\n" +
+          "clear it manually:\n" +
+          "  psql $ECHO_AGENT_DB_URL -c 'UPDATE maintenance_leases SET active = FALSE WHERE id = 1;'\n\n" +
+          "runtime_state.active is no longer a gate — it remains as an\n" +
+          "observability signal only (UI / CLI status).\n\n" +
           "DIFFERENT-DIM SWAP: this script refuses to run if any row has a different\n" +
           "embedding_dim from the current EMBEDDING_DIM. Use the export → wipe →\n" +
           "import flow for dim changes (see --help on knowledge-export / -import).\n",

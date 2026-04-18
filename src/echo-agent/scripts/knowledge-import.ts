@@ -24,6 +24,7 @@ import type { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { runMigrations } from "@echo-agent/db/migrate.js";
 import { closePool } from "@echo-agent/db/client.js";
+import { MaintenanceActiveError } from "@echo-agent/db/repos/maintenance-lease.js";
 import { loadEmbeddingConfig } from "@echo-agent/embeddings/config.js";
 import { assertSchemaUpToDate } from "./_preflight.js";
 import {
@@ -129,8 +130,20 @@ export async function importKnowledge(source: AsyncIterable<string>): Promise<Im
         report.skipped_duplicate++;
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.error("knowledge_import.row_failed", { lineNumber, error: msg, manifestVersion });
+      if (err instanceof MaintenanceActiveError) {
+        // Concurrent reembed holds the authoritative write-gate. The row is
+        // still counted as failed (import cannot proceed mid-maintenance),
+        // but the dedicated event lets the operator tell this apart from a
+        // genuine row-level error.
+        logger.error("knowledge_import.row_maintenance_blocked", {
+          lineNumber,
+          ownerId: err.ownerId,
+          manifestVersion,
+        });
+      } else {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error("knowledge_import.row_failed", { lineNumber, error: msg, manifestVersion });
+      }
       report.failed++;
     }
   }

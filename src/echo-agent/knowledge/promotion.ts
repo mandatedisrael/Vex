@@ -86,7 +86,8 @@ export type PromotionOutcome =
         | "language_unknown"
         | "translation_failed"
         | "invariant_violated"
-        | "embedding_unavailable";
+        | "embedding_unavailable"
+        | "maintenance_active";
     };
 
 export interface PromotionRunReport {
@@ -321,12 +322,14 @@ async function promoteEpisode(
     if (err instanceof MaintenanceActiveError) {
       // Maintenance running — defer; don't poison the pipeline with a
       // partial promotion batch. Skip this candidate; next checkpoint's
-      // pipeline will try again.
+      // pipeline will try again. Reported under a dedicated reason so
+      // operators can distinguish reembed contention from a real
+      // embed-sidecar outage in `report.skipped`.
       logger.warn("promotion.maintenance_active", {
         episodeId: candidate.id,
         ownerId: err.ownerId,
       });
-      return { code: "skipped", reason: "embedding_unavailable" };
+      return { code: "skipped", reason: "maintenance_active" };
     }
     throw err;
   }
