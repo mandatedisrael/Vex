@@ -20,6 +20,11 @@
  * next (write a fresh entry, invalidate, skip).
  */
 
+import { getPool } from "@echo-agent/db/client.js";
+import {
+  MaintenanceActiveError,
+  withLeaseSharedLock,
+} from "@echo-agent/db/repos/maintenance-lease.js";
 import { supersedeEntry, SupersedeError } from "@echo-agent/db/repos/knowledge-lifecycle.js";
 import { embedDocument } from "@echo-agent/embeddings/client.js";
 import { loadEmbeddingConfig } from "@echo-agent/embeddings/config.js";
@@ -95,28 +100,41 @@ export async function handleKnowledgeSupersede(
   }
 
   // ── Transaction ───────────────────────────────────────────────
+  //
+  // Both the supersede validations (predecessor SELECT FOR UPDATE + business
+  // checks) and the write (successor INSERT + predecessor UPDATE) run inside
+  // the maintenance-lease SHARE lock. `withLeaseSharedLock` opens the tx,
+  // grabs the SHARE lock on `maintenance_leases(id=1)`, then runs the
+  // supersede statements against the same tx. Reembed's FOR UPDATE on the
+  // same row blocks behind our SHARE lock, so the lineage flip and the gate
+  // flip cannot interleave.
   try {
-    const { successor, predecessor } = await supersedeEntry({
-      previousId,
-      kind,
-      title,
-      summary,
-      contentMd,
-      tags,
-      sourceRefs,
-      confidence,
-      pinned,
-      validUntil,
-      contentHash,
-      embeddingModel: providerModel,
-      embeddingDim: embedding.length,
-      embedding,
-      sourceSurface: context.sourceSurface,
-      sourceSession: context.sourceSession,
-      reason,
-      changeSummary,
-      whatFailed,
-    });
+    const { successor, predecessor } = await withLeaseSharedLock(getPool(), (tx) =>
+      supersedeEntry(
+        {
+          previousId,
+          kind,
+          title,
+          summary,
+          contentMd,
+          tags,
+          sourceRefs,
+          confidence,
+          pinned,
+          validUntil,
+          contentHash,
+          embeddingModel: providerModel,
+          embeddingDim: embedding.length,
+          embedding,
+          sourceSurface: context.sourceSurface,
+          sourceSession: context.sourceSession,
+          reason,
+          changeSummary,
+          whatFailed,
+        },
+        tx,
+      ),
+    );
 
     logger.info("knowledge.supersede.ok", {
       predecessorId: predecessor.id,
@@ -141,6 +159,12 @@ export async function handleKnowledgeSupersede(
         details: err.details,
       });
       return fail(`knowledge_supersede rejected (${err.code}): ${err.message}`);
+    }
+    if (err instanceof MaintenanceActiveError) {
+      logger.warn("knowledge.supersede.maintenance_active", { ownerId: err.ownerId });
+      return fail(
+        `knowledge_supersede blocked — maintenance active (reembed running, owner "${err.ownerId}"). Retry after the operator finishes.`,
+      );
     }
     const msg = err instanceof Error ? err.message : String(err);
     logger.error("knowledge.supersede.failed", { error: msg });

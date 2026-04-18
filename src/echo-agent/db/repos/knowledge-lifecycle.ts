@@ -23,7 +23,7 @@
  * LLM-facing messages without string-matching pg error text.
  */
 
-import pg from "pg";
+import pg, { type PoolClient } from "pg";
 import { getPool } from "../client.js";
 import type { KnowledgeEntry, InsertEntryInput } from "./knowledge.js";
 import type { KnowledgeStatus } from "@echo-agent/knowledge/policy.js";
@@ -142,18 +142,28 @@ function vectorLiteral(v: readonly number[]): string {
 /**
  * Atomically replace an active predecessor with a new successor entry.
  *
- * Sequence inside BEGIN/COMMIT:
+ * Sequence inside BEGIN/COMMIT (own-tx path) OR inside the caller's tx
+ * (external-tx path, PR4 Fase I.b+III — `withLeaseSharedLock` hands us a
+ * `PoolClient` that already holds the maintenance-lease SHARE lock, and
+ * we just layer the supersede logic on top without nesting transactions):
  *   1. SELECT predecessor FOR UPDATE → serializes concurrent supersedes on same id.
  *   2. Validate: exists, status=active, no existing successor, content differs,
  *      and no unrelated row has same content_hash.
  *   3. INSERT successor with supersedes_id + change_summary + what_failed.
  *   4. UPDATE predecessor: status='superseded', status_reason=reason.
- *   5. COMMIT.
+ *   5. COMMIT (own-tx path only).
  *
  * ROLLBACK on any validation or DB error. Throws `SupersedeError` for business
  * rejections (stable `code`); rethrows unexpected pg errors as-is.
+ *
+ * When `client` is passed, we DO NOT issue BEGIN/COMMIT/ROLLBACK — the caller
+ * owns the transaction boundary. We still emit `SupersedeError` on business
+ * rejections; rolling back is the caller's responsibility in that mode.
  */
-export async function supersedeEntry(input: SupersedeInput): Promise<SupersedeResult> {
+export async function supersedeEntry(
+  input: SupersedeInput,
+  client?: PoolClient,
+): Promise<SupersedeResult> {
   if (input.embedding.length !== input.embeddingDim) {
     throw new Error(
       `supersedeEntry: embedding length ${input.embedding.length} does not match embeddingDim ${input.embeddingDim} ` +
@@ -168,13 +178,37 @@ export async function supersedeEntry(input: SupersedeInput): Promise<SupersedeRe
     );
   }
 
-  const pool = getPool();
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
+  if (client) {
+    // Caller owns the transaction (e.g. via `withLeaseSharedLock`). We run
+    // the statements in-place; any throw propagates to the caller who is
+    // responsible for the ROLLBACK.
+    return runSupersedeStatements(client, input);
+  }
 
+  const pool = getPool();
+  const own = await pool.connect();
+  try {
+    await own.query("BEGIN");
+    const result = await runSupersedeStatements(own, input);
+    await own.query("COMMIT");
+    return result;
+  } catch (err) {
+    await own.query("ROLLBACK").catch(() => {
+      // ROLLBACK failures are non-actionable; the original error is what matters.
+    });
+    throw err;
+  } finally {
+    own.release();
+  }
+}
+
+async function runSupersedeStatements(
+  tx: PoolClient,
+  input: SupersedeInput,
+): Promise<SupersedeResult> {
+  try {
     // 1. Lock the predecessor row. Concurrent supersedes on the same id block here.
-    const predRes = await client.query<KnowledgeRowShape>(
+    const predRes = await tx.query<KnowledgeRowShape>(
       "SELECT * FROM knowledge_entries WHERE id = $1 FOR UPDATE",
       [input.previousId],
     );
@@ -190,7 +224,7 @@ export async function supersedeEntry(input: SupersedeInput): Promise<SupersedeRe
       // Distinguish "already superseded" from "invalidated/archived" for a more
       // actionable error. If superseded, surface the successor id via reverse lookup.
       if (predRow.status === "superseded") {
-        const succRes = await client.query<{ id: number }>(
+        const succRes = await tx.query<{ id: number }>(
           "SELECT id FROM knowledge_entries WHERE supersedes_id = $1",
           [input.previousId],
         );
@@ -223,7 +257,7 @@ export async function supersedeEntry(input: SupersedeInput): Promise<SupersedeRe
 
     // 2b. Collision check against any OTHER row. content_hash is UNIQUE globally;
     // if the "new" text already exists elsewhere we must not try to INSERT another.
-    const collisionRes = await client.query<{ id: number; status: string }>(
+    const collisionRes = await tx.query<{ id: number; status: string }>(
       "SELECT id, status FROM knowledge_entries WHERE content_hash = $1",
       [input.contentHash],
     );
@@ -241,7 +275,7 @@ export async function supersedeEntry(input: SupersedeInput): Promise<SupersedeRe
     // The FOR UPDATE lock + "status=active" check should make this unreachable
     // in practice, but the partial unique index would fire later regardless —
     // surface it as a clean error instead of a pg constraint trace.
-    const existingSuccRes = await client.query<{ id: number }>(
+    const existingSuccRes = await tx.query<{ id: number }>(
       "SELECT id FROM knowledge_entries WHERE supersedes_id = $1",
       [input.previousId],
     );
@@ -255,7 +289,7 @@ export async function supersedeEntry(input: SupersedeInput): Promise<SupersedeRe
     }
 
     // 3. INSERT successor.
-    const successorRes = await client.query<KnowledgeRowShape>(
+    const successorRes = await tx.query<KnowledgeRowShape>(
       `INSERT INTO knowledge_entries (
          kind, title, summary, content_md, tags, source_refs,
          confidence, status, pinned, valid_from, valid_until,
@@ -298,7 +332,7 @@ export async function supersedeEntry(input: SupersedeInput): Promise<SupersedeRe
     if (!successorRow) throw new Error("supersedeEntry: INSERT returned no row");
 
     // 4. UPDATE predecessor.
-    const predUpdateRes = await client.query<KnowledgeRowShape>(
+    const predUpdateRes = await tx.query<KnowledgeRowShape>(
       `UPDATE knowledge_entries
        SET status = 'superseded',
            status_reason = $1,
@@ -310,15 +344,11 @@ export async function supersedeEntry(input: SupersedeInput): Promise<SupersedeRe
     const updatedPredRow = predUpdateRes.rows[0];
     if (!updatedPredRow) throw new Error("supersedeEntry: predecessor UPDATE returned no row");
 
-    await client.query("COMMIT");
     return {
       successor: mapRowLocal(successorRow),
       predecessor: mapRowLocal(updatedPredRow),
     };
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => {
-      // ROLLBACK failures are non-actionable; the original error is what matters.
-    });
     // Race-lost UNIQUE violations: discriminate by constraint name rather than
     // assuming every 23505 is the supersede lineage. knowledge_entries has two
     // UNIQUE indexes — idx_ke_supersedes_id (partial, enforces single-successor
@@ -326,6 +356,11 @@ export async function supersedeEntry(input: SupersedeInput): Promise<SupersedeRe
     // pre-checks should handle both, but a concurrent writer can still slip in
     // between our SELECTs and the INSERT; surface the right error so the caller
     // doesn't get told "already superseded" when it's really a content collision.
+    //
+    // ROLLBACK is handled by the outer caller:
+    //  - own-tx path: `supersedeEntry` catches our throw and rolls back.
+    //  - external-tx path: the caller that passed `tx` in (e.g.
+    //    `withLeaseSharedLock`) is responsible for the rollback.
     if (err instanceof pg.DatabaseError && err.code === "23505") {
       const constraint = err.constraint ?? "";
       if (constraint === "idx_ke_supersedes_id") {
@@ -348,7 +383,5 @@ export async function supersedeEntry(input: SupersedeInput): Promise<SupersedeRe
       // caller can't act on a false diagnosis. Rethrow the original pg error.
     }
     throw err;
-  } finally {
-    client.release();
   }
 }

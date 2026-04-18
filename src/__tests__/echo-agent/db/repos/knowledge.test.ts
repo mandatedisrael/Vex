@@ -23,10 +23,21 @@ const mockExecute = vi.fn().mockResolvedValue(0);
 const mockQueryOne = vi.fn().mockResolvedValue(null);
 const mockQuery = vi.fn().mockResolvedValue([]);
 
+// PR4 Fase I.a: crud.ts and recall.ts use `getPool()` + `queryOneWith` /
+// `queryWith` / `executeWith` — keep the legacy `query/queryOne/execute`
+// passthroughs so existing tests continue to work, and mock the new helpers
+// to delegate to the same mocks so tests don't need to rewrite their
+// expectations.
+const fakePool = { connect: async () => ({ query: vi.fn(), release: vi.fn() }) };
+
 vi.mock("@echo-agent/db/client.js", () => ({
+  getPool: () => fakePool,
   execute: (...args: unknown[]) => mockExecute(...args),
   queryOne: (...args: unknown[]) => mockQueryOne(...args),
   query: (...args: unknown[]) => mockQuery(...args),
+  executeWith: (_exec: unknown, ...args: unknown[]) => mockExecute(...args),
+  queryOneWith: (_exec: unknown, ...args: unknown[]) => mockQueryOne(...args),
+  queryWith: (_exec: unknown, ...args: unknown[]) => mockQuery(...args),
 }));
 
 const {

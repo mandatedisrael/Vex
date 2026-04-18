@@ -35,6 +35,8 @@ import { executeTurn, saveAssistantMessage, type SingleTurnResult } from "./turn
 import type { ParsedToolCall } from "@echo-agent/inference/types.js";
 import { evaluateRuntimeStopConditions, type StopConditionContext } from "./stop-conditions.js";
 import { shouldCheckpoint, executeCheckpoint } from "./checkpoint.js";
+import { runPromotionForSession } from "@echo-agent/knowledge/promotion.js";
+import logger from "@utils/logger.js";
 import { dispatchTool } from "@echo-agent/tools/dispatcher.js";
 import type { InternalToolContext } from "@echo-agent/tools/internal/types.js";
 import * as messagesRepo from "@echo-agent/db/repos/messages.js";
@@ -120,6 +122,20 @@ export async function runTurnLoop(
     liveMessages.length = 0;
     const freshMessages = await messagesRepo.getLiveMessages(context.sessionId);
     liveMessages.push(...freshMessages);
+
+    // Post-checkpoint promotion hook (PR4 Fase IV). Runs AFTER the
+    // checkpoint tx has committed so a promotion failure never rolls back
+    // the session memory we just persisted. Any error is swallowed to
+    // `logger.warn` — promotion is always best-effort.
+    try {
+      await runPromotionForSession(context.sessionId, provider, config);
+    } catch (err) {
+      logger.warn("turn_loop.promotion.failed", {
+        sessionId: context.sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     return true;
   }
 

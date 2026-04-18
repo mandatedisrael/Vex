@@ -136,6 +136,12 @@ export interface InsertEntryInput {
   statusReason?: string | null;
   changeSummary?: string | null;
   whatFailed?: string | null;
+  // ── Promotion provenance (PR4 Fase IV, migration 010). All three are
+  // populated by the promotion pipeline; left undefined for entries written
+  // via knowledge_write / knowledge_supersede.
+  sourceEpisodeId?: number | null;
+  sourceEpisodeHash?: string | null;
+  promotionVersion?: number | null;
 }
 
 export interface InsertEntryResult {

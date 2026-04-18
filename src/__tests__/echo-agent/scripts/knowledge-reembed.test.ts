@@ -2,29 +2,50 @@
  * Tests for `reembedKnowledge` — the programmatic entry point of
  * src/echo-agent/scripts/knowledge-reembed.ts.
  *
- * Coverage focus (must-fixes from the plan):
- *   - pre-check 1: refuses to run when runtime_state.active = TRUE
- *   - pre-check 2: refuses to run on dim mismatch (must use export-wipe-import)
+ * Coverage focus (updated for PR4 Fase III maintenance lease):
+ *   - pre-check: refuses to run on dim mismatch (must use export-wipe-import)
+ *   - maintenance lease acquired before the loop starts
+ *   - refuses to run when lease held by another owner (`MaintenanceActiveError`)
+ *   - lease is released in `finally` even when the loop throws
  *   - same-dim happy path: streams rows whose embedding_model differs,
  *     re-embeds each, calls updateEmbedding
  *   - --force re-embeds matching rows too
- *   - --dry-run reports planned count without calling provider/DB
+ *   - --dry-run reports planned count without calling provider, DB, or lease
  *   - per-row failure increments `failed`, continues to the next row
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const TEST_DIM = 768;
-const TEST_PROVIDER_MODEL = "ai/embeddinggemma:300M-Q8_0";
 
 const mockRunMigrations = vi.fn().mockResolvedValue(undefined);
 const mockClosePool = vi.fn().mockResolvedValue(undefined);
-const mockIsRuntimeActive = vi.fn();
 const mockFindRowsWithDimNotMatching = vi.fn();
 const mockStreamRowsForReembed = vi.fn();
 const mockUpdateEmbedding = vi.fn();
 const mockEmbedDocument = vi.fn();
 const mockLoadEmbeddingConfig = vi.fn();
+
+// Lease module: acquire / release called by reembed under the real contract
+// (Fase III). We track calls so tests can assert acquire runs before the
+// stream loop and release runs after — including when the loop throws.
+const mockAcquireLease = vi.fn();
+const mockReleaseLease = vi.fn();
+
+// ── Class mock for MaintenanceActiveError ────────────────────────────
+class MaintenanceActiveErrorMock extends Error {
+  readonly code = "MAINTENANCE_ACTIVE" as const;
+  readonly ownerId: string;
+  constructor(ownerId: string) {
+    super(`maintenance active — lease held by "${ownerId}"`);
+    this.name = "MaintenanceActiveError";
+    this.ownerId = ownerId;
+  }
+}
+
+// ── Pool mock — reembed calls getPool().connect() twice (acquire + release)
+const mockLeaseClientRelease = vi.fn();
+const mockPoolConnect = vi.fn();
 
 vi.mock("@echo-agent/db/migrate.js", () => ({
   runMigrations: () => mockRunMigrations(),
@@ -32,17 +53,27 @@ vi.mock("@echo-agent/db/migrate.js", () => ({
 
 vi.mock("@echo-agent/db/client.js", () => ({
   closePool: () => mockClosePool(),
-  getPool: vi.fn(),
+  getPool: () => ({ connect: () => mockPoolConnect() }),
   query: vi.fn(),
   queryOne: vi.fn(),
   execute: vi.fn(),
 }));
 
+vi.mock("@echo-agent/db/repos/maintenance-lease.js", () => ({
+  MaintenanceActiveError: MaintenanceActiveErrorMock,
+  acquireReembedLease: (client: unknown, ownerId: string) => mockAcquireLease(client, ownerId),
+  releaseReembedLease: (client: unknown, ownerId: string) => mockReleaseLease(client, ownerId),
+  withLeaseSharedLock: vi.fn(),
+  inspectLease: vi.fn(),
+}));
+
 vi.mock("@echo-agent/db/repos/knowledge.js", () => ({
-  isRuntimeActive: () => mockIsRuntimeActive(),
   findRowsWithDimNotMatching: (dim: number) => mockFindRowsWithDimNotMatching(dim),
   streamRowsForReembed: (model: string, opts?: unknown) => mockStreamRowsForReembed(model, opts),
   updateEmbedding: (...args: unknown[]) => mockUpdateEmbedding(...args),
+  // Still exported for observability; no longer consumed by reembed but other
+  // callers may pull it via this bundle.
+  isRuntimeActive: vi.fn().mockResolvedValue(false),
 }));
 
 vi.mock("@echo-agent/embeddings/client.js", () => ({
@@ -97,36 +128,28 @@ beforeEach(() => {
     dim: TEST_DIM,
     provider: "local",
   });
-  mockIsRuntimeActive.mockResolvedValue(false);
   mockFindRowsWithDimNotMatching.mockResolvedValue(0);
-  // Default: provider returns the requested name (typical local Model Runner).
-  // Tests covering the alias case override this.
   mockEmbedDocument.mockResolvedValue({
     embedding: makeEmbedding(),
     providerModel: "new-model",
   });
   mockUpdateEmbedding.mockResolvedValue(true);
   mockStreamRowsForReembed.mockReturnValue(asyncIterableOf([]));
+
+  // Lease: default to idempotent success.
+  mockAcquireLease.mockResolvedValue(undefined);
+  mockReleaseLease.mockResolvedValue(undefined);
+
+  // Pool: each connect() returns a fresh fake client with release().
+  mockLeaseClientRelease.mockReset();
+  mockPoolConnect.mockImplementation(async () => ({
+    query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+    release: () => mockLeaseClientRelease(),
+  }));
 });
 
 describe("reembedKnowledge", () => {
-  // ── Pre-check 1: runtime active ──────────────────────────────
-
-  it("aborts with explicit message when runtime_state.active = TRUE", async () => {
-    mockIsRuntimeActive.mockResolvedValueOnce(true);
-    await expect(reembedKnowledge()).rejects.toThrow(/runtime_state\.active = TRUE/);
-    // No row work happens
-    expect(mockStreamRowsForReembed).not.toHaveBeenCalled();
-    expect(mockEmbedDocument).not.toHaveBeenCalled();
-    expect(mockUpdateEmbedding).not.toHaveBeenCalled();
-  });
-
-  it("abort message tells the operator to stop the FULL stack of writers (soft-guard semantics)", async () => {
-    mockIsRuntimeActive.mockResolvedValueOnce(true);
-    await expect(reembedKnowledge()).rejects.toThrow(/MCP server, internal tools, subagents, CLI/);
-  });
-
-  // ── Pre-check 2: dim mismatch ────────────────────────────────
+  // ── Pre-check: dim mismatch ──────────────────────────────────
 
   it("aborts when any row has a different embedding_dim than current config", async () => {
     mockFindRowsWithDimNotMatching.mockResolvedValueOnce(5);
@@ -134,11 +157,68 @@ describe("reembedKnowledge", () => {
       /5 row\(s\) in knowledge_entries have embedding_dim != 768/,
     );
     expect(mockStreamRowsForReembed).not.toHaveBeenCalled();
+    expect(mockAcquireLease).not.toHaveBeenCalled();
   });
 
   it("dim mismatch abort points to export → wipe → import flow", async () => {
     mockFindRowsWithDimNotMatching.mockResolvedValueOnce(1);
     await expect(reembedKnowledge()).rejects.toThrow(/export → wipe → import/);
+  });
+
+  // ── Maintenance lease gating ─────────────────────────────────
+
+  it("acquires the maintenance lease before starting the reembed loop", async () => {
+    const callOrder: string[] = [];
+    mockAcquireLease.mockImplementationOnce(async () => {
+      callOrder.push("acquire");
+    });
+    mockStreamRowsForReembed.mockImplementationOnce(() => {
+      callOrder.push("stream");
+      return asyncIterableOf([]);
+    });
+    await reembedKnowledge();
+    expect(callOrder).toEqual(["acquire", "stream"]);
+    expect(mockAcquireLease).toHaveBeenCalledTimes(1);
+    const [, ownerId] = mockAcquireLease.mock.calls[0]!;
+    expect(ownerId).toMatch(/^reembed:pid-\d+$/);
+  });
+
+  it("releases the lease after a successful loop", async () => {
+    mockStreamRowsForReembed.mockReturnValueOnce(asyncIterableOf([makeRow(1)]));
+    await reembedKnowledge();
+    expect(mockReleaseLease).toHaveBeenCalledTimes(1);
+    const [, releaseOwner] = mockReleaseLease.mock.calls[0]!;
+    const [, acquireOwner] = mockAcquireLease.mock.calls[0]!;
+    expect(releaseOwner).toBe(acquireOwner);
+  });
+
+  it("releases the lease even when the loop throws", async () => {
+    // Probe call succeeds; then the stream iterator is set up, but the first
+    // per-row embed fails. The loop catches row-level errors and continues,
+    // so we simulate a harder failure: the stream itself throws during
+    // iteration.
+    mockStreamRowsForReembed.mockImplementationOnce(() => ({
+      async *[Symbol.asyncIterator]() {
+        throw new Error("stream boom");
+      },
+    }));
+    await expect(reembedKnowledge()).rejects.toThrow(/stream boom/);
+    expect(mockAcquireLease).toHaveBeenCalledTimes(1);
+    expect(mockReleaseLease).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails loud when another owner already holds the lease", async () => {
+    mockAcquireLease.mockRejectedValueOnce(new MaintenanceActiveErrorMock("other-pid-99"));
+    const err = await reembedKnowledge().catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    const msg = err instanceof Error ? err.message : String(err);
+    expect(msg).toMatch(/Cannot start reembed/);
+    expect(msg).toMatch(/other-pid-99/);
+    // Surface the operator recovery hint in the error message.
+    expect(msg).toMatch(/UPDATE maintenance_leases SET active = FALSE WHERE id = 1/);
+    // No reembed work runs when acquisition fails.
+    expect(mockStreamRowsForReembed).not.toHaveBeenCalled();
+    expect(mockReleaseLease).not.toHaveBeenCalled();
   });
 
   // ── Happy path ───────────────────────────────────────────────
@@ -162,8 +242,6 @@ describe("reembedKnowledge", () => {
     expect(vec).toHaveLength(TEST_DIM);
   });
 
-  // ── R2 Fix 2: probe + providerModel ──────────────────────────
-
   it("probes the provider once at start to discover currentProviderModel", async () => {
     await reembedKnowledge();
     // The first call is the probe with the special title.
@@ -174,7 +252,6 @@ describe("reembedKnowledge", () => {
   });
 
   it("uses providerModel from the probe as the streamRowsForReembed key (alias case)", async () => {
-    // Provider aliases the requested name to a different one.
     mockEmbedDocument.mockResolvedValueOnce({
       embedding: makeEmbedding(),
       providerModel: "actual-aliased-model",
@@ -187,8 +264,6 @@ describe("reembedKnowledge", () => {
 
   it("stamps providerModel from each per-row embed (NOT config.model)", async () => {
     mockStreamRowsForReembed.mockReturnValueOnce(asyncIterableOf([makeRow(1)]));
-    // Probe returns one alias, the per-row embed returns another (e.g.,
-    // provider rotated mid-script — pathological but tested).
     mockEmbedDocument
       .mockResolvedValueOnce({ embedding: makeEmbedding(), providerModel: "probe-alias" })
       .mockResolvedValueOnce({ embedding: makeEmbedding(), providerModel: "row-alias" });
@@ -212,7 +287,7 @@ describe("reembedKnowledge", () => {
 
   // ── Dry run ──────────────────────────────────────────────────
 
-  it("--dry-run is a pure preview: NO provider calls, NO DB writes", async () => {
+  it("--dry-run is a pure preview: NO provider calls, NO DB writes, NO lease acquired", async () => {
     mockStreamRowsForReembed.mockReturnValueOnce(
       asyncIterableOf([makeRow(1), makeRow(2)]),
     );
@@ -220,14 +295,13 @@ describe("reembedKnowledge", () => {
     expect(report.dryRun).toBe(true);
     expect(report.plannedCount).toBe(2);
     expect(report.reembedded).toBe(0);
-    // Critical: dry-run must work even when the embedding runtime is down.
-    // Zero embed calls (no probe, no per-row).
     expect(mockEmbedDocument).not.toHaveBeenCalled();
     expect(mockUpdateEmbedding).not.toHaveBeenCalled();
+    expect(mockAcquireLease).not.toHaveBeenCalled();
+    expect(mockReleaseLease).not.toHaveBeenCalled();
   });
 
   it("--dry-run survives a broken embedding provider (regression for R3 finding)", async () => {
-    // Provider is dead. Reaching for it would throw — dry-run must NOT touch it.
     mockEmbedDocument.mockRejectedValue(new Error("ECONNREFUSED 12434"));
     mockStreamRowsForReembed.mockReturnValueOnce(asyncIterableOf([makeRow(1)]));
     const report = await reembedKnowledge({ dryRun: true });
@@ -240,7 +314,6 @@ describe("reembedKnowledge", () => {
     mockStreamRowsForReembed.mockReturnValueOnce(asyncIterableOf([]));
     await reembedKnowledge({ dryRun: true });
     const [streamKey] = mockStreamRowsForReembed.mock.calls[0]!;
-    // Dry-run uses config.model directly (no probe to discover providerModel).
     expect(streamKey).toBe("new-model");
   });
 
@@ -250,15 +323,16 @@ describe("reembedKnowledge", () => {
     mockStreamRowsForReembed.mockReturnValueOnce(
       asyncIterableOf([makeRow(1), makeRow(2), makeRow(3)]),
     );
-    // Sequence: probe (success) → row1 (success) → row2 (boom) → row3 (success)
     mockEmbedDocument
-      .mockResolvedValueOnce({ embedding: makeEmbedding(), providerModel: "new-model" }) // probe
-      .mockResolvedValueOnce({ embedding: makeEmbedding(), providerModel: "new-model" }) // row1
-      .mockRejectedValueOnce(new Error("provider boom")) // row2
-      .mockResolvedValueOnce({ embedding: makeEmbedding(), providerModel: "new-model" }); // row3
+      .mockResolvedValueOnce({ embedding: makeEmbedding(), providerModel: "new-model" })
+      .mockResolvedValueOnce({ embedding: makeEmbedding(), providerModel: "new-model" })
+      .mockRejectedValueOnce(new Error("provider boom"))
+      .mockResolvedValueOnce({ embedding: makeEmbedding(), providerModel: "new-model" });
     const report = await reembedKnowledge();
     expect(report.reembedded).toBe(2);
     expect(report.failed).toBe(1);
+    // Per-row failure does NOT skip lease release.
+    expect(mockReleaseLease).toHaveBeenCalledTimes(1);
   });
 
   it("counts updateEmbedding returning false as failed", async () => {

@@ -83,6 +83,36 @@ vi.mock("@echo-agent/embeddings/config.js", () => ({
   MAX_EMBEDDING_DIM: 8192,
 }));
 
+// PR4 Fase III — knowledge_write wraps insertEntry in withLeaseSharedLock.
+// Stub it to a pass-through so unit tests don't need a real pool/maintenance
+// lease row. The wrap behaviour (SHARE lock + MaintenanceActiveError fail
+// path) is covered by maintenance-lease unit + integration tests.
+vi.mock("@echo-agent/db/repos/maintenance-lease.js", () => ({
+  withLeaseSharedLock: async <T>(
+    _pool: unknown,
+    fn: (tx: unknown) => Promise<T>,
+  ): Promise<T> => fn({ query: () => ({ rows: [], rowCount: 0 }) }),
+  MaintenanceActiveError: class MaintenanceActiveError extends Error {
+    readonly code = "MAINTENANCE_ACTIVE" as const;
+    readonly ownerId: string;
+    constructor(ownerId: string) {
+      super(`maintenance active — lease held by "${ownerId}"`);
+      this.name = "MaintenanceActiveError";
+      this.ownerId = ownerId;
+    }
+  },
+  acquireReembedLease: vi.fn(),
+  releaseReembedLease: vi.fn(),
+  inspectLease: vi.fn(),
+}));
+
+vi.mock("@echo-agent/db/client.js", () => ({
+  getPool: () => ({ connect: async () => ({ query: vi.fn(), release: vi.fn() }) }),
+  query: vi.fn(),
+  queryOne: vi.fn(),
+  execute: vi.fn(),
+}));
+
 // ── Handler imports via the barrel public API ───────────────────
 
 const {

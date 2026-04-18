@@ -8,9 +8,25 @@
  *   `{ entry, inserted }` so callers can distinguish a new write from a
  *   no-op duplicate. Metadata is NEVER silently merged on conflict — the
  *   existing row is returned untouched.
+ *
+ * Transaction coordination (PR4 Fase I.b):
+ * - `insertEntry` accepts an optional `PoolClient`. When provided, the
+ *   INSERT runs inside the caller's transaction instead of on the shared
+ *   pool. `withLeaseSharedLock` (PR4 Fase II) uses this to run the write
+ *   under the maintenance-lease SHARE lock so it coordinates cleanly with
+ *   the reembed FOR UPDATE gate.
+ * - Backward compatible: callers that don't pass a client keep the
+ *   pre-PR4 behaviour (pool-backed single-query insert).
  */
 
-import { queryOne, execute } from "../../client.js";
+import type { PoolClient } from "pg";
+import {
+  execute,
+  getPool,
+  queryOne,
+  queryOneWith,
+  type Executor,
+} from "../../client.js";
 import type { UpdatableKnowledgeStatus, KnowledgeStatus } from "@echo-agent/knowledge/policy.js";
 import {
   type InsertEntryInput,
@@ -45,7 +61,10 @@ import {
  * insert vs. existing. ON CONFLICT DO NOTHING + RETURNING returns rows only
  * for inserts; the second branch SELECTs the existing row.
  */
-export async function insertEntry(input: InsertEntryInput): Promise<InsertEntryResult> {
+export async function insertEntry(
+  input: InsertEntryInput,
+  client?: PoolClient,
+): Promise<InsertEntryResult> {
   if (input.embedding.length !== input.embeddingDim) {
     throw new Error(
       `insertEntry: embedding length ${input.embedding.length} does not match embeddingDim ${input.embeddingDim} ` +
@@ -53,7 +72,9 @@ export async function insertEntry(input: InsertEntryInput): Promise<InsertEntryR
     );
   }
 
-  const row = await queryOne<KnowledgeRowWithInsertFlag>(
+  const exec: Executor = client ?? getPool();
+  const row = await queryOneWith<KnowledgeRowWithInsertFlag>(
+    exec,
     `WITH ins AS (
        INSERT INTO knowledge_entries (
          kind, title, summary, content_md, tags, source_refs,
@@ -61,6 +82,7 @@ export async function insertEntry(input: InsertEntryInput): Promise<InsertEntryR
          content_hash, embedding_model, embedding_dim, embedding,
          source_surface, source_session,
          supersedes_id, status_reason, change_summary, what_failed,
+         source_episode_id, source_episode_hash, promotion_version,
          created_at, updated_at
        )
        VALUES (
@@ -69,7 +91,8 @@ export async function insertEntry(input: InsertEntryInput): Promise<InsertEntryR
          $12, $13, $14, $15::vector,
          COALESCE($16::text, 'echo_agent'), $17,
          $18, $19, $20, $21,
-         COALESCE($22::timestamptz, NOW()), COALESCE($23::timestamptz, NOW())
+         $22, $23, COALESCE($24::int, 1),
+         COALESCE($25::timestamptz, NOW()), COALESCE($26::timestamptz, NOW())
        )
        ON CONFLICT (content_hash) DO NOTHING
        RETURNING *
@@ -100,6 +123,9 @@ export async function insertEntry(input: InsertEntryInput): Promise<InsertEntryR
       input.statusReason ?? null,
       input.changeSummary ?? null,
       input.whatFailed ?? null,
+      input.sourceEpisodeId ?? null,
+      input.sourceEpisodeHash ?? null,
+      input.promotionVersion ?? null,
       toIsoOrNull(input.createdAt),
       toIsoOrNull(input.updatedAt),
     ],

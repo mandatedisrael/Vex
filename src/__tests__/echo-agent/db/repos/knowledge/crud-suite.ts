@@ -97,14 +97,25 @@ export function crudSuite(ctx: SuiteCtx): void {
       const [, params] = mockQueryOne.mock.calls[0];
       expect(params[7]).toBe("invalidated");
       expect(params[9]).toBe(validFrom.toISOString());
-      // After lifecycle columns (supersedes_id/status_reason/change_summary/what_failed
-      // at params 17..20), created_at moved 17 → 21, updated_at 18 → 22.
-      expect(params[17]).toBeNull(); // supersedesId default
-      expect(params[18]).toBeNull(); // statusReason default
-      expect(params[19]).toBeNull(); // changeSummary default
-      expect(params[20]).toBeNull(); // whatFailed default
-      expect(params[21]).toBe(createdAt.toISOString());
-      expect(params[22]).toBe(updatedAt.toISOString());
+      // After lifecycle + promotion columns, created_at / updated_at shifted:
+      //   17 supersedesId        (default null)
+      //   18 statusReason         (default null)
+      //   19 changeSummary        (default null)
+      //   20 whatFailed           (default null)
+      //   21 sourceEpisodeId      (promotion, default null)
+      //   22 sourceEpisodeHash    (promotion, default null)
+      //   23 promotionVersion     (promotion, COALESCE → 1)
+      //   24 createdAt
+      //   25 updatedAt
+      expect(params[17]).toBeNull();
+      expect(params[18]).toBeNull();
+      expect(params[19]).toBeNull();
+      expect(params[20]).toBeNull();
+      expect(params[21]).toBeNull();
+      expect(params[22]).toBeNull();
+      expect(params[23]).toBeNull();
+      expect(params[24]).toBe(createdAt.toISOString());
+      expect(params[25]).toBe(updatedAt.toISOString());
     });
 
     it("passes lifecycle fields (supersedesId + reason + change_summary + what_failed) when provided", async () => {

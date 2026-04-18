@@ -15,6 +15,11 @@
  */
 
 import * as knowledgeRepo from "@echo-agent/db/repos/knowledge.js";
+import { getPool } from "@echo-agent/db/client.js";
+import {
+  MaintenanceActiveError,
+  withLeaseSharedLock,
+} from "@echo-agent/db/repos/maintenance-lease.js";
 import { embedDocument } from "@echo-agent/embeddings/client.js";
 import { loadEmbeddingConfig } from "@echo-agent/embeddings/config.js";
 import { computeContentHash } from "@echo-agent/knowledge/content-hash.js";
@@ -105,29 +110,39 @@ export async function handleKnowledgeWrite(
   }
 
   try {
-    const { entry, inserted } = await knowledgeRepo.insertEntry({
-      kind,
-      title,
-      summary,
-      contentMd,
-      tags,
-      sourceRefs,
-      confidence,
-      pinned,
-      validUntil,
-      contentHash,
-      // Honest provenance: stamp the model the provider actually reported,
-      // NOT the requested config.model. The audit column and the recall
-      // filter both consume this — they must agree on the same source.
-      embeddingModel: providerModel,
-      embeddingDim: embedding.length,
-      embedding,
-      // Surface provenance: defaults to 'echo_agent' when context omits it
-      // (legacy / scripts / tests). Production MCP server fills in 'mcp_local'
-      // and its own session id via makeProductionContext.
-      sourceSurface: context.sourceSurface,
-      sourceSession: context.sourceSession,
-    });
+    // The actual INSERT runs under the maintenance-lease SHARE lock so a
+    // concurrent reembed (FOR UPDATE on the same singleton row) cannot flip
+    // the gate mid-write. Lease helper opens the tx, takes the SHARE lock,
+    // runs `insertEntry` with the tx client, and commits. `MaintenanceActiveError`
+    // surfaces as a clean fail with the current owner id.
+    const { entry, inserted } = await withLeaseSharedLock(getPool(), (tx) =>
+      knowledgeRepo.insertEntry(
+        {
+          kind,
+          title,
+          summary,
+          contentMd,
+          tags,
+          sourceRefs,
+          confidence,
+          pinned,
+          validUntil,
+          contentHash,
+          // Honest provenance: stamp the model the provider actually reported,
+          // NOT the requested config.model. The audit column and the recall
+          // filter both consume this — they must agree on the same source.
+          embeddingModel: providerModel,
+          embeddingDim: embedding.length,
+          embedding,
+          // Surface provenance: defaults to 'echo_agent' when context omits it
+          // (legacy / scripts / tests). Production MCP server fills in 'mcp_local'
+          // and its own session id via makeProductionContext.
+          sourceSurface: context.sourceSurface,
+          sourceSession: context.sourceSession,
+        },
+        tx,
+      ),
+    );
     if (!inserted) {
       logger.info("knowledge.write.duplicate", {
         id: entry.id,
@@ -144,6 +159,12 @@ export async function handleKnowledgeWrite(
       duplicate: !inserted,
     });
   } catch (err) {
+    if (err instanceof MaintenanceActiveError) {
+      logger.warn("knowledge.write.maintenance_active", { ownerId: err.ownerId });
+      return fail(
+        `knowledge_write blocked — maintenance active (reembed running, owner "${err.ownerId}"). Retry after the operator finishes.`,
+      );
+    }
     const msg = err instanceof Error ? err.message : String(err);
     logger.error("knowledge.write.insert_failed", { error: msg });
     return fail(`knowledge_write failed: ${msg}`);

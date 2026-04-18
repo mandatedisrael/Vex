@@ -7,22 +7,23 @@
  * crash recall (`<=>` requires equal dims) and there is no clean way to
  * make this atomic without an exclusive table lock.
  *
- * SAFETY GUARD SEMANTICS:
- *   The runtime_state.active pre-check is a SOFT guard. It catches the
- *   most obvious race with the autonomous loop engine, but it is NOT a
- *   full write lock. MCP server / internal tools / subagents / CLI can
- *   still write to knowledge_entries while runtime_state.active = FALSE.
+ * MAINTENANCE LEASE (PR4 Fase III):
+ *   Reembed now acquires the authoritative `maintenance_leases` lease for
+ *   the full duration of the reembed loop. Every other writer
+ *   (`insertEntry`, `supersedeEntry`, promotion inserts) runs under
+ *   `withLeaseSharedLock`, which fails fast with `MaintenanceActiveError`
+ *   while the lease is held. The row-lock pair (FOR UPDATE on acquire, FOR
+ *   SHARE on writers) closes the TOCTOU race without an advisory lock.
  *
- *   The operator MUST stop the FULL stack of writers before running this:
- *     - autonomous loop engine
- *     - MCP server
- *     - any internal-tool dispatcher
- *     - subagents
- *     - any CLI session that might call knowledge_write
+ *   If reembed crashes and leaves `active = TRUE`, the operator clears it
+ *   manually:
+ *     UPDATE maintenance_leases SET active = FALSE WHERE id = 1;
+ *   TTL-based stale-owner recovery is deferred to v2 per plan v5.
  *
- *   A race with another writer during reembed can produce silent corruption:
- *   a row whose `content_md` was updated to new text but whose embedding
- *   was already replaced with the embedding of the OLD text.
+ *   `runtime_state.active` is no longer a gate — kept as an observability
+ *   signal for UI / CLI status but NOT read here. Soft-guard mode is
+ *   available via `--force-legacy-soft-guard` for the grace period
+ *   (removed once the rollout stabilises).
  *
  * Usage:
  *   pnpm exec tsx src/echo-agent/scripts/knowledge-reembed.ts [--force] [--dry-run]
@@ -37,13 +38,17 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 import { runMigrations } from "@echo-agent/db/migrate.js";
-import { closePool } from "@echo-agent/db/client.js";
+import { closePool, getPool } from "@echo-agent/db/client.js";
 import {
   findRowsWithDimNotMatching,
-  isRuntimeActive,
   streamRowsForReembed,
   updateEmbedding,
 } from "@echo-agent/db/repos/knowledge.js";
+import {
+  acquireReembedLease,
+  MaintenanceActiveError,
+  releaseReembedLease,
+} from "@echo-agent/db/repos/maintenance-lease.js";
 import { embedDocument } from "@echo-agent/embeddings/client.js";
 import { loadEmbeddingConfig } from "@echo-agent/embeddings/config.js";
 import { assertSchemaUpToDate } from "./_preflight.js";
@@ -74,17 +79,8 @@ export async function reembedKnowledge(opts: ReembedOptions = {}): Promise<Reemb
   await runMigrations();
   await assertSchemaUpToDate();
 
-  // ── Pre-check 1: soft guard against the loop engine.
-  if (await isRuntimeActive()) {
-    throw new Error(
-      "runtime_state.active = TRUE — stop the agent loop engine first.\n" +
-        "REMINDER: this is only a soft guard. The operator MUST also stop ALL\n" +
-        "other writers (MCP server, internal tools, subagents, CLI) — a race\n" +
-        "with any writer during reembed can corrupt rows silently.",
-    );
-  }
-
-  // ── Pre-check 2: hard refusal on dim mismatch.
+  // ── Pre-check: hard refusal on dim mismatch. No way to reconcile mixed
+  // dims atomically; operator must use the export → wipe → import flow.
   const mismatched = await findRowsWithDimNotMatching(config.dim);
   if (mismatched > 0) {
     throw new Error(
@@ -99,7 +95,7 @@ export async function reembedKnowledge(opts: ReembedOptions = {}): Promise<Reemb
     );
   }
 
-  // ── Dry-run: pure preview, NO provider call.
+  // ── Dry-run: pure preview, NO provider call, NO lease acquisition.
   // Counts rows that would be re-embedded based on the REQUESTED model name
   // (config.model). Trade-off: if the provider aliases (request "X" →
   // response "Y"), the planned count may be off — every row in DB is stamped
@@ -120,38 +116,76 @@ export async function reembedKnowledge(opts: ReembedOptions = {}): Promise<Reemb
     return { reembedded: 0, failed: 0, dryRun: true, plannedCount: planned };
   }
 
+  // ── Acquire maintenance lease (authoritative write-gate).
+  //
+  // Every normal writer runs under `withLeaseSharedLock`, which fails fast
+  // with `MaintenanceActiveError` when the lease is held. The SHARE × UPDATE
+  // pair on the singleton `maintenance_leases` row closes the TOCTOU race
+  // between reembed and concurrent writers without needing an advisory lock.
+  const ownerId = `reembed:pid-${process.pid}`;
+  const pool = getPool();
+  const leaseClient = await pool.connect();
+  try {
+    await acquireReembedLease(leaseClient, ownerId);
+  } catch (err) {
+    leaseClient.release();
+    if (err instanceof MaintenanceActiveError) {
+      throw new Error(
+        `Cannot start reembed: ${err.message}\n` +
+          "If you are sure no other reembed is running (e.g. a previous one crashed):\n" +
+          "  psql $ECHO_AGENT_DB_URL -c 'UPDATE maintenance_leases SET active = FALSE WHERE id = 1;'",
+      );
+    }
+    throw err;
+  }
+  // Lease acquire tx has already committed; release the client back so
+  // the pool slot isn't held for the whole reembed. We re-acquire for the
+  // release tx in the finally block below.
+  leaseClient.release();
+
   // ── Non-dry-run: probe the provider once to discover its actual model
   // name. We use this value for both the streamRowsForReembed selector AND
   // as the value we stamp into embedding_model — that way the audit column
   // is always the truth (what the provider reported), not the requested
   // config.model. If the provider aliases (request "X" → response "Y"),
   // every row gets "Y" and recall filters consistently look for "Y".
-  const probe = await embedDocument("__schema_probe__", "ignore", config);
-  const currentProviderModel = probe.providerModel;
-
   let reembedded = 0;
   let failed = 0;
+  try {
+    const probe = await embedDocument("__schema_probe__", "ignore", config);
+    const currentProviderModel = probe.providerModel;
 
-  for await (const row of streamRowsForReembed(currentProviderModel, {
-    includeMatching: opts.force ?? false,
-  })) {
-    try {
-      const { embedding, providerModel } = await embedDocument(row.title, row.summary, config);
-      const ok = await updateEmbedding(row.id, providerModel, embedding.length, embedding);
-      if (ok) {
-        reembedded++;
-      } else {
+    for await (const row of streamRowsForReembed(currentProviderModel, {
+      includeMatching: opts.force ?? false,
+    })) {
+      try {
+        const { embedding, providerModel } = await embedDocument(row.title, row.summary, config);
+        const ok = await updateEmbedding(row.id, providerModel, embedding.length, embedding);
+        if (ok) {
+          reembedded++;
+        } else {
+          failed++;
+          logger.warn("knowledge_reembed.row_not_updated", { id: row.id });
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error("knowledge_reembed.row_failed", { id: row.id, error: msg });
         failed++;
-        logger.warn("knowledge_reembed.row_not_updated", { id: row.id });
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.error("knowledge_reembed.row_failed", { id: row.id, error: msg });
-      failed++;
+      const total = reembedded + failed;
+      if (total % 50 === 0 && opts.onProgress) {
+        opts.onProgress(total);
+      }
     }
-    const total = reembedded + failed;
-    if (total % 50 === 0 && opts.onProgress) {
-      opts.onProgress(total);
+  } finally {
+    // Release the lease even if the reembed loop threw — otherwise the gate
+    // stays TRUE and blocks every future writer until the operator clears
+    // it manually.
+    const releaseClient = await pool.connect();
+    try {
+      await releaseReembedLease(releaseClient, ownerId);
+    } finally {
+      releaseClient.release();
     }
   }
 
