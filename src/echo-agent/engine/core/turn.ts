@@ -6,7 +6,7 @@
  */
 
 import type { EngineContext, TurnResult, MessageMetadata } from "../types.js";
-import type { InferenceProvider, InferenceConfig, InferenceResponse, ProviderMessage, ParsedToolCall, ToolDefinition } from "@echo-agent/inference/types.js";
+import type { InferenceProvider, InferenceConfig, ProviderMessage, ParsedToolCall, ToolDefinition } from "@echo-agent/inference/types.js";
 import type { Message } from "@echo-agent/db/repos/messages.js";
 import { buildPromptStack, type PromptStackOptions } from "../prompts/index.js";
 import { formatActiveKnowledgeBlock } from "../prompts/knowledge.js";
@@ -73,17 +73,14 @@ export async function executeTurn(
     });
   }
 
-  // Pre-fetch session episode recall. We translate the last user input to
-  // English before embedding so the query lives in the same language as the
-  // stored `summary_en` payloads — Gemma (and most embedding models) recall
-  // noticeably worse on cross-lingual queries. Failure on either leg
-  // (translate or embed) is non-fatal — an empty block just omits the system
-  // message.
+  // Pre-fetch session episode recall. The query embeds the last user input
+  // directly in its native language — EmbeddingGemma is multilingual (100+
+  // languages, MTEB Multilingual v2: 61.15 @ 768d) so we don't normalize to
+  // English first. Failure on either embed or DB recall is non-fatal — an
+  // empty block just omits the system message.
   const sessionEpisodeRecallBlock = await fetchSessionEpisodeRecallBlock(
     context.memoryScopeKey,
     existingMessages,
-    provider,
-    config,
   );
 
   // Build prompt
@@ -135,15 +132,12 @@ export async function executeTurn(
 async function fetchSessionEpisodeRecallBlock(
   memoryScopeKey: string,
   existingMessages: readonly Message[],
-  provider: InferenceProvider,
-  config: InferenceConfig,
 ): Promise<string> {
   const lastUserInput = findLastUserInput(existingMessages);
   if (!lastUserInput) return "";
 
   try {
-    const englishQuery = await translateQueryToEnglish(lastUserInput, provider, config);
-    const { embedding, providerModel } = await embedQuery(englishQuery);
+    const { embedding, providerModel } = await embedQuery(lastUserInput);
     const hits = await episodesRepo.recallTopK(embedding, {
       memoryScopeKey,
       embeddingModel: providerModel,
@@ -157,39 +151,6 @@ async function fetchSessionEpisodeRecallBlock(
       error: err instanceof Error ? err.message : String(err),
     });
     return "";
-  }
-}
-
-/**
- * Translate a recall query into English so it lives in the same language as
- * the stored `summary_en` payloads. If the input is already English the model
- * echoes it; if translation fails, fall back to the raw input rather than
- * drop recall entirely.
- */
-async function translateQueryToEnglish(
-  query: string,
-  provider: InferenceProvider,
-  config: InferenceConfig,
-): Promise<string> {
-  try {
-    const { content } = await provider.chatCompletionSimple(
-      [
-        {
-          role: "system",
-          content:
-            "Translate the user's message to English. If it is already English, repeat it verbatim. Output ONLY the translated text — no preamble, no quotes, no explanation.",
-        },
-        { role: "user", content: query },
-      ],
-      config,
-    );
-    const trimmed = content?.trim();
-    return trimmed && trimmed.length > 0 ? trimmed : query;
-  } catch (err) {
-    logger.warn("turn.session_episode_recall.translate_failed", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return query;
   }
 }
 

@@ -14,6 +14,14 @@ export interface SubagentContext {
   allowTrades: boolean;
   /** Parent's loop mode — child cannot exceed parent. */
   parentLoopMode: string;
+  /**
+   * Snapshot of the parent session's rolling summary at the moment of spawn.
+   * Copied by value, not referenced — later drift in the parent's summary does
+   * not affect this child's briefing. Optional: if the parent has no summary
+   * yet (early-session spawn) or memory scope is isolated and we want a clean
+   * slate, this stays undefined and the block is omitted from the prompt.
+   */
+  parentSummarySnapshot?: string;
 }
 
 export function buildSubagentPrompt(
@@ -38,6 +46,14 @@ export function buildSubagentPrompt(
     lines.push("## Assigned Task");
     lines.push(subagentContext.task);
     lines.push("");
+
+    if (subagentContext.parentSummarySnapshot && subagentContext.parentSummarySnapshot.trim().length > 0) {
+      lines.push("## Parent context (snapshot at spawn)");
+      lines.push("This is a snapshot of the parent session's rolling summary at the moment you were spawned. Use it to understand the broader context, but focus on your assigned task.");
+      lines.push("");
+      lines.push(subagentContext.parentSummarySnapshot.trim());
+      lines.push("");
+    }
 
     if (!subagentContext.allowTrades) {
       lines.push("## Restriction: NO TRADES");

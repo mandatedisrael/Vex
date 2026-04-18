@@ -183,6 +183,83 @@ describe("subagent handlers", () => {
       expect(insertArg.maxIterations).toBe(50);
     });
 
+    // ── scope_strategy resolution ────────────────────────────────────
+
+    it("defaults memory scope to isolated (own childSessionId) when scope_strategy is omitted", async () => {
+      const result = await handleSubagentSpawn(
+        { name: "EchoIsoDefault", task: "test" },
+        baseContext,
+      );
+      expect(result.success).toBe(true);
+      const parsed = JSON.parse(result.output);
+
+      // Child session id is unique per spawn; memory scope key must equal it.
+      expect(mockSetMemoryScopeKeyForSubagent).toHaveBeenCalledTimes(1);
+      const [childSessionId, scopeKey] = mockSetMemoryScopeKeyForSubagent.mock.calls[0];
+      expect(childSessionId).toBe(parsed.sessionId);
+      expect(scopeKey).toBe(parsed.sessionId);
+      expect(parsed.scopeStrategy).toBe("isolated");
+      // Parent session is not read in the isolated path.
+      expect(mockGetSessionForSubagent).not.toHaveBeenCalled();
+    });
+
+    it("accepts explicit scope_strategy=isolated (same outcome as default)", async () => {
+      const result = await handleSubagentSpawn(
+        { name: "EchoIsoExplicit", task: "test", scope_strategy: "isolated" },
+        baseContext,
+      );
+      expect(result.success).toBe(true);
+      const parsed = JSON.parse(result.output);
+      const [childSessionId, scopeKey] = mockSetMemoryScopeKeyForSubagent.mock.calls[0];
+      expect(childSessionId).toBe(parsed.sessionId);
+      expect(scopeKey).toBe(parsed.sessionId);
+      expect(parsed.scopeStrategy).toBe("isolated");
+    });
+
+    it("inherits parent's memoryScopeKey when scope_strategy=shared", async () => {
+      mockGetSessionForSubagent.mockResolvedValueOnce({
+        id: "test-session",
+        memoryScopeKey: "parent-scope-xyz",
+      });
+      const result = await handleSubagentSpawn(
+        { name: "EchoShared", task: "test", scope_strategy: "shared" },
+        baseContext,
+      );
+      expect(result.success).toBe(true);
+      const parsed = JSON.parse(result.output);
+
+      expect(mockGetSessionForSubagent).toHaveBeenCalledWith("test-session");
+      const [childSessionId, scopeKey] = mockSetMemoryScopeKeyForSubagent.mock.calls[0];
+      expect(childSessionId).toBe(parsed.sessionId);
+      expect(scopeKey).toBe("parent-scope-xyz");
+      expect(parsed.scopeStrategy).toBe("shared");
+    });
+
+    it("shared scope falls back to parent sessionId when parent has no memoryScopeKey", async () => {
+      mockGetSessionForSubagent.mockResolvedValueOnce({
+        id: "test-session",
+        memoryScopeKey: null,
+      });
+      await handleSubagentSpawn(
+        { name: "EchoSharedFallback", task: "test", scope_strategy: "shared" },
+        baseContext,
+      );
+      const [, scopeKey] = mockSetMemoryScopeKeyForSubagent.mock.calls[0];
+      expect(scopeKey).toBe("test-session");
+    });
+
+    it("rejects invalid scope_strategy by falling back to isolated default", async () => {
+      const result = await handleSubagentSpawn(
+        { name: "EchoBadScope", task: "test", scope_strategy: "garbage" },
+        baseContext,
+      );
+      expect(result.success).toBe(true);
+      const parsed = JSON.parse(result.output);
+      expect(parsed.scopeStrategy).toBe("isolated");
+      const [childSessionId, scopeKey] = mockSetMemoryScopeKeyForSubagent.mock.calls[0];
+      expect(scopeKey).toBe(childSessionId);
+    });
+
     it("rejects duplicate active name", async () => {
       await handleSubagentSpawn({ name: "EchoDup", task: "first" }, baseContext);
       const result = await handleSubagentSpawn({ name: "EchoDup", task: "second" }, baseContext);

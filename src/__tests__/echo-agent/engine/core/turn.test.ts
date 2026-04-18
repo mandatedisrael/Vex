@@ -67,7 +67,6 @@ describe("turn", () => {
   function makeProvider(response: {
     content?: string | null;
     toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
-    translatedQuery?: string;
   }) {
     return {
       chatCompletion: vi.fn().mockResolvedValue({
@@ -75,16 +74,9 @@ describe("turn", () => {
         toolCalls: response.toolCalls ?? null,
         usage: { promptTokens: 1000, completionTokens: 200, cachedTokens: 0, reasoningTokens: 0 },
       }),
-      // Session-episode recall translates the query to English before embed.
-      // Default behaviour: echo whatever the caller asked to translate,
-      // unless the test pins a specific translation via `translatedQuery`.
-      chatCompletionSimple: vi.fn().mockImplementation(async (messages: any[]) => {
-        if (response.translatedQuery !== undefined) {
-          return { content: response.translatedQuery, usage: {} };
-        }
-        const last = messages[messages.length - 1];
-        return { content: typeof last?.content === "string" ? last.content : "", usage: {} };
-      }),
+      // chatCompletionSimple stays on the contract (used by checkpoint extract/merge)
+      // but the recall path no longer calls it — see "recall path" tests below.
+      chatCompletionSimple: vi.fn(),
       calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD" }),
     };
   }
@@ -228,48 +220,68 @@ describe("turn", () => {
     expect(firstUserIdx).toBeGreaterThan(recallIdx);
   });
 
-  it("translates the last user input to English before embedding it for recall", async () => {
-    const embeddingsMod = await import("@echo-agent/embeddings/client.js");
-    const episodesMod = await import("@echo-agent/db/repos/session-episodes.js");
-    (embeddingsMod.embedQuery as any).mockClear();
-    (episodesMod.recallTopK as any).mockResolvedValue([]);
+  // ── Recall path: post-PR1 (no translation) ─────────────────────────
 
-    const provider = makeProvider({ content: "OK", translatedQuery: "Check my SOL balance" });
-    const messages = [
-      { role: "user" as const, content: "Sprawdź mój balance SOL", timestamp: "2026-04-01T10:00:00Z" },
-    ];
-    await executeTurn(
-      makeContext(), messages, null, provider as any, makeConfig() as any, [],
-    );
-
-    // chatCompletionSimple must have been called with a translate-style system
-    // prompt and the raw (Polish) user message as the user turn.
-    expect(provider.chatCompletionSimple).toHaveBeenCalled();
-    const translateCall = provider.chatCompletionSimple.mock.calls[0];
-    const translateMessages = translateCall[0] as Array<{ role: string; content: string }>;
-    expect(translateMessages[0].role).toBe("system");
-    expect(translateMessages[0].content.toLowerCase()).toContain("english");
-    expect(translateMessages[translateMessages.length - 1].content).toBe("Sprawdź mój balance SOL");
-
-    // embedQuery must see the translated English text, NOT the raw Polish.
-    expect(embeddingsMod.embedQuery).toHaveBeenCalledWith("Check my SOL balance");
-  });
-
-  it("falls back to raw query for recall when translation fails", async () => {
+  it("embeds the last user input verbatim for recall — no translation remote call", async () => {
     const embeddingsMod = await import("@echo-agent/embeddings/client.js");
     const episodesMod = await import("@echo-agent/db/repos/session-episodes.js");
     (embeddingsMod.embedQuery as any).mockClear();
     (episodesMod.recallTopK as any).mockResolvedValue([]);
 
     const provider = makeProvider({ content: "OK" });
-    provider.chatCompletionSimple = vi.fn().mockRejectedValue(new Error("translate boom"));
     const messages = [
-      { role: "user" as const, content: "raw query", timestamp: "2026-04-01T10:00:00Z" },
+      // Polish input — would have triggered translation pre-PR1. Now it must
+      // go to embedQuery directly because EmbeddingGemma handles multilingual
+      // recall natively (see docs/benchmarks/cross-lingual-recall.md).
+      { role: "user" as const, content: "Sprawdź mój balance SOL", timestamp: "2026-04-01T10:00:00Z" },
     ];
     await executeTurn(
       makeContext(), messages, null, provider as any, makeConfig() as any, [],
     );
 
-    expect(embeddingsMod.embedQuery).toHaveBeenCalledWith("raw query");
+    // No translation round-trip for the recall path — chatCompletionSimple
+    // stays on the provider contract (checkpoint extract/merge use it) but
+    // the recall path doesn't touch it.
+    expect(provider.chatCompletionSimple).not.toHaveBeenCalled();
+    // embedQuery sees the raw user text verbatim.
+    expect(embeddingsMod.embedQuery).toHaveBeenCalledWith("Sprawdź mój balance SOL");
+  });
+
+  it("embeds English queries verbatim too (no heuristic, just raw)", async () => {
+    const embeddingsMod = await import("@echo-agent/embeddings/client.js");
+    const episodesMod = await import("@echo-agent/db/repos/session-episodes.js");
+    (embeddingsMod.embedQuery as any).mockClear();
+    (episodesMod.recallTopK as any).mockResolvedValue([]);
+
+    const provider = makeProvider({ content: "OK" });
+    const messages = [
+      { role: "user" as const, content: "what is the yield on solana", timestamp: "2026-04-01T10:00:00Z" },
+    ];
+    await executeTurn(
+      makeContext(), messages, null, provider as any, makeConfig() as any, [],
+    );
+
+    expect(provider.chatCompletionSimple).not.toHaveBeenCalled();
+    expect(embeddingsMod.embedQuery).toHaveBeenCalledWith("what is the yield on solana");
+  });
+
+  it("swallows embedQuery failures and omits the recall block (turn continues)", async () => {
+    const embeddingsMod = await import("@echo-agent/embeddings/client.js");
+    (embeddingsMod.embedQuery as any).mockRejectedValueOnce(new Error("embed provider down"));
+
+    const provider = makeProvider({ content: "Hello" });
+    const messages = [
+      { role: "user" as const, content: "hello", timestamp: "2026-04-01T10:00:00Z" },
+    ];
+
+    // The turn must still complete cleanly even if recall embed throws —
+    // fetchSessionEpisodeRecallBlock has its own try/catch that degrades to
+    // an empty block.
+    const result = await executeTurn(
+      makeContext(), messages, null, provider as any, makeConfig() as any, [],
+    );
+
+    expect(result.content).toBe("Hello");
+    expect(provider.chatCompletion).toHaveBeenCalled();
   });
 });

@@ -17,6 +17,12 @@ export const SUBAGENT_TOOLS: readonly ToolDef[] = [
       task: { type: "string", description: "Full task description with context and output location" },
       allow_trades: { type: "boolean", description: "Allow mutating/trading tools (default: false)" },
       max_iterations: { type: "number", description: "Max tool iterations (default: 25)" },
+      scope_strategy: {
+        type: "string",
+        enum: ["isolated", "shared"],
+        description:
+          "Memory scope for the subagent (default: isolated). 'isolated' — own memory_scope_key, subagent sees no parent episodes. 'shared' — inherit parent's memory_scope_key, subagent writes contribute to parent's episode pool. Use 'shared' only when the subagent is a true delegate and the parent wants every checkpoint in its own recall.",
+      },
     }, required: ["name", "task"] },
   },
   {

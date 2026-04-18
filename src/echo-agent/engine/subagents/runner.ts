@@ -60,13 +60,20 @@ export async function runSubagentEngine(
   if (!sessionLink) throw new Error(`No session link found for subagent ${subagentId}`);
   const sessionId = sessionLink.childSessionId;
 
-  // Determine parent constraints from session_links → parent session → active run
+  // Determine parent constraints from session_links → parent session → active run.
+  // Parent's rolling summary snapshot is also captured here so the child's
+  // briefing can include it — copy by value, so later drift on the parent's
+  // summary does not affect this child's prompt.
   const parentLink = await sessionLinksRepo.getParentSession(sessionId);
   let parentLoopMode: LoopMode = "restricted";
+  let parentSummarySnapshot: string | undefined;
   if (parentLink) {
     const parentHydrated = await hydrateEngineSession(parentLink.parentSessionId);
     if (parentHydrated) {
       parentLoopMode = parentHydrated.context.loopMode;
+      if (parentHydrated.summary && parentHydrated.summary.trim().length > 0) {
+        parentSummarySnapshot = parentHydrated.summary;
+      }
     }
   }
 
@@ -90,6 +97,7 @@ export async function runSubagentEngine(
       task: subagent.task,
       allowTrades,
       parentLoopMode,
+      parentSummarySnapshot,
     },
   };
 

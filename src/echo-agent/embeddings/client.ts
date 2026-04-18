@@ -39,14 +39,18 @@ import logger from "@utils/logger.js";
 
 // ── Public API ───────────────────────────────────────────────────
 
-// NOTE: The two formatters below use EmbeddingGemma-specific prompt prefixes
+// NOTE: The formatters below use EmbeddingGemma-specific prompt prefixes
 // (`title: ... | text: ...` and `task: search result | query: ...`) per the
 // model card. Switching to a non-Gemma family (BGE, E5, Qwen3-Embedding, nomic)
 // requires updating these prefixes per that model's recommended scheme — they
-// are intentionally NOT model-agnostic. A pluggable per-model formatter is a
-// follow-up refactor; for now this assumption is documented and accepted.
+// are intentionally NOT model-agnostic. A fully model-pluggable formatter is a
+// follow-up refactor; for now the mode enum lets consumers name their intent
+// so a later switch can key off it without touching call sites.
 
-/** Format the document side of an embedding (write path). */
+/** Mode tag describing what's being embedded — used by callers and future formatters. */
+export type EmbedMode = "document" | "query" | "tool";
+
+/** Format the document side of an embedding (write path — knowledge/episodes). */
 export function formatDocumentInput(title: string, summary: string): string {
   return `title: ${title} | text: ${summary}`;
 }
@@ -54,6 +58,18 @@ export function formatDocumentInput(title: string, summary: string): string {
 /** Format the query side of an embedding (recall path). */
 export function formatQueryInput(query: string): string {
   return `task: search result | query: ${query}`;
+}
+
+/**
+ * Format a tool manifest for embedding (discovery rerank path).
+ *
+ * Uses the same `title | text` shape as documents because both sides of
+ * discovery rerank (tool manifest vs user query) live in the same semantic
+ * space as knowledge entries — a tool is just another document in the recall
+ * sense. When a future model family arrives this prefix is swapped here.
+ */
+export function formatToolInput(toolId: string, canonicalSummary: string): string {
+  return `title: ${toolId} | text: ${canonicalSummary}`;
 }
 
 /**
@@ -93,6 +109,20 @@ export async function embedQuery(
 ): Promise<EmbedResult> {
   const config = configOverride ?? loadEmbeddingConfig();
   const input = formatQueryInput(query);
+  return embedSingle(input, config);
+}
+
+/**
+ * Embed a tool manifest entry for discovery rerank.
+ * Throws on missing config or sidecar failure (after retries).
+ */
+export async function embedTool(
+  toolId: string,
+  canonicalSummary: string,
+  configOverride?: EmbeddingConfig,
+): Promise<EmbedResult> {
+  const config = configOverride ?? loadEmbeddingConfig();
+  const input = formatToolInput(toolId, canonicalSummary);
   return embedSingle(input, config);
 }
 

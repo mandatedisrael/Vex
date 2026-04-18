@@ -10,7 +10,7 @@ import * as subagentMessagesRepo from "@echo-agent/db/repos/subagent-messages.js
 import { loadEnvConfig, loadSubagentConfig } from "@echo-agent/inference/config.js";
 import type { ToolResult } from "../../types.js";
 import type { InternalToolContext } from "../types.js";
-import { str, num, bool, ok, fail } from "../types.js";
+import { str, num, bool, enumField, ok, fail } from "../types.js";
 import logger from "@utils/logger.js";
 import {
   activeSubagents,
@@ -45,22 +45,46 @@ export async function handleSubagentSpawn(
 
   const allowTrades = bool(params, "allow_trades");
   const maxIterations = num(params, "max_iterations") ?? subConfig.maxIterations;
+  // Memory scope strategy — default is "isolated" (server-enforced, not schema
+  // default, because LLMs frequently omit even declared defaults). 'shared' is
+  // the legacy opt-in for delegate-style subagents whose checkpoints should
+  // contribute to the parent's episode pool. 'isolated' gives the subagent its
+  // own memory_scope_key so parent recall never surfaces subagent episodes
+  // (and vice versa) — this avoids context leaks between unrelated sibling
+  // subagents running concurrently.
+  const scopeStrategy = enumField(params, "scope_strategy", ["isolated", "shared"] as const) ?? "isolated";
   const subagentId = `subagent-${randomUUID()}`;
   const childSessionId = `session-${randomUUID()}`;
 
   await subagentsRepo.insert({ id: subagentId, name, task, allowTrades, maxIterations });
   await sessionsRepo.createSession(childSessionId);
   await sessionsRepo.setScope(childSessionId, "subagent");
-  // Memory scope: subagents are delegates of the parent, so their checkpoints
-  // contribute to the parent's episode pool by default (inherit). Isolated
-  // scope (child session id) is reserved for a future opt-in — don't expose
-  // it through the tool schema until there's a concrete need.
-  const parentSession = await sessionsRepo.getSession(context.sessionId);
-  const inheritedScope = parentSession?.memoryScopeKey ?? context.sessionId;
-  await sessionsRepo.setMemoryScopeKey(childSessionId, inheritedScope);
+  // Resolve memory_scope_key from the chosen strategy:
+  //   - isolated: new scope keyed on the child session (own pool)
+  //   - shared:   inherit parent's memoryScopeKey (fallback: parent sessionId)
+  // Isolation is NOT transitive — a grandchild spawned as 'isolated' from a
+  // 'shared' child still gets its own scope; a grandchild spawned as 'shared'
+  // from an 'isolated' child inherits the child's (isolated) scope, not the
+  // grandparent's. 'shared' semantics are per-level.
+  let resolvedScope: string;
+  if (scopeStrategy === "shared") {
+    const parentSession = await sessionsRepo.getSession(context.sessionId);
+    resolvedScope = parentSession?.memoryScopeKey ?? context.sessionId;
+  } else {
+    resolvedScope = childSessionId;
+  }
+  await sessionsRepo.setMemoryScopeKey(childSessionId, resolvedScope);
   await sessionLinksRepo.linkSessions(context.sessionId, childSessionId, "subagent", subagentId);
 
-  logger.info("subagent.spawned", { id: subagentId, name, childSessionId, allowTrades, maxIterations });
+  logger.info("subagent.spawned", {
+    id: subagentId,
+    name,
+    childSessionId,
+    allowTrades,
+    maxIterations,
+    scopeStrategy,
+    resolvedScope,
+  });
 
   startSubagentExecution(subagentId, name);
 
@@ -71,7 +95,8 @@ export async function handleSubagentSpawn(
     task: task.slice(0, 200),
     allowTrades,
     maxIterations,
-    message: `Subagent "${name}" spawned (ID: ${subagentId}). Use subagent_status to check progress.`,
+    scopeStrategy,
+    message: `Subagent "${name}" spawned (ID: ${subagentId}, scope: ${scopeStrategy}). Use subagent_status to check progress.`,
   });
 }
 

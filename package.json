@@ -32,7 +32,8 @@
     "mcp": "tsx src/mcp/index.ts",
     "knowledge-export": "tsx src/echo-agent/scripts/knowledge-export.ts",
     "knowledge-import": "tsx src/echo-agent/scripts/knowledge-import.ts",
-    "knowledge-reembed": "tsx src/echo-agent/scripts/knowledge-reembed.ts"
+    "knowledge-reembed": "tsx src/echo-agent/scripts/knowledge-reembed.ts",
+    "benchmark-cross-lingual": "tsx src/echo-agent/scripts/cross-lingual-benchmark.ts"
   },
   "dependencies": {
     "@0gfoundation/0g-ts-sdk": "^1.2.1",

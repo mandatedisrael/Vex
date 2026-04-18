@@ -65,6 +65,22 @@ export function bool(params: Record<string, unknown>, key: string): boolean {
   return params[key] === true;
 }
 
+/**
+ * Safe enum accessor for tool params — returns the value only if it matches
+ * one of the allowed literals, otherwise undefined. Handlers resolve their
+ * own default (usually server-side, because LLMs frequently omit defaults
+ * even when the schema declares one).
+ */
+export function enumField<T extends string>(
+  params: Record<string, unknown>,
+  key: string,
+  allowed: readonly T[],
+): T | undefined {
+  const v = params[key];
+  if (typeof v !== "string") return undefined;
+  return (allowed as readonly string[]).includes(v) ? (v as T) : undefined;
+}
+
 // ── Result helpers ──────────────────────────────────────────────
 
 /** Success result with JSON-serialized data. */

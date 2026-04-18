@@ -253,6 +253,52 @@ describe("prompt-stack", () => {
       expect(joined).toContain("NO TRADES");
       expect(joined).toContain("restricted");
     });
+
+    it("subagent briefing includes parent summary snapshot when provided", () => {
+      const stack = buildPromptStack(
+        makeContext({ isSubagent: true }),
+        {
+          subagentContext: {
+            task: "Research L2 gas costs",
+            allowTrades: false,
+            parentLoopMode: "restricted",
+            parentSummarySnapshot:
+              "User opened a SOL long at 145 USD, closed BTC short at 62500, portfolio +4.2% 7d.",
+          },
+        },
+      );
+      const joined = stack.join("\n");
+      expect(joined).toContain("## Parent context (snapshot at spawn)");
+      expect(joined).toContain("SOL long at 145 USD");
+      expect(joined).toContain("portfolio +4.2%");
+    });
+
+    it("subagent briefing omits parent context block when snapshot is empty or absent", () => {
+      const withoutSnapshot = buildPromptStack(
+        makeContext({ isSubagent: true }),
+        {
+          subagentContext: {
+            task: "T",
+            allowTrades: false,
+            parentLoopMode: "restricted",
+          },
+        },
+      ).join("\n");
+      expect(withoutSnapshot).not.toContain("## Parent context");
+
+      const withEmptySnapshot = buildPromptStack(
+        makeContext({ isSubagent: true }),
+        {
+          subagentContext: {
+            task: "T",
+            allowTrades: false,
+            parentLoopMode: "restricted",
+            parentSummarySnapshot: "   \n   ",
+          },
+        },
+      ).join("\n");
+      expect(withEmptySnapshot).not.toContain("## Parent context");
+    });
   });
 
   // ── Base prompt ─────────────────────────────────────────────
