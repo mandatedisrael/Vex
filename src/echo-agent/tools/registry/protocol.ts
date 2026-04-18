@@ -25,7 +25,6 @@ export const PROTOCOL_TOOLS: readonly ToolDef[] = [
       query: { type: "string", description: "Short English capability phrase (e.g. 'bridge usdc to base', 'swap on solana', 'prediction market orderbook'). Translate the user's intent to English before calling — the retrieval surface is English-only." },
       namespace: { type: "string", description: buildDiscoverNamespaceDescription() },
       includeMutating: { type: "boolean", description: "Include mutating/trading capabilities" },
-      includeDeclared: { type: "boolean", description: "Include not-yet-active capabilities" },
       limit: { type: "number", description: "Max tools to return (default: 5)" },
     } },
   },

@@ -1,11 +1,27 @@
 /**
- * Protocol tool catalog — all protocol manifests in one place.
+ * Protocol tool catalog — aggregator over per-namespace manifest/handler bundles.
  *
- * New protocols register their manifests here.
- * Discovery searches this catalog. Execution looks up handlers.
+ * Registration model (PR1): each namespace exports its own `*_TOOLS` manifest
+ * array and `*_HANDLERS` record (see `./<namespace>/manifest.ts` + `./<namespace>/handlers.ts`).
+ * This file binds them into a single `NAMESPACE_MODULES` table that everything
+ * else derives from — `PROTOCOL_TOOLS`, `MANIFEST_BY_ID`, `HANDLER_BY_ID`,
+ * and the namespace availability helpers below.
+ *
+ * Adding a new protocol = one row in `NAMESPACE_MODULES` + its own
+ * `<namespace>/{manifest,handlers}.ts`. No more hand-editing a 10-spread in
+ * two places.
+ *
+ * `getProtocolManifest` + `getProtocolHandler` are O(1) `Map.get` lookups
+ * (pre-PR1 they were O(n) `Array.find` / record access). Duplicate `toolId`
+ * registration throws at module load time — this is the structural guard
+ * that `registry-completeness.test.ts` relies on.
  */
 
-import type { ProtocolNamespace, ProtocolToolManifest, ProtocolHandler, PortfolioRole } from "./types.js";
+import type {
+  ProtocolHandler,
+  ProtocolNamespace,
+  ProtocolToolManifest,
+} from "./types.js";
 import { PROTOCOL_NAMESPACE_NAVIGATION } from "./descriptions.js";
 import { KHALANI_TOOLS } from "./khalani/manifest.js";
 import { KHALANI_HANDLERS } from "./khalani/handlers.js";
@@ -56,6 +72,60 @@ export function isAdvertisedProtocolNamespace(value: string): value is ProtocolN
   return PROTOCOL_ADVERTISED_NAMESPACE_ALLOWLIST.includes(value as ProtocolNamespace);
 }
 
+// ── Namespace modules (registration table) ───────────────────────
+//
+// Single source of registration. Each row ties a namespace label to its
+// manifest array + handler record. Reserved namespaces (0g-compute,
+// 0g-storage) are in `PROTOCOL_NAMESPACE_ALLOWLIST` but have no module
+// entry here — they exist only for discovery-navigation metadata.
+
+export interface NamespaceModule {
+  readonly namespace: ProtocolNamespace;
+  readonly manifests: readonly ProtocolToolManifest[];
+  readonly handlers: Readonly<Record<string, ProtocolHandler>>;
+}
+
+export const NAMESPACE_MODULES: readonly NamespaceModule[] = [
+  { namespace: "khalani", manifests: KHALANI_TOOLS, handlers: KHALANI_HANDLERS },
+  { namespace: "solana", manifests: SOLANA_JUPITER_TOOLS, handlers: SOLANA_JUPITER_HANDLERS },
+  { namespace: "kyberswap", manifests: KYBERSWAP_TOOLS, handlers: KYBERSWAP_HANDLERS },
+  { namespace: "dexscreener", manifests: DEXSCREENER_TOOLS, handlers: DEXSCREENER_HANDLERS },
+  { namespace: "chainscan", manifests: CHAINSCAN_TOOLS, handlers: CHAINSCAN_HANDLERS },
+  { namespace: "jaine", manifests: JAINE_TOOLS, handlers: JAINE_HANDLERS },
+  { namespace: "slop", manifests: SLOP_TOOLS, handlers: SLOP_HANDLERS },
+  { namespace: "echobook", manifests: ECHOBOOK_TOOLS, handlers: ECHOBOOK_HANDLERS },
+  { namespace: "polymarket", manifests: POLYMARKET_TOOLS, handlers: POLYMARKET_HANDLERS },
+  { namespace: "slop-app", manifests: SLOP_APP_TOOLS, handlers: SLOP_APP_HANDLERS },
+];
+
+// ── Indices (built eagerly at module load) ───────────────────────
+
+const MANIFEST_BY_ID = new Map<string, ProtocolToolManifest>();
+const HANDLER_BY_ID = new Map<string, ProtocolHandler>();
+
+for (const mod of NAMESPACE_MODULES) {
+  for (const manifest of mod.manifests) {
+    if (MANIFEST_BY_ID.has(manifest.toolId)) {
+      // Fail loud at module load — better than silent shadowing in PROTOCOL_TOOLS.
+      throw new Error(
+        `Duplicate protocol toolId in NAMESPACE_MODULES: "${manifest.toolId}" appears in multiple namespaces`,
+      );
+    }
+    if (manifest.namespace !== mod.namespace) {
+      throw new Error(
+        `Namespace mismatch: manifest "${manifest.toolId}" declares namespace="${manifest.namespace}" but was registered under "${mod.namespace}"`,
+      );
+    }
+    MANIFEST_BY_ID.set(manifest.toolId, manifest);
+  }
+  for (const [toolId, handler] of Object.entries(mod.handlers)) {
+    if (HANDLER_BY_ID.has(toolId)) {
+      throw new Error(`Duplicate protocol handler: "${toolId}" appears in multiple namespace modules`);
+    }
+    HANDLER_BY_ID.set(toolId, handler);
+  }
+}
+
 // ── Runtime availability ─────────────────────────────────────────
 //
 // Mirrors the gate enforced by `discoverProtocolCapabilities` and
@@ -98,44 +168,19 @@ export function getMissingEnvForNamespace(namespace: ProtocolNamespace): string[
   return [...missing].sort();
 }
 
-// ── All protocol manifests ───────────────────────────────────────
+// ── Public catalog API ──────────────────────────────────────────
 
-export const PROTOCOL_TOOLS: readonly ProtocolToolManifest[] = [
-  ...KHALANI_TOOLS,
-  ...SOLANA_JUPITER_TOOLS,
-  ...KYBERSWAP_TOOLS,
-  ...DEXSCREENER_TOOLS,
-  ...CHAINSCAN_TOOLS,
-  ...JAINE_TOOLS,
-  ...SLOP_TOOLS,
-  ...ECHOBOOK_TOOLS,
-  ...POLYMARKET_TOOLS,
-  ...SLOP_APP_TOOLS,
-];
+/** All registered manifests. Built once from NAMESPACE_MODULES above. */
+export const PROTOCOL_TOOLS: readonly ProtocolToolManifest[] = [...MANIFEST_BY_ID.values()];
 
-// ── Handler registry ─────────────────────────────────────────────
-
-const HANDLER_MAP: Record<string, ProtocolHandler> = {
-  ...KHALANI_HANDLERS,
-  ...SOLANA_JUPITER_HANDLERS,
-  ...KYBERSWAP_HANDLERS,
-  ...DEXSCREENER_HANDLERS,
-  ...CHAINSCAN_HANDLERS,
-  ...JAINE_HANDLERS,
-  ...SLOP_HANDLERS,
-  ...ECHOBOOK_HANDLERS,
-  ...POLYMARKET_HANDLERS,
-  ...SLOP_APP_HANDLERS,
-};
-
-/** Get the handler function for a protocol tool by toolId */
+/** O(1) handler lookup by toolId. */
 export function getProtocolHandler(toolId: string): ProtocolHandler | undefined {
-  return HANDLER_MAP[toolId];
+  return HANDLER_BY_ID.get(toolId);
 }
 
-/** Get a manifest by toolId */
+/** O(1) manifest lookup by toolId. */
 export function getProtocolManifest(toolId: string): ProtocolToolManifest | undefined {
-  return PROTOCOL_TOOLS.find(t => t.toolId === toolId);
+  return MANIFEST_BY_ID.get(toolId);
 }
 
 // ── Namespace defaults ──────────────────────────────────────────

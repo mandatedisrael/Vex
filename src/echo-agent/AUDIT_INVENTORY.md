@@ -18,18 +18,10 @@ Classification vocabulary:
 
 | Path | Status | Evidence | Action |
 |------|--------|----------|--------|
-| `src/echo-agent/public/blue.png` | orphan | `grep -rn "blue.png" /mnt/x/EchoClaw/` → 0 hits outside file itself; not in `package.json#files`. | Delete in PR5 after global grep gate (§5a). |
-| `src/echo-agent/public/lite.png` | orphan | Same as above. | Delete in PR5. |
-| `src/echo-agent/public/new_echo_text.png` | orphan | Same as above. | Delete in PR5. |
-| `src/echo-agent/public/pink.png` | orphan | Same as above. | Delete in PR5. |
-| `src/echo-agent/public/pnl_card.png` | orphan | Same as above. | Delete in PR5. |
-| `src/echo-agent/public/purple.png` | orphan | Same as above. | Delete in PR5. |
-| `src/echo-agent/public/red.png` | orphan | Same as above. | Delete in PR5. |
-| `src/echo-agent/public/sticker.webm` | orphan | Same as above. | Delete in PR5. |
-| `src/echo-agent/public/vex.png` | orphan | Same as above. | Delete in PR5. |
+| `src/echo-agent/public/*` (9 assets) | reserved-for-future | Zero repo references (grep negative), not in `package.json#files`. **User decision 2026-04-18: retain — reserved na przyszłe użycie (potencjalnie frontend / desktop shell per `vex_desktop_bottlenecks` plan).** | **KEEP.** PR5 SKIPS deletion. Future refactor (move to `src/mcp/public/` or dedicated app) is OK; delete is not. |
 | `src/echo-agent/sync/replay.ts` (`replayProjections`) | operator-only | `grep -rn "replayProjections\|replay-projections" /mnt/x/EchoClaw/src/` → only self-reference; no runtime import, no test, no `package.json` script. | Move to `src/echo-agent/scripts/ops/replay-projections.ts` + add `package.json` script in PR5. Add operator-only comment header. |
 | `ToolLifecycle = "declared"` variant (`src/echo-agent/tools/protocols/types.ts`) | orphan (type state) | `grep -rn 'lifecycle:\s*"declared"' /mnt/x/EchoClaw/src/` → 0 hits. No manifest uses it. | Remove from `ToolLifecycle` union in PR1 §1c. Does NOT remove public `includeDeclared` parameter (separate concern, §1e). |
-| `includeDeclared` parameter (`src/echo-agent/tools/registry/protocol.ts:28`, `tools/protocols/types.ts:99`, `tools/protocols/discovery.ts:270`, `tools/protocols/discovery.telemetry.ts:76`, `tools/dispatcher.ts:69`) | **public contract, deprecated no-op** | Exposed through `discover_tools` JsonSchema → MCP client-visible. | Keep parameter; remove internal branch in `discovery.ts:270`; mark description `DEPRECATED`; log value to telemetry for migration observability. PR1 §1e. |
+| `includeDeclared` parameter (previously in `tools/registry/protocol.ts`, `tools/protocols/types.ts`, `tools/protocols/discovery.ts`, `tools/protocols/discovery.telemetry.ts`, `tools/dispatcher.ts`) | removed (PR1) | After `ToolLifecycle` was narrowed to `"active"`, the flag had literally zero runtime effect. Keeping it as deprecated no-op would have forced future reviewers to ask "when does this go" — dead surface is itself tech debt. MCP clients that still pass the flag get silent-strip from Zod default-parsing (no visible error). | DONE in PR1: removed from public schema, internal type, dispatcher forwarding, discovery branch, and telemetry field. Reintroduction requires a concrete new lifecycle variant + real manifests using it. |
 | `src/echo-agent/tools/protocols/navigation/entries-reserved.ts` — namespace `0g-compute` | reserved (collision with inference provider `inference/0g-compute.ts`) | `src/echo-agent/inference/0g-compute.ts` is an inference provider; `entries-reserved.ts:5` declares a reserved protocol namespace with same string label, zero handlers, `advertised: false`. Dual-purpose label is a grep trap for onboarding. | Rename reserved namespace label to `"0g-compute-reserved"` in PR5 §5e (zero handlers → cosmetic, zero runtime impact). Alternative: document collision here and leave — builder decides at PR5 time. |
 | `src/echo-agent/tools/protocols/navigation/entries-reserved.ts` — namespace `0g-storage` | reserved | Placeholder for future 0G Storage protocol; `advertised: false`, zero handlers. No current collision. | Keep. Document as intentional reserved in this inventory. |
 
@@ -85,7 +77,7 @@ Counted toward LOC limit. Post-PR4 state.
 - Rewrite inference provider adapters (`openrouter.ts`, `0g-compute.ts`).
 - Native gas reserve backstop (`handler-helpers.ts:52` TODO).
 - `validateCaptureContract` fail-open → fail-closed policy change (intentional today; documented in `capture-validator-policy.test.ts`).
-- Remove `includeDeclared` parameter from `discover_tools` schema — next milestone, after deprecation period.
+- (completed in PR1) `includeDeclared` removed entirely from `discover_tools` schema + internal types.
 - Unified DB pool for Agent DB vs echo-agent DB — intentional separation today.
 - Generic `sync/` worker + domain projectors migration.
 - Refactor `scripts/checkpoint-compliance-check.ts` (614 LOC) — operator CLI, out-of-scope for runtime audit.

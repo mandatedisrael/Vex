@@ -262,16 +262,16 @@ export function discoverProtocolCapabilities(
   }
 
   const query = typeof request.query === "string" ? request.query.trim() : "";
+  // Availability is strictly `isProtocolToolAvailable` (lifecycle + env).
+  // Pre-PR1 a `request.includeDeclared` branch relaxed the lifecycle half,
+  // but `ToolLifecycle` is narrowed to `"active"` only (see types.ts) so
+  // there is nothing left to include/exclude — the flag was removed from
+  // the public schema in PR1.
   const filteredTools = PROTOCOL_TOOLS
     .filter((manifest) => isAdvertisedProtocolNamespace(manifest.namespace))
     .filter((manifest) => resolvedNamespace ? manifest.namespace === resolvedNamespace : true)
     .filter((manifest) => request.includeMutating ? true : !manifest.mutating)
-    .filter((manifest) => {
-      if (request.includeDeclared) {
-        return !manifest.requiresEnv || Boolean(process.env[manifest.requiresEnv]?.trim());
-      }
-      return isProtocolToolAvailable(manifest);
-    });
+    .filter((manifest) => isProtocolToolAvailable(manifest));
 
   const scoredTools: ScoredManifest[] = query.length === 0
     ? filteredTools.map((manifest) => ({ manifest, score: 0, whyMatched: [] }))

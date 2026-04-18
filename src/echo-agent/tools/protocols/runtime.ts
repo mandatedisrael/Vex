@@ -30,12 +30,10 @@ export async function executeProtocolTool(
     };
   }
 
-  if (manifest.lifecycle !== "active") {
-    return {
-      success: false,
-      output: `Protocol tool "${request.toolId}" is declared but not yet executable.`,
-    };
-  }
+  // Note: `manifest.lifecycle` is always "active" after PR1 narrowed the
+  // ToolLifecycle union; no runtime lifecycle gate needed. If a future
+  // variant is added (e.g. "declared" / "experimental"), reintroduce the
+  // gate here *and* decide the discovery contract in tandem.
 
   if (manifest.requiresEnv && !process.env[manifest.requiresEnv]?.trim()) {
     return {
@@ -44,15 +42,30 @@ export async function executeProtocolTool(
     };
   }
 
-  // Validate required params
+  // Validate params — presence (required) and runtime type (§1f).
+  // Pre-PR1 runtime only checked `required`; that left handlers defending
+  // against bad types with `as any` casts on SDK enum params. Rejecting the
+  // call here gives the LLM a clear error instead of silently coercing via
+  // `str()` / `num()` readers inside each handler.
   const params = request.params ?? {};
   for (const param of manifest.params) {
-    if (param.required) {
-      const value = params[param.key];
-      if (value === undefined || value === null || value === "") {
+    const value = params[param.key];
+    const missing = value === undefined || value === null || value === "";
+    if (param.required && missing) {
+      return {
+        success: false,
+        output: `Missing required parameter "${param.key}" for ${request.toolId}`,
+      };
+    }
+    if (!missing) {
+      const actualType = typeof value;
+      // `ProtocolParamDef.type` is "string" | "number" | "boolean" — all
+      // primitives observable via `typeof`. If we later add "object" /
+      // "array" variants, widen the check (or move to a JsonSchema walker).
+      if (actualType !== param.type) {
         return {
           success: false,
-          output: `Missing required parameter "${param.key}" for ${request.toolId}`,
+          output: `Parameter "${param.key}" for ${request.toolId} has invalid type: expected ${param.type}, got ${actualType}`,
         };
       }
     }

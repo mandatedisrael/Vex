@@ -28,7 +28,16 @@ export type ProtocolNamespace =
   | "chainscan"
   | "slop-app";
 
-export type ToolLifecycle = "active" | "declared";
+/**
+ * Lifecycle state of a protocol manifest.
+ *
+ * Post-PR1 only `"active"` is inhabited. The previous `"declared"` variant
+ * was zero-ref in the repo (no manifest used it) and has been removed from
+ * the union — follow-up manifests that need a "declared but not yet
+ * executable" state should add a new variant here *and* provide at least
+ * one real manifest plus matching discovery / runtime behaviour.
+ */
+export type ToolLifecycle = "active";
 
 // ── Discovery metadata (optional per-tool enrichment) ───────────
 
@@ -60,7 +69,7 @@ export interface ProtocolToolManifest {
   toolId: string;
   /** Protocol namespace */
   namespace: ProtocolNamespace;
-  /** Active = executable, declared = metadata only */
+  /** Lifecycle state — see {@link ToolLifecycle}. */
   lifecycle: ToolLifecycle;
   /** Human-readable description for LLM */
   description: string;
@@ -96,7 +105,6 @@ export interface ProtocolDiscoveryRequest {
   query?: string;
   namespace?: string;
   includeMutating?: boolean;
-  includeDeclared?: boolean;
   limit?: number;
 }
 

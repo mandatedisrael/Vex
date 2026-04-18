@@ -9,10 +9,12 @@
  * signatures; this test proves the promise structurally instead of relying
  * on a manual `pnpm mcp` smoke run.
  *
- * Also covers the `discover_tools.parameters.properties.includeDeclared`
- * preservation invariant — the parameter stays as a deprecated no-op through
- * this milestone (plan §1e), and removing it from the JsonSchema would be a
- * breaking change for MCP clients that pass it today.
+ * `discover_tools` schema note: PR1 dropped the `includeDeclared` parameter
+ * entirely (not preserved as a deprecated no-op). Zod object schemas in the
+ * MCP bridge default-strip unknown fields, so clients that still pass the
+ * flag don't see a visible error — the field is silently ignored. Keeping
+ * dead surface would have forced every future reviewer to ask "when does
+ * this go away"; removing it upfront is cleaner.
  */
 
 import { describe, it, expect } from "vitest";
@@ -222,25 +224,33 @@ describe("MCP contract — echo-agent public surface", () => {
     });
   });
 
-  describe("discover_tools public schema — includeDeclared preservation (§1e)", () => {
+  describe("discover_tools public schema — includeDeclared removed (PR1)", () => {
     it("discover_tools is exposed through production MCP surface", () => {
       const mcpTools = getProductionMcpTools();
       const discover = mcpTools.find((t) => t.name === "discover_tools");
       expect(discover).toBeDefined();
     });
 
-    it("discover_tools.parameters.properties.includeDeclared exists as a boolean", () => {
+    it("discover_tools.parameters.properties.includeDeclared is NOT present", () => {
+      // PR1 removed the flag entirely after ToolLifecycle was narrowed to
+      // `"active"` only. MCP clients that still pass `includeDeclared: true`
+      // get silent-strip from Zod default-parsing (no breaking error). Any
+      // reintroduction should come with a concrete lifecycle variant and
+      // real manifests that use it.
       const mcpTools = getProductionMcpTools();
       const discover = mcpTools.find((t) => t.name === "discover_tools");
       expect(discover).toBeDefined();
-      const prop = discover!.parameters.properties.includeDeclared;
-      expect(prop).toBeDefined();
-      expect(prop!.type).toBe("boolean");
-      // Description should carry the DEPRECATED marker after PR1 §1e.
-      // Until PR1 ships, description still reads "Include not-yet-active
-      // capabilities" — we only assert the field exists. When PR1 lands,
-      // this expectation tightens (see plan §9 DoD).
-      expect(typeof prop!.description).toBe("string");
+      expect(discover!.parameters.properties.includeDeclared).toBeUndefined();
+    });
+
+    it("discover_tools schema still advertises query/namespace/includeMutating/limit", () => {
+      const mcpTools = getProductionMcpTools();
+      const discover = mcpTools.find((t) => t.name === "discover_tools");
+      const props = discover!.parameters.properties;
+      expect(props.query).toBeDefined();
+      expect(props.namespace).toBeDefined();
+      expect(props.includeMutating).toBeDefined();
+      expect(props.limit).toBeDefined();
     });
   });
 });

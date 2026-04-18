@@ -177,6 +177,35 @@ vi.mock("@echo-agent/embeddings/config.js", () => ({
   MAX_EMBEDDING_DIM: 8192,
 }));
 
+// knowledge_write / knowledge_supersede now run under the maintenance lease
+// gate. Dispatcher routing tests only care about handler wiring, so keep the
+// lease layer as a pass-through and avoid touching a real pool.
+vi.mock("@echo-agent/db/repos/maintenance-lease.js", () => ({
+  withLeaseSharedLock: async <T>(
+    _pool: unknown,
+    fn: (tx: unknown) => Promise<T>,
+  ): Promise<T> => fn({ query: () => ({ rows: [], rowCount: 0 }) }),
+  MaintenanceActiveError: class MaintenanceActiveError extends Error {
+    readonly code = "MAINTENANCE_ACTIVE" as const;
+    readonly ownerId: string;
+    constructor(ownerId: string) {
+      super(`maintenance active — lease held by "${ownerId}"`);
+      this.name = "MaintenanceActiveError";
+      this.ownerId = ownerId;
+    }
+  },
+  acquireReembedLease: vi.fn(),
+  releaseReembedLease: vi.fn(),
+  inspectLease: vi.fn(),
+}));
+
+vi.mock("@echo-agent/db/client.js", () => ({
+  getPool: () => ({ connect: async () => ({ query: vi.fn(), release: vi.fn() }) }),
+  query: vi.fn(),
+  queryOne: vi.fn(),
+  execute: vi.fn(),
+}));
+
 vi.mock("@echo-agent/db/repos/schedules.js", () => ({
   createSchedule: vi.fn().mockResolvedValue(undefined),
   deleteSchedule: vi.fn().mockResolvedValue(true),

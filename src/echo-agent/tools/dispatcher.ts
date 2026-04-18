@@ -5,8 +5,11 @@
  * Dispatcher decides: internal tool → direct handler, or
  * discover/execute → protocol runtime.
  *
- * Internal tool handlers are lazy-imported to avoid loading
- * all dependencies at startup.
+ * Internal tool handlers are lazy-imported so a dispatch for one handler
+ * never forces the rest of the internal tool modules into memory. PR1
+ * replaced a 25-case `switch` with a typed `INTERNAL_TOOL_LOADERS` map —
+ * same lazy semantics, data-driven, and the completeness test structurally
+ * catches orphaned entries.
  */
 
 import type { ToolCallRequest, ToolResult } from "./types.js";
@@ -66,7 +69,6 @@ async function routeToolCall(
       query: typeof call.args.query === "string" ? call.args.query : undefined,
       namespace: typeof call.args.namespace === "string" ? call.args.namespace : undefined,
       includeMutating: call.args.includeMutating === true,
-      includeDeclared: call.args.includeDeclared === true,
       limit: typeof call.args.limit === "number" ? call.args.limit : undefined,
     };
     const result = discoverProtocolCapabilities(discoveryRequest);
@@ -114,150 +116,82 @@ async function routeToolCall(
 }
 
 // ── Internal tool routing ────────────────────────────────────────
-// All handlers lazy-imported to avoid loading dependencies at startup.
+//
+// Table-driven lazy loader map (PR1 replacement for the 25-case switch).
+// Each entry imports exactly one internal-tool module and returns the
+// named handler. Lazy imports keep startup cost low — a handler module is
+// only parsed when its tool is actually dispatched.
+//
+// Adding a new internal tool: add a row here. `registry-completeness.test.ts`
+// asserts every ToolDef with `kind: "internal"` (except meta-tools
+// `discover_tools` / `execute_tool`) has a loader entry.
+
+type InternalHandler = (
+  args: Record<string, unknown>,
+  context: InternalToolContext,
+) => Promise<ToolResult>;
+
+type InternalHandlerLoader = () => Promise<InternalHandler>;
+
+export const INTERNAL_TOOL_LOADERS: Readonly<Record<string, InternalHandlerLoader>> = {
+  // Web
+  web_search: async () => (await import("./internal/web.js")).handleWebSearch,
+  web_fetch: async () => (await import("./internal/web.js")).handleWebFetch,
+
+  // Documents (replaces file_*)
+  document_read: async () => (await import("./internal/documents.js")).handleDocumentRead,
+  document_write: async () => (await import("./internal/documents.js")).handleDocumentWrite,
+  document_list: async () => (await import("./internal/documents.js")).handleDocumentList,
+  document_delete: async () => (await import("./internal/documents.js")).handleDocumentDelete,
+
+  // Knowledge — canonical agent memory layer
+  knowledge_write: async () => (await import("./internal/knowledge.js")).handleKnowledgeWrite,
+  knowledge_recall: async () => (await import("./internal/knowledge.js")).handleKnowledgeRecall,
+  knowledge_recall_overflow: async () => (await import("./internal/knowledge.js")).handleKnowledgeRecallOverflow,
+  knowledge_get: async () => (await import("./internal/knowledge.js")).handleKnowledgeGet,
+  knowledge_update_status: async () => (await import("./internal/knowledge.js")).handleKnowledgeUpdateStatus,
+  knowledge_supersede: async () => (await import("./internal/knowledge.js")).handleKnowledgeSupersede,
+  knowledge_lineage: async () => (await import("./internal/knowledge.js")).handleKnowledgeLineage,
+  knowledge_history: async () => (await import("./internal/knowledge.js")).handleKnowledgeHistory,
+
+  // Scheduling
+  schedule_create: async () => (await import("./internal/schedule.js")).handleScheduleCreate,
+  schedule_remove: async () => (await import("./internal/schedule.js")).handleScheduleRemove,
+
+  // Portfolio
+  portfolio_inspect: async () => (await import("./internal/portfolio-inspect.js")).handlePortfolioInspect,
+
+  // Setup / Configuration
+  polymarket_setup: async () => (await import("./internal/polymarket-setup.js")).handlePolymarketSetup,
+
+  // Mission
+  mission_stop: async () => (await import("./internal/mission.js")).handleMissionStop,
+
+  // Subagents
+  subagent_spawn: async () => (await import("./internal/subagent.js")).handleSubagentSpawn,
+  subagent_status: async () => (await import("./internal/subagent.js")).handleSubagentStatus,
+  subagent_stop: async () => (await import("./internal/subagent.js")).handleSubagentStop,
+  subagent_reply: async () => (await import("./internal/subagent.js")).handleSubagentReply,
+  subagent_request_parent: async () => (await import("./internal/subagent.js")).handleSubagentRequestParent,
+  subagent_report_complete: async () => (await import("./internal/subagent.js")).handleSubagentReportComplete,
+
+  // EVM on-chain reads
+  evm_read: async () => (await import("./internal/evm-read.js")).handleEvmRead,
+
+  // Wallet
+  wallet_read: async () => (await import("./internal/wallet.js")).handleWalletRead,
+  wallet_send_prepare: async () => (await import("./internal/wallet.js")).handleWalletSendPrepare,
+  wallet_send_confirm: async () => (await import("./internal/wallet.js")).handleWalletSendConfirm,
+};
 
 async function routeInternalTool(
   call: ToolCallRequest,
   context: InternalToolContext,
 ): Promise<ToolResult> {
-  switch (call.name) {
-    // Web
-    case "web_search": {
-      const { handleWebSearch } = await import("./internal/web.js");
-      return handleWebSearch(call.args, context);
-    }
-    case "web_fetch": {
-      const { handleWebFetch } = await import("./internal/web.js");
-      return handleWebFetch(call.args, context);
-    }
-
-    // Documents (replaces file_*)
-    case "document_read": {
-      const { handleDocumentRead } = await import("./internal/documents.js");
-      return handleDocumentRead(call.args, context);
-    }
-    case "document_write": {
-      const { handleDocumentWrite } = await import("./internal/documents.js");
-      return handleDocumentWrite(call.args, context);
-    }
-    case "document_list": {
-      const { handleDocumentList } = await import("./internal/documents.js");
-      return handleDocumentList(call.args, context);
-    }
-    case "document_delete": {
-      const { handleDocumentDelete } = await import("./internal/documents.js");
-      return handleDocumentDelete(call.args, context);
-    }
-
-    // Knowledge — canonical agent memory layer (replaces memory_manage)
-    case "knowledge_write": {
-      const { handleKnowledgeWrite } = await import("./internal/knowledge.js");
-      return handleKnowledgeWrite(call.args, context);
-    }
-    case "knowledge_recall": {
-      const { handleKnowledgeRecall } = await import("./internal/knowledge.js");
-      return handleKnowledgeRecall(call.args, context);
-    }
-    case "knowledge_recall_overflow": {
-      const { handleKnowledgeRecallOverflow } = await import("./internal/knowledge.js");
-      return handleKnowledgeRecallOverflow(call.args, context);
-    }
-    case "knowledge_get": {
-      const { handleKnowledgeGet } = await import("./internal/knowledge.js");
-      return handleKnowledgeGet(call.args, context);
-    }
-    case "knowledge_update_status": {
-      const { handleKnowledgeUpdateStatus } = await import("./internal/knowledge.js");
-      return handleKnowledgeUpdateStatus(call.args, context);
-    }
-    case "knowledge_supersede": {
-      const { handleKnowledgeSupersede } = await import("./internal/knowledge.js");
-      return handleKnowledgeSupersede(call.args, context);
-    }
-    case "knowledge_lineage": {
-      const { handleKnowledgeLineage } = await import("./internal/knowledge.js");
-      return handleKnowledgeLineage(call.args, context);
-    }
-    case "knowledge_history": {
-      const { handleKnowledgeHistory } = await import("./internal/knowledge.js");
-      return handleKnowledgeHistory(call.args, context);
-    }
-
-    // Scheduling
-    case "schedule_create": {
-      const { handleScheduleCreate } = await import("./internal/schedule.js");
-      return handleScheduleCreate(call.args, context);
-    }
-    case "schedule_remove": {
-      const { handleScheduleRemove } = await import("./internal/schedule.js");
-      return handleScheduleRemove(call.args, context);
-    }
-
-    // Portfolio
-    case "portfolio_inspect": {
-      const { handlePortfolioInspect } = await import("./internal/portfolio-inspect.js");
-      return handlePortfolioInspect(call.args, context);
-    }
-
-    // Setup / Configuration
-    case "polymarket_setup": {
-      const { handlePolymarketSetup } = await import("./internal/polymarket-setup.js");
-      return handlePolymarketSetup(call.args, context);
-    }
-
-    // Mission
-    case "mission_stop": {
-      const { handleMissionStop } = await import("./internal/mission.js");
-      return handleMissionStop(call.args, context);
-    }
-
-    // Subagents
-    case "subagent_spawn": {
-      const { handleSubagentSpawn } = await import("./internal/subagent.js");
-      return handleSubagentSpawn(call.args, context);
-    }
-    case "subagent_status": {
-      const { handleSubagentStatus } = await import("./internal/subagent.js");
-      return handleSubagentStatus(call.args, context);
-    }
-    case "subagent_stop": {
-      const { handleSubagentStop } = await import("./internal/subagent.js");
-      return handleSubagentStop(call.args, context);
-    }
-    case "subagent_reply": {
-      const { handleSubagentReply } = await import("./internal/subagent.js");
-      return handleSubagentReply(call.args, context);
-    }
-    case "subagent_request_parent": {
-      const { handleSubagentRequestParent } = await import("./internal/subagent.js");
-      return handleSubagentRequestParent(call.args, context);
-    }
-    case "subagent_report_complete": {
-      const { handleSubagentReportComplete } = await import("./internal/subagent.js");
-      return handleSubagentReportComplete(call.args, context);
-    }
-
-    // EVM on-chain reads
-    case "evm_read": {
-      const { handleEvmRead } = await import("./internal/evm-read.js");
-      return handleEvmRead(call.args, context);
-    }
-
-    // Wallet
-    case "wallet_read": {
-      const { handleWalletRead } = await import("./internal/wallet.js");
-      return handleWalletRead(call.args, context);
-    }
-    case "wallet_send_prepare": {
-      const { handleWalletSendPrepare } = await import("./internal/wallet.js");
-      return handleWalletSendPrepare(call.args, context);
-    }
-    case "wallet_send_confirm": {
-      const { handleWalletSendConfirm } = await import("./internal/wallet.js");
-      return handleWalletSendConfirm(call.args, context);
-    }
-
-    default:
-      return { success: false, output: `Unknown internal tool: ${call.name}` };
+  const loader = INTERNAL_TOOL_LOADERS[call.name];
+  if (!loader) {
+    return { success: false, output: `Unknown internal tool: ${call.name}` };
   }
+  const handler = await loader();
+  return handler(call.args, context);
 }
