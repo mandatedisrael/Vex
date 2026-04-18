@@ -69,7 +69,23 @@ Counted toward LOC limit. Post-PR4 state.
 | `src/echo-agent/tools/protocols/echobook/handlers.ts` | 301 | runtime | Split in PR2 §2d (per-domain handler files + barrel). |
 | `src/echo-agent/tools/protocols/discovery.ts` | 300 | runtime | Keep (at soft limit); PR1 removes `includeDeclared` internal branch → drops below. |
 
-## 4. Follow-up tickets (extracted from plan non-goals §7)
+## 4. Follow-up tickets (extracted from plan non-goals §7 + PR-time deferrals)
+
+Deferred during PR4 (test coverage) — not implemented because the value is lower
+than the SDK/DB mocking cost in the current milestone, and existing suites already
+provide structural coverage:
+
+- Provider adapter mapping tests (`inference/openrouter.ts`, `inference/0g-compute.ts`).
+  `registry.test.ts` + `resilience.test.ts` + `config.test.ts` + `cost-calculation.test.ts`
+  already cover selection, retry, config, and cost shape. What remains (response
+  parse, HMAC signature, tool-call delta accumulation) is highly SDK-shaped and
+  would be a maintenance burden without integration-level payloads.
+- `sync/replay.ts` unit tests. The module is zero-ref runtime today — it will
+  move to `scripts/ops/replay-projections.ts` in PR5 with an operator-only
+  comment. A test there would need DB mocking + MUTATION_MATRIX fixture work
+  that is disproportionate to the risk.
+
+Other follow-ups:
 
 - Extend `ProtocolParamDef` with `enum`/`schema` (option (b) from plan §2.8) — broader contract evolution.
 - Full Zod migration for handler readers (replace `str()/num()/bool()`).
