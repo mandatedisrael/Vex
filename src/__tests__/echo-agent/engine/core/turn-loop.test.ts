@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 // ── Mocks ─────────────────────────────────────────────────────
 
@@ -77,6 +79,20 @@ const { runTurnLoop } = await import("../../../../echo-agent/engine/core/turn-lo
 describe("turn-loop", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  // PR-2: promotion hook was removed — lint against regression that
+  // would silently reintroduce the session_episodes → knowledge_entries
+  // auto-promotion pipeline on checkpoint. Memory contract:
+  // `knowledge_*` is manual-write-only via `knowledge_write` /
+  // `knowledge_supersede`. session_episodes are recall-only.
+  it("does not call runPromotionForSession or import the removed promotion module", () => {
+    const src = readFileSync(
+      resolve(process.cwd(), "src/echo-agent/engine/core/turn-loop.ts"),
+      "utf-8",
+    );
+    expect(src).not.toContain("runPromotionForSession");
+    expect(src).not.toContain("knowledge/promotion");
   });
 
   function makeContext(overrides = {}) {

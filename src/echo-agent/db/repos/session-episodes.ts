@@ -1,15 +1,15 @@
 /**
- * Session-episodes repo — barrel over PR2 split.
+ * Session-episodes repo — barrel over the split submodules.
  *
  * Sits between `sessions.summary` (rolling per-session) and
- * `knowledge_entries` (canonical, cross-session, curated). Episodes are
- * write-once; promotion to canonical knowledge lives in
- * `src/echo-agent/knowledge/promotion/` (see `session-episodes/promotion-queries.ts`
- * for the read-only queries the pipeline consumes).
+ * `knowledge_entries` (canonical, cross-session, manually curated via
+ * `knowledge_write` / `knowledge_supersede`). Episodes are write-once,
+ * scoped by `memory_scope_key`, and used for recall-only augmentation of
+ * the prompt — they never flow into knowledge automatically.
  *
- * Public surface is unchanged post-PR2. Pre-split import `import * as
- * sessionEpisodesRepo from "@echo-agent/db/repos/session-episodes.js"` continues
- * to resolve every name below (types + functions).
+ * Pre-split import `import * as sessionEpisodesRepo from
+ * "@echo-agent/db/repos/session-episodes.js"` continues to resolve every
+ * name below (types + functions).
  */
 
 export {
@@ -32,10 +32,3 @@ export {
 } from "./session-episodes/crud.js";
 
 export { recallTopK } from "./session-episodes/recall.js";
-
-export {
-  PROMOTABLE_KINDS,
-  countSimilar,
-  listPromotable,
-  type PromotionCandidate,
-} from "./session-episodes/promotion-queries.js";

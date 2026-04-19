@@ -82,7 +82,6 @@ export async function insertEntry(
          content_hash, embedding_model, embedding_dim, embedding,
          source_surface, source_session,
          supersedes_id, status_reason, change_summary, what_failed,
-         source_episode_id, source_episode_hash, promotion_version,
          created_at, updated_at
        )
        VALUES (
@@ -91,8 +90,7 @@ export async function insertEntry(
          $12, $13, $14, $15::vector,
          COALESCE($16::text, 'echo_agent'), $17,
          $18, $19, $20, $21,
-         $22, $23, COALESCE($24::int, 1),
-         COALESCE($25::timestamptz, NOW()), COALESCE($26::timestamptz, NOW())
+         COALESCE($22::timestamptz, NOW()), COALESCE($23::timestamptz, NOW())
        )
        ON CONFLICT (content_hash) DO NOTHING
        RETURNING *
@@ -123,9 +121,6 @@ export async function insertEntry(
       input.statusReason ?? null,
       input.changeSummary ?? null,
       input.whatFailed ?? null,
-      input.sourceEpisodeId ?? null,
-      input.sourceEpisodeHash ?? null,
-      input.promotionVersion ?? null,
       toIsoOrNull(input.createdAt),
       toIsoOrNull(input.updatedAt),
     ],
