@@ -30,6 +30,45 @@ import type { ToolDef } from "../types.js";
 
 export const AUTONOMY_TOOLS: readonly ToolDef[] = [
   {
+    name: "checkpoint_handoff_prepare",
+    kind: "internal",
+    mutating: true,
+    excludeRoles: ["subagent"],
+    excludeFromMcp: true,
+    visibility: { band: "warning" },
+    description:
+      "Prepare a handoff note that will seed recall AFTER the next checkpoint compacts the prompt. " +
+      "Call this the moment you see the context-pressure warning (≥ 80%) so the post-compact turn can recover the right memories, entities, and open loops instead of starting blind. " +
+      "Bounded Zod schema enforces: preserve_md ≤ 2000 chars, preferred_recall_query ≤ 500 chars, up to 20 important_entities / open_loops each. " +
+      "Latest call supersedes any earlier handoff for the same pending checkpoint — a fresh call is always safe.",
+    parameters: {
+      type: "object",
+      properties: {
+        preserve_md: {
+          type: "string",
+          description:
+            "Free-form note (≤ 2000 chars) about what MUST survive compaction — the model's own view of which facts / decisions / plan steps would be lost if the rolling summary drops them. Merged into the summary prompt.",
+        },
+        preferred_recall_query: {
+          type: "string",
+          description:
+            "Seed query (≤ 500 chars) used by recall after compaction. Should describe what the next turn will need to know, not what just happened.",
+        },
+        important_entities: {
+          type: "string",
+          description:
+            "JSON array of entity identifiers (≤ 20 items, each ≤ 100 chars) to prioritise in recall: wallet addresses, symbols, mission ids, protocol names.",
+        },
+        open_loops: {
+          type: "string",
+          description:
+            "JSON array of unresolved follow-ups (≤ 20 items, each ≤ 200 chars) — steps, questions, or watchpoints the next turn should not lose.",
+        },
+      },
+      required: ["preserve_md", "preferred_recall_query", "important_entities", "open_loops"],
+    },
+  },
+  {
     name: "loop_defer",
     kind: "internal",
     mutating: false,

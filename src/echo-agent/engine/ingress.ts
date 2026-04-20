@@ -78,7 +78,7 @@ export async function routeUserMessage(
   // full_autonomous session still falls back to chat so existing deployments
   // don't break before PR-10 lands.
   const session = await sessionsRepo.getSession(sessionId);
-  const kind = (session as unknown as { kind?: string } | null)?.kind ?? "chat";
+  const kind = session?.kind ?? "chat";
 
   if (kind === "full_autonomous") {
     logger.warn("ingress.full_autonomous_stub_chat", { sessionId });

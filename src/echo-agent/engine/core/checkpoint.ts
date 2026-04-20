@@ -24,11 +24,13 @@
  */
 
 import type { PoolClient } from "pg";
-import type { InferenceProvider, InferenceConfig } from "@echo-agent/inference/types.js";
+import type { InferenceProvider, InferenceConfig, ProviderMessage, ToolDefinition } from "@echo-agent/inference/types.js";
 import * as sessionsRepo from "@echo-agent/db/repos/sessions.js";
 import * as messagesRepo from "@echo-agent/db/repos/messages.js";
 import * as episodesRepo from "@echo-agent/db/repos/session-episodes.js";
+import * as checkpointHandoffsRepo from "@echo-agent/db/repos/checkpoint-handoffs.js";
 import type { NewEpisode } from "@echo-agent/db/repos/session-episodes.js";
+import type { CheckpointHandoffPayload } from "@echo-agent/db/repos/checkpoint-handoffs.js";
 import { getPool } from "@echo-agent/db/client.js";
 import { embedDocument } from "@echo-agent/embeddings/client.js";
 import {
@@ -42,6 +44,10 @@ import {
   computeEpisodeHash,
   type ExtractedEpisode,
 } from "@echo-agent/engine/checkpoint/extract.js";
+import { getAllTools } from "@echo-agent/tools/registry.js";
+import { toOpenAITools } from "@echo-agent/tools/types.js";
+import { handleCheckpointHandoffPrepare } from "@echo-agent/tools/internal/checkpoint-handoff.js";
+import { computeBand } from "./context-band.js";
 import logger from "@utils/logger.js";
 
 /** Threshold: checkpoint when tokenCount exceeds 90% of context limit. */
@@ -49,6 +55,14 @@ const CHECKPOINT_THRESHOLD = 0.9;
 
 /** Cooldown after a noop so a stuck session doesn't re-enter the same path every turn. */
 const NOOP_COOLDOWN_MS = 5 * 60 * 1000;
+
+/**
+ * Cooldown for the Phase 0 forced handoff pass. 60s — enough to prevent a
+ * token_count re-trigger loop (band stays critical across several turns
+ * until the normal checkpoint clears it) without starving recovery when the
+ * model actually produces a useful handoff.
+ */
+const FORCED_HANDOFF_COOLDOWN_MS = 60 * 1000;
 
 /** Fallback title hint length — matches the pre-PR2 slice(0, 120) cap. */
 const TITLE_FALLBACK_CHARS = 120;
@@ -59,6 +73,13 @@ const TITLE_FALLBACK_CHARS = 120;
  * attempt after a restart is an acceptable conservative default.
  */
 const noopCooldownUntil = new Map<string, number>();
+
+/**
+ * Per-session cooldown for the PR-9 forced handoff pass. Matches
+ * `noopCooldownUntil` semantics (process-lifetime only, cleared on restart)
+ * so an over-critical band doesn't fire the forced pass on every turn.
+ */
+const forcedPassCooldownUntil = new Map<string, number>();
 
 /**
  * Per-session serialization for `executeCheckpoint`. Process-local mutex —
@@ -143,6 +164,24 @@ async function executeCheckpointInner(
   const session = await sessionsRepo.getSession(sessionId);
   const previousSummary = session?.summary ?? null;
   const currentCode = session?.memoryLanguageCode ?? null;
+
+  // Phase 0 — forced handoff pass. Fires only when the band is already
+  // `critical`, no active handoff exists for the next generation, and the
+  // per-session cooldown has elapsed. See PR-9 in the wake roadmap and
+  // ADR-001 for the side-effect-light contract (no usageRepo, no
+  // sessionsRepo.updateTokenCount, no saveAssistantMessage).
+  if (session) {
+    const band = computeBand(session.tokenCount, config.contextLimit);
+    if (band === "critical") {
+      await maybeRunForcedHandoffPass(
+        sessionId,
+        session.checkpointGeneration + 1,
+        messagesWithId,
+        provider,
+        config,
+      );
+    }
+  }
 
   // 3. Decide what to compact.
   const plan = selectPrefixWithGiantFallback(messagesWithId);
@@ -347,6 +386,40 @@ async function runCheckpointWriteTx(args: {
       [args.sessionId, nextGen],
     );
 
+    // 5b. Consume any active handoff for the freshly-bumped generation. PR-9
+    //     Phase 0 + `checkpoint_handoff_prepare` both target `target_gen =
+    //     current_gen + 1`; here is the atomic read/flip inside the same tx.
+    //     A handoff written for a STALE target_gen (writer saw old generation
+    //     and lost the race) is left in `active` — it's visible to the next
+    //     checkpoint and will either be consumed or superseded then.
+    try {
+      const active = await checkpointHandoffsRepo.getActive(args.sessionId, nextGen, tx);
+      if (active) {
+        const flipped = await checkpointHandoffsRepo.consume(active.id, tx);
+        if (flipped === 0) {
+          logger.warn("checkpoint.handoff.consume_raced", {
+            sessionId: args.sessionId,
+            handoffId: active.id,
+            targetGen: nextGen,
+          });
+        } else {
+          logger.info("checkpoint.handoff.consumed", {
+            sessionId: args.sessionId,
+            handoffId: active.id,
+            targetGen: nextGen,
+          });
+        }
+      }
+    } catch (err) {
+      // Handoff consume is best-effort — a checkpoint that compacted
+      // correctly must not roll back because the handoff flip failed.
+      logger.warn("checkpoint.handoff.consume_failed", {
+        sessionId: args.sessionId,
+        targetGen: nextGen,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     // 6. Archive — branch on plan mode.
     if (args.plan.mode === "prefix") {
       await sessionsRepo.archivePrefix(
@@ -421,6 +494,7 @@ function buildGiantToolPlaceholder(bloatedMessageId: number, episodeId: number |
  */
 export function __resetCheckpointCooldownForTests(): void {
   noopCooldownUntil.clear();
+  forcedPassCooldownUntil.clear();
 }
 
 /**
@@ -429,4 +503,265 @@ export function __resetCheckpointCooldownForTests(): void {
  */
 export function __resetCheckpointMutexForTests(): void {
   checkpointInFlight.clear();
+}
+
+// ── PR-9 Phase 0: forced handoff pass ───────────────────────────
+
+/**
+ * Cap on the number of recent live messages shown to the Phase 0 pass.
+ * Keeps the inline `chatCompletion` call cheap even on pressure-loaded
+ * sessions (we're at ≥ 90% for a reason).
+ */
+const FORCED_PASS_MESSAGE_WINDOW = 12;
+
+/** Cap per message shown to Phase 0 — same idea as `PER_MESSAGE_CHAR_CAP` in merge.ts. */
+const FORCED_PASS_PER_MESSAGE_CAP = 500;
+
+/**
+ * Phase 0 orchestration — decide whether to fire the forced pass. Skips
+ * when:
+ *   - an active handoff already exists for `targetGeneration`
+ *     (either `checkpoint_handoff_prepare` fired earlier this turn, or a
+ *     previous Phase 0 succeeded and we haven't compacted yet),
+ *   - the per-session cooldown is still active.
+ *
+ * On miss we fall back to a deterministic DB-based handoff so
+ * `effectiveRecallSeed` always sees a non-empty `preferred_recall_query`.
+ */
+async function maybeRunForcedHandoffPass(
+  sessionId: string,
+  targetGeneration: number,
+  messages: readonly messagesRepo.MessageWithId[],
+  provider: InferenceProvider,
+  config: InferenceConfig,
+): Promise<void> {
+  const existing = await checkpointHandoffsRepo.getActive(sessionId, targetGeneration);
+  if (existing) return;
+
+  const cooldownUntil = forcedPassCooldownUntil.get(sessionId);
+  if (cooldownUntil !== undefined && Date.now() < cooldownUntil) {
+    logger.info("checkpoint.forced_pass.cooldown_active", {
+      sessionId,
+      targetGeneration,
+      resumesAtMs: cooldownUntil - Date.now(),
+    });
+    return;
+  }
+
+  forcedPassCooldownUntil.set(sessionId, Date.now() + FORCED_HANDOFF_COOLDOWN_MS);
+
+  const modelWroteHandoff = await runForcedHandoffPass(
+    sessionId,
+    targetGeneration,
+    messages,
+    provider,
+    config,
+  );
+
+  // Always confirm a handoff exists — the model may have declined the tool
+  // call, or the inline call may have errored silently. `effectiveRecallSeed`
+  // depends on a non-empty `preferred_recall_query`, so fall back to a
+  // deterministic DB-based payload when the model didn't land one.
+  if (!modelWroteHandoff) {
+    await writeDeterministicFallbackHandoff(sessionId, targetGeneration);
+  }
+}
+
+/**
+ * Side-effect-light forced pass. Calls `provider.chatCompletion` directly
+ * with the SINGLE tool we want (`checkpoint_handoff_prepare`). No
+ * `executeTurn`, no `saveAssistantMessage`, no `usageRepo.logUsage`, no
+ * `sessionsRepo.updateTokenCount` — if the model emits the tool call, we
+ * drive the handler inline and exit.
+ *
+ * Returns `true` when the handoff row landed, `false` otherwise (caller
+ * falls back to the deterministic writer).
+ */
+async function runForcedHandoffPass(
+  sessionId: string,
+  targetGeneration: number,
+  messages: readonly messagesRepo.MessageWithId[],
+  provider: InferenceProvider,
+  config: InferenceConfig,
+): Promise<boolean> {
+  const allTools = getAllTools();
+  const handoffTool = allTools.find((t) => t.name === "checkpoint_handoff_prepare");
+  if (!handoffTool) {
+    logger.error("checkpoint.forced_pass.tool_missing", { sessionId });
+    return false;
+  }
+
+  const tools: ToolDefinition[] = toOpenAITools([handoffTool]).map((ot) => ({
+    type: "function" as const,
+    function: ot.function,
+  }));
+
+  const providerMessages = buildForcedPassMessages(messages);
+
+  let response;
+  try {
+    response = await provider.chatCompletion(providerMessages, tools, config);
+  } catch (err) {
+    logger.warn("checkpoint.forced_pass.completion_failed", {
+      sessionId,
+      targetGeneration,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
+
+  const toolCalls = response.toolCalls ?? [];
+  if (toolCalls.length === 0) {
+    logger.info("checkpoint.forced_pass.no_tool_call", { sessionId, targetGeneration });
+    return false;
+  }
+
+  // Dispatch the handoff handler directly — NOT via the dispatcher, so we
+  // bypass approval / logging / engine-signal plumbing. The handler itself
+  // writes the row and is the ONLY DB side effect of this pass.
+  const call = toolCalls[0]!;
+  if (call.name !== "checkpoint_handoff_prepare") {
+    logger.warn("checkpoint.forced_pass.unexpected_tool", {
+      sessionId,
+      toolName: call.name,
+    });
+    return false;
+  }
+
+  try {
+    const result = await handleCheckpointHandoffPrepare(call.arguments, {
+      sessionId,
+      loadedDocuments: new Map(),
+      loopMode: "off",
+      approved: true,
+      role: "parent",
+      missionRunId: null,
+      sessionKind: "mission",
+      contextUsageBand: "critical",
+    });
+    if (!result.success) {
+      logger.warn("checkpoint.forced_pass.handler_rejected", {
+        sessionId,
+        reason: result.output,
+      });
+      return false;
+    }
+    logger.info("checkpoint.forced_pass.handoff_written", {
+      sessionId,
+      targetGeneration,
+    });
+    return true;
+  } catch (err) {
+    logger.warn("checkpoint.forced_pass.handler_threw", {
+      sessionId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
+}
+
+function buildForcedPassMessages(
+  messages: readonly messagesRepo.MessageWithId[],
+): ProviderMessage[] {
+  const tail = messages.slice(-FORCED_PASS_MESSAGE_WINDOW);
+  const excerpt = tail
+    .map((m) => `[${m.role}]: ${m.content.slice(0, FORCED_PASS_PER_MESSAGE_CAP)}`)
+    .join("\n");
+  const system =
+    "Context is critical (>= 90%). A checkpoint will compact the prompt in a moment. " +
+    "Call `checkpoint_handoff_prepare` ONCE to record what the post-compact turn needs: " +
+    "`preserve_md` (what must survive), `preferred_recall_query` (recall seed), " +
+    "`important_entities` (wallets, symbols, ids), `open_loops` (unresolved follow-ups). " +
+    "Pass arrays as JSON strings, keep every string inside the declared bounds, and " +
+    "do NOT emit any other tool call or assistant text.";
+  return [
+    { role: "system", content: system },
+    { role: "user", content: `Recent conversation excerpt (last ${tail.length} messages):\n${excerpt}` },
+  ];
+}
+
+/**
+ * Deterministic fallback — synthesises a non-empty handoff payload from the
+ * most recent episodes when the model refused or failed to call the tool.
+ */
+async function writeDeterministicFallbackHandoff(
+  sessionId: string,
+  targetGeneration: number,
+): Promise<void> {
+  try {
+    const recent = await episodesRepo.listRecentBySession(sessionId, 5);
+    const payload = buildDeterministicFallbackPayload(recent);
+    await checkpointHandoffsRepo.writeHandoff(sessionId, targetGeneration, payload);
+    logger.info("checkpoint.forced_pass.fallback_written", {
+      sessionId,
+      targetGeneration,
+      entityCount: payload.importantEntities.length,
+      openLoopCount: payload.openLoops.length,
+    });
+  } catch (err) {
+    // A failed fallback is non-fatal — the checkpoint proceeds and the post-
+    // compact recall falls back to `findLastUserInput`. Logging loud so we
+    // can spot the pattern if it recurs.
+    logger.error("checkpoint.forced_pass.fallback_failed", {
+      sessionId,
+      targetGeneration,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+function buildDeterministicFallbackPayload(
+  recent: readonly episodesRepo.SessionEpisode[],
+): CheckpointHandoffPayload {
+  if (recent.length === 0) {
+    return {
+      preserveMd: "",
+      preferredRecallQuery: "Resume session after compaction",
+      importantEntities: [],
+      openLoops: [],
+    };
+  }
+
+  // Top-3 episode titles → recall seed. Drop empty titles so legacy rows
+  // don't produce `" / foo / "` patterns.
+  const titles = recent
+    .slice(0, 3)
+    .map((ep) => ep.title.trim())
+    .filter((t) => t.length > 0);
+
+  const preferredRecallQuery = titles.length > 0
+    ? titles.join(" / ")
+    : "Resume session after compaction";
+
+  // Top-5 episode entities → deduped, clipped to entity bound.
+  const entities = new Set<string>();
+  for (const ep of recent) {
+    for (const e of ep.entities) {
+      if (typeof e !== "string") continue;
+      const trimmed = e.trim().slice(0, 100);
+      if (trimmed.length === 0) continue;
+      entities.add(trimmed);
+      if (entities.size >= 20) break;
+    }
+    if (entities.size >= 20) break;
+  }
+
+  // Top-5 episode open_loops (JSONB shape: {"short label": "detail"}).
+  const openLoops: string[] = [];
+  for (const ep of recent) {
+    for (const [key, value] of Object.entries(ep.openLoops)) {
+      const detail = typeof value === "string" ? value : JSON.stringify(value);
+      const combined = `${key}: ${detail}`.slice(0, 200);
+      openLoops.push(combined);
+      if (openLoops.length >= 20) break;
+    }
+    if (openLoops.length >= 20) break;
+  }
+
+  return {
+    preserveMd: "",
+    preferredRecallQuery: preferredRecallQuery.slice(0, 500),
+    importantEntities: [...entities],
+    openLoops,
+  };
 }

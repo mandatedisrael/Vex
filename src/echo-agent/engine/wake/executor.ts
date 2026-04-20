@@ -237,11 +237,10 @@ function buildProductionDeps(): WakeDeps {
     getSessionKind: async (sessionId) => {
       const session = await sessionsRepo.getSession(sessionId);
       if (!session) return null;
-      // `sessions.kind` is added by PR-10. Until that PR lands, every
-      // session is treated as `chat` — executor will correctly skip
-      // full_autonomous wakes for now, and PR-10's migration + repo
-      // update makes this read live.
-      return (session as unknown as { kind?: string }).kind ?? "chat";
+      // Until PR-10's migration adds the `sessions.kind` column, `mapRow`
+      // resolves every row to `"chat"` — the executor correctly skips any
+      // full_autonomous wake that slips in during that window.
+      return session.kind;
     },
     injectWakeBanner: async (sessionId, reason, dueAt) => {
       await messagesRepo.addEngineMessage(

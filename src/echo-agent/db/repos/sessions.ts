@@ -51,7 +51,23 @@ interface SessionRow {
   memory_scope_key: string | null;
   memory_language_code: string | null;
   checkpoint_generation: number;
+  /**
+   * PR-10 (wake roadmap) adds `sessions.kind TEXT DEFAULT 'chat'`. The type
+   * field is declared now so PR-7 (wake executor + ingress router) can read
+   * `session.kind` without an `as unknown as` cast. Until PR-10's migration
+   * lands, the column does not exist — `mapRow` tolerates the missing key
+   * and falls back to `"chat"`.
+   */
+  kind?: string | null;
 }
+
+/**
+ * Known values for `sessions.kind`. `"chat"` is the default; `"full_autonomous"`
+ * becomes a real runtime surface in PR-10 (the standalone full-autonomous
+ * runner) but the type is declared now so PR-7's wake executor + ingress
+ * router stay cast-free.
+ */
+export type SessionKind = "chat" | "full_autonomous";
 
 export interface Session {
   id: string;
@@ -72,6 +88,13 @@ export interface Session {
    * generation 1.
    */
   checkpointGeneration: number;
+  /**
+   * Session-level runtime discriminator. `"chat"` by default; `"full_autonomous"`
+   * activates the standalone full-autonomous routing path (PR-10). The column
+   * itself is added by PR-10's migration — today every row resolves to `"chat"`
+   * because `mapRow` defaults unknown values there.
+   */
+  kind: SessionKind;
 }
 
 /**
@@ -100,6 +123,7 @@ function mapRow(r: SessionRow): Session {
     memoryScopeKey: r.memory_scope_key,
     memoryLanguageCode: r.memory_language_code,
     checkpointGeneration: r.checkpoint_generation,
+    kind: r.kind === "full_autonomous" ? "full_autonomous" : "chat",
   };
 }
 

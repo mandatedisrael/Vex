@@ -152,9 +152,13 @@ describe("registry", () => {
     expect(namespace?.description).not.toContain("0g-compute");
   });
 
-  it("mutating tools are wallet_send_confirm and polymarket_setup", () => {
+  it("mutating tools are wallet_send_confirm, polymarket_setup, checkpoint_handoff_prepare", () => {
     const mutating = getAllTools().filter(t => t.mutating).map(t => t.name).sort();
-    expect(mutating).toEqual(["polymarket_setup", "wallet_send_confirm"]);
+    expect(mutating).toEqual([
+      "checkpoint_handoff_prepare",
+      "polymarket_setup",
+      "wallet_send_confirm",
+    ]);
   });
 
   // ── Role filtering ──────────────────────────────────────────────
