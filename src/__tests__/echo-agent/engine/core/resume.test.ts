@@ -27,6 +27,10 @@ vi.mock("@echo-agent/db/repos/messages.js", () => ({
 vi.mock("@echo-agent/db/repos/mission-runs.js", () => ({
   updateStatus: (...a: unknown[]) => mockUpdateRunStatus(...a),
   getRunBySession: vi.fn().mockResolvedValue(null),
+  // Used by the defensive abort guard added in `approveAndResume`. Default
+  // null means "no active run for the session", so the existing happy-path
+  // tests skip the guard.
+  getActiveRunBySession: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../../../../echo-agent/engine/core/hydrate.js", () => ({
@@ -93,6 +97,26 @@ describe("resume", () => {
         pendingContext: null,
       });
       await expect(approveAndResume("approval-1")).rejects.toThrow("no associated session");
+    });
+
+    it("rejects approval when active mission run is terminal (defensive guard)", async () => {
+      const missionRunsModule = await import("@echo-agent/db/repos/mission-runs.js");
+      vi.mocked(missionRunsModule.getActiveRunBySession).mockResolvedValueOnce({
+        id: "run-cancelled",
+        status: "cancelled",
+      } as never);
+
+      mockApprove.mockResolvedValueOnce({
+        id: "approval-late",
+        toolCall: { command: "execute_tool", args: { toolId: "solana.swap" } },
+        sessionId: "session-1",
+        toolCallId: "call-late",
+        chatMode: "restricted",
+        pendingContext: null,
+      });
+
+      await expect(approveAndResume("approval-late")).rejects.toThrow(/cancelled/);
+      expect(mockDispatchTool).not.toHaveBeenCalled();
     });
 
     it("dispatches approved tool, saves result, and re-enters loop", async () => {

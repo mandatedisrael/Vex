@@ -112,7 +112,28 @@ export function getActiveProvider(): InferenceProvider | null {
   return cachedProvider;
 }
 
-/** Reset cached provider — for tests only. */
+/**
+ * Reset the cached provider. Used by `switchProvider()` for in-process
+ * provider toggling and by tests that want a clean cache between cases.
+ * The next `resolveProvider()` will re-read `process.env` and `compute-state.json`.
+ */
 export function resetProvider(): void {
   cachedProvider = null;
+}
+
+/**
+ * Switch the active provider in-process: set `AGENT_PROVIDER`, drop the
+ * cached instance, and re-resolve. Returns the freshly-instantiated provider
+ * (or `null` if `loadEnvConfig` rejects the value or the factory fails).
+ *
+ * Mutates `process.env.AGENT_PROVIDER` so subsequent `resolveProvider()`
+ * calls (anywhere in the process) honour the choice. There is no rollback —
+ * callers that need the previous selection should snapshot it first.
+ */
+export async function switchProvider(
+  name: "openrouter" | "0g-compute",
+): Promise<InferenceProvider | null> {
+  process.env.AGENT_PROVIDER = name;
+  resetProvider();
+  return resolveProvider();
 }

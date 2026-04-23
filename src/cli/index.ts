@@ -15,7 +15,6 @@ export function buildRootHelpText(): string {
     "Commands:",
     "  echo   Launch the EchoClaw MCP setup and AI connector flow.",
     "  mcp    Start the production MCP server directly.",
-    "  vex    Reserved for the future VEX runtime.",
     "  help   Show this help message.",
   ].join("\n");
 }
@@ -56,12 +55,6 @@ export async function runRootCli(argv: readonly string[] = process.argv.slice(2)
   if (command === "mcp") {
     const { runMcpCli } = await import("../mcp/index.js");
     await runMcpCli(rest);
-    return;
-  }
-
-  if (command === "vex") {
-    const { runVexCli } = await import("./vex/index.js");
-    await runVexCli(rest);
     return;
   }
 

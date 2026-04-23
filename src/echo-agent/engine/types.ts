@@ -38,7 +38,8 @@ export type MissionRunStatus =
   | "paused_wake"
   | "completed"
   | "failed"
-  | "stopped";
+  | "stopped"
+  | "cancelled";
 
 // ── Stop conditions ─────────────────────────────────────────────
 

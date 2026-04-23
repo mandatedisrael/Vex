@@ -52,6 +52,13 @@ export class ZeroGComputeProvider implements InferenceProvider {
   private alertThreshold = ZG_DEFAULT_ALERT_THRESHOLD;
   private cachedBalance: ProviderBalance | null = null;
   private cachedBalanceAt = 0;
+  /**
+   * 0G service base URL (`metadata.endpoint` from `getServiceMetadata`).
+   * Set by `loadConfig()`; consumed by `doFetch()` to build the chat-completions
+   * URL. The on-chain provider address (`state.activeProvider`) is the broker
+   * auth identifier — it is NOT a URL and must never be used to build one.
+   */
+  private endpoint: string | null = null;
 
   // ── loadConfig ──────────────────────────────────────────────────
 
@@ -69,6 +76,7 @@ export class ZeroGComputeProvider implements InferenceProvider {
     try {
       const broker = await getAuthenticatedBroker();
       const metadata = await getServiceMetadata(broker, state.activeProvider);
+      this.endpoint = metadata.endpoint;
 
       let inputPricePerM = 1.0;
       let outputPricePerM = 3.2;
@@ -95,7 +103,7 @@ export class ZeroGComputeProvider implements InferenceProvider {
       }
 
       return {
-        provider: state.activeProvider,
+        provider: this.id,
         model: state.model ?? metadata.model,
         contextLimit: env.contextLimit,
         // 0G does not support temperature — omitted
@@ -289,7 +297,12 @@ export class ZeroGComputeProvider implements InferenceProvider {
       contentForAuth,
     ) as unknown as Record<string, string>;
 
-    const url = `${config.provider}/chat/completions`;
+    if (!this.endpoint) {
+      throw new Error(
+        "0G Compute endpoint not loaded — call loadConfig() before chatCompletion()",
+      );
+    }
+    const url = `${this.endpoint}/chat/completions`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), INFERENCE_TIMEOUT_MS);
 

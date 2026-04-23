@@ -23,4 +23,10 @@ export { routeUserMessage } from "./ingress.js";
 export { startWakeExecutor } from "./wake/executor.js";
 export type { WakeExecutorHandle, WakeDeps, ClaimedWake, ClaimedWakeOutcome } from "./wake/executor.js";
 
+export {
+  abortMissionRun,
+  abortActiveMissionForSession,
+} from "./core/runner/abort.js";
+export type { AbortMissionRunResult } from "./core/runner/abort.js";
+
 export * from "./types.js";

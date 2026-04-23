@@ -38,3 +38,6 @@ terminals/
 *.plan.md
 typescript-sdk-main
 polymarket-cli-main
+
+# Private local harnesses (vex-shell, scratch tooling) — never published
+local/

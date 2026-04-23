@@ -20,6 +20,10 @@ import * as messagesRepo from "@echo-agent/db/repos/messages.js";
 import { refreshBlobTtlForRecentMessages } from "../../wake/blob-refresh.js";
 import logger from "@utils/logger.js";
 import { toToolDefinitions, DEFAULT_LOOP_CONFIG } from "./shared.js";
+import {
+  registerMissionRunAbortController,
+  unregisterMissionRunAbortController,
+} from "./abort.js";
 
 // ── processMissionSetupTurn ─────────────────────────────────────
 
@@ -195,17 +199,24 @@ export async function startMission(
     contextLimit: config.contextLimit,
   };
 
-  const result = await runTurnLoop(
-    { ...hydrated.context, missionRunId: runId, loopMode, sessionKind: "mission" },
-    hydrated.messages,
-    hydrated.summary,
-    hydrated.tokenCount,
-    provider,
-    config,
-    tools,
-    loopConfig,
-    promptOptions,
-  );
+  const controller = registerMissionRunAbortController(runId);
+  let result;
+  try {
+    result = await runTurnLoop(
+      { ...hydrated.context, missionRunId: runId, loopMode, sessionKind: "mission" },
+      hydrated.messages,
+      hydrated.summary,
+      hydrated.tokenCount,
+      provider,
+      config,
+      tools,
+      loopConfig,
+      promptOptions,
+      controller.signal,
+    );
+  } finally {
+    unregisterMissionRunAbortController(runId);
+  }
 
   const missionStatus = await finalizeMissionRunStatus(missionId, runId, result.stopReason, result.stopPayload);
 
@@ -237,8 +248,10 @@ export async function resumeMissionRun(
   const run = await missionRunsRepo.getRun(runId);
   if (!run) throw new Error(`Run ${runId} not found`);
 
-  // Guard: cannot resume terminal runs
-  const terminalStatuses = new Set(["completed", "failed", "stopped"]);
+  // Guard: cannot resume terminal runs. `cancelled` is included so an
+  // operator-driven `abortMissionRun` is permanent — without this guard a
+  // late approval/resume could revive a run the operator had finalised.
+  const terminalStatuses = new Set(["completed", "failed", "stopped", "cancelled"]);
   if (terminalStatuses.has(run.status)) {
     throw new Error(`Run ${runId} is terminal (${run.status}) — cannot resume`);
   }
@@ -283,17 +296,24 @@ export async function resumeMissionRun(
     contextLimit: config.contextLimit,
   };
 
-  const result = await runTurnLoop(
-    { ...hydrated.context, missionRunId: runId, loopMode: run.loopMode, sessionKind: "mission" },
-    hydrated.messages,
-    hydrated.summary,
-    hydrated.tokenCount,
-    provider,
-    config,
-    tools,
-    loopConfig,
-    promptOptions,
-  );
+  const controller = registerMissionRunAbortController(runId);
+  let result;
+  try {
+    result = await runTurnLoop(
+      { ...hydrated.context, missionRunId: runId, loopMode: run.loopMode, sessionKind: "mission" },
+      hydrated.messages,
+      hydrated.summary,
+      hydrated.tokenCount,
+      provider,
+      config,
+      tools,
+      loopConfig,
+      promptOptions,
+      controller.signal,
+    );
+  } finally {
+    unregisterMissionRunAbortController(runId);
+  }
 
   const missionStatus = await finalizeMissionRunStatus(run.missionId, runId, result.stopReason, result.stopPayload);
 

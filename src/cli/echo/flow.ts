@@ -84,12 +84,6 @@ export async function runLauncherMenu(): Promise<void> {
       description:
         "Set up the local EchoClaw MCP, configure wallets, start services, and generate ready connectors for Cursor, Claude Code, Codex, OpenClaw, and a default MCP client.",
     },
-    {
-      id: "vex",
-      label: "Run VEX Agent",
-      description: "Reserved for the future VEX runtime. Not available in v1.0.12.",
-      disabled: true,
-    },
   ]);
 
   if (selection === "connect") {

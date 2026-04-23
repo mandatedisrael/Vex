@@ -5,7 +5,7 @@ vi.mock("../../../tools/0g-compute/readiness.js", () => ({
   loadComputeState: () => null,
 }));
 
-const { resolveProvider, getActiveProvider, resetProvider } = await import(
+const { resolveProvider, getActiveProvider, resetProvider, switchProvider } = await import(
   "../../../echo-agent/inference/registry.js"
 );
 
@@ -50,5 +50,20 @@ describe("registry", () => {
   it("rejects invalid AGENT_PROVIDER early", async () => {
     process.env.AGENT_PROVIDER = "invalid-provider";
     await expect(resolveProvider()).rejects.toThrow("AGENT_PROVIDER");
+  });
+
+  it("switchProvider sets AGENT_PROVIDER and replaces cached instance", async () => {
+    process.env.OPENROUTER_API_KEY = "sk-or-test";
+    process.env.AGENT_MODEL = "openai/gpt-4o";
+    const first = await resolveProvider();
+    expect(first).not.toBeNull();
+    expect(first!.id).toBe("openrouter");
+
+    const switched = await switchProvider("openrouter");
+    expect(switched).not.toBeNull();
+    expect(switched!.id).toBe("openrouter");
+    expect(switched).not.toBe(first);
+    expect(process.env.AGENT_PROVIDER).toBe("openrouter");
+    expect(getActiveProvider()).toBe(switched);
   });
 });

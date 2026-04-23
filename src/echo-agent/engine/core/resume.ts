@@ -36,6 +36,22 @@ export async function approveAndResume(approvalId: string): Promise<TurnResult> 
     throw new Error(`Approval ${approvalId} has no associated session`);
   }
 
+  // Defensive: a concurrent operator-driven `abortMissionRun` could have
+  // finalised the run between our approval CAS and dispatch. The CAS in
+  // `approvalsRepo.approve` catches an approval that the abort had already
+  // rejected; this catches the narrower window where abort hadn't yet
+  // visited the queue but had already finalised the run. Without this,
+  // dispatch would execute a tool against a cancelled mission.
+  const activeRunForGuard = await missionRunsRepo.getActiveRunBySession(sessionId);
+  if (
+    activeRunForGuard &&
+    new Set(["completed", "failed", "stopped", "cancelled"]).has(activeRunForGuard.status)
+  ) {
+    throw new Error(
+      `Approval ${approvalId} cannot be applied: mission run ${activeRunForGuard.id} is ${activeRunForGuard.status}`,
+    );
+  }
+
   // Refresh tool_output_blob TTLs before dispatching the approved tool. A
   // long paused_approval window could otherwise leave blobs referenced by
   // recent messages expired, and the dispatched tool (or a follow-up turn)
