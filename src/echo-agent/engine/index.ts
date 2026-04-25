@@ -15,6 +15,8 @@ export {
 } from "./core/runner.js";
 
 export { approveAndResume } from "./core/resume.js";
+export { rejectApproval } from "./core/reject.js";
+export { runTool } from "./core/run-tool.js";
 
 export { runSubagentEngine } from "./subagents/runner.js";
 

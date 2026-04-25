@@ -250,3 +250,50 @@ export function saveConfig(config: EchoConfig): void {
 export function configExists(): boolean {
   return existsSync(CONFIG_FILE);
 }
+
+// ── Partial patch ────────────────────────────────────────────────────
+
+/**
+ * Shape accepted by {@link saveConfigPatch} — every top-level section is
+ * optional, and for object-valued sections (chain, services, …) the patch
+ * only needs to mention the fields it wants to override. `wallet`, `claude`,
+ * and `polymarket` follow the same rule.
+ *
+ * This is NOT a `DeepPartial<EchoConfig>` — we keep the nesting explicit at
+ * one level so the merge code stays simple and the call sites stay typed.
+ */
+export type EchoConfigPatch = {
+  chain?: Partial<EchoConfig["chain"]>;
+  protocol?: Partial<EchoConfig["protocol"]>;
+  slop?: Partial<EchoConfig["slop"]>;
+  wallet?: Partial<EchoConfig["wallet"]>;
+  solana?: Partial<EchoConfig["solana"]>;
+  services?: Partial<EchoConfig["services"]>;
+  polymarket?: NonNullable<EchoConfig["polymarket"]>;
+  claude?: NonNullable<EchoConfig["claude"]>;
+};
+
+/**
+ * Apply a partial config patch — loads current config (merged with defaults),
+ * shallow-merges each provided section, and atomically writes the result.
+ * Intended for UI editors (shell settings panel) that only know about a
+ * subset of fields.
+ *
+ * Returns the persisted config so the caller can refresh any cached view.
+ */
+export function saveConfigPatch(patch: EchoConfigPatch): EchoConfig {
+  const current = loadConfig();
+  const next: EchoConfig = {
+    ...current,
+    ...(patch.chain ? { chain: { ...current.chain, ...patch.chain } } : {}),
+    ...(patch.protocol ? { protocol: { ...current.protocol, ...patch.protocol } } : {}),
+    ...(patch.slop ? { slop: { ...current.slop, ...patch.slop } } : {}),
+    ...(patch.wallet ? { wallet: { ...current.wallet, ...patch.wallet } } : {}),
+    ...(patch.solana ? { solana: { ...current.solana, ...patch.solana } } : {}),
+    ...(patch.services ? { services: { ...current.services, ...patch.services } } : {}),
+    ...(patch.polymarket ? { polymarket: { ...(current.polymarket ?? {}), ...patch.polymarket } } : {}),
+    ...(patch.claude ? { claude: { ...(current.claude ?? {} as EchoConfig["claude"]), ...patch.claude } as EchoConfig["claude"] } : {}),
+  };
+  saveConfig(next);
+  return next;
+}

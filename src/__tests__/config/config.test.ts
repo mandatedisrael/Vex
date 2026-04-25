@@ -15,7 +15,7 @@ vi.mock("@config/paths.js", () => ({
 }));
 
 // Import after mocking
-const { loadConfig, saveConfig, getDefaultConfig, configExists, ensureConfigDir } = await import(
+const { loadConfig, saveConfig, saveConfigPatch, getDefaultConfig, configExists, ensureConfigDir } = await import(
   "@config/store.js"
 );
 
@@ -178,6 +178,59 @@ describe("config store", () => {
       writeFileSync(testConfigFile, "{}", "utf-8");
 
       expect(configExists()).toBe(true);
+    });
+  });
+
+  describe("saveConfigPatch", () => {
+    it("creates config with patched fields merged onto defaults", () => {
+      const result = saveConfigPatch({ chain: { rpcUrl: "https://custom.rpc.example" } });
+
+      const defaults = getDefaultConfig();
+      expect(result.chain.rpcUrl).toBe("https://custom.rpc.example");
+      // Other chain fields preserved from defaults
+      expect(result.chain.chainId).toBe(defaults.chain.chainId);
+      expect(result.chain.explorerUrl).toBe(defaults.chain.explorerUrl);
+
+      // Persisted
+      const loaded = loadConfig();
+      expect(loaded.chain.rpcUrl).toBe("https://custom.rpc.example");
+    });
+
+    it("preserves untouched sections", () => {
+      saveConfigPatch({ services: { dexScreenerApiUrl: "https://dex-override.test" } });
+      const loaded = loadConfig();
+
+      expect(loaded.services.dexScreenerApiUrl).toBe("https://dex-override.test");
+      // chain section unchanged
+      const defaults = getDefaultConfig();
+      expect(loaded.chain.rpcUrl).toBe(defaults.chain.rpcUrl);
+      // other services unchanged
+      expect(loaded.services.khalaniApiUrl).toBe(defaults.services.khalaniApiUrl);
+    });
+
+    it("adds polymarket block when patch provides one and previous config had none", () => {
+      const result = saveConfigPatch({
+        polymarket: { clobBaseUrl: "https://clob.custom" },
+      });
+
+      expect(result.polymarket?.clobBaseUrl).toBe("https://clob.custom");
+      expect(loadConfig().polymarket?.clobBaseUrl).toBe("https://clob.custom");
+    });
+
+    it("shallow-merges polymarket fields without dropping earlier overrides", () => {
+      saveConfigPatch({ polymarket: { clobBaseUrl: "https://clob.first" } });
+      saveConfigPatch({ polymarket: { gammaBaseUrl: "https://gamma.second" } });
+
+      const loaded = loadConfig();
+      expect(loaded.polymarket?.clobBaseUrl).toBe("https://clob.first");
+      expect(loaded.polymarket?.gammaBaseUrl).toBe("https://gamma.second");
+    });
+
+    it("applies wallet address patch without touching solana settings", () => {
+      const result = saveConfigPatch({ wallet: { address: "0xabc" as `0x${string}` } });
+
+      expect(result.wallet.address).toBe("0xabc");
+      expect(result.solana.cluster).toBe(getDefaultConfig().solana.cluster);
     });
   });
 });
