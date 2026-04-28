@@ -1,4 +1,5 @@
 import type { ProtocolToolManifest } from "../../types.js";
+import { POLYMARKET_CLOB_DISCOVERY } from "../../embeddings/polymarket/clob.js";
 
 export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
   // ── Market Data (public) ──────────────────────────────────────
@@ -13,10 +14,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "tokenId", type: "string", required: true, description: "CLOB token ID (outcome token asset ID)." },
     ],
     exampleParams: { tokenId: "71321..." },
-    discovery: {
-      canonicalSummary: "Full prediction market orderbook with bids, asks, tick size, and last trade price.",
-      preferredFor: ["orderbook", "bids asks", "clob book", "market depth"],
-    },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.orderbook"],
   },
   {
     toolId: "polymarket.clob.orderbooks",
@@ -28,6 +26,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "tokenIds", type: "string", required: true, description: "Comma-separated CLOB token IDs." },
     ],
     exampleParams: { tokenIds: "71321...,82432..." },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.orderbooks"],
   },
   {
     toolId: "polymarket.clob.price",
@@ -40,6 +39,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "side", type: "string", required: true, description: "Side: BUY or SELL." },
     ],
     exampleParams: { tokenId: "71321...", side: "BUY" },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.price"],
   },
   {
     toolId: "polymarket.clob.prices",
@@ -52,6 +52,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "sides", type: "string", required: true, description: "Comma-separated sides (BUY/SELL) matching tokenIds order." },
     ],
     exampleParams: { tokenIds: "71321...,82432...", sides: "BUY,SELL" },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.prices"],
   },
   {
     toolId: "polymarket.clob.midpoint",
@@ -63,6 +64,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "tokenId", type: "string", required: true, description: "CLOB token ID." },
     ],
     exampleParams: { tokenId: "71321..." },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.midpoint"],
   },
   {
     toolId: "polymarket.clob.midpoints",
@@ -74,6 +76,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "tokenIds", type: "string", required: true, description: "Comma-separated CLOB token IDs." },
     ],
     exampleParams: { tokenIds: "71321...,82432..." },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.midpoints"],
   },
   {
     toolId: "polymarket.clob.spread",
@@ -85,6 +88,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "tokenId", type: "string", required: true, description: "CLOB token ID." },
     ],
     exampleParams: { tokenId: "71321..." },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.spread"],
   },
   {
     toolId: "polymarket.clob.spreads",
@@ -96,6 +100,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "tokenIds", type: "string", required: true, description: "Comma-separated CLOB token IDs." },
     ],
     exampleParams: { tokenIds: "71321...,82432..." },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.spreads"],
   },
   {
     toolId: "polymarket.clob.lastTrade",
@@ -107,6 +112,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "tokenId", type: "string", required: true, description: "CLOB token ID." },
     ],
     exampleParams: { tokenId: "71321..." },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.lastTrade"],
   },
   {
     toolId: "polymarket.clob.lastTrades",
@@ -118,6 +124,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "tokenIds", type: "string", required: true, description: "Comma-separated CLOB token IDs." },
     ],
     exampleParams: { tokenIds: "71321...,82432..." },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.lastTrades"],
   },
   {
     toolId: "polymarket.clob.priceHistory",
@@ -133,6 +140,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "endTs", type: "number", description: "End timestamp (unix seconds)." },
     ],
     exampleParams: { market: "0xabc...", interval: "1d" },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.priceHistory"],
   },
   {
     toolId: "polymarket.clob.batchPriceHistory",
@@ -148,6 +156,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "endTs", type: "number", description: "End timestamp (unix seconds)." },
     ],
     exampleParams: { markets: "0xabc...,0xdef...", interval: "1d" },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.batchPriceHistory"],
   },
   {
     toolId: "polymarket.clob.serverTime",
@@ -157,6 +166,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
     mutating: false,
     params: [],
     exampleParams: {},
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.serverTime"],
   },
 
   {
@@ -169,6 +179,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "tokenId", type: "string", required: true, description: "CLOB token ID." },
     ],
     exampleParams: { tokenId: "71321..." },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.tickSize"],
   },
   {
     toolId: "polymarket.clob.feeRate",
@@ -180,6 +191,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "tokenId", type: "string", required: true, description: "CLOB token ID." },
     ],
     exampleParams: { tokenId: "71321..." },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.feeRate"],
   },
 
   // ── Trading (authenticated) ───────────────────────────────────
@@ -201,6 +213,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { conditionId: "0xabc...", outcome: "yes", amount: 10, price: 0.65 },
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.buy"],
   },
   {
     toolId: "polymarket.clob.sell",
@@ -219,6 +232,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { conditionId: "0xabc...", outcome: "yes", amount: 10 },
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.sell"],
   },
   {
     toolId: "polymarket.clob.cancel",
@@ -231,6 +245,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { orderId: "abc-123..." },
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.cancel"],
   },
   {
     toolId: "polymarket.clob.cancelAll",
@@ -241,6 +256,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
     params: [],
     exampleParams: {},
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.cancelAll"],
   },
   {
     toolId: "polymarket.clob.cancelMarket",
@@ -254,6 +270,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { market: "0xabc...", assetId: "71321..." },
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.cancelMarket"],
   },
   {
     toolId: "polymarket.clob.orders",
@@ -269,10 +286,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: {},
     requiresEnv: "POLYMARKET_API_KEY",
-    discovery: {
-      preferredFor: ["order status", "my orders", "open orders", "cancel order"],
-      avoidFor: ["orderbook", "market depth"],
-    },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.orders"],
   },
   {
     toolId: "polymarket.clob.order",
@@ -285,6 +299,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { orderId: "abc-123..." },
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.order"],
   },
   {
     toolId: "polymarket.clob.trades",
@@ -302,6 +317,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: {},
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.trades"],
   },
   {
     toolId: "polymarket.clob.simplifiedMarkets",
@@ -313,6 +329,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "cursor", type: "string", description: "Pagination cursor." },
     ],
     exampleParams: {},
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.simplifiedMarkets"],
   },
   {
     toolId: "polymarket.clob.rebates",
@@ -325,6 +342,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "makerAddress", type: "string", required: true, description: "Maker wallet address." },
     ],
     exampleParams: { date: "2026-04-04", makerAddress: "0x1234..." },
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.rebates"],
   },
   {
     toolId: "polymarket.clob.heartbeat",
@@ -335,6 +353,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
     params: [],
     exampleParams: {},
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.heartbeat"],
   },
   {
     toolId: "polymarket.clob.cancelOrders",
@@ -347,6 +366,7 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { orderIds: "abc-123,def-456" },
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.cancelOrders"],
   },
   {
     toolId: "polymarket.clob.orderScoring",
@@ -359,5 +379,6 @@ export const CLOB_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { orderId: "abc-123..." },
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_CLOB_DISCOVERY["polymarket.clob.orderScoring"],
   },
 ];

@@ -1,4 +1,5 @@
 import type { ProtocolToolManifest } from "../../types.js";
+import { POLYMARKET_GAMMA_DISCOVERY } from "../../embeddings/polymarket/gamma.js";
 
 export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
   // ── Events (4) ────────────────────────────────────────────────
@@ -37,6 +38,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "includeTemplate", type: "boolean", description: "Include template data." },
     ],
     exampleParams: { active: true, closed: false, liquidityMin: 1000, order: "volume24hr", ascending: false, limit: 10 },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.events"],
   },
   {
     toolId: "polymarket.gamma.event",
@@ -50,6 +52,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "includeTemplate", type: "boolean", description: "Include template data." },
     ],
     exampleParams: { id: "12345" },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.event"],
   },
   {
     toolId: "polymarket.gamma.eventBySlug",
@@ -63,6 +66,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "includeTemplate", type: "boolean", description: "Include template data." },
     ],
     exampleParams: { slug: "will-bitcoin-hit-100k" },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.eventBySlug"],
   },
   {
     toolId: "polymarket.gamma.eventTags",
@@ -74,6 +78,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "id", type: "string", required: true, description: "Event ID." },
     ],
     exampleParams: { id: "12345" },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.eventTags"],
   },
 
   // ── Markets (4) ───────────────────────────────────────────────
@@ -112,6 +117,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "rewardsMinSize", type: "number", description: "Min rewards size." },
     ],
     exampleParams: { closed: false, liquidityMin: 1000, order: "volume24hr", ascending: false, limit: 10 },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.markets"],
   },
   {
     toolId: "polymarket.gamma.market",
@@ -124,6 +130,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "includeTag", type: "boolean", description: "Include tag data." },
     ],
     exampleParams: { id: "0xabc..." },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.market"],
   },
   {
     toolId: "polymarket.gamma.marketBySlug",
@@ -136,6 +143,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "includeTag", type: "boolean", description: "Include tag data." },
     ],
     exampleParams: { slug: "will-eth-hit-5000" },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.marketBySlug"],
   },
   {
     toolId: "polymarket.gamma.marketTags",
@@ -147,6 +155,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "id", type: "string", required: true, description: "Market condition ID." },
     ],
     exampleParams: { id: "0xabc..." },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.marketTags"],
   },
 
   // ── Search (1) ────────────────────────────────────────────────
@@ -174,6 +183,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "optimized", type: "boolean", description: "Use optimized response format." },
     ],
     exampleParams: { query: "bitcoin", limitPerType: 5 },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.search"],
   },
 
   // ── Tags (7) ──────────────────────────────────────────────────
@@ -193,6 +203,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "includeTemplate", type: "boolean", description: "Include template data." },
     ],
     exampleParams: {},
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.tags"],
   },
   {
     toolId: "polymarket.gamma.tag",
@@ -205,6 +216,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "includeTemplate", type: "boolean", description: "Include template data." },
     ],
     exampleParams: { id: "42" },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.tag"],
   },
   {
     toolId: "polymarket.gamma.tagBySlug",
@@ -217,6 +229,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "includeTemplate", type: "boolean", description: "Include template data." },
     ],
     exampleParams: { slug: "crypto" },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.tagBySlug"],
   },
   {
     toolId: "polymarket.gamma.relatedTags",
@@ -230,6 +243,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "omitEmpty", type: "boolean", description: "Exclude empty relationships." },
     ],
     exampleParams: { id: "42" },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.relatedTags"],
   },
   {
     toolId: "polymarket.gamma.relatedTagsBySlug",
@@ -243,6 +257,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "omitEmpty", type: "boolean", description: "Exclude empty relationships." },
     ],
     exampleParams: { slug: "crypto" },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.relatedTagsBySlug"],
   },
   {
     toolId: "polymarket.gamma.tagsRelatedToTag",
@@ -256,6 +271,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "omitEmpty", type: "boolean", description: "Exclude empty relationships." },
     ],
     exampleParams: { id: "42" },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.tagsRelatedToTag"],
   },
   {
     toolId: "polymarket.gamma.tagsRelatedToTagBySlug",
@@ -269,6 +285,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "omitEmpty", type: "boolean", description: "Exclude empty relationships." },
     ],
     exampleParams: { slug: "crypto" },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.tagsRelatedToTagBySlug"],
   },
 
   // ── Series (2) ────────────────────────────────────────────────
@@ -293,6 +310,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "includeChat", type: "boolean", description: "Include chat data." },
     ],
     exampleParams: {},
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.series"],
   },
   {
     toolId: "polymarket.gamma.seriesById",
@@ -305,6 +323,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "includeChat", type: "boolean", description: "Include chat data." },
     ],
     exampleParams: { id: "123" },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.seriesById"],
   },
 
   // ── Comments (3) ──────────────────────────────────────────────
@@ -326,6 +345,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "ascending", type: "boolean", description: "Ascending sort." },
     ],
     exampleParams: { parentEntityType: "Event", parentEntityId: 12345 },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.comments"],
   },
   {
     toolId: "polymarket.gamma.comment",
@@ -338,6 +358,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "getPositions", type: "boolean", description: "Include position data." },
     ],
     exampleParams: { id: "789" },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.comment"],
   },
   {
     toolId: "polymarket.gamma.commentsByUser",
@@ -353,6 +374,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "ascending", type: "boolean", description: "Ascending sort." },
     ],
     exampleParams: { address: "0x1234..." },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.commentsByUser"],
   },
 
   // ── Profiles (1) ──────────────────────────────────────────────
@@ -367,6 +389,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "address", type: "string", required: true, description: "User wallet address." },
     ],
     exampleParams: { address: "0x1234..." },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.profile"],
   },
 
   // ── Sports (3) ────────────────────────────────────────────────
@@ -379,6 +402,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
     mutating: false,
     params: [],
     exampleParams: {},
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.sportsMetadata"],
   },
   {
     toolId: "polymarket.gamma.sportsMarketTypes",
@@ -388,6 +412,7 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
     mutating: false,
     params: [],
     exampleParams: {},
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.sportsMarketTypes"],
   },
   {
     toolId: "polymarket.gamma.teams",
@@ -405,5 +430,6 @@ export const GAMMA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "ascending", type: "boolean", description: "Ascending sort." },
     ],
     exampleParams: { league: "NBA" },
+    discovery: POLYMARKET_GAMMA_DISCOVERY["polymarket.gamma.teams"],
   },
 ];

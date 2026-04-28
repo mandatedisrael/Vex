@@ -1,4 +1,5 @@
 import type { ProtocolToolManifest } from "../../types.js";
+import { POLYMARKET_REWARDS_DISCOVERY } from "../../embeddings/polymarket/rewards.js";
 
 export const REWARDS_TOOLS: readonly ProtocolToolManifest[] = [
   // ── Public ───────────────────────────────────────────────────────
@@ -14,6 +15,7 @@ export const REWARDS_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "cursor", type: "string", description: "Pagination cursor." },
     ],
     exampleParams: {},
+    discovery: POLYMARKET_REWARDS_DISCOVERY["polymarket.rewards.active"],
   },
   {
     toolId: "polymarket.rewards.market",
@@ -27,6 +29,7 @@ export const REWARDS_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "cursor", type: "string", description: "Pagination cursor." },
     ],
     exampleParams: { conditionId: "0xabc..." },
+    discovery: POLYMARKET_REWARDS_DISCOVERY["polymarket.rewards.market"],
   },
   {
     toolId: "polymarket.rewards.multi",
@@ -51,6 +54,7 @@ export const REWARDS_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "pageSize", type: "number", description: "Items per page (max 500)." },
     ],
     exampleParams: { orderBy: "rate_per_day", position: "DESC", pageSize: 20 },
+    discovery: POLYMARKET_REWARDS_DISCOVERY["polymarket.rewards.multi"],
   },
 
   // ── Authenticated ────────────────────────────────────────────────
@@ -70,6 +74,7 @@ export const REWARDS_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { date: "2026-04-04" },
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_REWARDS_DISCOVERY["polymarket.rewards.earnings"],
   },
   {
     toolId: "polymarket.rewards.totalEarnings",
@@ -85,6 +90,7 @@ export const REWARDS_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { date: "2026-04-04" },
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_REWARDS_DISCOVERY["polymarket.rewards.totalEarnings"],
   },
   {
     toolId: "polymarket.rewards.percentages",
@@ -98,6 +104,7 @@ export const REWARDS_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: {},
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_REWARDS_DISCOVERY["polymarket.rewards.percentages"],
   },
   {
     toolId: "polymarket.rewards.userMarkets",
@@ -119,5 +126,6 @@ export const REWARDS_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { orderBy: "rate_per_day", position: "DESC" },
     requiresEnv: "POLYMARKET_API_KEY",
+    discovery: POLYMARKET_REWARDS_DISCOVERY["polymarket.rewards.userMarkets"],
   },
 ];

@@ -1,7 +1,5 @@
 import type { ProtocolToolManifest } from "../../types.js";
-import { embeddingText } from "../../_embedding-text.js";
-
-const SOLANA_CHAINS: readonly string[] = ["Solana"];
+import { SOLANA_PREDICT_DISCOVERY } from "../../embeddings/solana-jupiter/predict.js";
 
 export const PREDICT_TOOLS: readonly ProtocolToolManifest[] = [
   {
@@ -16,14 +14,7 @@ export const PREDICT_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { category: "crypto", filter: "trending" },
     requiresEnv: "JUPITER_API_KEY",
-    discovery: {
-      embeddingText: embeddingText(
-        `Browse prediction market events on Solana — sports, crypto, politics, esports, culture, economics, tech — with binary YES/NO markets. ` +
-        `Use this when the user wants to browse what they can bet on, see live or trending prediction markets, browse by category, or discover prediction opportunities. ` +
-        `Example queries: browse prediction markets, what can I bet on, live sports markets, trending crypto predictions, politics prediction events, prediction events on solana.`,
-      ),
-      chains: SOLANA_CHAINS,
-    },
+    discovery: SOLANA_PREDICT_DISCOVERY["solana.predict.events"],
   },
   {
     toolId: "solana.predict.search",
@@ -36,14 +27,7 @@ export const PREDICT_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { query: "bitcoin" },
     requiresEnv: "JUPITER_API_KEY",
-    discovery: {
-      embeddingText: embeddingText(
-        `Search Jupiter prediction market events on Solana by keyword across sports, crypto, politics, esports, culture, economics, and tech. ` +
-        `Use this when the user wants to find a specific prediction market, search by topic (bitcoin, election, super bowl), filter the prediction catalog by keyword, or look up a specific event. ` +
-        `Example queries: find bitcoin prediction markets, search election predictions, look up super bowl bets, find solana price markets, search prediction by keyword, find this prediction event.`,
-      ),
-      chains: SOLANA_CHAINS,
-    },
+    discovery: SOLANA_PREDICT_DISCOVERY["solana.predict.search"],
   },
   {
     toolId: "solana.predict.market",
@@ -56,14 +40,7 @@ export const PREDICT_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { marketId: "abc123" },
     requiresEnv: "JUPITER_API_KEY",
-    discovery: {
-      embeddingText: embeddingText(
-        `Get full details of a single Jupiter prediction market — YES/NO prices, probability, volume, status, payout, metadata. ` +
-        `Use this when the user wants the deep stats on one specific market, check the current odds before betting, see how a market is priced, or review trading conditions. ` +
-        `Example queries: details for this prediction market, what's the current odds on this, yes no prices for this market, market depth before betting, status of this prediction.`,
-      ),
-      chains: SOLANA_CHAINS,
-    },
+    discovery: SOLANA_PREDICT_DISCOVERY["solana.predict.market"],
   },
   {
     toolId: "solana.predict.positions",
@@ -76,14 +53,7 @@ export const PREDICT_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { address: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM" },
     requiresEnv: "JUPITER_API_KEY",
-    discovery: {
-      embeddingText: embeddingText(
-        `Get a wallet's open Jupiter prediction positions on Solana — YES/NO sides, exposure, unrealized PnL, payout. ` +
-        `Use this when the user wants to see their open prediction bets, check pending exposure, review unrealized PnL on bets, or list active prediction positions. ` +
-        `Example queries: my open prediction bets, show my prediction positions, unrealized pnl on prediction, what bets do I have, active yes no positions.`,
-      ),
-      chains: SOLANA_CHAINS,
-    },
+    discovery: SOLANA_PREDICT_DISCOVERY["solana.predict.positions"],
   },
   {
     toolId: "solana.predict.history",
@@ -98,14 +68,7 @@ export const PREDICT_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { address: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM" },
     requiresEnv: "JUPITER_API_KEY",
-    discovery: {
-      embeddingText: embeddingText(
-        `Get a wallet's full Jupiter prediction trade history on Solana — past buys, sells, claims, realized PnL, closed positions, settlement events. ` +
-        `Use this when the user wants to review past prediction trades, see realized PnL on closed bets, audit their prediction activity, look at past prediction settlements, or browse closed positions paginated. ` +
-        `Example queries: my prediction history, past prediction trades, realized pnl on prediction, closed prediction bets, audit my prediction activity, prediction trade log.`,
-      ),
-      chains: SOLANA_CHAINS,
-    },
+    discovery: SOLANA_PREDICT_DISCOVERY["solana.predict.history"],
   },
   {
     toolId: "solana.predict.buy",
@@ -120,14 +83,7 @@ export const PREDICT_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { marketId: "abc123", side: "yes", amountUsdc: 10 },
     requiresEnv: "JUPITER_API_KEY",
-    discovery: {
-      embeddingText: embeddingText(
-        `Buy YES or NO shares in a Jupiter prediction market on Solana to bet on the outcome of a real-world event — sports, crypto prices, politics, culture, tech. ` +
-        `Use this when the user wants to bet on something, take a position on an outcome, buy yes or no shares, speculate on an event, or open a prediction trade. ` +
-        `Example queries: bet on solana hitting 500, buy yes on this market, take the no side, speculate on the election, trade prediction outcome, place a bet.`,
-      ),
-      chains: SOLANA_CHAINS,
-    },
+    discovery: SOLANA_PREDICT_DISCOVERY["solana.predict.buy"],
   },
   {
     toolId: "solana.predict.sell",
@@ -140,14 +96,7 @@ export const PREDICT_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { positionPubkey: "Abc123..." },
     requiresEnv: "JUPITER_API_KEY",
-    discovery: {
-      embeddingText: embeddingText(
-        `Sell or close one Jupiter prediction position on Solana. ` +
-        `Use this when the user wants to exit a prediction bet, close a yes or no position before settlement, take profit on a prediction, or reduce exposure on a market. ` +
-        `Example queries: sell my prediction position, exit this bet, close my yes shares, take profit on prediction, get out of this market early.`,
-      ),
-      chains: SOLANA_CHAINS,
-    },
+    discovery: SOLANA_PREDICT_DISCOVERY["solana.predict.sell"],
   },
   {
     toolId: "solana.predict.claim",
@@ -160,14 +109,7 @@ export const PREDICT_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { positionPubkey: "Abc123..." },
     requiresEnv: "JUPITER_API_KEY",
-    discovery: {
-      embeddingText: embeddingText(
-        `Claim winnings from a resolved Jupiter prediction position on Solana. ` +
-        `Use this when the user wants to redeem a winning bet, settle a resolved position, claim payout for correct yes or no shares, cash out a successful prediction, or collect earnings from a finished prediction market. ` +
-        `Example queries: claim my winning bet, redeem this prediction payout, settle resolved position, collect my prediction winnings, claim payout, cash out winning shares.`,
-      ),
-      chains: SOLANA_CHAINS,
-    },
+    discovery: SOLANA_PREDICT_DISCOVERY["solana.predict.claim"],
   },
   {
     toolId: "solana.predict.closeAll",
@@ -178,14 +120,7 @@ export const PREDICT_TOOLS: readonly ProtocolToolManifest[] = [
     params: [],
     exampleParams: {},
     requiresEnv: "JUPITER_API_KEY",
-    discovery: {
-      embeddingText: embeddingText(
-        `Close every open Jupiter prediction position on Solana for a wallet in batch. ` +
-        `Use this when the user wants to wipe out all open prediction bets, panic-exit the prediction portfolio, settle every claimable position, or close out their prediction exposure entirely. ` +
-        `Example queries: close all my prediction positions, panic exit prediction portfolio, settle all bets, wipe out my prediction exposure, batch close prediction.`,
-      ),
-      chains: SOLANA_CHAINS,
-    },
+    discovery: SOLANA_PREDICT_DISCOVERY["solana.predict.closeAll"],
   },
   {
     toolId: "solana.predict.event",
@@ -198,14 +133,7 @@ export const PREDICT_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { eventId: "abc123" },
     requiresEnv: "JUPITER_API_KEY",
-    discovery: {
-      embeddingText: embeddingText(
-        `Get a single prediction event with all of its included markets on Solana. ` +
-        `Use this when the user wants to see one event (e.g. an election, a sports match) along with every related market it spawns, before picking which specific market to trade. ` +
-        `Example queries: get this event with all markets, full event details, markets for this election, all bets for this match, browse one event.`,
-      ),
-      chains: SOLANA_CHAINS,
-    },
+    discovery: SOLANA_PREDICT_DISCOVERY["solana.predict.event"],
   },
   {
     toolId: "solana.predict.position",
@@ -218,13 +146,6 @@ export const PREDICT_TOOLS: readonly ProtocolToolManifest[] = [
     ],
     exampleParams: { positionPubkey: "Abc123..." },
     requiresEnv: "JUPITER_API_KEY",
-    discovery: {
-      embeddingText: embeddingText(
-        `Get one Jupiter prediction position by public key — open or resolved, contracts, payout, market reference, claimability. ` +
-        `Use this when the user wants the deep details on one specific bet, check whether a position is claimable, review the state of one prediction position, or look up a single bet by pubkey. ` +
-        `Example queries: details for this prediction position, is this position claimable, status of one bet, look up position by pubkey, full state of one bet.`,
-      ),
-      chains: SOLANA_CHAINS,
-    },
+    discovery: SOLANA_PREDICT_DISCOVERY["solana.predict.position"],
   },
 ];

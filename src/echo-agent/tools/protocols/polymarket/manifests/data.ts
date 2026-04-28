@@ -1,4 +1,5 @@
 import type { ProtocolToolManifest } from "../../types.js";
+import { POLYMARKET_DATA_DISCOVERY } from "../../embeddings/polymarket/data.js";
 
 export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
   // ── User Data ─────────────────────────────────────────────────
@@ -23,10 +24,7 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "title", type: "string", description: "Filter by title substring." },
     ],
     exampleParams: { user: "0x1234..." },
-    discovery: {
-      preferredFor: ["open positions", "my positions", "unrealized pnl"],
-      avoidFor: ["orderbook", "clob"],
-    },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.positions"],
   },
   {
     toolId: "polymarket.data.closedPositions",
@@ -45,10 +43,7 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "sortDirection", type: "string", description: "ASC or DESC." },
     ],
     exampleParams: { user: "0x1234..." },
-    discovery: {
-      preferredFor: ["closed positions", "realized pnl", "settled markets"],
-      avoidFor: ["orderbook"],
-    },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.closedPositions"],
   },
   {
     toolId: "polymarket.data.activity",
@@ -70,6 +65,7 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "sortDirection", type: "string", description: "ASC or DESC." },
     ],
     exampleParams: { user: "0x1234...", type: "TRADE", limit: 50 },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.activity"],
   },
   {
     toolId: "polymarket.data.trades",
@@ -89,6 +85,7 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "offset", type: "number", description: "Pagination offset (max 10000)." },
     ],
     exampleParams: { user: "0x1234...", limit: 20 },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.trades"],
   },
   {
     toolId: "polymarket.data.value",
@@ -101,6 +98,7 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "market", type: "string", description: "Filter by specific market." },
     ],
     exampleParams: { user: "0x1234..." },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.value"],
   },
   {
     toolId: "polymarket.data.traded",
@@ -112,6 +110,7 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "user", type: "string", required: true, description: "User wallet or proxy address." },
     ],
     exampleParams: { user: "0x1234..." },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.traded"],
   },
 
   // ── Market Data ───────────────────────────────────────────────
@@ -128,6 +127,7 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "minBalance", type: "number", description: "Min balance filter." },
     ],
     exampleParams: { market: "0xabc..." },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.holders"],
   },
   {
     toolId: "polymarket.data.openInterest",
@@ -139,6 +139,7 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "market", type: "string", description: "Market condition ID (optional — omit for all)." },
     ],
     exampleParams: { market: "0xabc..." },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.openInterest"],
   },
   {
     toolId: "polymarket.data.liveVolume",
@@ -150,6 +151,7 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "eventId", type: "number", required: true, description: "Event ID." },
     ],
     exampleParams: { eventId: 12345 },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.liveVolume"],
   },
   {
     toolId: "polymarket.data.marketPositions",
@@ -167,6 +169,7 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "offset", type: "number", description: "Pagination offset." },
     ],
     exampleParams: { market: "0xabc..." },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.marketPositions"],
   },
 
   // ── Leaderboard ───────────────────────────────────────────────
@@ -187,6 +190,7 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "userName", type: "string", description: "Filter by trader username." },
     ],
     exampleParams: { category: "OVERALL", timePeriod: "WEEK", limit: 20 },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.leaderboard"],
   },
   {
     toolId: "polymarket.data.builderLeaderboard",
@@ -200,6 +204,7 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "offset", type: "number", description: "Pagination offset." },
     ],
     exampleParams: { timePeriod: "WEEK" },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.builderLeaderboard"],
   },
   {
     toolId: "polymarket.data.builderVolume",
@@ -211,6 +216,7 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "timePeriod", type: "string", description: "Period: DAY, WEEK, MONTH, ALL." },
     ],
     exampleParams: { timePeriod: "WEEK" },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.builderVolume"],
   },
 
   // ── Accounting ────────────────────────────────────────────────
@@ -225,5 +231,6 @@ export const DATA_TOOLS: readonly ProtocolToolManifest[] = [
       { key: "user", type: "string", required: true, description: "User wallet or proxy address." },
     ],
     exampleParams: { user: "0x1234..." },
+    discovery: POLYMARKET_DATA_DISCOVERY["polymarket.data.accountingSnapshot"],
   },
 ];
