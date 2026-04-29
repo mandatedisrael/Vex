@@ -22,21 +22,21 @@ const mockCancelForSession = vi.fn();
 const mockGetPendingApprovals = vi.fn();
 const mockRejectApproval = vi.fn();
 
-vi.mock("@echo-agent/db/repos/mission-runs.js", () => ({
+vi.mock("@vex-agent/db/repos/mission-runs.js", () => ({
   getRun: (...a: unknown[]) => mockGetRun(...a),
   getActiveRunBySession: (...a: unknown[]) => mockGetActiveRunBySession(...a),
   updateStatus: (...a: unknown[]) => mockUpdateRunStatus(...a),
 }));
 
-vi.mock("@echo-agent/db/repos/missions.js", () => ({
+vi.mock("@vex-agent/db/repos/missions.js", () => ({
   setStatus: (...a: unknown[]) => mockSetMissionStatus(...a),
 }));
 
-vi.mock("@echo-agent/db/repos/loop-wake.js", () => ({
+vi.mock("@vex-agent/db/repos/loop-wake.js", () => ({
   cancelForSession: (...a: unknown[]) => mockCancelForSession(...a),
 }));
 
-vi.mock("@echo-agent/db/repos/approvals.js", () => ({
+vi.mock("@vex-agent/db/repos/approvals.js", () => ({
   getPending: (...a: unknown[]) => mockGetPendingApprovals(...a),
   reject: (...a: unknown[]) => mockRejectApproval(...a),
   approve: vi.fn(),
@@ -48,7 +48,7 @@ const {
   registerMissionRunAbortController,
   unregisterMissionRunAbortController,
   hasMissionRunAbortController,
-} = await import("../../../echo-agent/engine/core/runner/abort.js");
+} = await import("../../../vex-agent/engine/core/runner/abort.js");
 
 describe("abortMissionRun", () => {
   beforeEach(() => {
@@ -207,16 +207,8 @@ describe("abortActiveMissionForSession", () => {
 // ── Companion guards ────────────────────────────────────────────
 
 describe("companion guards", () => {
-  it("MissionRunStatus union includes cancelled (compile-time)", async () => {
-    const { MissionRunStatusValues } = await import("./abort-mission-run.helpers.js").catch(() => ({
-      MissionRunStatusValues: undefined as unknown as readonly string[],
-    }));
-    // No helpers file — assert at value level via a runtime tuple to keep the
-    // test self-contained. The real type-level assertion happens at tsc time
-    // because `engine/types.ts::MissionRunStatus` now includes "cancelled";
-    // the snippet below compiles only if the union actually contains it.
-    const status: import("../../../echo-agent/engine/types.js").MissionRunStatus = "cancelled";
+  it("MissionRunStatus union includes cancelled (compile-time)", () => {
+    const status: import("../../../vex-agent/engine/types.js").MissionRunStatus = "cancelled";
     expect(status).toBe("cancelled");
-    void MissionRunStatusValues;
   });
 });

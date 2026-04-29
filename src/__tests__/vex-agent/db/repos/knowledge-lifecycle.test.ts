@@ -57,7 +57,7 @@ const mockClient = {
 
 const mockConnect = vi.fn(async () => mockClient);
 
-vi.mock("@echo-agent/db/client.js", () => ({
+vi.mock("@vex-agent/db/client.js", () => ({
   getPool: () => ({ connect: mockConnect }),
   query: vi.fn(),
   queryOne: vi.fn(),
@@ -65,7 +65,7 @@ vi.mock("@echo-agent/db/client.js", () => ({
 }));
 
 const { supersedeEntry, SupersedeError } = await import(
-  "@echo-agent/db/repos/knowledge-lifecycle.js"
+  "@vex-agent/db/repos/knowledge-lifecycle.js"
 );
 
 const SAMPLE_HASH_OLD = "a".repeat(64);
@@ -87,7 +87,7 @@ const activePredRow = {
   content_hash: SAMPLE_HASH_OLD,
   embedding_model: "ai/embeddinggemma:300M-Q8_0",
   embedding_dim: 768,
-  source_surface: "echo_agent",
+  source_surface: "vex_agent",
   source_session: null,
   supersedes_id: null,
   status_reason: null,
@@ -270,9 +270,7 @@ describe("supersedeEntry — rejections", () => {
 describe("supersedeEntry — concurrency belt-and-braces", () => {
   it("race-lost partial unique violation (23505) inside tx → mapped to predecessor_already_superseded", async () => {
     const dbErr = new pg.DatabaseError("duplicate key value violates unique constraint", 0, "error");
-    // @ts-expect-error — write-only test field injection on pg.DatabaseError
     dbErr.code = "23505";
-    // @ts-expect-error — write-only
     dbErr.constraint = "idx_ke_supersedes_id";
 
     queryScript.push(
@@ -293,9 +291,7 @@ describe("supersedeEntry — concurrency belt-and-braces", () => {
 
   it("race-lost 23505 on content_hash constraint → mapped to content_hash_collision", async () => {
     const dbErr = new pg.DatabaseError("duplicate key value violates unique constraint", 0, "error");
-    // @ts-expect-error — write-only
     dbErr.code = "23505";
-    // @ts-expect-error — write-only
     dbErr.constraint = "idx_ke_content_hash";
 
     queryScript.push(
@@ -318,9 +314,7 @@ describe("supersedeEntry — concurrency belt-and-braces", () => {
 
   it("23505 with unknown constraint name → rethrown verbatim (not masked as SupersedeError)", async () => {
     const dbErr = new pg.DatabaseError("duplicate key value violates unique constraint", 0, "error");
-    // @ts-expect-error — write-only
     dbErr.code = "23505";
-    // @ts-expect-error — write-only
     dbErr.constraint = "some_future_constraint";
 
     queryScript.push(

@@ -28,18 +28,17 @@ export function leaseSuite(ctx: SuiteCtx): void {
       expect(report.skipped_duplicate).toBe(0);
       expect(mockInsertEntry).not.toHaveBeenCalled();
 
-      const maintenanceLog = errorSpy.mock.calls.find(
-        ([event]) => event === "knowledge_import.row_maintenance_blocked",
+      expect(errorSpy).toHaveBeenCalledWith(
+        "knowledge_import.row_maintenance_blocked",
+        expect.objectContaining({
+          lineNumber: 2,
+          ownerId: "reembed:pid-42",
+        }),
       );
-      expect(maintenanceLog).toBeDefined();
-      expect(maintenanceLog?.[1]).toMatchObject({
-        lineNumber: 2,
-        ownerId: "reembed:pid-42",
-      });
-      const genericFailureLog = errorSpy.mock.calls.find(
-        ([event]) => event === "knowledge_import.row_failed",
+      expect(errorSpy).not.toHaveBeenCalledWith(
+        "knowledge_import.row_failed",
+        expect.anything(),
       );
-      expect(genericFailureLog).toBeUndefined();
 
       errorSpy.mockRestore();
     });

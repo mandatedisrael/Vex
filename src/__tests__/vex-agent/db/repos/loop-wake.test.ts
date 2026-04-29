@@ -9,7 +9,7 @@
  * LOCKED`, `ON CONFLICT DO NOTHING`, partial-index predicate, etc.).
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 
 // ── Mock helpers ────────────────────────────────────────────────────
 
@@ -19,8 +19,21 @@ const poolQueryLog: QueryCall[] = [];
 const clientQueryLog: QueryCall[] = [];
 const clientReleaseSpy = vi.fn();
 
-let mockPoolQueryOne: ReturnType<typeof vi.fn>;
-let mockPoolExecute: ReturnType<typeof vi.fn>;
+type PoolQueryOneMock = Mock<(sql: string, params?: unknown[]) => Promise<Record<string, unknown> | null>>;
+type PoolExecuteMock = Mock<(sql: string, params?: unknown[]) => Promise<number>>;
+
+function makePoolQueryOneMock(): PoolQueryOneMock {
+  return vi.fn<(sql: string, params?: unknown[]) => Promise<Record<string, unknown> | null>>()
+    .mockResolvedValue(null);
+}
+
+function makePoolExecuteMock(): PoolExecuteMock {
+  return vi.fn<(sql: string, params?: unknown[]) => Promise<number>>()
+    .mockResolvedValue(0);
+}
+
+let mockPoolQueryOne: PoolQueryOneMock;
+let mockPoolExecute: PoolExecuteMock;
 let mockClientResponses: Array<{ rows: Record<string, unknown>[] } | Error> = [];
 
 function resetMocks() {
@@ -44,8 +57,8 @@ const mockGetPool = vi.fn(() => ({
   connect: async () => mockClient,
 }));
 
-vi.mock("@echo-agent/db/client.js", () => ({
-  getPool: (...args: unknown[]) => mockGetPool(...args),
+vi.mock("@vex-agent/db/client.js", () => ({
+  getPool: () => mockGetPool(),
   queryOne: (sql: string, params?: unknown[]) => mockPoolQueryOne(sql, params),
   queryOneWith: (_exec: unknown, sql: string, params?: unknown[]) =>
     mockPoolQueryOne(sql, params),
@@ -56,11 +69,11 @@ vi.mock("@echo-agent/db/client.js", () => ({
 }));
 
 // Initialize mocks AFTER vi.mock registration so closures see the refs.
-mockPoolQueryOne = vi.fn().mockResolvedValue(null);
-mockPoolExecute = vi.fn().mockResolvedValue(0);
+mockPoolQueryOne = makePoolQueryOneMock();
+mockPoolExecute = makePoolExecuteMock();
 
 // Import under test AFTER mocks are registered.
-const loopWake = await import("@echo-agent/db/repos/loop-wake.js");
+const loopWake = await import("@vex-agent/db/repos/loop-wake.js");
 
 // ── Fixtures ────────────────────────────────────────────────────────
 
@@ -92,8 +105,8 @@ function makeRow(overrides: Partial<Record<string, unknown>> = {}): Record<strin
 describe("loop-wake repo — enqueue", () => {
   beforeEach(() => {
     resetMocks();
-    mockPoolQueryOne = vi.fn().mockResolvedValue(null);
-    mockPoolExecute = vi.fn().mockResolvedValue(0);
+    mockPoolQueryOne = makePoolQueryOneMock();
+    mockPoolExecute = makePoolExecuteMock();
   });
 
   it("inserts a pending row and returns the mapped LoopWakeRequest", async () => {
@@ -162,8 +175,8 @@ describe("loop-wake repo — enqueue", () => {
 describe("loop-wake repo — cancelForSession", () => {
   beforeEach(() => {
     resetMocks();
-    mockPoolQueryOne = vi.fn().mockResolvedValue(null);
-    mockPoolExecute = vi.fn().mockResolvedValue(0);
+    mockPoolQueryOne = makePoolQueryOneMock();
+    mockPoolExecute = makePoolExecuteMock();
   });
 
   it("issues UPDATE targeting only pending rows and returns row count", async () => {
@@ -192,8 +205,8 @@ describe("loop-wake repo — cancelForSession", () => {
 describe("loop-wake repo — claimDue (exactly-once)", () => {
   beforeEach(() => {
     resetMocks();
-    mockPoolQueryOne = vi.fn().mockResolvedValue(null);
-    mockPoolExecute = vi.fn().mockResolvedValue(0);
+    mockPoolQueryOne = makePoolQueryOneMock();
+    mockPoolExecute = makePoolExecuteMock();
   });
 
   it("uses a dedicated connection with BEGIN/COMMIT wrapping the UPDATE", async () => {
@@ -264,8 +277,8 @@ describe("loop-wake repo — claimDue (exactly-once)", () => {
 describe("loop-wake repo — getPendingForSession", () => {
   beforeEach(() => {
     resetMocks();
-    mockPoolQueryOne = vi.fn().mockResolvedValue(null);
-    mockPoolExecute = vi.fn().mockResolvedValue(0);
+    mockPoolQueryOne = makePoolQueryOneMock();
+    mockPoolExecute = makePoolExecuteMock();
   });
 
   it("selects the pending row for a session, or null", async () => {
@@ -294,8 +307,8 @@ describe("loop-wake repo — getPendingForSession", () => {
 describe("loop-wake repo — row mapping", () => {
   beforeEach(() => {
     resetMocks();
-    mockPoolQueryOne = vi.fn().mockResolvedValue(null);
-    mockPoolExecute = vi.fn().mockResolvedValue(0);
+    mockPoolQueryOne = makePoolQueryOneMock();
+    mockPoolExecute = makePoolExecuteMock();
   });
 
   it("normalizes Date timestamps coming from pg to ISO strings", async () => {
