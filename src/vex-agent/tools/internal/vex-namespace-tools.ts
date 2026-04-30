@@ -45,7 +45,7 @@ export async function handleVexNamespaceTools(
     return {
       success: false,
       output:
-        `Namespace "${namespace}" is deprecated and not maintained for hybrid retrieval. ` +
+        `Namespace "${namespace}" is deprecated and not maintained for dense discovery. ` +
         `Set \`VEX_ALLOW_DEPRECATED_PROTOCOLS=1\` to enable execution; embeddings are not refreshed. ` +
         `See \`src/vex-agent/tools/protocols/embeddings/_DEPRECATED.md\` for rationale.`,
     };

@@ -59,30 +59,6 @@ export interface DiscoveryTelemetryInput {
   sourceSession?: string;
 }
 
-// ── Cross-lingual query-language sniff (A5) ─────────────────────
-//
-// Cheap, non-statistical detector — we only need to distinguish English
-// from Polish for cohort labelling. A token is enough: any Polish-specific
-// diacritic flags Polish; otherwise we look for high-frequency Polish
-// stopwords. No real NLP needed at this stage.
-
-const POLISH_DIACRITIC_RE = /[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/;
-const POLISH_STOPWORDS = new Set([
-  "żeby", "też", "nie", "jak", "co", "tak", "moje", "moja",
-  "kup", "kupić", "sprzedaj", "sprzedać", "przelej", "wyślij",
-  "swap", "swapnij", "pumpa", "pompa",
-]);
-
-export type DiscoveryQueryLanguage = "en" | "pl" | "other";
-
-export function detectQueryLanguage(query: string | undefined): DiscoveryQueryLanguage {
-  if (typeof query !== "string" || query.trim().length === 0) return "other";
-  if (POLISH_DIACRITIC_RE.test(query)) return "pl";
-  const tokens = query.toLowerCase().split(/[^a-ząćęłńóśźż0-9]+/g);
-  if (tokens.some((t) => POLISH_STOPWORDS.has(t))) return "pl";
-  return "en";
-}
-
 export function logDiscoveryTelemetry({ request, result, discoveryRunId, sourceSurface, sourceSession }: DiscoveryTelemetryInput): void {
   const privacyMode = resolvePrivacyMode();
   const safeQuery = sanitizeQuery(request.query, privacyMode);
@@ -96,7 +72,6 @@ export function logDiscoveryTelemetry({ request, result, discoveryRunId, sourceS
     sourceSession,
     query: safeQuery,
     queryPrivacy: privacyMode,
-    queryLanguage: detectQueryLanguage(request.query),
     namespace: typeof request.namespace === "string" ? request.namespace : undefined,
     limit: typeof request.limit === "number" ? request.limit : undefined,
     count: result.count,

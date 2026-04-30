@@ -7,7 +7,7 @@
  *      as `mcp__vex__*`); architecture; local stack (Postgres + pgvector
  *      + EmbeddingGemma).
  *   2. **How to talk to it**: discover_tools intent-first, English query
- *      rule, score / whyMatched semantics, hybrid retrieval roadmap.
+ *      rule, score / whyMatched semantics, dense retrieval roadmap.
  *
  * The default brief (no `topic`) leads with the five active protocol
  * namespaces because that is the highest-priority context for an
@@ -154,19 +154,19 @@ const QUERYING_MD = [
   "## Query writing",
   "",
   "- Be **intent-first**: write what the user wants to *do*, not what tool name they want. `swap usdc on base`, `bridge sol from solana to ethereum`, `prediction market orderbook for trump`.",
-  "- **English only**: even if the user speaks another language, translate the intent before calling. The lexical scorer matches on English tool descriptions and aliases; cross-lingual recall improves substantially when you pre-translate.",
+  "- **English intent**: write concise English intent text even when the user speaks another language. Tool passages and manifests are authored in English.",
   "- **Filter when you know**: passing `namespace=\"polymarket\"` cuts the search space and pushes recall on near-duplicate tools across namespaces.",
   "",
   "## Reading results",
   "",
   "- `score` — relative rank within this call. A drop of >20% between #1 and #2 usually means #1 is unambiguously the best fit; a flat score curve is the time to ask the user to disambiguate.",
-  "- `whyMatched` — which fields contributed to the score (`toolId`, `description`, `aliases`, `exampleIntents`, `chains`, `preferredFor`, `dense` if hybrid mode). When you see only `chains`, the match is on a chain-name token — useful but verify intent.",
+  "- `whyMatched` — which fields contributed to the score. In the default dense path this is usually `dense`; in lexical fallback it can include fields such as `toolId`, `description`, `aliases`, `exampleIntents`, `chains`, or `preferredFor`.",
   "- `params` + `exampleParams` — what `execute_tool` expects. Always inspect before invoking.",
   "",
   "## Retrieval modes",
   "",
-  "- Default mode is **lexical** (BM25-like weighted-field scoring over toolId, canonicalSummary, aliases, exampleIntents, description, chains).",
-  "- `VEX_RETRIEVAL_MODE=hybrid` activates the dense leg (EmbeddingGemma 768d via local Docker Model Runner against `tool_embeddings`) fused with lexical via Reciprocal Rank Fusion (k=60). When the embedding service is unavailable the dense leg degrades silently to `dense_failed: true` and the result returns lexical-only — the user-facing latency never blocks on the sidecar.",
+  "- Default mode is **dense**: EmbeddingGemma 768d via local Docker Model Runner ranks `tool_embeddings` by semantic similarity.",
+  "- If dense retrieval is unavailable or returns no usable rows, discovery degrades to lexical fallback (`dense_failed: true`) so user-facing calls do not crash on sidecar or table issues.",
   "- `tool_embeddings` is populated on MCP bootstrap (non-blocking) and re-embedded only on `content_hash` changes. Run `pnpm tool-reembed` to populate synchronously during dev.",
   "",
   "## Cold path",
@@ -182,7 +182,7 @@ const KNOWLEDGE_MD = [
   "## Storage",
   "",
   "- **Postgres + pgvector** locally. The `knowledge_entries` table holds title / summary / content_md / tags / status / lifecycle metadata + embedding vector + audit columns (`embedding_model`, `embedding_dim`, `content_hash`).",
-  "- **Embedding model** is local — Docker Model Runner with EmbeddingGemma 768d (configurable via `EMBEDDING_*` env). The same model embeds tool descriptions for hybrid discovery.",
+  "- **Embedding model** is local — Docker Model Runner with EmbeddingGemma 768d (configurable via `EMBEDDING_*` env). The same model embeds tool descriptions for dense discovery.",
   "- **Source surface** stamped on every entry: `vex_agent` (mission loop, chat) or `mcp_local` (this MCP server). Lets you grep history later for what wrote what.",
   "",
   "## Write / recall pipeline",

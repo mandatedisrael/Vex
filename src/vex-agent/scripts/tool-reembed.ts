@@ -9,10 +9,10 @@
  *   3. Call `reembedAllTools()` — single-flight, idempotent on `content_hash`.
  *   4. Print a one-line summary, exit 0 on success / non-zero on failure.
  *
- * Use this when developing locally and you want to know reembed is finished
- * before you flip `VEX_RETRIEVAL_MODE=hybrid`. Production MCP boots reembed
- * in the background (see `src/mcp/bootstrap.ts`); this script is the
- * synchronous equivalent.
+ * Use this when developing locally and you want to know dense tool discovery
+ * is ready before running the MCP server. Production MCP boots reembed in the
+ * background (see `src/mcp/bootstrap.ts`); this script is the synchronous
+ * equivalent.
  */
 
 import { loadProviderDotenv } from "../../providers/env-resolution.js";

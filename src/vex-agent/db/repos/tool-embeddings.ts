@@ -1,5 +1,5 @@
 /**
- * tool_embeddings repo — dense leg of the hybrid tool retriever.
+ * tool_embeddings repo — dense-primary tool discovery.
  *
  * Schema in `010_tool_embeddings.sql`. Companion of `knowledge` repo:
  * - same audit columns (`embedding_model`, `embedding_dim`) — recall MUST
@@ -181,6 +181,24 @@ export async function countToolEmbeddings(): Promise<number> {
   const row = await queryOne<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM tool_embeddings`,
     [],
+  );
+  return row ? Number(row.count) : 0;
+}
+
+/**
+ * Row count filtered by (embedding_model, embedding_dim).
+ *
+ * Used by the health check to detect model/dim mismatch: a non-zero total
+ * but zero count for the current config means the table was populated under
+ * a different model or dim and needs a fresh `pnpm tool-reembed` run.
+ */
+export async function countByModelDim(model: string, dim: number): Promise<number> {
+  const row = await queryOne<{ count: string }>(
+    `SELECT COUNT(*)::text AS count
+     FROM tool_embeddings
+     WHERE embedding_model = $1
+       AND embedding_dim   = $2`,
+    [model, dim],
   );
   return row ? Number(row.count) : 0;
 }

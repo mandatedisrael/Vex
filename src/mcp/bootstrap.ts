@@ -80,7 +80,7 @@ export async function runBootstrapChecks(): Promise<void> {
   // Tool embeddings reembed — non-blocking. Bootstrap returns immediately;
   // the run logs `tool_embeddings.reembed.completed` when finished. If the
   // embedding service is unavailable, the catch keeps startup quiet and
-  // the dense leg of `discover_tools` degrades to lexical-only at runtime.
+  // `discover_tools` degrades to lexical scoring at runtime.
   void reembedAllTools().catch((err) => {
     logger.warn("mcp.bootstrap.reembed.failed", {
       error: err instanceof Error ? err.message : String(err),

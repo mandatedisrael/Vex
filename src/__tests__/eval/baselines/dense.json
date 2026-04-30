@@ -1,0 +1,178 @@
+{
+  "version": "v3-agent-200",
+  "mode": "dense",
+  "capturedAt": "2026-04-30T08:50:17.438Z",
+  "datasetVersion": "v3-agent-200",
+  "status": "captured",
+  "metrics": {
+    "overall": {
+      "count": 200,
+      "recall1": 0.86,
+      "recall5": 0.975,
+      "coverage5": 0.95,
+      "mrr5": 0.906,
+      "groupMrr5": 0.869
+    },
+    "awareness": {
+      "blind": {
+        "count": 100,
+        "recall1": 0.86,
+        "recall5": 0.96,
+        "coverage5": 0.94,
+        "mrr5": 0.903,
+        "groupMrr5": 0.868
+      },
+      "protocolAware": {
+        "count": 100,
+        "recall1": 0.86,
+        "recall5": 0.99,
+        "coverage5": 0.96,
+        "mrr5": 0.91,
+        "groupMrr5": 0.87
+      }
+    },
+    "intentShapes": {
+      "single": {
+        "count": 174,
+        "recall1": 0.868,
+        "recall5": 0.977,
+        "coverage5": 0.977,
+        "mrr5": 0.91,
+        "groupMrr5": 0.91
+      },
+      "cross": {
+        "count": 4,
+        "recall1": 1,
+        "recall5": 1,
+        "coverage5": 1,
+        "mrr5": 1,
+        "groupMrr5": 0.75
+      },
+      "compare": {
+        "count": 2,
+        "recall1": 0.5,
+        "recall5": 0.5,
+        "coverage5": 0.5,
+        "mrr5": 0.5,
+        "groupMrr5": 0.375
+      },
+      "workflow": {
+        "count": 20,
+        "recall1": 0.8,
+        "recall5": 1,
+        "coverage5": 0.75,
+        "mrr5": 0.892,
+        "groupMrr5": 0.579
+      }
+    },
+    "scenarios": {
+      "account_history": {
+        "count": 28,
+        "recall1": 0.964,
+        "recall5": 1,
+        "coverage5": 1,
+        "mrr5": 0.982,
+        "groupMrr5": 0.982
+      },
+      "bridge": {
+        "count": 21,
+        "recall1": 0.571,
+        "recall5": 0.905,
+        "coverage5": 0.905,
+        "mrr5": 0.694,
+        "groupMrr5": 0.694
+      },
+      "evm_lp": {
+        "count": 10,
+        "recall1": 1,
+        "recall5": 1,
+        "coverage5": 1,
+        "mrr5": 1,
+        "groupMrr5": 1
+      },
+      "evm_swap": {
+        "count": 13,
+        "recall1": 0.923,
+        "recall5": 1,
+        "coverage5": 1,
+        "mrr5": 0.962,
+        "groupMrr5": 0.962
+      },
+      "limit_order": {
+        "count": 15,
+        "recall1": 0.733,
+        "recall5": 1,
+        "coverage5": 1,
+        "mrr5": 0.839,
+        "groupMrr5": 0.839
+      },
+      "market_research": {
+        "count": 26,
+        "recall1": 0.962,
+        "recall5": 1,
+        "coverage5": 1,
+        "mrr5": 0.974,
+        "groupMrr5": 0.946
+      },
+      "prediction_discovery": {
+        "count": 24,
+        "recall1": 0.833,
+        "recall5": 0.917,
+        "coverage5": 0.917,
+        "mrr5": 0.868,
+        "groupMrr5": 0.868
+      },
+      "prediction_trading": {
+        "count": 16,
+        "recall1": 0.938,
+        "recall5": 1,
+        "coverage5": 1,
+        "mrr5": 0.969,
+        "groupMrr5": 0.969
+      },
+      "rewards": {
+        "count": 9,
+        "recall1": 0.889,
+        "recall5": 1,
+        "coverage5": 1,
+        "mrr5": 0.926,
+        "groupMrr5": 0.926
+      },
+      "solana_lend": {
+        "count": 6,
+        "recall1": 1,
+        "recall5": 1,
+        "coverage5": 1,
+        "mrr5": 1,
+        "groupMrr5": 1
+      },
+      "solana_swap": {
+        "count": 8,
+        "recall1": 0.75,
+        "recall5": 0.875,
+        "coverage5": 0.875,
+        "mrr5": 0.781,
+        "groupMrr5": 0.781
+      },
+      "token_safety": {
+        "count": 2,
+        "recall1": 1,
+        "recall5": 1,
+        "coverage5": 1,
+        "mrr5": 1,
+        "groupMrr5": 1
+      },
+      "workflow": {
+        "count": 22,
+        "recall1": 0.818,
+        "recall5": 1,
+        "coverage5": 0.773,
+        "mrr5": 0.902,
+        "groupMrr5": 0.594
+      }
+    }
+  },
+  "notes": [
+    "Gate passed: dense retrieval met Recall@5 and MRR@5 floors; latency gate is captured separately."
+  ]
+}

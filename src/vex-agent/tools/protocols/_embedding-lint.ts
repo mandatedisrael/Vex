@@ -5,14 +5,14 @@
  * which checks forbidden technical jargon and word-count budget. This
  * module focuses on **passage shape** — does the passage carry the
  * structural cues the dense retriever and LLM need to disambiguate
- * during hybrid recall:
+ * during tool discovery:
  *
  *   - **`Use when:` / `Use this when:`** — verb-first imperative anchor.
  *     Without it, passages lapse into descriptive prose and the dense
  *     retriever loses the signal "this passage explains a use case".
  *   - **`Example queries:` / `Example:`** — concrete query examples
- *     diversify intent across paraphrases and languages (cross-lingual
- *     recall on Polish queries against English text relies on these).
+ *     diversify intent across paraphrases and keep dense recall grounded in
+ *     real agent phrasing.
  *   - **No banned phrases** — `"can be used to"`, `"this tool"`,
  *     `"wrapper around"`, `"helper for"` are passive/meta phrasings
  *     that pull embeddings toward boilerplate centroids.

@@ -2,7 +2,7 @@
  * Embedding-text style linter — author-time guardrail.
  *
  * Each manifest's `discovery.embeddingText` is the passage side of dense
- * tool retrieval (EmbeddingGemma 308M, hybrid lexical+vector via RRF).
+ * tool retrieval (EmbeddingGemma 308M, dense-primary discovery).
  * The agent-style refactor moved API/tech jargon out of these passages
  * (it lives in `description`/`aliases`/`params` for power-user lexical
  * exact-match) and standardised passage shape on intent verbs + concrete
@@ -54,7 +54,7 @@ const FORBIDDEN_PATTERNS: readonly ForbiddenPattern[] = [
   { pattern: /\bZaaS\b/, label: "ZaaS", reason: "internal product label — not user vocabulary" },
   // Style rules (in addition to forbidden tech tokens):
   { pattern: /\bDiffers from\b/i, label: "'Differs from' trailer", reason: "sibling differentiator must lead the verb summary, not appear as a trailer (densifies sibling clusters in vector space)" },
-  { pattern: /[ąćęłńóśźż]/i, label: "Polish characters", reason: "embeddingText is English-only — agent translates user intent to English before retrieval" },
+  { pattern: /[ąćęłńóśźż]/i, label: "Non-English diacritics", reason: "embeddingText is English-only because tool passages are authored in English" },
 ];
 
 const WORD_COUNT_MIN = 60;

@@ -12,8 +12,8 @@
  * Wired into `src/mcp/bootstrap.ts:runBootstrapChecks` as **non-blocking**
  * fire-and-forget so MCP startup never waits on the embedding service. The
  * `discover_tools` cold path NEVER lazy-embeds in user-facing code — if
- * `tool_embeddings` is incomplete and `VEX_RETRIEVAL_MODE=hybrid`, the
- * dense leg degrades to `dense_failed: true` and falls back to lexical-only.
+ * `tool_embeddings` is incomplete, dense discovery degrades to
+ * `dense_failed: true` and falls back to lexical scoring.
  *
  * Module-level `inFlight` promise enforces single-flight: parallel calls
  * (e.g. CLI invocation racing the bootstrap fire-and-forget) wait on the

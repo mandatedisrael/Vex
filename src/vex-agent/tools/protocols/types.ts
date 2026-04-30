@@ -134,18 +134,18 @@ export interface ProtocolDiscoveryItem {
 }
 
 /**
- * Retrieval metadata attached to a discovery result. Surfaces which lane
- * produced the ranking (lexical vs hybrid), whether the dense leg degraded,
- * and the audit columns of the embedding used. Consumed by telemetry; the
+ * Retrieval metadata attached to a discovery result. Surfaces whether the
+ * response was an unranked catalog listing, dense-ranked, or lexical fallback,
+ * plus the audit columns of the embedding used. Consumed by telemetry; the
  * LLM never sees it directly.
  */
 export interface ProtocolDiscoveryRetrievalMeta {
-  method: "lexical" | "hybrid";
-  /** True when the dense leg was attempted but failed (RRF fell back to lexical-only). */
+  method: "catalog" | "dense" | "lexical";
+  /** True when dense retrieval was attempted but lexical fallback produced the result. */
   denseFailed: boolean;
-  /** Provider-reported embedding model (only set when dense leg ran). */
+  /** Provider-reported embedding model (only set when dense retrieval ran). */
   embeddingModel?: string;
-  /** Provider-reported embedding dim (only set when dense leg ran). */
+  /** Provider-reported embedding dim (only set when dense retrieval ran). */
   embeddingDim?: number;
   /** Number of candidates before scoring (post env/advertised/lifecycle filters). */
   candidateCount: number;

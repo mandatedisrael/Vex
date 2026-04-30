@@ -9,13 +9,24 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { discoverProtocolCapabilities } from "../../../vex-agent/tools/protocols/runtime.js";
 
 describe("protocol discovery — metadata v1 wiring (PR3)", () => {
-  const ENV_KEYS = ["JUPITER_API_KEY", "POLYMARKET_API_KEY"] as const;
+  const ENV_KEYS = [
+    "JUPITER_API_KEY",
+    "POLYMARKET_API_KEY",
+    "EMBEDDING_BASE_URL",
+    "EMBEDDING_MODEL",
+    "EMBEDDING_DIM",
+    "EMBEDDING_PROVIDER",
+  ] as const;
   const original: Record<string, string | undefined> = {};
 
   beforeEach(() => {
     for (const k of ENV_KEYS) original[k] = process.env[k];
     process.env.JUPITER_API_KEY = "test-jupiter-key";
     process.env.POLYMARKET_API_KEY = "test-polymarket-key";
+    delete process.env.EMBEDDING_BASE_URL;
+    delete process.env.EMBEDDING_MODEL;
+    delete process.env.EMBEDDING_DIM;
+    delete process.env.EMBEDDING_PROVIDER;
   });
 
   afterEach(() => {

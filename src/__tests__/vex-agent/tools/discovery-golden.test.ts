@@ -2,9 +2,8 @@
  * Discovery golden harness — measures top-3 retrieval quality on realistic
  * English capability-phrase intents. PR1 baseline (18); PR4 extends to 32.
  *
- * Fixtures stay English-only (message #5: model translates intent to English
- * before calling discover_tools). Polish pipeline lives in
- * discovery-pipeline.test.ts.
+ * Fixtures stay English-only; discover_tools is evaluated on English
+ * capability phrases.
  *
  * NOTE: Fixtures whose `expectedAny` targets a 0G-ecosystem (jaine, slop,
  * slop-app, chainscan) or EchoBook tool are marked `disabled: true` because
@@ -77,13 +76,24 @@ const FIXTURES: readonly GoldenFixture[] = [
 ];
 
 describe("discovery golden harness", () => {
-  const ENV_KEYS = ["JUPITER_API_KEY", "POLYMARKET_API_KEY"] as const;
+  const ENV_KEYS = [
+    "JUPITER_API_KEY",
+    "POLYMARKET_API_KEY",
+    "EMBEDDING_BASE_URL",
+    "EMBEDDING_MODEL",
+    "EMBEDDING_DIM",
+    "EMBEDDING_PROVIDER",
+  ] as const;
   const original: Record<string, string | undefined> = {};
 
   beforeAll(() => {
     for (const k of ENV_KEYS) original[k] = process.env[k];
     process.env.JUPITER_API_KEY = "test-jupiter-key";
     process.env.POLYMARKET_API_KEY = "test-polymarket-key";
+    delete process.env.EMBEDDING_BASE_URL;
+    delete process.env.EMBEDDING_MODEL;
+    delete process.env.EMBEDDING_DIM;
+    delete process.env.EMBEDDING_PROVIDER;
   });
 
   afterAll(() => {

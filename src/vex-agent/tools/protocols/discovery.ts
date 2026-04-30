@@ -21,7 +21,6 @@ import type {
   ToolDiscoveryMetadata,
 } from "./types.js";
 import { embedQuery } from "@vex-agent/embeddings/client.js";
-import { loadEmbeddingConfig } from "@vex-agent/embeddings/config.js";
 import { searchByVector } from "@vex-agent/db/repos/tool-embeddings.js";
 import logger from "@utils/logger.js";
 
@@ -272,125 +271,110 @@ function resolveRequestedNamespace(rawNamespace: string | undefined): string | P
   return namespace;
 }
 
-// ── Hybrid retrieval (A5) ───────────────────────────────────────
+// ── Dense-primary retrieval ─────────────────────────────────────
 //
-// `hybridScore` combines the lexical scorer above with a dense leg backed
-// by `tool_embeddings` (pgvector cosine search). The two ranked lists are
-// fused with Reciprocal Rank Fusion (k=60, the canonical Cormack et al.
-// parameter). When the dense leg fails (embedding service down, missing
-// rows for the configured model+dim), the function logs and falls back to
-// pure lexical so user-facing latency never blocks on the sidecar.
+// `denseScore` is the production ranker for free-text tool discovery. It
+// embeds the user query, searches `tool_embeddings` by cosine distance, and
+// maps those hits back to the currently available candidate manifests. If the
+// embedding service, config, DB, or table state is not usable, discovery falls
+// back to the lexical scorer above so the caller still receives a useful
+// shortlist instead of a crash.
 //
-// Activated only when `VEX_RETRIEVAL_MODE=hybrid`. Default mode (lexical)
-// keeps the pre-A5 path verbatim — no behavioral change for production
-// until the operator opts in.
-
-const RRF_K = 60;
-const DENSE_OVERFETCH_FACTOR = 4;
-
-interface HybridScoreOutcome {
+interface DiscoveryScoreOutcome {
   scored: ScoredManifest[];
   meta: ProtocolDiscoveryRetrievalMeta;
 }
 
-async function hybridScore(
+function lexicalScore(
   query: string,
   candidates: ProtocolToolManifest[],
-): Promise<HybridScoreOutcome> {
-  // Lexical leg — same as the default path.
-  const lexicalScored = candidates
+  options?: {
+    denseFailed?: boolean;
+    embeddingModel?: string;
+    embeddingDim?: number;
+  },
+): DiscoveryScoreOutcome {
+  const scored = candidates
     .map((manifest): ScoredManifest => ({ manifest, ...scoreManifest(manifest, query) }))
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score || a.manifest.toolId.localeCompare(b.manifest.toolId));
 
-  const lexicalRank = new Map<string, number>();
-  lexicalScored.forEach((entry, idx) => {
-    lexicalRank.set(entry.manifest.toolId, idx + 1);
-  });
-
-  // Dense leg — embed query once, fetch top-(k * 4) by cosine.
-  let denseFailed = false;
-  let embeddingModel: string | undefined;
-  let embeddingDim: number | undefined;
-  const denseRank = new Map<string, number>();
-
-  try {
-    const config = loadEmbeddingConfig();
-    const queryEmb = await embedQuery(query, config);
-    embeddingModel = queryEmb.providerModel;
-    embeddingDim = queryEmb.embedding.length;
-    const hits = await searchByVector(queryEmb.embedding, {
-      k: Math.max(candidates.length, DEFAULT_DISCOVERY_LIMIT * DENSE_OVERFETCH_FACTOR),
-      embeddingModel: queryEmb.providerModel,
-      embeddingDim: queryEmb.embedding.length,
-    });
-    hits.forEach((hit, idx) => {
-      denseRank.set(hit.toolId, idx + 1);
-    });
-  } catch (err) {
-    denseFailed = true;
-    logger.warn("discovery.hybrid.dense_failed", {
-      query,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-
-  // If dense produced nothing (failure or empty `tool_embeddings`), fall back
-  // to lexical-only — return lexical scored as-is.
-  if (denseRank.size === 0) {
-    return {
-      scored: lexicalScored,
-      meta: {
-        method: "lexical",
-        denseFailed,
-        embeddingModel,
-        embeddingDim,
-        candidateCount: candidates.length,
-      },
-    };
-  }
-
-  // RRF fusion. Iterate union of lexical and dense hit IDs, build new
-  // scored list keyed by candidate manifests (dense may return a tool that
-  // is filtered out by env / lifecycle — those drop here).
-  const candidatesById = new Map(candidates.map((m) => [m.toolId, m]));
-  const allIds = new Set<string>([...lexicalRank.keys(), ...denseRank.keys()]);
-  const fused: ScoredManifest[] = [];
-  for (const id of allIds) {
-    const manifest = candidatesById.get(id);
-    if (!manifest) continue;
-    const lex = lexicalRank.get(id);
-    const den = denseRank.get(id);
-    const score = (lex !== undefined ? 1 / (RRF_K + lex) : 0)
-                + (den !== undefined ? 1 / (RRF_K + den) : 0);
-    const why: string[] = [];
-    if (lex !== undefined) why.push("lexical");
-    if (den !== undefined) why.push("dense");
-    fused.push({ manifest, score, whyMatched: why });
-  }
-  fused.sort(
-    (a, b) => b.score - a.score || a.manifest.toolId.localeCompare(b.manifest.toolId),
-  );
-
   return {
-    scored: fused,
+    scored,
     meta: {
-      method: "hybrid",
-      denseFailed: false,
-      embeddingModel,
-      embeddingDim,
+      method: "lexical",
+      denseFailed: options?.denseFailed ?? false,
+      embeddingModel: options?.embeddingModel,
+      embeddingDim: options?.embeddingDim,
       candidateCount: candidates.length,
     },
   };
 }
 
-function resolveRetrievalMode(): "lexical" | "hybrid" {
-  const value = process.env.VEX_RETRIEVAL_MODE?.trim().toLowerCase();
-  if (value === "hybrid") return "hybrid";
-  if (value && value !== "lexical") {
-    logger.warn("discovery.retrieval_mode.unknown", { value, fallback: "lexical" });
+async function denseScore(
+  query: string,
+  candidates: ProtocolToolManifest[],
+): Promise<DiscoveryScoreOutcome> {
+  let embeddingModel: string | undefined;
+  let embeddingDim: number | undefined;
+
+  try {
+    const queryEmb = await embedQuery(query);
+    embeddingModel = queryEmb.providerModel;
+    embeddingDim = queryEmb.embedding.length;
+    const hits = await searchByVector(queryEmb.embedding, {
+      k: Math.max(PROTOCOL_TOOLS.length, candidates.length, DEFAULT_DISCOVERY_LIMIT),
+      embeddingModel: queryEmb.providerModel,
+      embeddingDim: queryEmb.embedding.length,
+    });
+
+    const candidatesById = new Map(candidates.map((m) => [m.toolId, m]));
+    const scored: ScoredManifest[] = [];
+    for (const hit of hits) {
+      const manifest = candidatesById.get(hit.toolId);
+      if (!manifest) continue;
+      scored.push({
+        manifest,
+        score: Math.max(0, hit.similarity),
+        whyMatched: ["dense"],
+      });
+    }
+
+    if (scored.length === 0) {
+      logger.warn("discovery.dense.empty", {
+        query,
+        embeddingModel,
+        embeddingDim,
+        candidateCount: candidates.length,
+      });
+      return lexicalScore(query, candidates, {
+        denseFailed: true,
+        embeddingModel,
+        embeddingDim,
+      });
+    }
+
+    return {
+      scored,
+      meta: {
+        method: "dense",
+        denseFailed: false,
+        embeddingModel,
+        embeddingDim,
+        candidateCount: candidates.length,
+      },
+    };
+  } catch (err) {
+    logger.warn("discovery.dense.failed", {
+      query,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return lexicalScore(query, candidates, {
+      denseFailed: true,
+      embeddingModel,
+      embeddingDim,
+    });
   }
-  return "lexical";
 }
 
 export async function discoverProtocolCapabilities(
@@ -419,32 +403,20 @@ export async function discoverProtocolCapabilities(
     .filter((manifest) => resolvedNamespace ? manifest.namespace === resolvedNamespace : true)
     .filter((manifest) => isProtocolToolAvailable(manifest));
 
-  const mode = resolveRetrievalMode();
-
   let scoredTools: ScoredManifest[];
   let retrievalMeta: ProtocolDiscoveryRetrievalMeta;
 
   if (query.length === 0) {
     scoredTools = filteredTools.map((manifest) => ({ manifest, score: 0, whyMatched: [] }));
     retrievalMeta = {
-      method: mode,
+      method: "catalog",
       denseFailed: false,
       candidateCount: filteredTools.length,
     };
-  } else if (mode === "hybrid") {
-    const outcome = await hybridScore(query, filteredTools);
+  } else {
+    const outcome = await denseScore(query, filteredTools);
     scoredTools = outcome.scored;
     retrievalMeta = outcome.meta;
-  } else {
-    scoredTools = filteredTools
-      .map((manifest): ScoredManifest => ({ manifest, ...scoreManifest(manifest, query) }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score || a.manifest.toolId.localeCompare(b.manifest.toolId));
-    retrievalMeta = {
-      method: "lexical",
-      denseFailed: false,
-      candidateCount: filteredTools.length,
-    };
   }
 
   const tools = scoredTools.slice(0, limit).map(toDiscoveryItem);

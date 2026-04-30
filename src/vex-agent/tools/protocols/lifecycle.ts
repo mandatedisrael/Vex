@@ -14,7 +14,7 @@
  *      for migration-period workflows. `reserved` namespaces never
  *      execute (they have no `NAMESPACE_MODULES` row anyway).
  *   3. **tool_embeddings reembed** — only `active` namespaces are
- *      re-embedded for hybrid retrieval. Deprecated/reserved are skipped
+ *      re-embedded for dense discovery. Deprecated/reserved are skipped
  *      silently.
  *
  * Why a separate map (vs adding `lifecycle` to `ProtocolNamespaceNavigation`):

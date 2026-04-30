@@ -1,16 +1,175 @@
 {
-  "version": "v1-seed",
+  "version": "v3-agent-200",
   "mode": "lexical",
-  "VEX_RETRIEVAL_MODE": "lexical",
-  "datasetVersion": "v1-seed",
-  "capturedAt": "2026-04-29",
-  "notes": "A5 seed baseline for lexical-only discover_tools. Captured immediately after detaching `embeddingText` from the lexical lane (A3) and adding `vex_introduction` is NOT yet in the registry (registry change is B1, no impact on protocol discovery). Recall@5 in the polish cohort is the headline gap dense retrieval (Phase 4) is meant to close.",
+  "capturedAt": "2026-04-29T20:54:25.325Z",
+  "datasetVersion": "v3-agent-200",
+  "status": "captured",
   "metrics": {
-    "overall": { "count": 51, "recall1": 0.314, "recall5": 0.510, "mrr5": 0.382 },
-    "perCohort": {
-      "single-namespace": { "count": 28, "recall1": 0.429, "recall5": 0.536, "mrr5": 0.464 },
-      "cross-namespace":  { "count": 6,  "recall1": 0.333, "recall5": 0.667, "mrr5": 0.458 },
-      "polish":           { "count": 17, "recall1": 0.118, "recall5": 0.412, "mrr5": 0.221 }
+    "overall": {
+      "count": 200,
+      "recall1": 0.45,
+      "recall5": 0.76,
+      "coverage5": 0.665,
+      "mrr5": 0.557,
+      "groupMrr5": 0.522
+    },
+    "awareness": {
+      "blind": {
+        "count": 100,
+        "recall1": 0.49,
+        "recall5": 0.79,
+        "coverage5": 0.68,
+        "mrr5": 0.592,
+        "groupMrr5": 0.556
+      },
+      "protocolAware": {
+        "count": 100,
+        "recall1": 0.41,
+        "recall5": 0.73,
+        "coverage5": 0.65,
+        "mrr5": 0.522,
+        "groupMrr5": 0.487
+      }
+    },
+    "intentShapes": {
+      "single": {
+        "count": 174,
+        "recall1": 0.454,
+        "recall5": 0.736,
+        "coverage5": 0.736,
+        "mrr5": 0.549,
+        "groupMrr5": 0.549
+      },
+      "cross": {
+        "count": 4,
+        "recall1": 0,
+        "recall5": 0.75,
+        "coverage5": 0.25,
+        "mrr5": 0.229,
+        "groupMrr5": 0.146
+      },
+      "compare": {
+        "count": 2,
+        "recall1": 0,
+        "recall5": 1,
+        "coverage5": 0,
+        "mrr5": 0.375,
+        "groupMrr5": 0.188
+      },
+      "workflow": {
+        "count": 20,
+        "recall1": 0.55,
+        "recall5": 0.95,
+        "coverage5": 0.2,
+        "mrr5": 0.708,
+        "groupMrr5": 0.394
+      }
+    },
+    "scenarios": {
+      "account_history": {
+        "count": 28,
+        "recall1": 0.429,
+        "recall5": 0.786,
+        "coverage5": 0.786,
+        "mrr5": 0.557,
+        "groupMrr5": 0.557
+      },
+      "bridge": {
+        "count": 21,
+        "recall1": 0.381,
+        "recall5": 0.667,
+        "coverage5": 0.667,
+        "mrr5": 0.488,
+        "groupMrr5": 0.488
+      },
+      "evm_lp": {
+        "count": 10,
+        "recall1": 0.7,
+        "recall5": 0.8,
+        "coverage5": 0.8,
+        "mrr5": 0.75,
+        "groupMrr5": 0.75
+      },
+      "evm_swap": {
+        "count": 13,
+        "recall1": 0.385,
+        "recall5": 0.769,
+        "coverage5": 0.769,
+        "mrr5": 0.499,
+        "groupMrr5": 0.499
+      },
+      "limit_order": {
+        "count": 15,
+        "recall1": 0.667,
+        "recall5": 0.933,
+        "coverage5": 0.933,
+        "mrr5": 0.772,
+        "groupMrr5": 0.772
+      },
+      "market_research": {
+        "count": 26,
+        "recall1": 0.154,
+        "recall5": 0.385,
+        "coverage5": 0.308,
+        "mrr5": 0.224,
+        "groupMrr5": 0.208
+      },
+      "prediction_discovery": {
+        "count": 24,
+        "recall1": 0.542,
+        "recall5": 0.875,
+        "coverage5": 0.833,
+        "mrr5": 0.659,
+        "groupMrr5": 0.654
+      },
+      "prediction_trading": {
+        "count": 16,
+        "recall1": 0.688,
+        "recall5": 1,
+        "coverage5": 1,
+        "mrr5": 0.783,
+        "groupMrr5": 0.783
+      },
+      "rewards": {
+        "count": 9,
+        "recall1": 0.556,
+        "recall5": 0.889,
+        "coverage5": 0.889,
+        "mrr5": 0.676,
+        "groupMrr5": 0.676
+      },
+      "solana_lend": {
+        "count": 6,
+        "recall1": 0,
+        "recall5": 0.5,
+        "coverage5": 0.5,
+        "mrr5": 0.117,
+        "groupMrr5": 0.117
+      },
+      "solana_swap": {
+        "count": 8,
+        "recall1": 0.375,
+        "recall5": 0.5,
+        "coverage5": 0.5,
+        "mrr5": 0.406,
+        "groupMrr5": 0.406
+      },
+      "token_safety": {
+        "count": 2,
+        "recall1": 0.5,
+        "recall5": 0.5,
+        "coverage5": 0.5,
+        "mrr5": 0.5,
+        "groupMrr5": 0.5
+      },
+      "workflow": {
+        "count": 22,
+        "recall1": 0.5,
+        "recall5": 0.955,
+        "coverage5": 0.227,
+        "mrr5": 0.67,
+        "groupMrr5": 0.377
+      }
     }
   }
 }

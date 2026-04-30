@@ -1,16 +1,14 @@
 -- 010_tool_embeddings.sql
 --
--- Tool discovery embeddings — semantic leg of the hybrid retriever over the
+-- Tool discovery embeddings — dense ranker over the
 -- protocol tool surface. Mirrors `knowledge_entries` shape (vector + dim +
 -- model + content_hash) so re-embed only happens when the source text
 -- actually changed.
 --
--- The hybrid retriever in `src/vex-agent/tools/protocols/discovery.ts`
--- combines lexical scoring (BM25-ish weighted-field search over toolId,
--- canonicalSummary, aliases, exampleIntents, description) with cosine
--- similarity on `embedding` via Reciprocal Rank Fusion (k=60). Default
--- runtime mode is `lexical`; `VEX_RETRIEVAL_MODE=hybrid` activates the
--- dense leg.
+-- The dense retriever in `src/vex-agent/tools/protocols/discovery.ts` ranks
+-- free-text queries by cosine similarity on `embedding`. If the embedding
+-- service or table is unavailable at runtime, discovery falls back to lexical
+-- scoring so callers still get a useful shortlist.
 --
 -- Re-embed task at startup (`src/mcp/bootstrap.ts:runBootstrapChecks`,
 -- non-blocking) iterates active manifests, computes `content_hash`, and
@@ -42,4 +40,4 @@ CREATE INDEX idx_te_model_dim ON tool_embeddings(embedding_model, embedding_dim)
 CREATE UNIQUE INDEX idx_te_content_hash ON tool_embeddings(content_hash);
 
 COMMENT ON TABLE tool_embeddings IS
-  'Per-tool dense embeddings for hybrid discovery; re-embedded only when content_hash differs from canonical (formatter_version|tool_id|namespace|sourceText|aliases|exampleIntents|chains) hash.';
+  'Per-tool dense embeddings for tool discovery; re-embedded only when content_hash differs from canonical (formatter_version|tool_id|namespace|sourceText|aliases|exampleIntents|chains) hash.';

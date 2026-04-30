@@ -86,7 +86,7 @@ export interface NamespaceModule {
 }
 
 export const NAMESPACE_MODULES: readonly NamespaceModule[] = [
-  // Active namespaces — discoverable, executable, embedded for hybrid retrieval.
+  // Active namespaces — discoverable, executable, embedded for dense discovery.
   { namespace: "khalani", manifests: KHALANI_TOOLS, handlers: KHALANI_HANDLERS },
   { namespace: "solana", manifests: SOLANA_JUPITER_TOOLS, handlers: SOLANA_JUPITER_HANDLERS },
   { namespace: "kyberswap", manifests: KYBERSWAP_TOOLS, handlers: KYBERSWAP_HANDLERS },

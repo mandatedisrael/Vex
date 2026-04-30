@@ -1,0 +1,21 @@
+{
+  "version": "v3-agent-200",
+  "mode": "dense",
+  "capturedAt": "2026-04-30T13:29:03.286Z",
+  "methodology": {
+    "warmupQueries": 5,
+    "trialsPerQuery": 3,
+    "totalMeasurements": 600
+  },
+  "latencyMs": {
+    "p50": 23,
+    "p95": 64,
+    "p99": 69,
+    "min": 15,
+    "max": 93
+  },
+  "gate": {
+    "p95ThresholdMs": 750,
+    "passed": true
+  }
+}

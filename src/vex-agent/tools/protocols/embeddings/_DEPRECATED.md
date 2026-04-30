@@ -1,7 +1,7 @@
 # Deprecated protocol namespaces
 
 These five namespaces are still wired into the catalog (`catalog.ts:NAMESPACE_MODULES`)
-but are **deprecated** for the hybrid retrieval surface. They have no `embeddings/<ns>/`
+but are **deprecated** for the dense discovery surface. They have no `embeddings/<ns>/`
 directory by design, will not be re-embedded on startup, and `execute_tool` refuses
 to invoke them by default.
 

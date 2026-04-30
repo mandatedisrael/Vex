@@ -1,13 +1,16 @@
 import { defineConfig } from "vitest/config";
 import { resolve } from "node:path";
 
+const root = resolve(__dirname, "..");
+
 export default defineConfig({
+  root,
   resolve: {
     alias: {
-      "@tools": resolve(__dirname, "src/tools"),
-      "@utils": resolve(__dirname, "src/utils"),
-      "@config": resolve(__dirname, "src/config"),
-      "@vex-agent": resolve(__dirname, "src/vex-agent"),
+      "@tools": resolve(root, "src/tools"),
+      "@utils": resolve(root, "src/utils"),
+      "@config": resolve(root, "src/config"),
+      "@vex-agent": resolve(root, "src/vex-agent"),
     },
   },
   test: {
