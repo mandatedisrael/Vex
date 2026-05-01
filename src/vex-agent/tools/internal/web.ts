@@ -43,7 +43,11 @@ export async function handleWebSearch(
   }
 
   try {
-    const response = await client.search(query, { maxResults: DEFAULT_SEARCH_LIMIT });
+    // SDK timeout in seconds (1-60). Tavily's own default is 60s; we cap at
+    // 30s so a slow upstream cannot wedge a turn for the full window. Repo
+    // pattern: every other HTTP client uses fetchWithTimeout / AbortSignal
+    // (rule 10.7); this brings web_search in line.
+    const response = await client.search(query, { maxResults: DEFAULT_SEARCH_LIMIT, timeout: 30 });
     const results: searchRepo.SearchResult[] = (response.results ?? []).map(r => ({
       title: r.title ?? "",
       url: r.url ?? "",
@@ -82,7 +86,9 @@ export async function handleWebFetch(
   const client = getTavilyClient();
   if (client) {
     try {
-      const response = await client.extract([url]);
+      // Tavily's default extract timeout is 10s (basic) / 30s (advanced).
+      // We pin 25s so basic depth still has runway before the SDK fires.
+      const response = await client.extract([url], { timeout: 25 });
       const extracted = response.results?.[0];
       if (extracted?.rawContent) {
         const titleMatch = extracted.rawContent.match(/^#\s+(.+)$/m);
