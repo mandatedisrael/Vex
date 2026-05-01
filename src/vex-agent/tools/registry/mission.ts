@@ -1,6 +1,6 @@
 /**
  * Mission tools — vex-agent only. MCP has no mission concept
- * (`missionRunId` is always null in MCP context); hide via `excludeFromMcp`.
+ * (`missionRunId` is always null in MCP context); hide via `surface: "agent"`.
  */
 
 import type { ToolDef } from "../types.js";
@@ -9,7 +9,7 @@ export const MISSION_TOOLS: readonly ToolDef[] = [
   {
     name: "mission_stop", kind: "internal", mutating: false,
     excludeRoles: ["subagent"],
-    excludeFromMcp: true,
+    surface: "agent",
     visibility: { hiddenInChat: true },
     description: "Stop the current mission run. Only valid during active mission execution. Use when a stop condition is met (goal reached, capital depleted, etc.).",
     parameters: { type: "object", properties: {

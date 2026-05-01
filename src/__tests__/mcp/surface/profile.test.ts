@@ -66,6 +66,13 @@ describe("mcp surface — getProductionTools", () => {
     expect(names).toContain("wallet_send_confirm");
   });
 
+  it("always includes vex_introduction and vex_namespace_tools (MCP-host orientation)", () => {
+    process.env.TAVILY_API_KEY = "fake-key";
+    const names = getProductionTools().map((t) => t.name);
+    expect(names).toContain("vex_introduction");
+    expect(names).toContain("vex_namespace_tools");
+  });
+
   // ── Env gating: requiresEnv ─────────────────────────────────────
 
   it("hides web_* tools when TAVILY_API_KEY is unset", () => {

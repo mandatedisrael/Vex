@@ -6,7 +6,7 @@
  * any form — not in `tools/list`, not in any `docs://*` resource, not in
  * `surface://manifest`, not in the initialize `instructions` preamble.
  *
- * The existing design already hides them via `excludeFromMcp: true` +
+ * The existing design already hides them via `surface: "agent"` +
  * `getProductionMcpTools()`. This test locks the invariant so a future
  * change (e.g. adding a "internal-only" note that names them) still fails
  * CI, and so a missing filter on a new surface is caught structurally.

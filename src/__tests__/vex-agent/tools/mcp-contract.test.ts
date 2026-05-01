@@ -100,11 +100,11 @@ describe("MCP contract — vex-agent public surface", () => {
       expect(typeof isToolBlockedForRole).toBe("function");
     });
 
-    it("production MCP profile hides subagent_*, excludeFromMcp, and env-gated tools", () => {
+    it("production MCP profile hides subagent_*, agent-only surface, and env-gated tools", () => {
       const mcpTools = getProductionMcpTools();
       for (const t of mcpTools) {
         expect(t.name.startsWith("subagent_")).toBe(false);
-        expect(t.excludeFromMcp).not.toBe(true);
+        expect(t.surface).not.toBe("agent");
       }
     });
   });

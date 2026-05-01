@@ -270,6 +270,9 @@ describe("registry", () => {
       expect(names).toContain("portfolio_inspect");
     });
 
+    // Single-tool exclusion test for `mission_stop`. The full agent-only freeze
+    // for `loop_defer`, `checkpoint_handoff_prepare`, `tool_output_read` lives in
+    // `__tests__/mcp/docs/no-autonomy-leak.test.ts` (broader: also gates docs/manifest).
     it("excludes mission_stop (vex-agent runtime concept)", () => {
       const names = getProductionMcpTools().map((t) => t.name);
       expect(names).not.toContain("mission_stop");
@@ -290,6 +293,28 @@ describe("registry", () => {
         missionRunActive: true,
       })).map((t) => t.function.name);
       expect(names).toContain("mission_stop");
+    });
+
+    // ── surface: "mcp" — self-doc tools hidden from agent ──────────
+
+    it("excludes vex_introduction from agent surface (already covered by system prompt)", () => {
+      const names = getOpenAITools(defaultVisibilityContext()).map((t) => t.function.name);
+      expect(names).not.toContain("vex_introduction");
+    });
+
+    it("excludes vex_namespace_tools from agent surface (already covered by system prompt)", () => {
+      const names = getOpenAITools(defaultVisibilityContext()).map((t) => t.function.name);
+      expect(names).not.toContain("vex_namespace_tools");
+    });
+
+    it("includes vex_introduction in MCP surface (host orientation)", () => {
+      const names = getProductionMcpTools().map((t) => t.name);
+      expect(names).toContain("vex_introduction");
+    });
+
+    it("includes vex_namespace_tools in MCP surface (host orientation)", () => {
+      const names = getProductionMcpTools().map((t) => t.name);
+      expect(names).toContain("vex_namespace_tools");
     });
   });
 });

@@ -125,8 +125,22 @@ export function getOpenAITools(ctx: ToolVisibilityContext): OpenAITool[] {
     .filter(t => !t.showOnlyWhenEnvMissing || !process.env[t.showOnlyWhenEnvMissing]?.trim())
     .filter(t => ctx.chatMode === "off" ? !t.proactive : true)
     .filter(t => !t.excludeRoles?.includes(ctx.role))
-    .filter(t => passesVisibility(t.visibility, ctx));
+    .filter(t => passesVisibility(t.visibility, ctx))
+    .filter(t => isVisibleOnSurface(t, "agent"));
   return toOpenAITools(filtered);
+}
+
+/**
+ * Whether `tool` is advertised on the given runtime surface.
+ *
+ * Default `surface === undefined` is treated as "both" — preserves the
+ * pre-migration behavior for tools that don't declare a surface. The two
+ * surfaces have asymmetric defaults intentionally: most operational tools
+ * (knowledge, wallet, web, evm, khalani, etc.) need to appear on both, so
+ * leaving `surface` unset is the sensible no-op.
+ */
+function isVisibleOnSurface(tool: ToolDef, surface: "agent" | "mcp"): boolean {
+  return !tool.surface || tool.surface === "both" || tool.surface === surface;
 }
 
 function passesVisibility(
@@ -166,7 +180,7 @@ function passesVisibility(
  * Reuses the canonical env / showOnlyWhenEnvMissing / role filtering used
  * everywhere else. The MCP server is a passive bridge — it surfaces the
  * `parent`-role view of tools (no subagent child-only tools), drops anything
- * marked `excludeFromMcp` (e.g. `mission_stop`, `loop_defer`,
+ * marked `surface: "agent"` (e.g. `mission_stop`, `loop_defer`,
  * `checkpoint_handoff_prepare`, `tool_output_read` — Vex Agent runtime
  * concepts that the MCP host cannot drive), and hard-excludes any name
  * starting with `subagent_` as defense in depth (today these are already
@@ -183,7 +197,7 @@ export function getProductionMcpTools(): readonly ToolDef[] {
     .filter(t => !t.requiresEnv || Boolean(process.env[t.requiresEnv]?.trim()))
     .filter(t => !t.showOnlyWhenEnvMissing || !process.env[t.showOnlyWhenEnvMissing]?.trim())
     .filter(t => !t.excludeRoles?.includes("parent")) // none today, defensive
-    .filter(t => !t.excludeFromMcp)                   // mission_stop + autonomy internals — vex-agent only
+    .filter(t => isVisibleOnSurface(t, "mcp"))        // agent-runtime-only tools hidden (mission_stop + autonomy primitives)
     .filter(t => !t.name.startsWith("subagent_"));    // hard guard for `full-minus-subagents`
 }
 

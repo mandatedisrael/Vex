@@ -13,7 +13,7 @@
  *   - `excludeRoles: ["subagent"]` is defense in depth — a child subagent
  *     that somehow ended up with the tool name should still be rejected at
  *     dispatch.
- *   - `excludeFromMcp: true` — MCP has no runtime / autonomy concept.
+ *   - `surface: "agent"` — MCP has no runtime / autonomy concept.
  *
  * Contract reminders for the model (PR-5 plan §7):
  *   - `reason` is an INTERNAL resume hint, not a user-facing message. It
@@ -33,7 +33,7 @@ export const AUTONOMY_TOOLS: readonly ToolDef[] = [
     name: "tool_output_read",
     kind: "internal",
     mutating: false,
-    excludeFromMcp: true,
+    surface: "agent",
     visibility: { hiddenInMissionSetup: true },
     description:
       "Retrieve the full payload of a previously-overflowed tool output. " +
@@ -56,7 +56,7 @@ export const AUTONOMY_TOOLS: readonly ToolDef[] = [
     kind: "internal",
     mutating: true,
     excludeRoles: ["subagent"],
-    excludeFromMcp: true,
+    surface: "agent",
     visibility: { band: "warning" },
     description:
       "Prepare a handoff note that will seed recall AFTER the next checkpoint compacts the prompt. " +
@@ -95,7 +95,7 @@ export const AUTONOMY_TOOLS: readonly ToolDef[] = [
     kind: "internal",
     mutating: false,
     excludeRoles: ["subagent"],
-    excludeFromMcp: true,
+    surface: "agent",
     visibility: { requiresMissionActiveRun: true },
     description:
       "Pause the current mission run or full-autonomous session until a wake time. " +
