@@ -29,30 +29,17 @@ describe("requiresEnv filtering", () => {
   // ── Internal tools (registry) ──────────────────────────────────
 
   describe("internal tools (registry)", () => {
-    it("hides web_search when TAVILY_API_KEY not set", async () => {
+    it("hides web_research when TAVILY_API_KEY not set", async () => {
       const tools = getOpenAITools(defaultVisibilityContext());
-      const hasWebSearch = tools.some(t => t.function.name === "web_search");
-      expect(hasWebSearch).toBe(false);
+      const hasWebResearch = tools.some(t => t.function.name === "web_research");
+      expect(hasWebResearch).toBe(false);
     });
 
-    it("hides web_fetch when TAVILY_API_KEY not set", async () => {
-      const tools = getOpenAITools(defaultVisibilityContext());
-      const hasWebFetch = tools.some(t => t.function.name === "web_fetch");
-      expect(hasWebFetch).toBe(false);
-    });
-
-    it("shows web_search when TAVILY_API_KEY is set", async () => {
+    it("shows web_research when TAVILY_API_KEY is set", async () => {
       process.env.TAVILY_API_KEY = "tvly-test-key-12345678";
       const tools = getOpenAITools(defaultVisibilityContext());
-      const hasWebSearch = tools.some(t => t.function.name === "web_search");
-      expect(hasWebSearch).toBe(true);
-    });
-
-    it("shows web_fetch when TAVILY_API_KEY is set", async () => {
-      process.env.TAVILY_API_KEY = "tvly-test-key-12345678";
-      const tools = getOpenAITools(defaultVisibilityContext());
-      const hasWebFetch = tools.some(t => t.function.name === "web_fetch");
-      expect(hasWebFetch).toBe(true);
+      const hasWebResearch = tools.some(t => t.function.name === "web_research");
+      expect(hasWebResearch).toBe(true);
     });
 
     it("non-ENV tools always present regardless of ENV state", async () => {
@@ -88,9 +75,9 @@ describe("requiresEnv filtering", () => {
 
     it("getAllTools still returns all tools including ENV-gated ones", async () => {
       const all = getAllTools();
-      const webSearch = all.find(t => t.name === "web_search");
-      expect(webSearch).toBeDefined();
-      expect(webSearch!.requiresEnv).toBe("TAVILY_API_KEY");
+      const webResearch = all.find(t => t.name === "web_research");
+      expect(webResearch).toBeDefined();
+      expect(webResearch!.requiresEnv).toBe("TAVILY_API_KEY");
     });
   });
 

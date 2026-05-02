@@ -262,7 +262,7 @@ describe("turn-loop", () => {
   describe("deferred save", () => {
     it("saves assistant message with toolCalls to DB via deferred save", async () => {
       const provider = makeProvider([
-        { toolCalls: [{ id: "call-1", name: "web_search", arguments: { query: "test" } }] },
+        { toolCalls: [{ id: "call-1", name: "web_research", arguments: { query: "test" } }] },
         { content: "Done" },
       ]);
       mockDispatchTool.mockResolvedValue({ success: true, output: '{"results":[]}' });
@@ -277,7 +277,7 @@ describe("turn-loop", () => {
       const firstCall = mockAddMessage.mock.calls[0];
       expect(firstCall[1].role).toBe("assistant");
       expect(firstCall[1].toolCalls).toHaveLength(1);
-      expect(firstCall[1].toolCalls[0].command).toBe("web_search");
+      expect(firstCall[1].toolCalls[0].command).toBe("web_research");
     });
 
     it("saves text-only assistant message via deferred save", async () => {
@@ -297,7 +297,7 @@ describe("turn-loop", () => {
 
     it("saves assistant message BEFORE tool results (correct ordering)", async () => {
       const provider = makeProvider([
-        { toolCalls: [{ id: "call-1", name: "web_search", arguments: { query: "test" } }] },
+        { toolCalls: [{ id: "call-1", name: "web_research", arguments: { query: "test" } }] },
         { content: "Done" },
       ]);
       mockDispatchTool.mockResolvedValue({ success: true, output: '{"ok":true}' });
@@ -323,9 +323,9 @@ describe("turn-loop", () => {
       const provider = makeProvider([
         {
           toolCalls: [
-            { id: "call-1", name: "web_search", arguments: { query: "test" } },
+            { id: "call-1", name: "web_research", arguments: { query: "test" } },
             { id: "call-2", name: "execute_tool", arguments: { toolId: "solana.swap" } },
-            { id: "call-3", name: "web_fetch", arguments: { url: "https://x.com" } },
+            { id: "call-3", name: "wallet_read", arguments: {} },
           ],
         },
       ]);
@@ -362,7 +362,7 @@ describe("turn-loop", () => {
       const provider = makeProvider([
         {
           toolCalls: [
-            { id: "call-1", name: "web_search", arguments: { query: "test" } },
+            { id: "call-1", name: "web_research", arguments: { query: "test" } },
             { id: "call-2", name: "execute_tool", arguments: { toolId: "solana.swap" } },
           ],
         },
@@ -421,9 +421,9 @@ describe("turn-loop", () => {
       const provider = makeProvider([
         {
           toolCalls: [
-            { id: "call-1", name: "web_search", arguments: { query: "market" } },
+            { id: "call-1", name: "web_research", arguments: { query: "market" } },
             { id: "call-2", name: "mission_stop", arguments: { reason: "goal_reached", summary: "Done" } },
-            { id: "call-3", name: "web_fetch", arguments: { url: "https://example.com" } },
+            { id: "call-3", name: "wallet_read", arguments: {} },
           ],
         },
       ]);
@@ -524,7 +524,7 @@ describe("turn-loop", () => {
       mockGetSessionForLoop.mockResolvedValue({ tokenCount: 120_000 });
 
       const provider = makeProvider([
-        { toolCalls: [{ id: "call-1", name: "web_search", arguments: { query: "x" } }] },
+        { toolCalls: [{ id: "call-1", name: "web_research", arguments: { query: "x" } }] },
         { content: "wrapped up" },
       ]);
       mockDispatchTool.mockResolvedValue({ success: true, output: "huge-output" });

@@ -73,7 +73,7 @@ describe("types - structural integrity", () => {
   it("InferenceResponse represents tool call response", () => {
     const toolCall: ParsedToolCall = {
       id: "call_123",
-      name: "web_search",
+      name: "web_research",
       arguments: { query: "bitcoin price" },
     };
     const response: InferenceResponse = {
@@ -83,7 +83,7 @@ describe("types - structural integrity", () => {
     };
     expect(response.content).toBeNull();
     expect(response.toolCalls).toHaveLength(1);
-    expect(response.toolCalls![0].name).toBe("web_search");
+    expect(response.toolCalls![0].name).toBe("web_research");
   });
 
   it("StreamChunk supports all chunk types", () => {
@@ -132,7 +132,7 @@ describe("types - structural integrity", () => {
     const assistant: ProviderMessage = {
       role: "assistant",
       content: "",
-      toolCalls: [{ id: "call_1", command: "web_search", args: { query: "test" } }],
+      toolCalls: [{ id: "call_1", command: "web_research", args: { query: "test" } }],
     };
     const tool: ProviderMessage = {
       role: "tool",
@@ -150,7 +150,7 @@ describe("types - structural integrity", () => {
     const tool: ToolDefinition = {
       type: "function",
       function: {
-        name: "web_search",
+        name: "web_research",
         description: "Search the web",
         parameters: {
           type: "object",
@@ -161,7 +161,7 @@ describe("types - structural integrity", () => {
         },
       },
     };
-    expect(tool.function.name).toBe("web_search");
+    expect(tool.function.name).toBe("web_research");
   });
 
   it("ProviderBalance supports both providers", () => {

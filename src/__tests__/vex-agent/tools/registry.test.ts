@@ -57,8 +57,8 @@ describe("registry", () => {
     expect(isMutatingTool("discover_tools")).toBe(false);
   });
 
-  it("identifies web_search as non-mutating", () => {
-    expect(isMutatingTool("web_search")).toBe(false);
+  it("identifies web_research as non-mutating", () => {
+    expect(isMutatingTool("web_research")).toBe(false);
   });
 
   // ── Expected tools present ───────────────────────────────────────
@@ -66,8 +66,7 @@ describe("registry", () => {
   const EXPECTED_TOOLS = [
     "discover_tools",
     "execute_tool",
-    "web_search",
-    "web_fetch",
+    "web_research",
     "document_read",
     "document_write",
     "document_list",
@@ -243,7 +242,7 @@ describe("registry", () => {
     it("isToolBlockedForRole returns false for allowed tools", () => {
       expect(isToolBlockedForRole("mission_stop", "parent")).toBe(false);
       expect(isToolBlockedForRole("subagent_request_parent", "subagent")).toBe(false);
-      expect(isToolBlockedForRole("web_search", "subagent")).toBe(false);
+      expect(isToolBlockedForRole("web_research", "subagent")).toBe(false);
     });
 
     it("defaultVisibilityContext produces parent-role defaults", () => {

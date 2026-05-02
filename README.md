@@ -418,7 +418,7 @@ The `session_links` table is a general graph. It stores subagent relationships t
 Vex's surface is intentionally small at the agent level and deep underneath.
 
 - **32 agent level tools** register in the engine.
-- **22 of those** are visible through the MCP bridge in a fully configured environment. The exact number dips if `TAVILY_API_KEY` is unset (hides `web_search` and `web_fetch`) or rises by one if `POLYMARKET_API_KEY` is unset (shows `polymarket_setup` for one shot credential provisioning).
+- **22 of those** are visible through the MCP bridge in a fully configured environment. The exact number dips if `TAVILY_API_KEY` is unset (hides `web_research`) or rises by one if `POLYMARKET_API_KEY` is unset (shows `polymarket_setup` for one shot credential provisioning).
 - **240 protocol manifests** federate through two meta tools, `discover_tools` for semantic search and `execute_tool` for typed dispatch by `toolId`.
 - **40+ EVM chains plus Solana** are resolved dynamically from the Khalani chain registry at call time. There is no hardcoded chain list to rot.
 
@@ -454,7 +454,7 @@ All 10 advertised namespaces are live in code. Two (`0g-compute`, `0g-storage`) 
 | `wallet_send_prepare` | Prepare a native, ERC 20, ERC 721, or SPL send | No | Returns an intent id |
 | `wallet_send_confirm` | Broadcast the prepared intent | Yes | Approval gated in restricted mode |
 | `evm_read` | Receipts, metadata, balances | No | Any EVM chain in the Khalani registry |
-| `web_search`, `web_fetch` | Tavily backed web | No | Hidden unless `TAVILY_API_KEY` set |
+| `web_research` | Tavily backed search + page fetch (one tool) | No | Hidden unless `TAVILY_API_KEY` set |
 | `document_read`, `document_write`, `document_list`, `document_delete` | Scratchpad notes in the `notes` space | Mixed | Persisted in the database, soft delete |
 | `portfolio_inspect` | Portfolio views (see below) | No | Filters by namespace, product type, instrument key, wallet address, status, groupBy |
 | `knowledge_write` | Create a new canonical entry | Yes | English only, content hash idempotent |
@@ -612,7 +612,7 @@ Embeddings change. Models get deprecated, dimensions get bumped, research moves.
 | `MCP_HTTP_PORT` | HTTP port when applicable | 4203 |
 | `JUPITER_API_KEY` | Required for every Solana tool | n/a |
 | `POLYMARKET_API_KEY` | Required for CLOB trading and auth reads | n/a |
-| `TAVILY_API_KEY` | Required for `web_search` and `web_fetch` | n/a |
+| `TAVILY_API_KEY` | Required for `web_research` | n/a |
 | `VEX_DB_URL` | PostgreSQL connection string | n/a |
 | `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_DIM`, `EMBEDDING_PROVIDER` | Local or remote embedding service | n/a |
 

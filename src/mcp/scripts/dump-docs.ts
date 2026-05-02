@@ -20,7 +20,7 @@
  * ───────────────
  * The script primes JUPITER_API_KEY / POLYMARKET_API_KEY / TAVILY_API_KEY
  * with placeholder values BEFORE importing the registry. Reason: those
- * keys gate solana / polymarket-clob / web_* tools at registry-import
+ * keys gate solana / polymarket-clob / web_research tools at registry-import
  * time, and the goal of the dump is to show the FULL advertised surface
  * the model would see in a fully-configured deployment. Comment those
  * three lines out (or set the keys yourself before running) to inspect

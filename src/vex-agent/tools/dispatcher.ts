@@ -138,9 +138,8 @@ export const INTERNAL_TOOL_LOADERS: Readonly<Record<string, InternalHandlerLoade
   vex_introduction: async () => (await import("./internal/vex-intro.js")).handleVexIntroduction,
   vex_namespace_tools: async () => (await import("./internal/vex-namespace-tools.js")).handleVexNamespaceTools,
 
-  // Web
-  web_search: async () => (await import("./internal/web.js")).handleWebSearch,
-  web_fetch: async () => (await import("./internal/web.js")).handleWebFetch,
+  // Web research (search + optional fetch in one tool)
+  web_research: async () => (await import("./internal/web.js")).handleWebResearch,
 
   // Documents (replaces file_*)
   document_read: async () => (await import("./internal/documents.js")).handleDocumentRead,

@@ -85,8 +85,8 @@ describe("dispatcher — subagent, wallet, unknown, no-stubs", () => {
 
   it("no internal tool returns [STUB]", async () => {
     const internalTools = [
-      { name: "web_search", args: { query: "test" } },
-      { name: "web_fetch", args: { url: "https://example.com" } },
+      { name: "web_research", args: { query: "test" } },
+      { name: "web_research", args: { url: "https://example.com" } },
       { name: "document_read", args: { slug: "test" } },
       { name: "document_write", args: { title: "t", content: "c" } },
       { name: "document_list", args: {} },

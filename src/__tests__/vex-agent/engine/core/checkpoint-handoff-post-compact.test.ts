@@ -209,7 +209,7 @@ describe("PR-13 S-4 — overflow blob_keys fall back to the first episode", () =
     const prefix: MessageWithId[] = [
       {
         id: 1, role: "assistant", content: "calling tool",
-        toolCalls: blobKeys.map((_, i) => ({ id: `tc-${i}`, command: "web_fetch", args: {} })),
+        toolCalls: blobKeys.map((_, i) => ({ id: `tc-${i}`, command: "web_research", args: {} })),
         timestamp: "2026-04-20T09:00:00.000Z",
       },
     ];

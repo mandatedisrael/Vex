@@ -75,24 +75,22 @@ describe("mcp surface — getProductionTools", () => {
 
   // ── Env gating: requiresEnv ─────────────────────────────────────
 
-  it("hides web_* tools when TAVILY_API_KEY is unset", () => {
+  it("hides web_research when TAVILY_API_KEY is unset", () => {
     delete process.env.TAVILY_API_KEY;
     const names = getProductionTools().map((t) => t.name);
-    expect(names).not.toContain("web_search");
-    expect(names).not.toContain("web_fetch");
+    expect(names).not.toContain("web_research");
   });
 
-  it("shows web_* tools when TAVILY_API_KEY is set", () => {
+  it("shows web_research when TAVILY_API_KEY is set", () => {
     process.env.TAVILY_API_KEY = "tavily-test-key";
     const names = getProductionTools().map((t) => t.name);
-    expect(names).toContain("web_search");
-    expect(names).toContain("web_fetch");
+    expect(names).toContain("web_research");
   });
 
   it("ignores TAVILY_API_KEY=' ' (whitespace) as missing", () => {
     process.env.TAVILY_API_KEY = "   ";
     const names = getProductionTools().map((t) => t.name);
-    expect(names).not.toContain("web_search");
+    expect(names).not.toContain("web_research");
   });
 
   // ── Env gating: showOnlyWhenEnvMissing ──────────────────────────

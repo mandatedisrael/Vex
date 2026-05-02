@@ -67,7 +67,7 @@ export const ENV_FIELDS: readonly EnvFieldSpec[] = [
   {
     key: "TAVILY_API_KEY",
     required: false,
-    description: "Optional key for web_search and web_fetch. You can add it later without rerunning wallet setup.",
+    description: "Optional key for web_research (search + page fetch). You can add it later without rerunning wallet setup.",
   },
 ] as const;
 

@@ -56,6 +56,8 @@ describe("mcp docs — onboarding helper", () => {
 
     expect(withoutTavily.directToolPatterns).not.toContain("web_*");
     expect(withTavily.directToolPatterns).toContain("web_*");
-    expect(withTavily.internalToolCount).toBe(withoutTavily.internalToolCount + 2);
+    // After consolidation, TAVILY_API_KEY unlocks one tool (web_research),
+    // not two (web_search + web_fetch).
+    expect(withTavily.internalToolCount).toBe(withoutTavily.internalToolCount + 1);
   });
 });

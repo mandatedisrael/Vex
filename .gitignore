@@ -9,7 +9,9 @@ dist/
 .idea/
 .vscode/
 .claude/
-.codex
+AGENTS.md
+agents.md
+.codex/
 *.swp
 *.swo
 

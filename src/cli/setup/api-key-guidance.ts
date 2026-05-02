@@ -11,7 +11,7 @@ export const JUPITER_API_KEY_GUIDANCE = [
 ].join("\n");
 
 export const TAVILY_API_KEY_GUIDANCE = [
-  "Tavily enables web_search and web_fetch.",
+  "Tavily enables web_research (search + page fetch in one tool).",
   "How to get it:",
   "1. Log in or create an account at https://app.tavily.com/home",
   "2. Open API Keys.",

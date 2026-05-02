@@ -131,7 +131,7 @@ describe("turn-loop tool output overflow", () => {
     const smallOutput = "small tool result";
     mockExecuteTurn.mockResolvedValueOnce({
       content: null,
-      toolCalls: [{ id: "tc-1", name: "web_search", arguments: { query: "x" } }],
+      toolCalls: [{ id: "tc-1", name: "web_research", arguments: { query: "x" } }],
       promptTokens: 100,
     });
     mockDispatchTool.mockResolvedValueOnce({ success: true, output: smallOutput });
@@ -160,7 +160,7 @@ describe("turn-loop tool output overflow", () => {
     const bigOutput = "x".repeat(20_000); // > 16 KiB
     mockExecuteTurn.mockResolvedValueOnce({
       content: null,
-      toolCalls: [{ id: "tc-1", name: "web_search", arguments: { query: "x" } }],
+      toolCalls: [{ id: "tc-1", name: "web_research", arguments: { query: "x" } }],
       promptTokens: 100,
     });
     mockDispatchTool.mockResolvedValueOnce({ success: true, output: bigOutput });
@@ -201,7 +201,7 @@ describe("turn-loop tool output overflow", () => {
     const bigOutput = "y".repeat(20_000);
     mockExecuteTurn.mockResolvedValueOnce({
       content: null,
-      toolCalls: [{ id: "tc-1", name: "web_search", arguments: { query: "x" } }],
+      toolCalls: [{ id: "tc-1", name: "web_research", arguments: { query: "x" } }],
       promptTokens: 100,
     });
     mockDispatchTool.mockResolvedValueOnce({ success: true, output: bigOutput });
