@@ -5,6 +5,7 @@ import { buildToolGroups } from "../../../mcp/docs/registry-projection.js";
 describe("mcp docs — onboarding helper", () => {
   const ENV_KEYS = [
     "TAVILY_API_KEY",
+    "RETTIWT_API_KEY",
     "POLYMARKET_API_KEY",
   ] as const;
   const original: Record<string, string | undefined> = {};
@@ -12,6 +13,7 @@ describe("mcp docs — onboarding helper", () => {
   beforeEach(() => {
     for (const key of ENV_KEYS) original[key] = process.env[key];
     delete process.env.TAVILY_API_KEY;
+    delete process.env.RETTIWT_API_KEY;
     process.env.POLYMARKET_API_KEY = "test-polymarket-key";
   });
 
@@ -59,5 +61,16 @@ describe("mcp docs — onboarding helper", () => {
     // After consolidation, TAVILY_API_KEY unlocks one tool (web_research),
     // not two (web_search + web_fetch).
     expect(withTavily.internalToolCount).toBe(withoutTavily.internalToolCount + 1);
+  });
+
+  it("changes internal tool counts when env-gated social tools appear", () => {
+    const withoutRettiwt = buildMcpOnboardingGuide();
+
+    process.env.RETTIWT_API_KEY = "test-rettiwt-key";
+    const withRettiwt = buildMcpOnboardingGuide();
+
+    expect(withoutRettiwt.directToolPatterns).not.toContain("twitter_*");
+    expect(withRettiwt.directToolPatterns).toContain("twitter_*");
+    expect(withRettiwt.internalToolCount).toBe(withoutRettiwt.internalToolCount + 1);
   });
 });

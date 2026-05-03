@@ -44,3 +44,6 @@ github-mcp-server-main
 
 # Private local harnesses (vex-shell, scratch tooling) — never published
 local/
+
+# Local upstream checkout used for Rettiwt API inspection.
+Rettiwt-API-dev/

@@ -58,6 +58,7 @@ import { VEX_TOOLS } from "./registry/vex.js";
 import { PROTOCOL_TOOLS } from "./registry/protocol.js";
 import { KHALANI_INTERNAL_TOOLS } from "./registry/khalani.js";
 import { WEB_TOOLS } from "./registry/web.js";
+import { TWITTER_ACCOUNT_TOOLS } from "./registry/twitter-account.js";
 import { DOCUMENT_TOOLS } from "./registry/documents.js";
 import { KNOWLEDGE_TOOLS } from "./registry/knowledge.js";
 import { PORTFOLIO_TOOLS } from "./registry/portfolio.js";
@@ -77,6 +78,7 @@ const TOOLS: readonly ToolDef[] = [
   ...PROTOCOL_TOOLS,
   ...KHALANI_INTERNAL_TOOLS,
   ...WEB_TOOLS,
+  ...TWITTER_ACCOUNT_TOOLS,
   ...DOCUMENT_TOOLS,
   ...KNOWLEDGE_TOOLS,
   ...PORTFOLIO_TOOLS,

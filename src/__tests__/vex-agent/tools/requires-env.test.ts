@@ -19,6 +19,7 @@ describe("requiresEnv filtering", () => {
 
   beforeEach(() => {
     delete process.env.TAVILY_API_KEY;
+    delete process.env.RETTIWT_API_KEY;
     delete process.env.JUPITER_API_KEY;
   });
 
@@ -40,6 +41,19 @@ describe("requiresEnv filtering", () => {
       const tools = getOpenAITools(defaultVisibilityContext());
       const hasWebResearch = tools.some(t => t.function.name === "web_research");
       expect(hasWebResearch).toBe(true);
+    });
+
+    it("hides twitter_account when RETTIWT_API_KEY is not set", async () => {
+      const tools = getOpenAITools(defaultVisibilityContext());
+      const hasTwitterAccount = tools.some(t => t.function.name === "twitter_account");
+      expect(hasTwitterAccount).toBe(false);
+    });
+
+    it("shows twitter_account when RETTIWT_API_KEY is set", async () => {
+      process.env.RETTIWT_API_KEY = "rettiwt-test-key";
+      const tools = getOpenAITools(defaultVisibilityContext());
+      const hasTwitterAccount = tools.some(t => t.function.name === "twitter_account");
+      expect(hasTwitterAccount).toBe(true);
     });
 
     it("non-ENV tools always present regardless of ENV state", async () => {
@@ -78,6 +92,9 @@ describe("requiresEnv filtering", () => {
       const webResearch = all.find(t => t.name === "web_research");
       expect(webResearch).toBeDefined();
       expect(webResearch!.requiresEnv).toBe("TAVILY_API_KEY");
+      const twitterAccount = all.find(t => t.name === "twitter_account");
+      expect(twitterAccount).toBeDefined();
+      expect(twitterAccount!.requiresEnv).toBe("RETTIWT_API_KEY");
     });
   });
 

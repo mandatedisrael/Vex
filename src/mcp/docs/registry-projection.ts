@@ -42,6 +42,7 @@ import type { ProtocolNamespace, ProtocolToolManifest } from "@vex-agent/tools/p
 const TOOL_GROUP_RULES: Array<{ group: string; match: (name: string) => boolean }> = [
   { group: "Discovery", match: (n) => n === "discover_tools" || n === "execute_tool" },
   { group: "Web",       match: (n) => n.startsWith("web_") },
+  { group: "Social",    match: (n) => n.startsWith("twitter_") },
   { group: "Documents", match: (n) => n.startsWith("document_") },
   { group: "Knowledge", match: (n) => n.startsWith("knowledge_") },
   { group: "Wallet",    match: (n) => n.startsWith("wallet_") },
@@ -262,6 +263,7 @@ const RUNTIME_ENV_KEYS = [
   "EMBEDDING_PROVIDER",
   "JUPITER_API_KEY",
   "TAVILY_API_KEY",
+  "RETTIWT_API_KEY",
   "POLYMARKET_API_KEY",
 ] as const;
 

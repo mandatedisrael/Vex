@@ -12,6 +12,7 @@ const TRACKED_ENV_KEYS = [
   ...REQUIRED_ENV,
   "VEX_KEYSTORE_PASSWORD",
   "TAVILY_API_KEY",
+  "RETTIWT_API_KEY",
 ];
 
 function readBundledEnvDefaults(): Record<string, string> {

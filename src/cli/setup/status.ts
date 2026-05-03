@@ -69,6 +69,11 @@ export const ENV_FIELDS: readonly EnvFieldSpec[] = [
     required: false,
     description: "Optional key for web_research (search + page fetch). You can add it later without rerunning wallet setup.",
   },
+  {
+    key: "RETTIWT_API_KEY",
+    required: false,
+    description: "Optional Rettiwt cookie-session key for read-only Twitter/X account research. Use a secondary account.",
+  },
 ] as const;
 
 export function parseDotenvContent(content: string): Record<string, string> {

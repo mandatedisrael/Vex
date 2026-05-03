@@ -26,6 +26,7 @@ const DIRECT_TOOL_GROUP_PATTERNS: Record<string, string> = {
   Wallet: "wallet_*",
   Portfolio: "portfolio_*",
   Web: "web_*",
+  Social: "twitter_*",
   EVM: "evm_*",
   Setup: "*_setup",
   Other: "other surfaced internal tools",

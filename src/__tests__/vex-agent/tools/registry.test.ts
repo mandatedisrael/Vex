@@ -61,12 +61,17 @@ describe("registry", () => {
     expect(isMutatingTool("web_research")).toBe(false);
   });
 
+  it("identifies twitter_account as non-mutating", () => {
+    expect(isMutatingTool("twitter_account")).toBe(false);
+  });
+
   // ── Expected tools present ───────────────────────────────────────
 
   const EXPECTED_TOOLS = [
     "discover_tools",
     "execute_tool",
     "web_research",
+    "twitter_account",
     "document_read",
     "document_write",
     "document_list",

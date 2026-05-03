@@ -19,7 +19,7 @@ Vex is a production grade agent runtime built around three axes that most LLM st
 
 1. **Canonical memory with disjoint contracts.** Knowledge the agent writes by hand is the source of truth. Session episodes are scoped recall helpers. Live transcripts compact themselves under pressure. The three layers never cross contaminate, and every compaction preserves a handoff so the next turn picks up where the previous one left off.
 2. **Wake driven autonomy, preempt symmetric.** The agent can pause itself until a future moment, be interrupted by a user in flight, or run entirely headless. In every case resume is atomic, the wake row is consumed exactly once, and the user message always wins the race.
-3. **Tool federation at scale.** A 32 tool agent surface (22 of them visible through MCP in a fully configured environment) federates to **240 protocol manifests** across 10 live on chain and social namespaces. A disciplined filter chain keeps the surface safe whether the operator is a human in a GUI, a remote Claude Code session, or a headless autonomous mission.
+3. **Tool federation at scale.** A 33 tool agent surface (23 of them visible through MCP in a fully configured environment) federates to **240 protocol manifests** across 10 live on chain and social namespaces. A disciplined filter chain keeps the surface safe whether the operator is a human in a GUI, a remote Claude Code session, or a headless autonomous mission.
 
 The same TypeScript engine (`src/vex-agent/`) powers both products. The MCP bridge (`src/mcp/`) is a passive surface adapter on top. No feature lives only in one product.
 
@@ -83,7 +83,7 @@ Both products talk to the same local PostgreSQL with pgvector store, the same kn
    }
    ```
 
-3. Restart the host. On initialize, Vex runs migrations, probes the database and the embedding service, then registers its 22 production tools. HTTP transport flips `MCP_TRANSPORT=http` and reads the Bearer token from `CONFIG_DIR/mcp-http-token`.
+3. Restart the host. On initialize, Vex runs migrations, probes the database and the embedding service, then registers its 23 production tools in a fully configured environment. HTTP transport flips `MCP_TRANSPORT=http` and reads the Bearer token from `CONFIG_DIR/mcp-http-token`.
 
 ### Migrating from EchoClaw
 
@@ -419,8 +419,8 @@ The `session_links` table is a general graph. It stores subagent relationships t
 
 Vex's surface is intentionally small at the agent level and deep underneath.
 
-- **32 agent level tools** register in the engine.
-- **22 of those** are visible through the MCP bridge in a fully configured environment. The exact number dips if `TAVILY_API_KEY` is unset (hides `web_research`) or rises by one if `POLYMARKET_API_KEY` is unset (shows `polymarket_setup` for one shot credential provisioning).
+- **33 agent level tools** register in the engine.
+- **23 of those** are visible through the MCP bridge in a fully configured environment. The exact number dips if `TAVILY_API_KEY` is unset (hides `web_research`) or `RETTIWT_API_KEY` is unset (hides `twitter_account`), and rises by one if `POLYMARKET_API_KEY` is unset (shows `polymarket_setup` for one shot credential provisioning).
 - **240 protocol manifests** federate through two meta tools, `discover_tools` for semantic search and `execute_tool` for typed dispatch by `toolId`.
 - **40+ EVM chains plus Solana** are resolved dynamically from the Khalani chain registry at call time. There is no hardcoded chain list to rot.
 
@@ -457,6 +457,7 @@ All 10 advertised namespaces are live in code. Two (`0g-compute`, `0g-storage`) 
 | `wallet_send_confirm` | Broadcast the prepared intent | Yes | Approval gated in restricted mode |
 | `evm_read` | Receipts, metadata, balances | No | Any EVM chain in the Khalani registry |
 | `web_research` | Tavily backed search + page fetch (one tool) | No | Hidden unless `TAVILY_API_KEY` set |
+| `twitter_account` | Rettiwt backed read-only Twitter/X account research | No | Hidden unless `RETTIWT_API_KEY` set; use a secondary account |
 | `document_read`, `document_write`, `document_list`, `document_delete` | Scratchpad notes in the `notes` space | Mixed | Persisted in the database, soft delete |
 | `portfolio_inspect` | Portfolio views (see below) | No | Filters by namespace, product type, instrument key, wallet address, status, groupBy |
 | `knowledge_write` | Create a new canonical entry | Yes | English only, content hash idempotent |
@@ -576,7 +577,7 @@ flowchart TB
     EMBP[probeEmbeddings, dim match]
   end
   subgraph Server["McpServer"]
-    TOOLS[registerProductionTools, 22 tools]
+    TOOLS[registerProductionTools, 23 tools]
     DOCS[docs resources, registry projection]
     PROMPTS[workflow prompts]
     INSTR[instructions preamble]
@@ -654,6 +655,7 @@ Embeddings change. Models get deprecated, dimensions get bumped, research moves.
 | `JUPITER_API_KEY` | Required for every Solana tool | n/a |
 | `POLYMARKET_API_KEY` | Required for CLOB trading and auth reads | n/a |
 | `TAVILY_API_KEY` | Required for `web_research` | n/a |
+| `RETTIWT_API_KEY` | Optional cookie-session key for read-only Twitter/X account research | n/a |
 | `VEX_DB_URL` | PostgreSQL connection string | n/a |
 | `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_DIM`, `EMBEDDING_PROVIDER` | Local or remote embedding service | n/a |
 

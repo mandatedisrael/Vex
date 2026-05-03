@@ -6,6 +6,7 @@ describe("mcp surface — getProductionTools", () => {
   // them without leaking into siblings. Restored in afterEach.
   const ENV_KEYS = [
     "TAVILY_API_KEY",
+    "RETTIWT_API_KEY",
     "POLYMARKET_API_KEY",
     "EMBEDDING_BASE_URL",
   ] as const;
@@ -91,6 +92,18 @@ describe("mcp surface — getProductionTools", () => {
     process.env.TAVILY_API_KEY = "   ";
     const names = getProductionTools().map((t) => t.name);
     expect(names).not.toContain("web_research");
+  });
+
+  it("hides twitter_account when RETTIWT_API_KEY is unset", () => {
+    delete process.env.RETTIWT_API_KEY;
+    const names = getProductionTools().map((t) => t.name);
+    expect(names).not.toContain("twitter_account");
+  });
+
+  it("shows twitter_account when RETTIWT_API_KEY is set", () => {
+    process.env.RETTIWT_API_KEY = "rettiwt-test-key";
+    const names = getProductionTools().map((t) => t.name);
+    expect(names).toContain("twitter_account");
   });
 
   // ── Env gating: showOnlyWhenEnvMissing ──────────────────────────

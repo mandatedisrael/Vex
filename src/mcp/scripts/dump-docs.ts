@@ -18,12 +18,12 @@
  *
  * Env-gating note
  * ───────────────
- * The script primes JUPITER_API_KEY / POLYMARKET_API_KEY / TAVILY_API_KEY
+ * The script primes JUPITER_API_KEY / POLYMARKET_API_KEY / TAVILY_API_KEY / RETTIWT_API_KEY
  * with placeholder values BEFORE importing the registry. Reason: those
- * keys gate solana / polymarket-clob / web_research tools at registry-import
+ * keys gate solana / polymarket-clob / web_research / twitter_account tools at registry-import
  * time, and the goal of the dump is to show the FULL advertised surface
  * the model would see in a fully-configured deployment. Comment those
- * three lines out (or set the keys yourself before running) to inspect
+ * four lines out (or set the keys yourself before running) to inspect
  * the env-aware shrunken view that matches your actual shell env.
  *
  * The script does NOT touch the database or the embedding service. It
@@ -36,6 +36,7 @@
 process.env.JUPITER_API_KEY ??= "dump-docs-placeholder";
 process.env.POLYMARKET_API_KEY ??= "dump-docs-placeholder";
 process.env.TAVILY_API_KEY ??= "dump-docs-placeholder";
+process.env.RETTIWT_API_KEY ??= "dump-docs-placeholder";
 
 // Quiet the embedding config validator. `safeLoadEmbeddingConfig` swallows
 // the throw, but the underlying loader logs four warnings before throwing.
@@ -126,7 +127,7 @@ lines.push(
     "`instructions`, the registered tool surface, every `docs://*` / " +
     "`surface://*` / `runtime://*` resource, and every workflow prompt. " +
     "Env-gated tools are surfaced because this script primes " +
-    "`JUPITER_API_KEY` / `POLYMARKET_API_KEY` / `TAVILY_API_KEY` with " +
+    "`JUPITER_API_KEY` / `POLYMARKET_API_KEY` / `TAVILY_API_KEY` / `RETTIWT_API_KEY` with " +
     "placeholders before importing the registry — comment those out in the " +
     "script to see the env-aware shrunken view.",
 );
