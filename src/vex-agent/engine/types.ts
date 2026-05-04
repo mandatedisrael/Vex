@@ -65,6 +65,27 @@ export const ACTIVE_OR_PAUSED_RUN_STATUSES: ReadonlySet<MissionRunStatus> = new 
   ...PAUSED_RUN_STATUSES,
 ]);
 
+export type FullAutonomousRunStatus =
+  | "running"
+  | "paused_wake"
+  | "paused_error"
+  | "stopped"
+  | "failed";
+
+export const ACTIVE_FULL_AUTONOMOUS_STATUSES: ReadonlySet<FullAutonomousRunStatus> = new Set(["running"]);
+export const PAUSED_FULL_AUTONOMOUS_STATUSES: ReadonlySet<FullAutonomousRunStatus> = new Set([
+  "paused_wake",
+  "paused_error",
+]);
+export const TERMINAL_FULL_AUTONOMOUS_STATUSES: ReadonlySet<FullAutonomousRunStatus> = new Set([
+  "stopped",
+  "failed",
+]);
+export const ACTIVE_OR_PAUSED_FULL_AUTONOMOUS_STATUSES: ReadonlySet<FullAutonomousRunStatus> = new Set([
+  ...ACTIVE_FULL_AUTONOMOUS_STATUSES,
+  ...PAUSED_FULL_AUTONOMOUS_STATUSES,
+]);
+
 /**
  * Recoverable failure surfaced by `startMission` / `resumeMissionRun` when a
  * provider call (or the surrounding hydrate / status update / prompt prep)
@@ -130,9 +151,13 @@ export type MessageType =
   | "chat"
   | "mission_setup"
   | "mission_summary"
+  | "mission_recovered"
+  | "mission_started"
+  | "operator_interrupt"
   | "approval_pause"
   | "continue"
   | "checkpoint"
+  | "wake_due"
   | "subagent_relay"
   | "tool_result";
 
@@ -191,6 +216,8 @@ export interface EngineContext {
   loopMode: LoopMode;
   missionId: string | null;
   missionRunId: string | null;
+  /** Active full-autonomous run id. Null outside standalone full-auto loops. */
+  fullAutonomousRunId?: string | null;
   /** Session creation time from DB; used only for runtime clock prompt context. */
   sessionStartedAt?: string | null;
   /** Active mission run start time from DB; null outside active mission runs. */

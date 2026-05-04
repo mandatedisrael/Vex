@@ -14,9 +14,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockCancelForSession = vi.fn();
 const mockGetActiveRunBySession = vi.fn();
 const mockUpdateRunStatus = vi.fn();
+const mockCasFlipToRunning = vi.fn();
+const mockGetActiveFullAutonomousRunBySession = vi.fn();
+const mockCasFullAutonomousToRunning = vi.fn();
 const mockGetSession = vi.fn();
 const mockGetActiveMission = vi.fn();
 const mockAddMessage = vi.fn();
+const mockAddEngineMessage = vi.fn();
 const mockProcessChatTurn = vi.fn();
 const mockProcessMissionSetupTurn = vi.fn();
 const mockProcessFullAutonomousTurn = vi.fn();
@@ -29,6 +33,12 @@ vi.mock("@vex-agent/db/repos/loop-wake.js", () => ({
 vi.mock("@vex-agent/db/repos/mission-runs.js", () => ({
   getActiveRunBySession: (...a: unknown[]) => mockGetActiveRunBySession(...a),
   updateStatus: (...a: unknown[]) => mockUpdateRunStatus(...a),
+  casFlipToRunning: (...a: unknown[]) => mockCasFlipToRunning(...a),
+}));
+
+vi.mock("@vex-agent/db/repos/full-autonomous-runs.js", () => ({
+  getActiveRunBySession: (...a: unknown[]) => mockGetActiveFullAutonomousRunBySession(...a),
+  casFlipToRunning: (...a: unknown[]) => mockCasFullAutonomousToRunning(...a),
 }));
 
 vi.mock("@vex-agent/db/repos/sessions.js", () => ({
@@ -41,6 +51,7 @@ vi.mock("@vex-agent/db/repos/missions.js", () => ({
 
 vi.mock("@vex-agent/db/repos/messages.js", () => ({
   addMessage: (...a: unknown[]) => mockAddMessage(...a),
+  addEngineMessage: (...a: unknown[]) => mockAddEngineMessage(...a),
 }));
 
 vi.mock("../../../vex-agent/engine/core/runner.js", () => ({
@@ -64,6 +75,9 @@ beforeEach(() => {
   mockProcessMissionSetupTurn.mockResolvedValue(setupResult);
   mockProcessFullAutonomousTurn.mockResolvedValue(fullAutoResult);
   mockResumeMissionRun.mockResolvedValue(resumeResult);
+  mockCasFlipToRunning.mockResolvedValue("paused_wake");
+  mockGetActiveFullAutonomousRunBySession.mockResolvedValue(null);
+  mockCasFullAutonomousToRunning.mockResolvedValue("paused_wake");
 });
 
 describe("ingress.routeUserMessage", () => {
@@ -84,16 +98,17 @@ describe("ingress.routeUserMessage", () => {
     const result = await routeUserMessage("s1", "can you pause?");
 
     expect(result).toBe(resumeResult);
-    expect(mockUpdateRunStatus).toHaveBeenCalledWith("run-1", "running");
+    expect(mockCasFlipToRunning).toHaveBeenCalledWith("run-1", ["paused_wake"]);
     expect(mockAddMessage).toHaveBeenCalledWith(
       "s1",
       expect.objectContaining({ role: "user", content: "can you pause?" }),
       expect.objectContaining({
         source: "user",
-        messageType: "chat",
-        payload: { preempt: "wake" },
+        messageType: "operator_interrupt",
+        payload: expect.objectContaining({ preempt: "wake" }),
       }),
     );
+    expect(mockAddEngineMessage).toHaveBeenCalled();
     expect(mockResumeMissionRun).toHaveBeenCalledWith("run-1");
     expect(mockProcessChatTurn).not.toHaveBeenCalled();
   });
@@ -103,7 +118,7 @@ describe("ingress.routeUserMessage", () => {
 
     const result = await routeUserMessage("s1", "wait!");
 
-    expect(result.text).toBeNull();
+    expect(result.text).toContain("queued");
     expect(result.toolCallsMade).toBe(0);
     expect(mockAddMessage).toHaveBeenCalled();
     expect(mockResumeMissionRun).not.toHaveBeenCalled();
@@ -127,9 +142,9 @@ describe("ingress.routeUserMessage", () => {
     expect(mockAddMessage).toHaveBeenCalledWith(
       "s1",
       expect.objectContaining({ role: "user", content: "anything" }),
-      expect.objectContaining({ source: "user", messageType: "chat" }),
+      expect.objectContaining({ source: "user", messageType: "operator_interrupt" }),
     );
-    expect(result.text).toContain("Use /retry");
+    expect(result.text).toContain("/retry");
     expect(result.text).toContain("/rewind");
     expect(result.stopReason).toBeNull();
     expect(mockResumeMissionRun).not.toHaveBeenCalled();

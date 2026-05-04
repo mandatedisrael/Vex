@@ -14,6 +14,8 @@ const mockResolveProvider = vi.fn();
 const mockHydrate = vi.fn();
 const mockRunTurnLoop = vi.fn();
 const mockGetRun = vi.fn();
+const mockGetActiveFullRun = vi.fn();
+const mockGetFullRun = vi.fn();
 const mockGetMission = vi.fn();
 const mockUpdateStatus = vi.fn();
 const mockRefreshBlobTtl = vi.fn();
@@ -33,6 +35,12 @@ vi.mock("../../../../../vex-agent/engine/core/turn-loop.js", () => ({
 vi.mock("@vex-agent/db/repos/mission-runs.js", () => ({
   getRun: (...a: unknown[]) => mockGetRun(...a),
   updateStatus: (...a: unknown[]) => mockUpdateStatus(...a),
+}));
+
+vi.mock("@vex-agent/db/repos/full-autonomous-runs.js", () => ({
+  getActiveRunBySession: (...a: unknown[]) => mockGetActiveFullRun(...a),
+  getRun: (...a: unknown[]) => mockGetFullRun(...a),
+  updateStatus: vi.fn(),
 }));
 
 vi.mock("@vex-agent/db/repos/missions.js", () => ({
@@ -71,7 +79,24 @@ beforeEach(() => {
     tokenCount: 0,
   });
   mockRunTurnLoop.mockResolvedValue({ text: "done", toolCallsMade: 0, pendingApprovals: [], stopReason: null });
-  mockGetRun.mockResolvedValue({ id: "run-1", missionId: "m1", sessionId: "s1", status: "paused_wake", loopMode: "restricted", iterationCount: 1 });
+  mockGetRun.mockResolvedValue({
+    id: "run-1",
+    missionId: "m1",
+    sessionId: "s1",
+    status: "paused_wake",
+    loopMode: "restricted",
+    iterationCount: 1,
+    contractSnapshotJson: null,
+  });
+  const fullRun = {
+    id: "farun-1",
+    sessionId: "s2",
+    status: "running",
+    loopMode: "full",
+    iterationCount: 1,
+  };
+  mockGetActiveFullRun.mockResolvedValue(fullRun);
+  mockGetFullRun.mockResolvedValue(fullRun);
   mockGetMission.mockResolvedValue({
     id: "m1",
     status: "running",

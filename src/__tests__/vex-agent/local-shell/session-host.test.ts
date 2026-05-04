@@ -7,6 +7,7 @@ const mockEndSession = vi.fn();
 const mockListSessions = vi.fn();
 const mockGetPending = vi.fn();
 const mockGetActiveRunBySession = vi.fn();
+const mockGetActiveFullAutonomousRunBySession = vi.fn();
 const mockGetRunBySession = vi.fn();
 const mockGetActiveMission = vi.fn();
 const mockGetMissionBySession = vi.fn();
@@ -28,6 +29,10 @@ vi.mock("../../../../src/vex-agent/db/repos/approvals.js", () => ({
 vi.mock("../../../../src/vex-agent/db/repos/mission-runs.js", () => ({
   getActiveRunBySession: (...a: unknown[]) => mockGetActiveRunBySession(...a),
   getRunBySession: (...a: unknown[]) => mockGetRunBySession(...a),
+}));
+
+vi.mock("../../../../src/vex-agent/db/repos/full-autonomous-runs.js", () => ({
+  getActiveRunBySession: (...a: unknown[]) => mockGetActiveFullAutonomousRunBySession(...a),
 }));
 
 vi.mock("../../../../src/vex-agent/db/repos/missions.js", () => ({
@@ -85,6 +90,7 @@ describe("local shell session-host", () => {
     mockGetSession.mockResolvedValue(makeSession());
     mockGetPending.mockResolvedValue([]);
     mockGetActiveRunBySession.mockResolvedValue(null);
+    mockGetActiveFullAutonomousRunBySession.mockResolvedValue(null);
     mockGetActiveMission.mockResolvedValue(null);
     mockGetMissionBySession.mockResolvedValue(null);
     mockGetRunBySession.mockResolvedValue(null);

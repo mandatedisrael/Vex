@@ -24,6 +24,7 @@ import { computeBand } from "../context-band.js";
 import { resolveProvider } from "@vex-agent/inference/registry.js";
 import * as messagesRepo from "@vex-agent/db/repos/messages.js";
 import * as episodesRepo from "@vex-agent/db/repos/session-episodes.js";
+import * as fullAutonomousRunsRepo from "@vex-agent/db/repos/full-autonomous-runs.js";
 import { refreshBlobTtlForRecentMessages } from "../../wake/blob-refresh.js";
 import type { FullAutonomousContext } from "../../prompts/full-autonomous.js";
 import logger from "@utils/logger.js";
@@ -55,7 +56,16 @@ export async function processFullAutonomousTurn(
     { source: "user", messageType: "chat", visibility: "user" },
   );
 
-  return runFullAutonomousLoop(sessionId, provider, config);
+  const existing = await fullAutonomousRunsRepo.getActiveRunBySession(sessionId);
+  if (existing) {
+    throw new Error(
+      `Full-autonomous run ${existing.id} is already active (${existing.status}); queue an operator instruction instead.`,
+    );
+  }
+
+  const runId = `farun-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await fullAutonomousRunsRepo.createRun(runId, sessionId);
+  return runFullAutonomousLoop(runId, provider, config);
 }
 
 export async function resumeFullAutonomousSession(sessionId: string): Promise<TurnResult> {
@@ -67,17 +77,29 @@ export async function resumeFullAutonomousSession(sessionId: string): Promise<Tu
   const config = await provider.loadConfig();
   if (!config) throw new Error("No inference config available");
 
-  return runFullAutonomousLoop(sessionId, provider, config);
+  const run = await fullAutonomousRunsRepo.getActiveRunBySession(sessionId);
+  if (!run) {
+    throw new Error(`No active full-autonomous run for session ${sessionId}`);
+  }
+  if (run.status !== "running") {
+    throw new Error(`Full-autonomous run ${run.id} is ${run.status}; cannot resume without a CAS claim.`);
+  }
+
+  return runFullAutonomousLoop(run.id, provider, config);
 }
 
 // ── Shared loop entry ──────────────────────────────────────────────
 
 async function runFullAutonomousLoop(
-  sessionId: string,
+  runId: string,
   provider: Awaited<ReturnType<typeof resolveProvider>>,
   config: NonNullable<Awaited<ReturnType<NonNullable<Awaited<ReturnType<typeof resolveProvider>>>["loadConfig"]>>>,
 ): Promise<TurnResult> {
   if (!provider) throw new Error("No inference provider available");
+
+  const run = await fullAutonomousRunsRepo.getRun(runId);
+  if (!run) throw new Error(`Full-autonomous run ${runId} not found`);
+  const sessionId = run.sessionId;
 
   // Refresh tool_output_blob TTLs up front so overflow pointers in the
   // session's tail are still resolvable after a long wait. See the
@@ -112,34 +134,65 @@ async function runFullAutonomousLoop(
 
   const fullAutonomousContext = await buildFullAutonomousContext(sessionId);
 
-  const result = await runTurnLoop(
-    { ...hydrated.context, sessionKind: "full_autonomous", loopMode: "full" },
-    hydrated.messages,
-    hydrated.summary,
-    hydrated.tokenCount,
-    provider,
-    config,
-    tools,
-    loopConfig,
-    { fullAutonomousContext },
-  );
+  try {
+    const result = await runTurnLoop(
+      {
+        ...hydrated.context,
+        sessionKind: "full_autonomous",
+        loopMode: "full",
+        fullAutonomousRunId: runId,
+      },
+      hydrated.messages,
+      hydrated.summary,
+      hydrated.tokenCount,
+      provider,
+      config,
+      tools,
+      loopConfig,
+      { fullAutonomousContext },
+    );
 
-  if (isContinuableRuntimeStop(result.stopReason)) {
-    await scheduleRuntimeContinuation({
-      sessionId,
-      missionRunId: null,
-      kind: "full_autonomous",
-      trigger: result.stopReason,
+    if (result.stopReason === "waiting_for_wake") {
+      await fullAutonomousRunsRepo.updateStatus(
+        runId,
+        "paused_wake",
+        "waiting_for_wake",
+        result.stopPayload,
+      );
+    } else if (isContinuableRuntimeStop(result.stopReason)) {
+      await scheduleRuntimeContinuation({
+        sessionId,
+        missionRunId: null,
+        kind: "full_autonomous",
+        trigger: result.stopReason,
+      });
+      await fullAutonomousRunsRepo.updateStatus(runId, "paused_wake", "waiting_for_wake", {
+        summary: "Runtime slice yielded and scheduled continuation.",
+        evidence: { trigger: result.stopReason },
+      });
+    } else if (result.stopReason) {
+      await fullAutonomousRunsRepo.updateStatus(
+        runId,
+        result.stopReason === "user_stopped" ? "stopped" : "failed",
+        result.stopReason,
+        result.stopPayload,
+      );
+    }
+
+    return {
+      text: result.text,
+      toolCallsMade: result.toolCallsMade,
+      pendingApprovals: result.pendingApprovals,
+      stopReason: result.stopReason,
+      missionStatus: null,
+    };
+  } catch (err: unknown) {
+    await fullAutonomousRunsRepo.updateStatus(runId, "paused_error", "system_error", {
+      summary: err instanceof Error ? err.message : String(err),
+      evidence: { error: err instanceof Error ? err.message : String(err) },
     });
+    throw err;
   }
-
-  return {
-    text: result.text,
-    toolCallsMade: result.toolCallsMade,
-    pendingApprovals: result.pendingApprovals,
-    stopReason: result.stopReason,
-    missionStatus: null,
-  };
 }
 
 /**

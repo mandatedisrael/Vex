@@ -12,7 +12,10 @@ import { hydrateEngineSession } from "../hydrate.js";
 import type { TurnLoopConfig } from "../turn-loop.js";
 import { runTurnLoop } from "../turn-loop.js";
 import { isReadyToStart } from "../../mission/validator.js";
-import { draftToPromptContext } from "../../mission/mapper.js";
+import {
+  buildMissionRunContractSnapshot,
+  resolveMissionPromptContext,
+} from "../../mission/run-contract.js";
 import type { PromptStackOptions } from "../../prompts/index.js";
 import { getOpenAITools } from "@vex-agent/tools/registry.js";
 import { computeBand } from "../context-band.js";
@@ -105,7 +108,10 @@ export async function startMission(
   const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const sessionId = mission.rootSessionId;
 
-  await missionRunsRepo.createRun(runId, missionId, sessionId, loopMode);
+  const contractSnapshot = buildMissionRunContractSnapshot(mission);
+  await missionRunsRepo.createRun(runId, missionId, sessionId, loopMode, {
+    contractSnapshotJson: contractSnapshot,
+  });
 
   const controller = registerMissionRunAbortController(runId);
   // Wrap the entire post-`createRun` block. Any throw — hydrate failure,
@@ -120,7 +126,7 @@ export async function startMission(
     if (!hydrated) throw new Error(`Session ${sessionId} not found`);
 
     // Build mission-specific prompt options.
-    const missionPromptContext = draftToPromptContext(mission);
+    const missionPromptContext = contractSnapshot.missionPromptContext;
 
     const promptOptions: PromptStackOptions = {
       missionRunContext: {
@@ -224,7 +230,10 @@ export async function resumeMissionRun(
     const hydrated = await hydrateEngineSession(run.sessionId);
     if (!hydrated) throw new Error(`Session ${run.sessionId} not found`);
 
-    const missionPromptContext = draftToPromptContext(mission);
+    const missionPromptContext = resolveMissionPromptContext({
+      snapshot: run.contractSnapshotJson,
+      fallbackMission: mission,
+    });
     const promptOptions: PromptStackOptions = {
       missionRunContext: {
         missionPromptContext,

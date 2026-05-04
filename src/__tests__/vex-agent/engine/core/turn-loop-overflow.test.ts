@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockAddMessage = vi.fn();
 const mockAddEngineMessage = vi.fn();
 const mockGetLiveMessages = vi.fn().mockResolvedValue([]);
+const mockGetOperatorInstructionsAfter = vi.fn().mockResolvedValue([]);
 const mockDispatchTool = vi.fn();
 const mockIncrementIterations = vi.fn().mockResolvedValue(1);
 const mockUpdateStatus = vi.fn();
@@ -28,6 +29,7 @@ vi.mock("@vex-agent/db/repos/messages.js", () => ({
   addMessage: (...a: unknown[]) => mockAddMessage(...a),
   addEngineMessage: (...a: unknown[]) => mockAddEngineMessage(...a),
   getLiveMessages: (...a: unknown[]) => mockGetLiveMessages(...a),
+  getOperatorInstructionsAfter: (...a: unknown[]) => mockGetOperatorInstructionsAfter(...a),
 }));
 
 vi.mock("@vex-agent/db/repos/mission-runs.js", () => ({

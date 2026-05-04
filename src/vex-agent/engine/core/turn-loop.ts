@@ -42,7 +42,12 @@ import type { InternalToolContext } from "@vex-agent/tools/internal/types.js";
 import * as messagesRepo from "@vex-agent/db/repos/messages.js";
 import * as sessionsRepo from "@vex-agent/db/repos/sessions.js";
 import * as missionRunsRepo from "@vex-agent/db/repos/mission-runs.js";
+import * as fullAutonomousRunsRepo from "@vex-agent/db/repos/full-autonomous-runs.js";
 import * as approvalsRepo from "@vex-agent/db/repos/approvals.js";
+import {
+  appendPendingOperatorInstructions,
+  maxOperatorInstructionId,
+} from "./operator-instructions.js";
 
 export interface TurnLoopConfig {
   maxIterations: number;
@@ -91,6 +96,7 @@ export async function runTurnLoop(
 
   // Mutable copy of messages for turn history
   const liveMessages = [...messages];
+  let lastSeenOperatorMessageId = maxOperatorInstructionId(messages);
 
   /**
    * Evaluate the checkpoint trigger against the DB-authoritative token count
@@ -123,12 +129,23 @@ export async function runTurnLoop(
     if (context.missionRunId) {
       await missionRunsRepo.setLastCheckpoint(context.missionRunId);
     }
+    if (context.fullAutonomousRunId) {
+      await fullAutonomousRunsRepo.setLastCheckpoint(context.fullAutonomousRunId);
+    }
 
     liveMessages.length = 0;
     const freshMessages = await messagesRepo.getLiveMessages(context.sessionId);
     liveMessages.push(...freshMessages);
 
     return true;
+  }
+
+  async function mergeOperatorInstructions(): Promise<void> {
+    lastSeenOperatorMessageId = await appendPendingOperatorInstructions({
+      sessionId: context.sessionId,
+      afterId: lastSeenOperatorMessageId,
+      liveMessages,
+    });
   }
 
   for (let iteration = 0; iteration < loopConfig.maxIterations; iteration++) {
@@ -154,6 +171,8 @@ export async function runTurnLoop(
     // Increment iteration counter for mission runs
     if (context.missionRunId) {
       await missionRunsRepo.incrementIterations(context.missionRunId);
+    } else if (context.fullAutonomousRunId) {
+      await fullAutonomousRunsRepo.incrementIterations(context.fullAutonomousRunId);
     }
 
     // Execute turn
@@ -328,6 +347,7 @@ export async function runTurnLoop(
       // Normal batch complete — evaluate checkpoint on tool-only paths too
       // (long tool outputs pump the context and text-only gating misses them).
       await maybeRunCheckpoint();
+      await mergeOperatorInstructions();
       continue;
     }
 
@@ -346,6 +366,7 @@ export async function runTurnLoop(
 
       // Check checkpoint
       if (await maybeRunCheckpoint()) {
+        await mergeOperatorInstructions();
         continue;
       }
 
@@ -355,6 +376,8 @@ export async function runTurnLoop(
       // missionRunId) ends on text like chat. Full autonomous never has a
       // missionRunId but still needs to iterate.
       if (context.missionRunId || context.sessionKind === "full_autonomous") {
+        await mergeOperatorInstructions();
+
         await messagesRepo.addEngineMessage(
           context.sessionId,
           "[Engine: continue — no stop condition met. Proceed with next action.]",

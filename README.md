@@ -364,6 +364,8 @@ sequenceDiagram
 
 User preemption is symmetric. Every inbound user message runs through a router that cancels any pending wake for the session before touching state. If the run was `paused_wake`, it flips to `running` under a hand off and the user message lands as a first class interrupt, not as a second class interjection behind a bot.
 
+Operator messages during an already running mission or full autonomous loop are soft interrupts. The current provider/tool iteration is allowed to finish, then the turn loop merges any new `operator_interrupt` user messages from the database, injects an internal cue, and the next provider call must acknowledge the latest instruction before continuing. Full autonomous sessions have their own durable `full_autonomous_runs` row so wake executor, user preemption, and manual resume all share the same CAS-style single-loop guard.
+
 ### Missions
 
 ```mermaid
@@ -377,13 +379,18 @@ stateDiagram-v2
   paused_wake --> running: wake executor or user preempt
   running --> completed: business stop (goal_reached, deadline_reached, capital_depleted)
   running --> cancelled: user_stopped
-  running --> failed: iteration_limit, timeout, system_error
+  running --> paused_wake: iteration_limit or timeout continuation
+  running --> paused_error: recoverable provider/runtime error
+  running --> failed: terminal system_error
+  failed --> running: /mission recover creates a new linked run
   completed --> [*]
   cancelled --> [*]
   failed --> [*]
 ```
 
 A mission is not just a prompt. It locks `allowedWallets`, `allowedChains`, `allowedProtocols`, `riskProfile`, `successCriteria`, `stopConditions`, and a capital source with starting capital. An optional deadline bounds the whole run. `mission_stop` is the only terminal business stop and is gated to active runs (`missionRunId != null`). The MCP bridge hides it entirely, because mission state is an engine side concept the host cannot drive.
+
+Every mission run stores a frozen contract snapshot. A terminal `failed` run is immutable audit history; `/mission recover` creates a new run linked back to the failed run and reuses that snapshot instead of mutating the failed row in place.
 
 ### Subagents
 

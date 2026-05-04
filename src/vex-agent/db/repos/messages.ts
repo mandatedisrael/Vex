@@ -124,6 +124,29 @@ export async function getLiveMessagesWithId(sessionId: string): Promise<MessageW
 }
 
 /**
+ * Operator instructions are user messages written while an autonomous loop is
+ * already active. The loop fetches only this marked subset between iterations,
+ * avoiding duplicate assistant/tool rows that it just persisted itself.
+ */
+export async function getOperatorInstructionsAfter(
+  sessionId: string,
+  afterId: number,
+): Promise<MessageWithId[]> {
+  const rows = await query<MessageRow>(
+    `SELECT id, role, content, tool_call_id, tool_calls, created_at,
+            source, message_type, visibility, origin_session_id, subagent_id, metadata
+       FROM messages
+      WHERE session_id = $1
+        AND id > $2
+        AND role = 'user'
+        AND message_type = 'operator_interrupt'
+      ORDER BY id ASC`,
+    [sessionId, afterId],
+  );
+  return rows.map((r) => ({ ...mapRowToMessage(r), id: r.id }));
+}
+
+/**
  * Get all messages including archived (for history views). Ordered by
  * `created_at + id` for deterministic ordering.
  *

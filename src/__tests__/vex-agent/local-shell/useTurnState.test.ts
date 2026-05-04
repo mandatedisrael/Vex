@@ -16,6 +16,11 @@ describe("vex-shell live turn polling activation", () => {
     expect(shouldPollTurnState(null, "paused_wake")).toBe(true);
   });
 
+  it("polls for active full-autonomous statuses", () => {
+    expect(shouldPollTurnState(null, null, "running")).toBe(true);
+    expect(shouldPollTurnState(null, null, "paused_wake")).toBe(true);
+  });
+
   it("does not poll idle mission setup or terminal states", () => {
     expect(isMissionActivityStatus("draft")).toBe(false);
     expect(isMissionActivityStatus("ready")).toBe(false);

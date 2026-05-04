@@ -32,6 +32,8 @@ export interface MissionRun {
   stopSummary: string | null;
   stopEvidenceJson: Record<string, unknown> | null;
   iterationCount: number;
+  contractSnapshotJson: Record<string, unknown> | null;
+  recoveredFromRunId: string | null;
 }
 
 /** SQL `IN (…)` literal compiled once from `ACTIVE_OR_PAUSED_RUN_STATUSES`. */
@@ -79,6 +81,8 @@ function mapRow(r: Record<string, unknown>): MissionRun {
     stopSummary: r.stop_summary as string | null,
     stopEvidenceJson: r.stop_evidence_json as Record<string, unknown> | null,
     iterationCount: (r.iteration_count as number) ?? 0,
+    contractSnapshotJson: r.contract_snapshot_json as Record<string, unknown> | null,
+    recoveredFromRunId: r.recovered_from_run_id as string | null,
   };
 }
 
@@ -89,10 +93,23 @@ export async function createRun(
   missionId: string,
   sessionId: string,
   loopMode: string,
+  options: {
+    contractSnapshotJson?: Record<string, unknown> | null;
+    recoveredFromRunId?: string | null;
+  } = {},
 ): Promise<void> {
   await execute(
-    "INSERT INTO mission_runs (id, mission_id, session_id, loop_mode) VALUES ($1, $2, $3, $4)",
-    [id, missionId, sessionId, loopMode],
+    `INSERT INTO mission_runs (
+       id, mission_id, session_id, loop_mode, contract_snapshot_json, recovered_from_run_id
+     ) VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+    [
+      id,
+      missionId,
+      sessionId,
+      loopMode,
+      nullableJsonb(options.contractSnapshotJson ?? null),
+      options.recoveredFromRunId ?? null,
+    ],
   );
 }
 
@@ -227,6 +244,14 @@ export async function getRun(id: string): Promise<MissionRun | null> {
 export async function getRunBySession(sessionId: string): Promise<MissionRun | null> {
   const row = await queryOne<Record<string, unknown>>(
     "SELECT * FROM mission_runs WHERE session_id = $1 ORDER BY started_at DESC LIMIT 1",
+    [sessionId],
+  );
+  return row ? mapRow(row) : null;
+}
+
+export async function getLatestFailedRunBySession(sessionId: string): Promise<MissionRun | null> {
+  const row = await queryOne<Record<string, unknown>>(
+    "SELECT * FROM mission_runs WHERE session_id = $1 AND status = 'failed' ORDER BY ended_at DESC NULLS LAST, started_at DESC LIMIT 1",
     [sessionId],
   );
   return row ? mapRow(row) : null;

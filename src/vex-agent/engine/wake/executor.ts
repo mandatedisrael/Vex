@@ -28,7 +28,8 @@
 
 import type { LoopWakeRequest } from "@vex-agent/db/repos/loop-wake.js";
 import type { MissionRun } from "@vex-agent/db/repos/mission-runs.js";
-import type { MissionRunStatus } from "../types.js";
+import type { FullAutonomousRun } from "@vex-agent/db/repos/full-autonomous-runs.js";
+import type { FullAutonomousRunStatus, MissionRunStatus } from "../types.js";
 import logger from "@utils/logger.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -38,6 +39,7 @@ export type ClaimedWakeOutcome =
   | { kind: "skipped_stale_status"; currentStatus: string }
   | { kind: "skipped_claim_lost" }
   | { kind: "skipped_mission_run_missing" }
+  | { kind: "skipped_full_autonomous_run_missing" }
   | { kind: "skipped_session_kind_mismatch"; currentKind: string }
   | { kind: "error"; message: string };
 
@@ -62,6 +64,13 @@ export interface WakeDeps {
     runId: string,
     fromStatuses: readonly MissionRunStatus[],
   ): Promise<MissionRunStatus | null>;
+  /** Fetch the active full-autonomous run for a session. */
+  getFullAutonomousRun(sessionId: string): Promise<FullAutonomousRun | null>;
+  /** Claim a paused full-autonomous run before injecting a wake banner. */
+  casFullAutonomousToRunning(
+    runId: string,
+    fromStatuses: readonly FullAutonomousRunStatus[],
+  ): Promise<FullAutonomousRunStatus | null>;
   /** Return the `kind` column of a session, or `null` when missing. */
   getSessionKind(sessionId: string): Promise<string | null>;
   /** Persist a `wake_due` banner for the resume path to pick up. */
@@ -156,9 +165,32 @@ async function handleClaimed(
     return { kind: "skipped_session_kind_mismatch", currentKind: sessionKind ?? "<missing>" };
   }
 
+  const run = await deps.getFullAutonomousRun(wake.sessionId);
+  if (!run) {
+    return { kind: "skipped_full_autonomous_run_missing" };
+  }
+  if (run.status !== "paused_wake") {
+    logger.info("wake.executor.skip_full_autonomous_stale", {
+      wakeId: wake.id,
+      sessionId: wake.sessionId,
+      runId: run.id,
+      status: run.status,
+    });
+    return { kind: "skipped_stale_status", currentStatus: run.status };
+  }
+  const claimed = await deps.casFullAutonomousToRunning(run.id, ["paused_wake"]);
+  if (claimed === null) {
+    logger.info("wake.executor.skip_full_autonomous_claim_lost", {
+      wakeId: wake.id,
+      sessionId: wake.sessionId,
+      runId: run.id,
+    });
+    return { kind: "skipped_claim_lost" };
+  }
+
   await deps.injectWakeBanner(wake.sessionId, wake.reason, wake.dueAt);
   await deps.resumeFullAutonomousSession(wake.sessionId);
-  return { kind: "resumed", runId: null };
+  return { kind: "resumed", runId: run.id };
 }
 
 // ── Scheduler ──────────────────────────────────────────────────────
@@ -240,6 +272,7 @@ export function startWakeExecutor(options: StartOptions = {}): WakeExecutorHandl
 
 import * as loopWakeRepo from "@vex-agent/db/repos/loop-wake.js";
 import * as missionRunsRepo from "@vex-agent/db/repos/mission-runs.js";
+import * as fullAutonomousRunsRepo from "@vex-agent/db/repos/full-autonomous-runs.js";
 import * as sessionsRepo from "@vex-agent/db/repos/sessions.js";
 import * as messagesRepo from "@vex-agent/db/repos/messages.js";
 
@@ -249,6 +282,10 @@ function buildProductionDeps(): WakeDeps {
     getMissionRun: (runId) => missionRunsRepo.getRun(runId),
     casFlipToRunning: (runId, fromStatuses) =>
       missionRunsRepo.casFlipToRunning(runId, fromStatuses),
+    getFullAutonomousRun: (sessionId) =>
+      fullAutonomousRunsRepo.getActiveRunBySession(sessionId),
+    casFullAutonomousToRunning: (runId, fromStatuses) =>
+      fullAutonomousRunsRepo.casFlipToRunning(runId, fromStatuses),
     getSessionKind: async (sessionId) => {
       const session = await sessionsRepo.getSession(sessionId);
       return session?.kind ?? null;

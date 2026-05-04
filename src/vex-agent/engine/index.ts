@@ -12,6 +12,7 @@ export {
   resumeMissionRun,
   processFullAutonomousTurn,
   resumeFullAutonomousSession,
+  recoverFailedMissionRun,
 } from "./core/runner.js";
 
 export { approveAndResume } from "./core/resume.js";
@@ -20,7 +21,7 @@ export { runTool } from "./core/run-tool.js";
 
 export { runSubagentEngine } from "./subagents/runner.js";
 
-export { routeUserMessage } from "./ingress.js";
+export { routeUserMessage, submitOperatorInstruction } from "./ingress.js";
 
 export { startWakeExecutor } from "./wake/executor.js";
 export type { WakeExecutorHandle, WakeDeps, ClaimedWake, ClaimedWakeOutcome } from "./wake/executor.js";

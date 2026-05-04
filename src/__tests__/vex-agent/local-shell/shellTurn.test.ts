@@ -3,11 +3,13 @@ import type { SessionSummary } from "../../../../local/vex-shell/platform/render
 
 const mocks = vi.hoisted(() => ({
   routeUserMessage: vi.fn(),
+  submitOperatorInstruction: vi.fn(),
   startReadyMission: vi.fn(),
   startMissionFromSetup: vi.fn(),
   abortActiveMission: vi.fn(),
   approveById: vi.fn(),
   editMissionDraft: vi.fn(),
+  recoverMission: vi.fn(),
   rejectById: vi.fn(),
   recordTurnLatency: vi.fn(),
   sessionInfo: vi.fn(),
@@ -16,6 +18,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../../src/vex-agent/engine/index.js", () => ({
   routeUserMessage: (...args: unknown[]) => mocks.routeUserMessage(...args),
+  submitOperatorInstruction: (...args: unknown[]) => mocks.submitOperatorInstruction(...args),
+  ACTIVE_OR_PAUSED_RUN_STATUSES: new Set(["running", "paused_approval", "paused_wake", "paused_error"]),
+  ACTIVE_OR_PAUSED_FULL_AUTONOMOUS_STATUSES: new Set(["running", "paused_wake", "paused_error"]),
 }));
 
 vi.mock("../../../../local/vex-shell/engine-actions.js", () => ({
@@ -24,6 +29,7 @@ vi.mock("../../../../local/vex-shell/engine-actions.js", () => ({
   abortActiveMission: (...args: unknown[]) => mocks.abortActiveMission(...args),
   approveById: (...args: unknown[]) => mocks.approveById(...args),
   editMissionDraft: (...args: unknown[]) => mocks.editMissionDraft(...args),
+  recoverMission: (...args: unknown[]) => mocks.recoverMission(...args),
   rejectById: (...args: unknown[]) => mocks.rejectById(...args),
 }));
 
@@ -50,6 +56,7 @@ function makeSession(overrides: Partial<SessionSummary> = {}): SessionSummary {
     id: "session-1",
     kind: "chat",
     missionStatus: "ready",
+    fullAutonomousStatus: null,
     missionCommand: "start",
     pendingApprovals: 0,
     usage: {

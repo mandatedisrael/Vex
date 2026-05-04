@@ -23,6 +23,7 @@ describe("vex-shell mission draft message formatting", () => {
       id: "session-1",
       kind: "chat",
       missionStatus: "running",
+      fullAutonomousStatus: null,
       missionCommand: null,
       pendingApprovals: 0,
       usage: {

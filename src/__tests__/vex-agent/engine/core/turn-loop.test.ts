@@ -7,21 +7,30 @@ import { resolve } from "node:path";
 const mockAddMessage = vi.fn();
 const mockAddEngineMessage = vi.fn();
 const mockGetLiveMessages = vi.fn().mockResolvedValue([]);
+const mockGetOperatorInstructionsAfter = vi.fn().mockResolvedValue([]);
 const mockDispatchTool = vi.fn();
 const mockIncrementIterations = vi.fn().mockResolvedValue(1);
+const mockIncrementFullAutonomousIterations = vi.fn().mockResolvedValue(1);
 const mockUpdateStatus = vi.fn();
 const mockSetLastCheckpoint = vi.fn();
+const mockSetFullAutonomousLastCheckpoint = vi.fn();
 
 vi.mock("@vex-agent/db/repos/messages.js", () => ({
   addMessage: (...a: unknown[]) => mockAddMessage(...a),
   addEngineMessage: (...a: unknown[]) => mockAddEngineMessage(...a),
   getLiveMessages: (...a: unknown[]) => mockGetLiveMessages(...a),
+  getOperatorInstructionsAfter: (...a: unknown[]) => mockGetOperatorInstructionsAfter(...a),
 }));
 
 vi.mock("@vex-agent/db/repos/mission-runs.js", () => ({
   incrementIterations: (...a: unknown[]) => mockIncrementIterations(...a),
   updateStatus: (...a: unknown[]) => mockUpdateStatus(...a),
   setLastCheckpoint: (...a: unknown[]) => mockSetLastCheckpoint(...a),
+}));
+
+vi.mock("@vex-agent/db/repos/full-autonomous-runs.js", () => ({
+  incrementIterations: (...a: unknown[]) => mockIncrementFullAutonomousIterations(...a),
+  setLastCheckpoint: (...a: unknown[]) => mockSetFullAutonomousLastCheckpoint(...a),
 }));
 
 vi.mock("@vex-agent/tools/dispatcher.js", () => ({
@@ -214,6 +223,49 @@ describe("turn-loop", () => {
       );
 
       expect(mockIncrementIterations).toHaveBeenCalledWith("run-1");
+    });
+
+    it("merges operator instructions before the next autonomous iteration", async () => {
+      const provider = makeProvider([
+        { content: "Working..." },
+        { content: "Applying operator instruction..." },
+      ]);
+      mockGetOperatorInstructionsAfter.mockResolvedValueOnce([
+        {
+          id: 42,
+          role: "user",
+          content: "prioritize safety",
+          timestamp: "2026-05-04T08:00:00.000Z",
+          metadata: {
+            source: "user",
+            messageType: "operator_interrupt",
+            visibility: "user",
+            payload: { operatorInstruction: true },
+          },
+        },
+      ]);
+
+      await runTurnLoop(
+        makeContext({ sessionKind: "mission", missionRunId: "run-1" }),
+        [], null, 0, provider as any, makeConfig() as any, [],
+        { ...defaultLoopConfig, maxIterations: 2 },
+      );
+
+      const secondMessages = provider.chatCompletion.mock.calls[1]![0] as Array<{ role: string; content: string }>;
+      expect(secondMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ role: "user", content: "prioritize safety" }),
+          expect.objectContaining({
+            role: "system",
+            content: expect.stringContaining("operator_interrupt"),
+          }),
+        ]),
+      );
+      expect(mockAddEngineMessage).toHaveBeenCalledWith(
+        "session-1",
+        expect.stringContaining("operator_interrupt"),
+        expect.objectContaining({ messageType: "operator_interrupt" }),
+      );
     });
   });
 
