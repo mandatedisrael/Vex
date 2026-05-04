@@ -16,9 +16,11 @@
 
 import type { InferenceProvider, InferenceConfig } from "@vex-agent/inference/types.js";
 import type { MessageWithId } from "@vex-agent/db/repos/messages.js";
+import logger from "@utils/logger.js";
 
 /** Truncation cap for per-message content shown to the summarizer. */
 const PER_MESSAGE_CHAR_CAP = 500;
+const FALLBACK_MESSAGE_CHAR_CAP = 220;
 
 export async function summarizePrefix(
   prefix: readonly MessageWithId[],
@@ -33,16 +35,42 @@ export async function summarizePrefix(
   }
 
   const compactionPrompt = buildCompactionPrompt(prefix, previousSummary, currentCode, handoffPreserve);
-  const { content: summary } = await provider.chatCompletionSimple(
+  const { content: firstSummary } = await provider.chatCompletionSimple(
     [{ role: "system", content: compactionPrompt }],
     config,
   );
 
-  const trimmed = summary?.trim();
-  if (!trimmed) {
-    throw new Error("summarizePrefix: provider returned empty summary");
+  const firstTrimmed = firstSummary?.trim();
+  if (firstTrimmed) {
+    return firstTrimmed;
   }
-  return trimmed;
+
+  logger.warn("checkpoint.summary.empty", {
+    attempt: 1,
+    sourceStartMessageId: prefix[0]?.id ?? null,
+    sourceEndMessageId: prefix[prefix.length - 1]?.id ?? null,
+  });
+
+  const retryPrompt = buildRetryCompactionPrompt(compactionPrompt);
+  const { content: retrySummary } = await provider.chatCompletionSimple(
+    [{ role: "system", content: retryPrompt }],
+    config,
+  );
+
+  const retryTrimmed = retrySummary?.trim();
+  if (retryTrimmed) {
+    return retryTrimmed;
+  }
+
+  logger.error("checkpoint.summary.empty_fallback", {
+    sourceStartMessageId: prefix[0]?.id ?? null,
+    sourceEndMessageId: prefix[prefix.length - 1]?.id ?? null,
+    messageCount: prefix.length,
+    hasPreviousSummary: previousSummary !== null && previousSummary.trim().length > 0,
+    hasHandoffPreserve: handoffPreserve !== null && handoffPreserve.trim().length > 0,
+  });
+
+  return buildDeterministicFallbackSummary(prefix, previousSummary, handoffPreserve);
 }
 
 // ── Prompt builder ─────────────────────────────────────────────
@@ -83,6 +111,49 @@ ${buildLanguageDirective(currentCode)}
 
 ${preserveBlock}${previousBlock}Archived prefix:
 ${conversation}`;
+}
+
+function buildRetryCompactionPrompt(compactionPrompt: string): string {
+  return `${compactionPrompt}
+
+The previous summarizer call returned an empty response. Return a non-empty rolling summary now. Output plain text only.`;
+}
+
+function buildDeterministicFallbackSummary(
+  prefix: readonly MessageWithId[],
+  previousSummary: string | null,
+  handoffPreserve: string | null,
+): string {
+  const lines: string[] = [];
+  const startId = prefix[0]?.id ?? "unknown";
+  const endId = prefix[prefix.length - 1]?.id ?? "unknown";
+
+  lines.push(
+    `Deterministic fallback summary for compacted messages ${startId}-${endId}.`,
+  );
+
+  const preserve = handoffPreserve?.trim();
+  if (preserve) {
+    lines.push(`Pre-compact handoff: ${preserve}`);
+  }
+
+  const previous = previousSummary?.trim();
+  if (previous) {
+    lines.push(`Previous rolling summary to carry forward: ${previous}`);
+  }
+
+  const excerpts = prefix
+    .map((message) => {
+      const excerpt = message.content.trim().slice(0, FALLBACK_MESSAGE_CHAR_CAP);
+      return excerpt.length > 0 ? `[${message.role}#${message.id}]: ${excerpt}` : null;
+    })
+    .filter((excerpt): excerpt is string => excerpt !== null);
+
+  if (excerpts.length > 0) {
+    lines.push(`Archived prefix excerpts: ${excerpts.join(" | ")}`);
+  }
+
+  return lines.join("\n");
 }
 
 function buildLanguageDirective(currentCode: string | null): string {

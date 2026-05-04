@@ -35,7 +35,7 @@ import { executeTurn, saveAssistantMessage } from "./turn.js";
 import type { ParsedToolCall } from "@vex-agent/inference/types.js";
 import { evaluateRuntimeStopConditions } from "./stop-conditions.js";
 import { shouldCheckpoint, executeCheckpoint } from "./checkpoint.js";
-import { computeBand } from "./context-band.js";
+import { computeBand, type ContextUsageBand } from "./context-band.js";
 import { persistToolResultWithOverflow } from "./tool-output-overflow.js";
 import { dispatchTool } from "@vex-agent/tools/dispatcher.js";
 import type { InternalToolContext } from "@vex-agent/tools/internal/types.js";
@@ -53,6 +53,7 @@ export interface TurnLoopConfig {
   maxIterations: number;
   timeoutMs: number;
   contextLimit: number;
+  buildToolsForBand?: (band: ContextUsageBand) => ToolDefinition[];
 }
 
 export interface TurnLoopResult {
@@ -99,7 +100,7 @@ export async function runTurnLoop(
   let lastSeenOperatorMessageId = maxOperatorInstructionId(messages);
 
   /**
-   * Evaluate the checkpoint trigger against the DB-authoritative token count
+   * Evaluate the checkpoint trigger against the freshest known token count
    * and run `executeCheckpoint` if we're over the threshold. Returns `true`
    * only when a real compaction happened (prefix or giant_tool) — the caller
    * uses that to short-circuit normal turn bookkeeping (e.g. mission
@@ -109,7 +110,9 @@ export async function runTurnLoop(
    */
   async function maybeRunCheckpoint(): Promise<boolean> {
     const freshSession = await sessionsRepo.getSession(context.sessionId);
-    currentTokenCount = freshSession?.tokenCount ?? currentTokenCount;
+    if (typeof freshSession?.tokenCount === "number" && Number.isFinite(freshSession.tokenCount)) {
+      currentTokenCount = Math.max(currentTokenCount, freshSession.tokenCount);
+    }
     if (!shouldCheckpoint(currentTokenCount, loopConfig.contextLimit)) return false;
 
     const result = await executeCheckpoint(
@@ -175,10 +178,14 @@ export async function runTurnLoop(
       await fullAutonomousRunsRepo.incrementIterations(context.fullAutonomousRunId);
     }
 
+    const turnBand = computeBand(currentTokenCount, loopConfig.contextLimit);
+    const turnTools = loopConfig.buildToolsForBand?.(turnBand) ?? tools;
+
     // Execute turn
     const turnResult = await executeTurn(
-      context, liveMessages, currentSummary, provider, config, tools, promptOptions,
+      context, liveMessages, currentSummary, provider, config, turnTools, promptOptions,
     );
+    currentTokenCount = turnResult.promptTokens;
 
     if (abortSignal?.aborted) {
       stopReason = "user_stopped";
@@ -194,6 +201,7 @@ export async function runTurnLoop(
       let batchStopReason: StopReason | null = null;
       let batchStopOutput: string | null = null;
       let batchStopPayload: { summary?: string; evidence?: Record<string, unknown> } | undefined;
+      const dispatchBand = computeBand(currentTokenCount, loopConfig.contextLimit);
 
       for (const toolCall of turnResult.toolCalls) {
         totalToolCalls++;
@@ -207,7 +215,7 @@ export async function runTurnLoop(
           missionRunId: context.missionRunId,
           missionId: context.missionId,
           sessionKind: context.sessionKind,
-          contextUsageBand: computeBand(currentTokenCount, loopConfig.contextLimit),
+          contextUsageBand: dispatchBand,
           sourceSurface: "vex_agent",
           sourceSession: context.sessionId,
         };

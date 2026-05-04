@@ -18,7 +18,7 @@ import {
 } from "../../mission/run-contract.js";
 import type { PromptStackOptions } from "../../prompts/index.js";
 import { getOpenAITools } from "@vex-agent/tools/registry.js";
-import { computeBand } from "../context-band.js";
+import { computeBand, type ContextUsageBand } from "../context-band.js";
 import { resolveProvider } from "@vex-agent/inference/registry.js";
 import * as messagesRepo from "@vex-agent/db/repos/messages.js";
 import * as missionsRepo from "@vex-agent/db/repos/missions.js";
@@ -135,17 +135,19 @@ export async function startMission(
       },
     };
 
-    const tools = toToolDefinitions(getOpenAITools({
+    const buildToolsForBand = (contextUsageBand: ContextUsageBand) => toToolDefinitions(getOpenAITools({
       chatMode: loopMode,
       role: "parent",
       sessionKind: "mission",
       missionRunActive: true,
-      contextUsageBand: "normal", // fresh start — no prior pressure
+      contextUsageBand,
     }));
+    const tools = buildToolsForBand(computeBand(hydrated.tokenCount, config.contextLimit));
 
     const loopConfig: TurnLoopConfig = {
       ...DEFAULT_LOOP_CONFIG,
       contextLimit: config.contextLimit,
+      buildToolsForBand,
     };
 
     const result = await runTurnLoop(
@@ -245,18 +247,20 @@ export async function resumeMissionRun(
     // warning-band tools (PR-9) are visible if the previous turn already
     // pushed the window past 80%. Turn-loop recomputes per iteration for
     // dispatch context.
-    const resumeBand = computeBand(hydrated.tokenCount, config.contextLimit);
-    const tools = toToolDefinitions(getOpenAITools({
+    const buildToolsForBand = (contextUsageBand: ContextUsageBand) => toToolDefinitions(getOpenAITools({
       chatMode: run.loopMode,
       role: "parent",
       sessionKind: "mission",
       missionRunActive: true,
-      contextUsageBand: resumeBand,
+      contextUsageBand,
     }));
+    const resumeBand = computeBand(hydrated.tokenCount, config.contextLimit);
+    const tools = buildToolsForBand(resumeBand);
 
     const loopConfig: TurnLoopConfig = {
       ...DEFAULT_LOOP_CONFIG,
       contextLimit: config.contextLimit,
+      buildToolsForBand,
     };
 
     const result = await runTurnLoop(

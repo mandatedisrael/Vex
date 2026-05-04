@@ -25,6 +25,7 @@ import {
 import { parseModelMissionOutput } from "../../mission/patch-parser.js";
 import type { PromptStackOptions } from "../../prompts/index.js";
 import { getOpenAITools } from "@vex-agent/tools/registry.js";
+import { computeBand, type ContextUsageBand } from "../context-band.js";
 import { resolveProvider } from "@vex-agent/inference/registry.js";
 import * as messagesRepo from "@vex-agent/db/repos/messages.js";
 import logger from "@utils/logger.js";
@@ -75,13 +76,14 @@ export async function processMissionSetupTurn(
     missionRunId: null,
   };
 
-  const tools = toToolDefinitions(getOpenAITools({
+  const buildToolsForBand = (contextUsageBand: ContextUsageBand) => toToolDefinitions(getOpenAITools({
     chatMode: "off",
     role: "parent",
     sessionKind: "mission",
     missionRunActive: false, // setup — no run yet
-    contextUsageBand: "normal",
+    contextUsageBand,
   }));
+  const tools = buildToolsForBand(computeBand(hydrated.tokenCount, config.contextLimit));
 
   const loopConfig: TurnLoopConfig = {
     ...DEFAULT_LOOP_CONFIG,
@@ -90,6 +92,7 @@ export async function processMissionSetupTurn(
     // DEFAULT_LOOP_CONFIG.maxIterations=50 still dominates actual execution.
     maxIterations: 15,
     contextLimit: config.contextLimit,
+    buildToolsForBand,
   };
 
   const promptOptions: PromptStackOptions = {

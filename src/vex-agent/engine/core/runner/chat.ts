@@ -7,6 +7,7 @@ import { hydrateEngineSession } from "../hydrate.js";
 import type { TurnLoopConfig } from "../turn-loop.js";
 import { runTurnLoop } from "../turn-loop.js";
 import { getOpenAITools } from "@vex-agent/tools/registry.js";
+import { computeBand, type ContextUsageBand } from "../context-band.js";
 import { resolveProvider } from "@vex-agent/inference/registry.js";
 import * as messagesRepo from "@vex-agent/db/repos/messages.js";
 import logger from "@utils/logger.js";
@@ -44,13 +45,14 @@ export async function processChatTurn(
   // Force chat semantics — even if session has a mission attached
   const chatContext = { ...hydrated.context, sessionKind: "chat" as const, loopMode: "off" as const };
 
-  const tools = toToolDefinitions(getOpenAITools({
+  const buildToolsForBand = (contextUsageBand: ContextUsageBand) => toToolDefinitions(getOpenAITools({
     chatMode: "off",
     role: "parent",
     sessionKind: "chat",
     missionRunActive: false,
-    contextUsageBand: "normal",
+    contextUsageBand,
   }));
+  const tools = buildToolsForBand(computeBand(hydrated.tokenCount, config.contextLimit));
 
   const loopConfig: TurnLoopConfig = {
     ...DEFAULT_LOOP_CONFIG,
@@ -59,6 +61,7 @@ export async function processChatTurn(
     // only engages when the model loops on tool-calls without ever summarising.
     maxIterations: 10,
     contextLimit: config.contextLimit,
+    buildToolsForBand,
   };
 
   const result = await runTurnLoop(

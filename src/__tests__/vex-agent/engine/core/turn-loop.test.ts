@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import type { ToolDefinition } from "@vex-agent/inference/types.js";
+import type { ContextUsageBand } from "@vex-agent/engine/core/context-band.js";
 
 // ── Mocks ─────────────────────────────────────────────────────
 
@@ -88,6 +90,12 @@ const { runTurnLoop } = await import("../../../../vex-agent/engine/core/turn-loo
 describe("turn-loop", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetSessionForLoop.mockResolvedValue({ tokenCount: 0 });
+    mockExecuteCheckpoint.mockResolvedValue({
+      mode: "prefix",
+      summary: "new rolling summary",
+      episodeIds: [],
+    });
   });
 
   // PR-2: promotion hook was removed — lint against regression that
@@ -121,6 +129,7 @@ describe("turn-loop", () => {
   function makeProvider(responses: Array<{
     content?: string | null;
     toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
+    promptTokens?: number;
   }>) {
     let callIndex = 0;
     return {
@@ -130,7 +139,12 @@ describe("turn-loop", () => {
         return Promise.resolve({
           content: resp.content ?? null,
           toolCalls: resp.toolCalls ?? null,
-          usage: { promptTokens: 1000, completionTokens: 200, cachedTokens: 0, reasoningTokens: 0 },
+          usage: {
+            promptTokens: resp.promptTokens ?? 1000,
+            completionTokens: 200,
+            cachedTokens: 0,
+            reasoningTokens: 0,
+          },
         });
       }),
       calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD" }),
@@ -153,6 +167,20 @@ describe("turn-loop", () => {
     timeoutMs: 60000,
     contextLimit: 128000,
   };
+
+  function makeTool(name: string): ToolDefinition {
+    return {
+      type: "function",
+      function: {
+        name,
+        description: "test tool",
+        parameters: {
+          type: "object",
+          properties: {},
+        },
+      },
+    };
+  }
 
   // ── Chat mode ───────────────────────────────────────────────
 
@@ -649,6 +677,45 @@ describe("turn-loop", () => {
       );
 
       expect(order).toEqual(["turn", "ckpt", "continue"]);
+    });
+
+    it("uses the latest promptTokens for tool dispatch context band", async () => {
+      const provider = makeProvider([
+        {
+          toolCalls: [{ id: "call-1", name: "web_research", arguments: { query: "x" } }],
+          promptTokens: 950,
+        },
+      ]);
+      mockDispatchTool.mockResolvedValue({ success: true, output: "ok" });
+
+      await runTurnLoop(
+        makeContext(), [], null, 100, provider as any, makeConfig() as any, [],
+        { ...defaultLoopConfig, maxIterations: 1, contextLimit: 1000 },
+      );
+
+      const [, toolContext] = mockDispatchTool.mock.calls[0];
+      expect(toolContext).toMatchObject({
+        contextUsageBand: "critical",
+      });
+    });
+
+    it("rebuilds tools for the next iteration from latest promptTokens", async () => {
+      const provider = makeProvider([
+        { content: "working", promptTokens: 850 },
+        { content: "still working", promptTokens: 850 },
+      ]);
+      const toolsForBand = (band: ContextUsageBand): ToolDefinition[] => [makeTool(`tool_${band}`)];
+      const buildToolsForBand = vi.fn(toolsForBand);
+
+      await runTurnLoop(
+        makeContext({ sessionKind: "mission", missionRunId: "run-1" }),
+        [], null, 100, provider as any, makeConfig() as any, toolsForBand("normal"),
+        { ...defaultLoopConfig, maxIterations: 2, contextLimit: 1000, buildToolsForBand },
+      );
+
+      expect(buildToolsForBand.mock.calls.map(([band]) => band)).toEqual(["normal", "warning"]);
+      const secondCallTools = provider.chatCompletion.mock.calls[1][1] as ToolDefinition[];
+      expect(secondCallTools[0].function.name).toBe("tool_warning");
     });
   });
 
