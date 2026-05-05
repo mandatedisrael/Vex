@@ -64,6 +64,11 @@ export function buildBasePrompt(context: EngineContext): string {
  * without the noise of modes unreachable from this session.
  */
 function resolveAspect(ctx: EngineContext): string {
+  // TODO(subagent-disabled): gałąź nieosiągalna dla nowych sesji póki
+  // subagent_spawn jest wypięty z registry. Treść celowo zostawiona, żeby
+  // re-enable wrócił z pełnym promptem. Residual risk: legacy sesje z DB
+  // (is_subagent=true) zhydratowane przez engine/core/hydrate.ts dostaną
+  // referencje do disabled tooli — patrz docs planu.
   if (ctx.isSubagent) {
     return [
       "You are a SUBAGENT — VEX delegated from a parent session to execute a narrow,",

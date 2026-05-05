@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { expectSqlPlaceholdersContiguous } from "./_sql-helpers.js";
 
 const mockExecute = vi.fn().mockResolvedValue(0);
 const mockQueryOne = vi.fn().mockResolvedValue(null);
@@ -43,14 +44,16 @@ describe("mission-runs repo", () => {
   // ── updateStatus ────────────────────────────────────────────
 
   describe("updateStatus", () => {
-    it("updates status without ending for running", async () => {
+    it("clears stop fields and passes only id for running (no orphan placeholders)", async () => {
       await updateStatus("run-1", "running");
-      const [sql] = mockExecute.mock.calls[0];
-      expect(sql).toContain("status = $1");
+      const [sql, params] = mockExecute.mock.calls[0];
+      expect(sql).toContain("status = 'running'");
       expect(sql).toContain("stop_reason = NULL");
       expect(sql).toContain("stop_summary = NULL");
       expect(sql).toContain("stop_evidence_json = NULL");
       expect(sql).toContain("ended_at = NULL");
+      expect(params).toEqual(["run-1"]);
+      expectSqlPlaceholdersContiguous(sql, params);
     });
 
     it("updates status without ending for paused_approval", async () => {
@@ -59,6 +62,8 @@ describe("mission-runs repo", () => {
       expect(sql).toContain("ended_at = ended_at");
       expect(params[0]).toBe("paused_approval");
       expect(params[1]).toBe("approval_required");
+      expect(params).toHaveLength(5);
+      expectSqlPlaceholdersContiguous(sql, params);
     });
 
     it("sets ended_at for completed", async () => {
@@ -67,6 +72,8 @@ describe("mission-runs repo", () => {
       expect(sql).toContain("ended_at = NOW()");
       expect(params[0]).toBe("completed");
       expect(params[1]).toBe("goal_reached");
+      expect(params).toHaveLength(5);
+      expectSqlPlaceholdersContiguous(sql, params);
     });
 
     it("sets ended_at for failed", async () => {

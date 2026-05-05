@@ -42,10 +42,22 @@ export async function approveAndResume(approvalId: string): Promise<TurnResult> 
   // rejected; this catches the narrower window where abort hadn't yet
   // visited the queue but had already finalised the run. Without this,
   // dispatch would execute a tool against a cancelled mission.
-  const activeRunForGuard = await missionRunsRepo.getActiveRunBySession(sessionId);
-  if (activeRunForGuard && TERMINAL_RUN_STATUSES.has(activeRunForGuard.status)) {
+  //
+  // `getRunBySession` returns the most recent run regardless of status —
+  // `getActiveRunBySession` filters terminal out, which is exactly the case
+  // we need to detect here. We also gate on `endedAt > approval.createdAt`
+  // so an old terminal mission run on the same session does not block an
+  // unrelated newer chat approval (approvals are session-scoped, not
+  // run-scoped, until the schema carries `mission_run_id`).
+  const recentRunForGuard = await missionRunsRepo.getRunBySession(sessionId);
+  if (
+    recentRunForGuard &&
+    TERMINAL_RUN_STATUSES.has(recentRunForGuard.status) &&
+    recentRunForGuard.endedAt !== null &&
+    recentRunForGuard.endedAt > approval.createdAt
+  ) {
     throw new Error(
-      `Approval ${approvalId} cannot be applied: mission run ${activeRunForGuard.id} is ${activeRunForGuard.status}`,
+      `Approval ${approvalId} cannot be applied: mission run ${recentRunForGuard.id} is ${recentRunForGuard.status}`,
     );
   }
 

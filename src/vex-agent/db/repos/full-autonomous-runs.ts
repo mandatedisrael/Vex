@@ -101,16 +101,27 @@ export async function updateStatus(
   stopReason?: string,
   stopPayload?: { summary?: string; evidence?: Record<string, unknown> },
 ): Promise<void> {
-  const isRunning = status === "running";
-  const ended = isRunning ? "NULL" : TERMINAL_FULL_AUTONOMOUS_STATUSES.has(status) ? "NOW()" : "ended_at";
-  const stopReasonSql = isRunning ? "NULL" : "COALESCE($2, stop_reason)";
-  const stopSummarySql = isRunning ? "NULL" : "COALESCE($3, stop_summary)";
-  const stopEvidenceSql = isRunning ? "NULL" : "COALESCE($4::jsonb, stop_evidence_json)";
+  // Two SQL paths (not one with conditional string-injection) so the
+  // placeholder count always matches the params array. Mirrors the same
+  // fix in mission-runs.updateStatus — orphan $N would otherwise crash
+  // Postgres at type-inference for unused placeholders.
+  if (status === "running") {
+    await execute(
+      `UPDATE full_autonomous_runs SET status = 'running',
+       stop_reason = NULL, stop_summary = NULL,
+       stop_evidence_json = NULL, ended_at = NULL
+       WHERE id = $1`,
+      [id],
+    );
+    return;
+  }
+
+  const ended = TERMINAL_FULL_AUTONOMOUS_STATUSES.has(status) ? "NOW()" : "ended_at";
   await execute(
     `UPDATE full_autonomous_runs SET status = $1,
-      stop_reason = ${stopReasonSql},
-      stop_summary = ${stopSummarySql},
-      stop_evidence_json = ${stopEvidenceSql},
+      stop_reason = COALESCE($2, stop_reason),
+      stop_summary = COALESCE($3, stop_summary),
+      stop_evidence_json = COALESCE($4::jsonb, stop_evidence_json),
       ended_at = ${ended}
       WHERE id = $5`,
     [

@@ -3,6 +3,12 @@
  *
  * Delegated scope from parent, reports results back.
  * Respects allowTrades and parent loopMode.
+ *
+ * TODO(subagent-disabled): cała warstwa instruuje wywołanie
+ * `subagent_report_complete` / `subagent_request_parent`, które są wypięte
+ * z registry. Dla nowych sesji nieosiągalna (brak `subagent_spawn`); legacy
+ * sesja z is_subagent=true zhydratowana z DB przez hydrate.ts dostanie tu
+ * wiszącą referencję do disabled tooli — patrz Residual Risk w docs planu.
  */
 
 import type { EngineContext } from "../types.js";

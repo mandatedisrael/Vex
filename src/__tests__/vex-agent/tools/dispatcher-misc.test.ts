@@ -9,7 +9,8 @@ const baseContext = makeTestContext();
 describe("dispatcher — subagent, wallet, unknown, no-stubs", () => {
   // ── Subagent ─────────────────────────────────────────────────────
 
-  it("subagent_spawn returns id", async () => {
+  // TODO(subagent-disabled): re-enable razem z SUBAGENT_TOOLS i dispatcher loaders.
+  it.skip("subagent_spawn returns id", async () => {
     const result = await dispatchTool(
       { name: "subagent_spawn", args: { name: "VexTest", task: "research markets" }, toolCallId: "call_13" },
       baseContext,
@@ -21,7 +22,8 @@ describe("dispatcher — subagent, wallet, unknown, no-stubs", () => {
     expect(parsed.name).toBe("VexTest");
   });
 
-  it("subagent_spawn fails without name", async () => {
+  // TODO(subagent-disabled): re-enable razem z SUBAGENT_TOOLS i dispatcher loaders.
+  it.skip("subagent_spawn fails without name", async () => {
     const result = await dispatchTool(
       { name: "subagent_spawn", args: { task: "do something" }, toolCallId: "call_13b" },
       baseContext,
@@ -31,7 +33,8 @@ describe("dispatcher — subagent, wallet, unknown, no-stubs", () => {
     expect(result.output).toContain("name");
   });
 
-  it("subagent_status returns empty when none active", async () => {
+  // TODO(subagent-disabled): re-enable razem z SUBAGENT_TOOLS i dispatcher loaders.
+  it.skip("subagent_status returns empty when none active", async () => {
     const result = await dispatchTool(
       { name: "subagent_status", args: {}, toolCallId: "call_13c" },
       baseContext,
@@ -96,9 +99,10 @@ describe("dispatcher — subagent, wallet, unknown, no-stubs", () => {
       { name: "knowledge_recall_overflow", args: { cacheKey: "rcl-test" } },
       { name: "knowledge_get", args: { id: 1 } },
       { name: "knowledge_update_status", args: { id: 1, status: "archived" } },
-      { name: "subagent_spawn", args: { name: "VexX", task: "t" } },
-      { name: "subagent_status", args: {} },
-      { name: "subagent_stop", args: { id: "sub-1" } },
+      // TODO(subagent-disabled): re-enable razem z SUBAGENT_TOOLS.
+      // { name: "subagent_spawn", args: { name: "VexX", task: "t" } },
+      // { name: "subagent_status", args: {} },
+      // { name: "subagent_stop", args: { id: "sub-1" } },
     ];
 
     for (const tool of internalTools) {

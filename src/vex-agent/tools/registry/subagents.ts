@@ -2,11 +2,17 @@
  * Subagent tools — split into parent (spawn/status/stop/reply) and child
  * (request_parent / report_complete). `excludeRoles` enforces parent-only
  * vs child-only at registration time; the dispatcher hard-blocks at call time.
+ *
+ * TODO(subagent-disabled): all entries below are commented out — runtime
+ * exposure of the subagent surface is paused. Re-enable in lockstep with
+ * `INTERNAL_TOOL_LOADERS` in `tools/dispatcher.ts` (the `// Subagents` block)
+ * to keep `registry-completeness.test.ts` symmetric.
  */
 
 import type { ToolDef } from "../types.js";
 
 export const SUBAGENT_TOOLS: readonly ToolDef[] = [
+  /* TODO(subagent-disabled): re-enable razem z dispatcher loaders w tools/dispatcher.ts.
   // Parent tools
   {
     name: "subagent_spawn", kind: "internal", mutating: false,
@@ -72,4 +78,5 @@ export const SUBAGENT_TOOLS: readonly ToolDef[] = [
       success: { type: "boolean", description: "Whether the task was completed successfully (default: true)" },
     }, required: ["summary"] },
   },
+  */
 ];

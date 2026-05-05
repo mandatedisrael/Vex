@@ -26,11 +26,9 @@ vi.mock("@vex-agent/db/repos/messages.js", () => ({
 
 vi.mock("@vex-agent/db/repos/mission-runs.js", () => ({
   updateStatus: (...a: unknown[]) => mockUpdateRunStatus(...a),
+  // Used by the defensive abort guard in `approveAndResume`. Default null
+  // means "no run for the session", so happy-path tests skip the guard.
   getRunBySession: vi.fn().mockResolvedValue(null),
-  // Used by the defensive abort guard added in `approveAndResume`. Default
-  // null means "no active run for the session", so the existing happy-path
-  // tests skip the guard.
-  getActiveRunBySession: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../../../../vex-agent/engine/core/hydrate.js", () => ({
@@ -99,11 +97,12 @@ describe("resume", () => {
       await expect(approveAndResume("approval-1")).rejects.toThrow("no associated session");
     });
 
-    it("rejects approval when active mission run is terminal (defensive guard)", async () => {
+    it("rejects approval when terminal run ended after approval was created (abort race)", async () => {
       const missionRunsModule = await import("@vex-agent/db/repos/mission-runs.js");
-      vi.mocked(missionRunsModule.getActiveRunBySession).mockResolvedValueOnce({
+      vi.mocked(missionRunsModule.getRunBySession).mockResolvedValueOnce({
         id: "run-cancelled",
         status: "cancelled",
+        endedAt: "2026-05-04T13:30:00Z",
       } as never);
 
       mockApprove.mockResolvedValueOnce({
@@ -113,10 +112,43 @@ describe("resume", () => {
         toolCallId: "call-late",
         chatMode: "restricted",
         pendingContext: null,
+        // Approval queued before the abort terminated the run.
+        createdAt: "2026-05-04T13:00:00Z",
       });
 
       await expect(approveAndResume("approval-late")).rejects.toThrow(/cancelled/);
       expect(mockDispatchTool).not.toHaveBeenCalled();
+    });
+
+    it("allows approval when terminal mission run ended before approval was created", async () => {
+      // Old mission run finalised cleanly long ago; later, an unrelated chat
+      // approval lands on the same session. The guard must not fire — that
+      // race window only exists when `run.endedAt > approval.createdAt`.
+      const missionRunsModule = await import("@vex-agent/db/repos/mission-runs.js");
+      vi.mocked(missionRunsModule.getRunBySession).mockResolvedValueOnce({
+        id: "run-old",
+        status: "completed",
+        endedAt: "2026-01-01T00:00:00Z",
+      } as never);
+
+      mockApprove.mockResolvedValueOnce({
+        id: "approval-chat",
+        toolCall: { command: "execute_tool", args: { toolId: "chat.tool" } },
+        sessionId: "session-1",
+        toolCallId: "call-chat",
+        chatMode: "restricted",
+        pendingContext: null,
+        createdAt: "2026-05-04T13:00:00Z",
+      });
+      mockDispatchTool.mockResolvedValueOnce({ success: true, output: "Chat tool OK" });
+      mockHydrate.mockResolvedValueOnce({
+        context: { sessionId: "session-1", missionRunId: null },
+      });
+
+      const result = await approveAndResume("approval-chat");
+
+      expect(mockDispatchTool).toHaveBeenCalledTimes(1);
+      expect(result.text).toBe("Chat tool OK");
     });
 
     it("dispatches approved tool, saves result, and re-enters loop", async () => {

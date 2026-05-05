@@ -181,13 +181,13 @@ export const INTERNAL_TOOL_LOADERS: Readonly<Record<string, InternalHandlerLoade
   checkpoint_handoff_prepare: async () => (await import("./internal/checkpoint-handoff.js")).handleCheckpointHandoffPrepare,
   tool_output_read: async () => (await import("./internal/tool-output-read.js")).handleToolOutputRead,
 
-  // Subagents
-  subagent_spawn: async () => (await import("./internal/subagent.js")).handleSubagentSpawn,
-  subagent_status: async () => (await import("./internal/subagent.js")).handleSubagentStatus,
-  subagent_stop: async () => (await import("./internal/subagent.js")).handleSubagentStop,
-  subagent_reply: async () => (await import("./internal/subagent.js")).handleSubagentReply,
-  subagent_request_parent: async () => (await import("./internal/subagent.js")).handleSubagentRequestParent,
-  subagent_report_complete: async () => (await import("./internal/subagent.js")).handleSubagentReportComplete,
+  // Subagents — DISABLED (TODO subagent-disabled). Re-enable z registry/subagents.ts.
+  // subagent_spawn: async () => (await import("./internal/subagent.js")).handleSubagentSpawn,
+  // subagent_status: async () => (await import("./internal/subagent.js")).handleSubagentStatus,
+  // subagent_stop: async () => (await import("./internal/subagent.js")).handleSubagentStop,
+  // subagent_reply: async () => (await import("./internal/subagent.js")).handleSubagentReply,
+  // subagent_request_parent: async () => (await import("./internal/subagent.js")).handleSubagentRequestParent,
+  // subagent_report_complete: async () => (await import("./internal/subagent.js")).handleSubagentReportComplete,
 
   // EVM on-chain reads
   evm_read: async () => (await import("./internal/evm-read.js")).handleEvmRead,

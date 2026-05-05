@@ -84,12 +84,13 @@ describe("registry", () => {
     "knowledge_supersede",
     "knowledge_lineage",
     "knowledge_history",
-    "subagent_spawn",
-    "subagent_status",
-    "subagent_stop",
-    "subagent_reply",
-    "subagent_request_parent",
-    "subagent_report_complete",
+    // TODO(subagent-disabled): przywrócić gdy subagent runtime wraca.
+    // "subagent_spawn",
+    // "subagent_status",
+    // "subagent_stop",
+    // "subagent_reply",
+    // "subagent_request_parent",
+    // "subagent_report_complete",
     "wallet_read",
     "wallet_send_prepare",
     "wallet_send_confirm",
@@ -188,7 +189,8 @@ describe("registry", () => {
       expect(names).not.toContain("subagent_reply");
     });
 
-    it("subagent role includes subagent_request_parent and subagent_report_complete", () => {
+    // TODO(subagent-disabled): re-enable razem z SUBAGENT_TOOLS.
+    it.skip("subagent role includes subagent_request_parent and subagent_report_complete", () => {
       const tools = getOpenAITools(defaultVisibilityContext({ chatMode: "restricted", role: "subagent" }));
       const names = tools.map(t => t.function.name);
       expect(names).toContain("subagent_request_parent");
@@ -202,7 +204,8 @@ describe("registry", () => {
       expect(names).not.toContain("subagent_report_complete");
     });
 
-    it("parent role includes mission_stop (inside a run), subagent_spawn, subagent_reply", () => {
+    // TODO(subagent-disabled): re-enable razem z SUBAGENT_TOOLS.
+    it.skip("parent role includes mission_stop (inside a run), subagent_spawn, subagent_reply", () => {
       const tools = getOpenAITools(defaultVisibilityContext({
         chatMode: "restricted",
         role: "parent",
@@ -253,14 +256,16 @@ describe("registry", () => {
       expect(names).not.toContain("subagent_stop");
     });
 
-    it("subagent_status and subagent_stop remain visible to parent role", () => {
+    // TODO(subagent-disabled): re-enable razem z SUBAGENT_TOOLS.
+    it.skip("subagent_status and subagent_stop remain visible to parent role", () => {
       const tools = getOpenAITools(defaultVisibilityContext({ chatMode: "restricted", role: "parent" }));
       const names = tools.map(t => t.function.name);
       expect(names).toContain("subagent_status");
       expect(names).toContain("subagent_stop");
     });
 
-    it("isToolBlockedForRole returns true for blocked tools", () => {
+    // TODO(subagent-disabled): re-enable razem z SUBAGENT_TOOLS.
+    it.skip("isToolBlockedForRole returns true for blocked tools", () => {
       expect(isToolBlockedForRole("mission_stop", "subagent")).toBe(true);
       expect(isToolBlockedForRole("subagent_request_parent", "parent")).toBe(true);
     });

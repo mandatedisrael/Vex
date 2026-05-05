@@ -119,21 +119,36 @@ export async function updateStatus(
   stopReason?: string,
   stopPayload?: { summary?: string; evidence?: Record<string, unknown> },
 ): Promise<void> {
-  // Running is a live state, so stale stop evidence from paused_wake /
-  // paused_error must be cleared on resume. Paused states keep evidence for
-  // recovery UX; terminal statuses stamp ended_at to NOW().
-  const isRunning = status === "running";
-  const ended = isRunning ? "NULL" : TERMINAL_RUN_STATUSES.has(status) ? "NOW()" : "ended_at";
-  const stopReasonSql = isRunning ? "NULL" : "COALESCE($2, stop_reason)";
-  const stopSummarySql = isRunning ? "NULL" : "COALESCE($3, stop_summary)";
-  const stopEvidenceSql = isRunning ? "NULL" : "COALESCE($4::jsonb, stop_evidence_json)";
+  // Two SQL paths (not one with conditional string-injection) so the
+  // placeholder count always matches the params array. A single template
+  // with `isRunning ? "NULL" : "COALESCE($N, …)"` left $2..$4 orphan when
+  // status === "running" and Postgres aborts type-inference for unused
+  // placeholders ("could not determine data type of parameter $2").
+  if (status === "running") {
+    // Live state: clear stale stop evidence from paused_wake / paused_error.
+    await execute(
+      `UPDATE mission_runs SET status = 'running',
+       stop_reason = NULL, stop_summary = NULL,
+       stop_evidence_json = NULL, ended_at = NULL
+       WHERE id = $1`,
+      [id],
+    );
+    return;
+  }
+
+  // Paused statuses keep prior evidence (COALESCE merge); terminal statuses
+  // additionally stamp ended_at to NOW().
+  const ended = TERMINAL_RUN_STATUSES.has(status) ? "NOW()" : "ended_at";
   await execute(
-    `UPDATE mission_runs SET status = $1, stop_reason = ${stopReasonSql},
-     stop_summary = ${stopSummarySql},
-     stop_evidence_json = ${stopEvidenceSql},
-     ended_at = ${ended} WHERE id = $5`,
+    `UPDATE mission_runs SET status = $1,
+     stop_reason = COALESCE($2, stop_reason),
+     stop_summary = COALESCE($3, stop_summary),
+     stop_evidence_json = COALESCE($4::jsonb, stop_evidence_json),
+     ended_at = ${ended}
+     WHERE id = $5`,
     [
-      status, stopReason ?? null,
+      status,
+      stopReason ?? null,
       stopPayload?.summary ?? null,
       nullableJsonb(stopPayload?.evidence ?? null),
       id,
