@@ -1,7 +1,8 @@
 # Vex — Developer Makefile
 
 .PHONY: build test dev clean lint lint-all check e2e-up e2e-down e2e-smoke \
-        knowledge-export knowledge-import knowledge-reembed
+        knowledge-export knowledge-import knowledge-reembed \
+        vex-dev vex-make vex-lint vex-test
 
 # -- Build & Test -------------------------------------------------------------
 
@@ -67,3 +68,20 @@ knowledge-import:
 
 knowledge-reembed:
 	pnpm exec tsx src/vex-agent/scripts/knowledge-reembed.ts $(ARGS)
+
+# -- Vex Electron desktop app (vex-app/) --------------------------------------
+#
+# Sibling top-level package for the Electron GUI. See vex-app/dependency-audit.md
+# for stack details. Phase 1 focus: bootstrap ceremony (splash → wizard → setup).
+
+vex-dev:
+	pnpm vex:dev
+
+vex-make:
+	pnpm vex:make
+
+vex-lint:
+	pnpm vex:lint
+
+vex-test:
+	pnpm vex:test

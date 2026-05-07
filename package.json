@@ -38,7 +38,12 @@
     "tool-reembed": "tsx src/vex-agent/scripts/tool-reembed.ts",
     "tool-embeddings:health": "tsx src/vex-agent/scripts/tool-embeddings-health.ts",
     "benchmark-cross-lingual": "tsx src/vex-agent/scripts/cross-lingual-benchmark.ts",
-    "check-checkpoint-compliance": "tsx src/vex-agent/scripts/checkpoint-compliance-check.ts"
+    "check-checkpoint-compliance": "tsx src/vex-agent/scripts/checkpoint-compliance-check.ts",
+    "vex:dev": "pnpm --dir vex-app install && pnpm --dir vex-app dev",
+    "vex:make": "pnpm --dir vex-app make",
+    "vex:lint": "pnpm --dir vex-app lint",
+    "vex:test": "pnpm --dir vex-app test",
+    "vex:test:e2e": "pnpm --dir vex-app test:e2e"
   },
   "dependencies": {
     "@0gfoundation/0g-ts-sdk": "^1.2.1",

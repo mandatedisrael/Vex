@@ -1,0 +1,164 @@
+/**
+ * Unit tests for the shared URL security helpers — they back BOTH the app://vex/
+ * protocol handler and the external-link allowlist, so a regression here is a
+ * regression in two security boundaries at once.
+ */
+
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import {
+  containsTraversal,
+  isAllowedExternalUrl,
+  pathStartsWithBoundary,
+  resolveAppUrl,
+  type ExternalAllowEntry,
+} from "../url.js";
+
+describe("containsTraversal", () => {
+  it.each([
+    "app://vex/../etc/passwd",
+    "app://vex/foo/../../../etc",
+    "app://vex/%2e%2e/etc/passwd",
+    "app://vex/%2E%2E/etc/passwd",
+    "app://vex/%2f%2e%2e/etc",
+    "https://github.com/../",
+    "https://github.com/foo\\..\\bar",
+  ])("flags %s", (s) => {
+    expect(containsTraversal(s)).toBe(true);
+  });
+
+  it.each([
+    "app://vex/index.html",
+    "https://github.com/Vex-Foundation/Vex",
+    "https://github.com/electron/electron/releases",
+    "app://vex/assets/main.js",
+  ])("does not flag %s", (s) => {
+    expect(containsTraversal(s)).toBe(false);
+  });
+});
+
+describe("pathStartsWithBoundary", () => {
+  it("exact match", () => {
+    expect(pathStartsWithBoundary("/foo", "/foo")).toBe(true);
+  });
+  it("subpath with slash boundary", () => {
+    expect(pathStartsWithBoundary("/foo/bar", "/foo")).toBe(true);
+  });
+  it("rejects suffix-only match", () => {
+    expect(pathStartsWithBoundary("/foo-bar", "/foo")).toBe(false);
+    expect(pathStartsWithBoundary("/foobar", "/foo")).toBe(false);
+  });
+  it("trailing slash on prefix accepts deep subpaths", () => {
+    expect(pathStartsWithBoundary("/foo/bar/baz", "/foo/")).toBe(true);
+    expect(pathStartsWithBoundary("/foo-bar", "/foo/")).toBe(false);
+  });
+});
+
+describe("isAllowedExternalUrl", () => {
+  const allowlist: ReadonlyArray<ExternalAllowEntry> = [
+    "vex.ai",
+    "docs.vex.ai",
+    "portal.jup.ag",
+    "openrouter.ai",
+    "releases.electronjs.org",
+    "desktop.docker.com",
+    "docs.docker.com",
+    { host: "github.com", pathPrefix: "/Vex-Foundation/" },
+    { host: "github.com", pathPrefix: "/electron/electron/releases" },
+  ];
+
+  it.each([
+    "https://vex.ai/",
+    "https://docs.vex.ai/",
+    "https://portal.jup.ag/keys",
+    "https://openrouter.ai/models",
+    "https://releases.electronjs.org/schedule",
+    "https://desktop.docker.com/mac/main/arm64/Docker.dmg",
+    "https://docs.docker.com/desktop/setup/install/mac-install/",
+    "https://github.com/Vex-Foundation/Vex",
+    "https://github.com/Vex-Foundation/Vex/releases",
+    "https://github.com/electron/electron/releases",
+    "https://github.com/electron/electron/releases/tag/v42.0.0",
+  ])("allows %s", (u) => {
+    expect(isAllowedExternalUrl(u, allowlist)).toBe(true);
+  });
+
+  it.each([
+    "http://vex.ai/", // wrong scheme
+    "javascript:alert(1)",
+    "file:///etc/passwd",
+    "data:text/html,<script>",
+    "https://evil.com/",
+    "https://vex.ai.evil.com/",
+    "https://github.com/", // root not under Vex-Foundation/
+    "https://github.com/torvalds/linux",
+    "https://github.com/electron/electron", // missing /releases boundary
+    "https://github.com/electron/electron/issues/1",
+    // Path-boundary regression: prefix is /electron/electron/releases.
+    // Without boundary, /releases-malicious would slip through.
+    "https://github.com/electron/electron/releases-malicious/",
+    "https://github.com/electron/electron/releasesfoo",
+    "https://github.com/Vex-Foundation",
+    "https://github.com/Vex-FoundationX/Vex",
+    // Traversal in path
+    "https://github.com/../Vex-Foundation/",
+    "https://github.com/electron/electron/releases/../../torvalds/linux",
+    "https://github.com/%2e%2e/Vex-Foundation/",
+    "",
+    "not-a-url",
+  ])("denies %s", (u) => {
+    expect(isAllowedExternalUrl(u, allowlist)).toBe(false);
+  });
+
+  it("URL spec normalizes hostname to lowercase — mixed case still allowed", () => {
+    expect(isAllowedExternalUrl("https://VEX.AI/", allowlist)).toBe(true);
+    expect(
+      isAllowedExternalUrl("https://gIThub.com/Vex-Foundation/Vex", allowlist)
+    ).toBe(true);
+  });
+});
+
+describe("resolveAppUrl", () => {
+  const root = "/var/app/dist/renderer";
+  const args = (rawUrl: string) => ({
+    rawUrl,
+    expectedHost: "vex",
+    normalizedRoot: root,
+    resolve: path.resolve,
+    sep: path.sep,
+  });
+
+  it("resolves root + named index", () => {
+    expect(resolveAppUrl(args("app://vex/")).kind).toBe("ok");
+    expect(resolveAppUrl(args("app://vex/index.html")).kind).toBe("ok");
+  });
+
+  it("resolves nested asset", () => {
+    const out = resolveAppUrl(args("app://vex/assets/main.css"));
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok") {
+      expect(out.absolutePath).toBe(`${root}/assets/main.css`);
+    }
+  });
+
+  it.each([
+    "app://vex/../etc/passwd",
+    "app://vex/../../etc/passwd",
+    "app://vex/%2e%2e/etc/passwd",
+    "app://vex/foo/../../../etc/passwd",
+    "app://vex/./../etc/passwd",
+  ])("blocks traversal: %s", (raw) => {
+    expect(resolveAppUrl(args(raw)).kind).toBe("forbidden");
+  });
+
+  it("rejects wrong host", () => {
+    expect(resolveAppUrl(args("app://other/index.html")).kind).toBe("not_found");
+    expect(resolveAppUrl(args("app://localhost/index.html")).kind).toBe(
+      "not_found"
+    );
+  });
+
+  it("rejects malformed URL", () => {
+    expect(resolveAppUrl(args("not-a-url")).kind).toBe("bad_request");
+  });
+});

@@ -12,6 +12,7 @@ dist/
 AGENTS.md
 agents.md
 .codex/
+.agents/
 *.swp
 *.swo
 
@@ -47,3 +48,12 @@ local/
 
 # Local upstream checkout used for Rettiwt API inspection.
 Rettiwt-API-dev/
+
+# Vex Electron desktop app build outputs
+vex-app/node_modules/
+vex-app/dist/
+vex-app/dist-electron/
+vex-app/.vite/
+vex-app/build/icons/
+vex-app/playwright-report/
+vex-app/test-results/

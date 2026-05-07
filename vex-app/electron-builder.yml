@@ -1,0 +1,63 @@
+appId: com.vex.app
+productName: Vex
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+# Stage 1 = unsigned dev release for internal team distribution.
+# Switch to forceCodeSigning: true + signing config gdy team ma certs (Phase 2+).
+forceCodeSigning: false
+
+asar: true
+electronUpdaterCompatibility: ">=2.16"
+afterPack: ./build/afterPack.mjs
+
+directories:
+  output: dist-electron
+  buildResources: build
+
+files:
+  - dist/main/**
+  - dist/preload/**
+  - dist/renderer/**
+  - package.json
+  # Exclude sourcemaps from packaged artifacts (security + size).
+  - "!dist/**/*.map"
+  - "!dist/**/*.tsbuildinfo"
+
+extraResources:
+  - from: resources/compose
+    to: compose
+    filter: ["**/*"]
+
+publish:
+  provider: github
+  releaseType: prerelease
+  vPrefixedTagName: true
+
+mac:
+  category: public.app-category.finance
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  notarize: false
+
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  verifyUpdateCodeSignature: false
+
+linux:
+  category: Finance
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]

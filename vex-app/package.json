@@ -1,0 +1,81 @@
+{
+  "name": "@vex/app",
+  "version": "0.1.0-dev",
+  "description": "Vex Electron desktop app — local self-custodial wallet + autonomous on-chain agent GUI",
+  "private": true,
+  "type": "module",
+  "main": "dist/main/index.js",
+  "engines": {
+    "node": ">=22.21.0"
+  },
+  "scripts": {
+    "build:main": "vite build --config vite.main.config.ts",
+    "build:preload": "vite build --config vite.preload.config.ts",
+    "build:renderer": "vite build --config vite.renderer.config.ts",
+    "build": "pnpm run build:main && pnpm run build:preload && pnpm run build:renderer",
+    "postbuild": "node scripts/check-build-artifacts.mjs",
+    "dev:renderer": "vite --config vite.renderer.config.ts",
+    "dev:main:watch": "vite build --config vite.main.config.ts --watch",
+    "dev:preload:watch": "vite build --config vite.preload.config.ts --watch",
+    "dev:electron": "wait-on http://127.0.0.1:5173 && electron dist/main/index.js",
+    "dev": "pnpm run build:main && pnpm run build:preload && concurrently --kill-others --names \"renderer,main,preload,electron\" \"pnpm:dev:renderer\" \"pnpm:dev:main:watch\" \"pnpm:dev:preload:watch\" \"pnpm:dev:electron\"",
+    "package": "pnpm run build && electron-builder --dir",
+    "make": "pnpm run build && electron-builder",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "audit:deps": "pnpm audit --prod && pnpm audit",
+    "doctor": "node scripts/doctor.mjs",
+    "predev": "node scripts/doctor.mjs",
+    "check:build": "node scripts/check-build-artifacts.mjs"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "~5.2.2",
+    "@hugeicons/core-free-icons": "~4.1.1",
+    "@hugeicons/react": "~1.1.6",
+    "@sentry/electron": "~7.13.0",
+    "@tanstack/react-query": "~5.100.9",
+    "@tanstack/react-virtual": "~3.13.24",
+    "dompurify": "~3.4.2",
+    "electron-log": "~5.4.3",
+    "electron-updater": "~6.8.3",
+    "marked": "~18.0.3",
+    "motion": "~12.38.0",
+    "pg": "~8.20.0",
+    "react": "~19.2.6",
+    "react-dom": "~19.2.6",
+    "react-hook-form": "~7.75.0",
+    "zod": "~4.4.3",
+    "zustand": "~5.0.13"
+  },
+  "devDependencies": {
+    "@electron/fuses": "~2.1.1",
+    "@playwright/test": "1.59.1",
+    "@tailwindcss/vite": "~4.2.4",
+    "@types/node": "~22.19.17",
+    "@types/pg": "~8.20.0",
+    "@types/react": "~19.2.14",
+    "@types/react-dom": "~19.2.3",
+    "@vitejs/plugin-react": "~6.0.1",
+    "concurrently": "^9.2.1",
+    "electron": "42.0.0",
+    "electron-builder": "~26.8.1",
+    "playwright": "1.59.1",
+    "sharp": "~0.34.5",
+    "tailwindcss": "~4.2.4",
+    "typescript": "6.0.3",
+    "vite": "~8.0.11",
+    "vitest": "~4.1.5",
+    "wait-on": "^9.0.5"
+  },
+  "packageManager": "pnpm@10.32.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "electron-winstaller",
+      "esbuild",
+      "sharp"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-electron/
+.vite/
+out/
+build/icons/
+coverage/
+.DS_Store
+*.log
+.env
+.env.local
+.env.*.local
+playwright-report/
+test-results/

@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024"],
+    "types": [],
+    "outDir": "./dist/shared",
+    "rootDir": "./src/shared"
+  },
+  "include": ["src/shared"]
+}

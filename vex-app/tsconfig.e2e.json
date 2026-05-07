@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM"],
+    "types": ["node"],
+    "outDir": "./dist/e2e",
+    "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["src/shared/*"]
+    }
+  },
+  "include": ["src/e2e", "src/shared"],
+  "references": [{ "path": "./tsconfig.shared.json" }]
+}
