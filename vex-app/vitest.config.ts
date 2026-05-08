@@ -4,6 +4,11 @@ import { defineConfig } from "vitest/config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Two projects so renderer component tests run under jsdom while main /
+ * shared / preload unit tests stay in pure node — keeps the existing
+ * suite fast and avoids accidental DOM globals in main-process code.
+ */
 export default defineConfig({
   resolve: {
     alias: {
@@ -12,9 +17,33 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "node",
-    globals: true,
-    include: ["src/**/__tests__/**/*.test.ts", "src/**/*.test.ts"],
-    setupFiles: [],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          globals: true,
+          include: [
+            "src/main/**/__tests__/**/*.test.ts",
+            "src/preload/**/__tests__/**/*.test.ts",
+            "src/shared/**/__tests__/**/*.test.ts",
+          ],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "renderer",
+          environment: "jsdom",
+          globals: true,
+          include: [
+            "src/renderer/**/__tests__/**/*.test.ts",
+            "src/renderer/**/__tests__/**/*.test.tsx",
+          ],
+          setupFiles: [path.resolve(__dirname, "src/renderer/test/setup.ts")],
+        },
+      },
+    ],
   },
 });

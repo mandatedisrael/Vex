@@ -3,7 +3,9 @@ import "./vex.d.ts";
 
 import React from "react";
 import { createRoot } from "react-dom/client";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App.js";
+import { queryClient } from "./app/queryClient.js";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("Missing #root");
@@ -25,6 +27,8 @@ createRoot(rootEl, {
   },
 }).render(
   <React.StrictMode>
-    <App />
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
   </React.StrictMode>
 );

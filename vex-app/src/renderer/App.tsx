@@ -1,13 +1,56 @@
-import { useEffect, useState } from "react";
+/**
+ * Top-level renderer state machine for Phase 1.
+ *
+ * Flow: splash → placeholder. Splash owns its own min-duration timer and
+ * calls back into `uiStore.setCurrentView('placeholder')` when ready.
+ * M2+ will introduce additional view kinds (system-check, docker, wizard)
+ * and stop hardcoding the splash → placeholder transition here.
+ *
+ * The legacy M0 capability/health/security cards are gated behind
+ * `import.meta.env.DEV` and are reachable via a dev-only side panel —
+ * they are not part of the user-facing flow.
+ */
+
+import { useCallback, useEffect, useState } from "react";
+import { Splash } from "./features/splash/Splash.js";
+import { PlaceholderShell } from "./features/placeholder/PlaceholderShell.js";
+import { useUiStore } from "./stores/uiStore.js";
 import type { Capabilities } from "../shared/schemas/capabilities.js";
 import type { HealthReport } from "../shared/schemas/system.js";
 
 export function App(): JSX.Element {
+  const currentView = useUiStore((s) => s.currentView);
+  const setCurrentView = useUiStore((s) => s.setCurrentView);
+
+  const handleSplashComplete = useCallback(() => {
+    setCurrentView("placeholder");
+  }, [setCurrentView]);
+
+  return (
+    <>
+      {currentView === "splash" ? (
+        <Splash onComplete={handleSplashComplete} />
+      ) : (
+        <PlaceholderShell />
+      )}
+      {import.meta.env.DEV ? <DevDiagnostics /> : null}
+    </>
+  );
+}
+
+/**
+ * Dev-only floating panel that surfaces the M0 IPC health probes. Hidden
+ * in production builds via `import.meta.env.DEV`, which Vite tree-shakes
+ * out of the bundle.
+ */
+function DevDiagnostics(): JSX.Element | null {
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [health, setHealth] = useState<HealthReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
+    if (!open) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -28,97 +71,45 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [open]);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-8">
-      <div className="flex flex-col items-center gap-3">
-        <h1 className="text-4xl font-semibold tracking-tight text-[--color-text-primary]">
-          Vex
-        </h1>
-        <p className="text-sm text-[--color-text-secondary]">
-          M0 — Security baseline scaffold
-        </p>
-      </div>
-
-      <div className="grid w-full max-w-xl gap-4">
-        <Card title="Capabilities">
+    <div className="fixed bottom-4 right-4 z-50">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="rounded-md border border-border bg-card px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--color-text-secondary)] hover:text-foreground"
+      >
+        dev · {open ? "hide" : "diagnostics"}
+      </button>
+      {open ? (
+        <section className="mt-2 w-72 rounded-md border border-border bg-card p-3 text-xs">
+          <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
+            M0 diagnostics
+          </h2>
           {capabilities ? (
-            <ul className="space-y-1 text-sm">
-              <li>Phase: <span className="font-mono text-[--color-accent-primary]">{capabilities.phase}</span></li>
-              <li>App version: <span className="font-mono">{capabilities.appVersion}</span></li>
-              <li>Onboarding complete: <span className="font-mono">{String(capabilities.onboardingComplete)}</span></li>
+            <ul className="mb-2 space-y-0.5 font-mono">
+              <li>phase: {capabilities.phase}</li>
+              <li>app: {capabilities.appVersion}</li>
+              <li>onboarded: {String(capabilities.onboardingComplete)}</li>
             </ul>
-          ) : (
-            <p className="text-sm text-[--color-text-muted]">Loading…</p>
-          )}
-        </Card>
-
-        <Card title="System health">
+          ) : null}
           {health ? (
-            <ul className="space-y-1 text-sm">
-              <li>Platform: <span className="font-mono">{health.os.platform} / {health.os.arch}</span></li>
-              <li>Electron: <span className="font-mono">{health.os.electronVersion}</span></li>
-              <li>Network: <span className="font-mono">{health.network.online ? "online" : "offline"}</span></li>
-              <li>Overall: <span className="font-mono">{health.overall}</span></li>
+            <ul className="mb-2 space-y-0.5 font-mono">
+              <li>os: {health.os.platform}/{health.os.arch}</li>
+              <li>electron: {health.os.electronVersion}</li>
+              <li>net: {health.network.online ? "online" : "offline"}</li>
+              <li>overall: {health.overall}</li>
             </ul>
-          ) : (
-            <p className="text-sm text-[--color-text-muted]">Probing…</p>
-          )}
-        </Card>
-
-        {error ? (
-          <Card title="Error">
-            <p className="text-sm text-[--color-danger]">{error}</p>
-          </Card>
-        ) : null}
-
-        <Card title="Security audit checklist (DevTools)">
-          <ul className="space-y-1 text-sm">
-            <li>
-              <code>typeof window.require</code>:{" "}
-              <span className="font-mono text-[--color-success]">
-                {typeof (window as unknown as { require?: unknown }).require}
-              </span>
-            </li>
-            <li>
-              <code>typeof window.process</code>:{" "}
-              <span className="font-mono text-[--color-success]">
-                {typeof (window as unknown as { process?: unknown }).process}
-              </span>
-            </li>
-            <li>
-              <code>typeof window.Buffer</code>:{" "}
-              <span className="font-mono text-[--color-success]">
-                {typeof (window as unknown as { Buffer?: unknown }).Buffer}
-              </span>
-            </li>
-            <li>
-              <code>typeof window.vex</code>:{" "}
-              <span className="font-mono text-[--color-success]">
-                {typeof window.vex}
-              </span>
-            </li>
+          ) : null}
+          <ul className="space-y-0.5 font-mono">
+            <li>require: {typeof (window as unknown as { require?: unknown }).require}</li>
+            <li>process: {typeof (window as unknown as { process?: unknown }).process}</li>
+            <li>vex: {typeof window.vex}</li>
           </ul>
-        </Card>
-      </div>
-    </main>
-  );
-}
-
-function Card({
-  title,
-  children,
-}: {
-  readonly title: string;
-  readonly children: React.ReactNode;
-}): JSX.Element {
-  return (
-    <section className="rounded-lg border border-[--color-bg-overlay] bg-[--color-bg-elevated] p-4">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[--color-text-secondary]">
-        {title}
-      </h2>
-      {children}
-    </section>
+          {error ? <p className="mt-2 text-destructive">{error}</p> : null}
+        </section>
+      ) : null}
+    </div>
   );
 }
