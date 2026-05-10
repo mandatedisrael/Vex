@@ -1,0 +1,196 @@
+/**
+ * Wizard schemas — Phase 1 setup ceremony (M7–M11).
+ *
+ * Three concerns share this module:
+ *   1. Form-side password schema (renderer React Hook Form)
+ *   2. IPC boundary schemas for `vex.onboarding.{keystoreSet,getWizardState,setWizardState}`
+ *   3. Persistent wizard progress shape (`${ELECTRON_STATE_DIR}/wizard-state.json`)
+ *
+ * `WIZARD_STEP_IDS` is the single source of truth for step ordering — sidebar
+ * rendering, schema enums, and forward-safe transition validation all derive
+ * from this list. Adding/removing a step in M8–M11 is one edit here
+ * (codex turn 5 RED #1).
+ *
+ * "keystore" as the step id is historical and matches the env var name
+ * (`VEX_KEYSTORE_PASSWORD`) the step writes — UX copy refers to the
+ * configured value as "master password" / "password" because M7 only
+ * persists the credential, it does not create or unlock a keystore file
+ * (codex turn 5 RED #2).
+ */
+
+import { z } from "zod";
+
+// ── Step ordering — single source of truth (codex turn 5 RED #1) ────────────
+export const WIZARD_STEP_IDS = [
+  "keystore",
+  "wallets",
+  "apiKeys",
+  "embedding",
+  "agentCore",
+  "provider",
+  "mode",
+  "wake",
+  "review",
+] as const;
+
+export const wizardStepIdSchema = z.enum(WIZARD_STEP_IDS);
+export type WizardStepId = z.infer<typeof wizardStepIdSchema>;
+
+const stepIndex = (id: WizardStepId): number =>
+  WIZARD_STEP_IDS.indexOf(id);
+
+// ── Form-side schema (renderer only) ───────────────────────────────────────
+const PASSWORD_MIN = 8;
+
+export const keystorePasswordSchema = z
+  .object({
+    password: z.string().min(PASSWORD_MIN, {
+      message: `Password must be at least ${PASSWORD_MIN} characters.`,
+    }),
+    confirm: z.string(),
+  })
+  .refine((d) => d.password === d.confirm, {
+    message: "Passwords do not match.",
+    path: ["confirm"],
+  });
+
+export type KeystorePasswordInput = z.infer<typeof keystorePasswordSchema>;
+
+// ── IPC: keystoreSet ───────────────────────────────────────────────────────
+// Confirm-match validation is renderer-side only; main never sees the
+// confirm field so a malicious renderer cannot bypass the rule by
+// invoking IPC directly with `{password, confirm}` shapes.
+export const keystoreSetInputSchema = z
+  .object({
+    password: z.string().min(PASSWORD_MIN, {
+      message: `Password must be at least ${PASSWORD_MIN} characters.`,
+    }),
+  })
+  .strict();
+
+export type KeystoreSetInput = z.infer<typeof keystoreSetInputSchema>;
+
+export const keystoreSetResultSchema = z
+  .object({
+    kind: z.enum(["set", "unchanged"]),
+  })
+  .strict();
+
+export type KeystoreSetResult = z.infer<typeof keystoreSetResultSchema>;
+
+// ── Wizard state (persisted) ───────────────────────────────────────────────
+
+// Canonical-prefix predicate (codex turn 6 RED): completedSteps must be
+// a contiguous prefix of WIZARD_STEP_IDS. A renderer cannot persist
+// "completedSteps: ['wake']" without also persisting every step before
+// it — closes the door on the wizard skipping forward into Step 9
+// (Review) with an arbitrary subset that bypasses the actual setup.
+function isCanonicalPrefix(steps: ReadonlyArray<WizardStepId>): boolean {
+  if (steps.length === 0) return true;
+  const set = new Set(steps);
+  if (set.size !== steps.length) return false;
+  for (const id of set) {
+    const idx = stepIndex(id);
+    for (let i = 0; i < idx; i++) {
+      const prior = WIZARD_STEP_IDS[i];
+      if (prior === undefined) continue;
+      if (!set.has(prior)) return false;
+    }
+  }
+  return true;
+}
+
+const completedStepsSchema = z
+  .array(wizardStepIdSchema)
+  .readonly()
+  .refine(
+    (arr) => new Set(arr).size === arr.length,
+    { message: "completedSteps must contain unique step ids." }
+  )
+  .refine(isCanonicalPrefix, {
+    message:
+      "completedSteps must be a canonical prefix of the wizard step list (no gaps).",
+  });
+
+// Forward-safe transition predicate (codex turn 5 small adjustment):
+// currentStepId must be at-or-after the latest completed step in the
+// canonical order. Prevents stale-state corruption (e.g. an old file
+// claiming currentStepId="keystore" while completedSteps already
+// contains "wallets") from sending the user back through completed
+// ground. Applied at BOTH the persisted shape (load-time) AND the
+// IPC input (caller validation) — the same invariant.
+function isForwardSafe(s: {
+  readonly currentStepId: WizardStepId;
+  readonly completedSteps: ReadonlyArray<WizardStepId>;
+}): boolean {
+  if (s.completedSteps.length === 0) return true;
+  const maxCompleted = Math.max(
+    ...s.completedSteps.map((id) => stepIndex(id))
+  );
+  return stepIndex(s.currentStepId) >= maxCompleted;
+}
+
+// Completed-flag invariant (codex turn 6 RED): `completed === true`
+// is allowed ONLY when currentStepId === "review" AND completedSteps
+// contains every step before review. WizardShell uses `completed` as
+// a single boolean to skip-to-app on a finished install; without
+// this fence a renderer could persist `completed: true` at any step
+// and bypass the entire ceremony. Fail closed.
+const REVIEW_PRECONDITION = WIZARD_STEP_IDS.filter((id) => id !== "review");
+
+function isCompletedConsistent(s: {
+  readonly currentStepId: WizardStepId;
+  readonly completedSteps: ReadonlyArray<WizardStepId>;
+  readonly completed?: boolean;
+}): boolean {
+  if (s.completed !== true) return true;
+  if (s.currentStepId !== "review") return false;
+  const have = new Set(s.completedSteps);
+  for (const required of REVIEW_PRECONDITION) {
+    if (!have.has(required)) return false;
+  }
+  return true;
+}
+
+const FORWARD_SAFE_MESSAGE =
+  "currentStepId must be at-or-after the latest completed step.";
+const COMPLETED_CONSISTENT_MESSAGE =
+  "completed=true requires currentStepId='review' and every prior step in completedSteps.";
+
+export const wizardStateSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    currentStepId: wizardStepIdSchema,
+    completedSteps: completedStepsSchema,
+    completed: z.boolean(),
+  })
+  .strict()
+  .refine(isForwardSafe, { message: FORWARD_SAFE_MESSAGE })
+  .refine(isCompletedConsistent, { message: COMPLETED_CONSISTENT_MESSAGE });
+
+export type WizardState = z.infer<typeof wizardStateSchema>;
+
+export const defaultWizardState: WizardState = {
+  schemaVersion: 1,
+  currentStepId: "keystore",
+  completedSteps: [],
+  completed: false,
+};
+
+// IPC: setWizardState input mirrors the persisted shape minus schemaVersion
+// (the store owns versioning). `completed` is optional on input — most
+// step transitions only update currentStepId + completedSteps.
+export const setWizardStateInputSchema = z
+  .object({
+    currentStepId: wizardStepIdSchema,
+    completedSteps: completedStepsSchema,
+    completed: z.boolean().optional(),
+  })
+  .strict()
+  .refine(isForwardSafe, { message: FORWARD_SAFE_MESSAGE })
+  .refine(isCompletedConsistent, { message: COMPLETED_CONSISTENT_MESSAGE });
+
+export type SetWizardStateInput = z.infer<typeof setWizardStateInputSchema>;
+
+export const wizardStateResultSchema = wizardStateSchema;
+export type WizardStateResult = z.infer<typeof wizardStateResultSchema>;

@@ -71,7 +71,7 @@ describe("Migrations component", () => {
     expect(queryByRole("button", { name: /Retry/ })).toBeNull();
   });
 
-  it("auto-advances to placeholder on noop", async () => {
+  it("auto-advances to wizard on noop", async () => {
     mockMigrate.mockResolvedValue({
       ok: true,
       data: {
@@ -82,7 +82,7 @@ describe("Migrations component", () => {
     render(<Migrations />);
     await waitFor(
       () => {
-        expect(mockSetCurrentView).toHaveBeenCalledWith("placeholder");
+        expect(mockSetCurrentView).toHaveBeenCalledWith("wizard");
       },
       { timeout: 1500 }
     );

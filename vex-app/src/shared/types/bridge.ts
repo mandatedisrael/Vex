@@ -24,6 +24,12 @@ import type {
 } from "../schemas/docker.js";
 import type { EnvState } from "../schemas/onboarding.js";
 import type {
+  KeystoreSetInput,
+  KeystoreSetResult,
+  SetWizardStateInput,
+  WizardState,
+} from "../schemas/wizard.js";
+import type {
   HealthReport,
   NetworkProbe,
   OsInfo,
@@ -86,6 +92,13 @@ export interface VexBridge {
 
   readonly onboarding: {
     readonly getEnvState: () => Promise<Result<EnvState>>;
+    readonly getWizardState: () => Promise<Result<WizardState>>;
+    readonly setWizardState: (
+      input: SetWizardStateInput
+    ) => Promise<Result<WizardState>>;
+    readonly keystoreSet: (
+      input: KeystoreSetInput
+    ) => Promise<Result<KeystoreSetResult>>;
   };
 
   readonly settings: {

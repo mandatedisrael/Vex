@@ -98,12 +98,14 @@ export function Migrations(): JSX.Element {
     };
   }, [retryToken]);
 
-  // No migrations to apply → auto-advance after a short delay so the
-  // user sees the up-to-date message without needing to click.
+  // No migrations to apply → auto-advance to the wizard after a short
+  // delay so the user sees the up-to-date message without needing to
+  // click. The wizard itself decides whether to render Step 1 or
+  // skip-to-app based on `wizard-state.json` + envState (M7).
   useEffect(() => {
     if (state.phase !== "noop") return;
     const timer = setTimeout(
-      () => setCurrentView("placeholder"),
+      () => setCurrentView("wizard"),
       NOOP_AUTOADVANCE_MS
     );
     return () => clearTimeout(timer);
@@ -165,7 +167,7 @@ export function Migrations(): JSX.Element {
               </Button>
             ) : null}
             {state.phase === "ready" ? (
-              <Button onClick={() => setCurrentView("placeholder")}>
+              <Button onClick={() => setCurrentView("wizard")}>
                 Continue
               </Button>
             ) : null}

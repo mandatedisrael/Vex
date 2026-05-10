@@ -20,4 +20,5 @@ export const dockerKeys = {
 export const onboardingKeys = {
   all: ["onboarding"] as const,
   envState: () => ["onboarding", "envState"] as const,
+  wizardState: () => ["onboarding", "wizardState"] as const,
 };

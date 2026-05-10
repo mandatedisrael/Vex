@@ -40,6 +40,8 @@ export const CH = {
   // Onboarding — wizard step actions (M7–M11)
   onboarding: {
     getEnvState: "vex:onboarding:getEnvState",
+    getWizardState: "vex:onboarding:getWizardState",
+    setWizardState: "vex:onboarding:setWizardState",
     keystoreSet: "vex:onboarding:keystoreSet",
     walletGenerateEvm: "vex:onboarding:walletGenerateEvm",
     walletImportEvm: "vex:onboarding:walletImportEvm",

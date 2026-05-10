@@ -22,6 +22,10 @@ import {
   installMethodSchema,
   installProgressSchema,
 } from "../shared/schemas/docker.js";
+import {
+  keystoreSetInputSchema,
+  setWizardStateInputSchema,
+} from "../shared/schemas/wizard.js";
 import type { VexBridge } from "../shared/types/bridge.js";
 
 function newRequestId(): string {
@@ -156,6 +160,23 @@ const api = {
   onboarding: {
     getEnvState() {
       return invokeWithSchema(CH.onboarding.getEnvState, {});
+    },
+    getWizardState() {
+      return invokeWithSchema(CH.onboarding.getWizardState, {});
+    },
+    setWizardState(input: import("../shared/schemas/wizard.js").SetWizardStateInput) {
+      return invokeWithSchema(
+        CH.onboarding.setWizardState,
+        input,
+        setWizardStateInputSchema
+      );
+    },
+    keystoreSet(input: import("../shared/schemas/wizard.js").KeystoreSetInput) {
+      return invokeWithSchema(
+        CH.onboarding.keystoreSet,
+        input,
+        keystoreSetInputSchema
+      );
     },
   },
 

@@ -24,6 +24,7 @@ export type View =
   | "dockerBootstrap"
   | "composeBootstrap"
   | "migrations"
+  | "wizard"
   | "placeholder";
 
 export interface UiLogEntry {
