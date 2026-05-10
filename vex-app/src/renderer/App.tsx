@@ -18,7 +18,7 @@ import { BootstrapPanel } from "./features/docker/BootstrapPanel.js";
 import { ComposeBootstrap } from "./features/compose/ComposeBootstrap.js";
 import { Migrations } from "./features/database/Migrations.js";
 import { PlaceholderShell } from "./features/placeholder/PlaceholderShell.js";
-import { useUiStore } from "./stores/uiStore.js";
+import { useUiStore, type View } from "./stores/uiStore.js";
 import type { Capabilities } from "../shared/schemas/capabilities.js";
 import type { HealthReport } from "../shared/schemas/system.js";
 
@@ -30,21 +30,22 @@ export function App(): JSX.Element {
     setCurrentView("systemCheck");
   }, [setCurrentView]);
 
+  // Dispatch map keeps view routing flat: adding a view = one entry,
+  // not a new ternary branch. Keep the map inline (no separate registry
+  // module) until M7+ wizard step views need real per-step prop wiring
+  // or lazy loading (codex turn 4).
+  const views: Record<View, () => JSX.Element> = {
+    splash: () => <Splash onComplete={handleSplashComplete} />,
+    systemCheck: () => <SystemCheck />,
+    dockerBootstrap: () => <BootstrapPanel />,
+    composeBootstrap: () => <ComposeBootstrap />,
+    migrations: () => <Migrations />,
+    placeholder: () => <PlaceholderShell />,
+  };
+
   return (
     <>
-      {currentView === "splash" ? (
-        <Splash onComplete={handleSplashComplete} />
-      ) : currentView === "systemCheck" ? (
-        <SystemCheck />
-      ) : currentView === "dockerBootstrap" ? (
-        <BootstrapPanel />
-      ) : currentView === "composeBootstrap" ? (
-        <ComposeBootstrap />
-      ) : currentView === "migrations" ? (
-        <Migrations />
-      ) : (
-        <PlaceholderShell />
-      )}
+      {views[currentView]()}
       {import.meta.env.DEV ? <DevDiagnostics /> : null}
     </>
   );

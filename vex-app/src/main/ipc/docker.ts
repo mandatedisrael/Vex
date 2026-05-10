@@ -6,7 +6,6 @@
  * + domain-namespaced event subscriptions; for M2 we only ship detection.
  */
 
-import { BrowserWindow } from "electron";
 import { z } from "zod";
 import { CH, EV } from "@shared/ipc/channels.js";
 import { ok, type Result } from "@shared/ipc/result.js";
@@ -35,7 +34,8 @@ import {
 import { buildRenderDeps } from "../compose/deps-factory.js";
 import { log } from "../logger/index.js";
 import { CONFIG_DIR } from "../paths/config-dir.js";
-import { setDbConnection } from "../state/db-connection-state.js";
+import { setDbConnection } from "../database/connection-state.js";
+import { broadcastToAllWindows } from "../lifecycle/broadcast.js";
 import { registerHandler } from "./register-handler.js";
 
 const empty = z.object({}).strict();
@@ -50,23 +50,15 @@ const DEFAULT_PG_PORT = 55432;
 const DEFAULT_MODEL_RUNNER_BASE_URL = "http://127.0.0.1:12434/engines/llama.cpp/v1";
 
 function broadcastProgress(): () => void {
-  return dockerProgressBus.subscribe((payload) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send(EV.docker.installProgress, payload);
-      }
-    }
-  });
+  return dockerProgressBus.subscribe((payload) =>
+    broadcastToAllWindows(EV.docker.installProgress, payload)
+  );
 }
 
 function broadcastComposeLogs(): () => void {
-  return composeLogBus.subscribe((payload) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send(EV.docker.composeLogs, payload);
-      }
-    }
-  });
+  return composeLogBus.subscribe((payload) =>
+    broadcastToAllWindows(EV.docker.composeLogs, payload)
+  );
 }
 
 export function registerDockerHandlers(): Array<() => void> {

@@ -1,41 +1,13 @@
 /**
- * Tiny in-process pub/sub for docker install/compose progress events.
- * The IPC handler subscribes here and forwards every payload to all
- * live BrowserWindows via `webContents.send`. This decouples the
- * spawn runners (which only know `(line) => emit(...)`) from the
- * preload subscription wiring.
+ * Typed Bus singletons for Docker install + compose log streams.
+ * Backed by the generic `Bus<T>` primitive in `../events/event-bus.ts`
+ * — the named instances live here so consumers grep by domain
+ * (`dockerProgressBus`, `composeLogBus`) instead of an anonymous
+ * `new Bus<...>()` call site.
  */
 
 import type { ComposeLog, InstallProgress } from "@shared/schemas/docker.js";
-
-class Bus<T> {
-  private readonly listeners = new Set<(payload: T) => void>();
-
-  emit(payload: T): void {
-    for (const listener of this.listeners) {
-      try {
-        listener(payload);
-      } catch {
-        // a misbehaving listener must not poison the rest of the bus
-      }
-    }
-  }
-
-  subscribe(listener: (payload: T) => void): () => void {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
-
-  size(): number {
-    return this.listeners.size;
-  }
-
-  clear(): void {
-    this.listeners.clear();
-  }
-}
+import { Bus } from "../events/event-bus.js";
 
 export const dockerProgressBus = new Bus<InstallProgress>();
 export const composeLogBus = new Bus<ComposeLog>();

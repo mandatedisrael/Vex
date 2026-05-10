@@ -1,15 +1,15 @@
 /**
  * Builds a `pg.Pool` config from the compose state held in
- * `state/db-connection-state.ts`. Reads the password from the secret
- * file the compose stack mounts — that file is owned by main and never
- * crosses the preload boundary.
+ * `connection-state.ts`. Reads the password from the secret file the
+ * compose stack mounts — that file is owned by main and never crosses
+ * the preload boundary.
  *
  * Returns `null` when no compose has run yet; callers must surface
  * that as a user-facing failure (compose bootstrap must succeed first).
  */
 
 import { promises as fs } from "node:fs";
-import { getDbConnection } from "../state/db-connection-state.js";
+import { getDbConnection } from "./connection-state.js";
 
 export interface DbPoolConfig {
   readonly host: string;

@@ -163,10 +163,10 @@ const api = {
     getPreferences() {
       return invokeWithSchema(CH.settings.getPreferences, {});
     },
-    setTelemetryConsent(enabled: boolean) {
+    setTelemetryConsent(input: { enabled: boolean }) {
       return invokeWithSchema(
         CH.settings.setTelemetryConsent,
-        { enabled },
+        input,
         z.object({ enabled: setTelemetryConsentSchema }).strict()
       );
     },

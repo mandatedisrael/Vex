@@ -12,7 +12,6 @@
  * (codex turn 1 RED #1).
  */
 
-import { BrowserWindow } from "electron";
 import { CH, EV } from "@shared/ipc/channels.js";
 import { ok, err, type Result } from "@shared/ipc/result.js";
 import {
@@ -25,19 +24,16 @@ import {
   runMigrationsForIpc,
   type MigrateRunResult,
 } from "../database/migrate-runner.js";
+import { broadcastToAllWindows } from "../lifecycle/broadcast.js";
 import { log } from "../logger/index.js";
 import { registerHandler } from "./register-handler.js";
 
 const PROGRESS_CHANNEL = EV.database.migrateProgress;
 
 function broadcastMigrationProgress(): () => void {
-  return migrationProgressBus.subscribe((payload) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send(PROGRESS_CHANNEL, payload);
-      }
-    }
-  });
+  return migrationProgressBus.subscribe((payload) =>
+    broadcastToAllWindows(PROGRESS_CHANNEL, payload)
+  );
 }
 
 function mapToResult(

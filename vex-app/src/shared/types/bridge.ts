@@ -91,7 +91,7 @@ export interface VexBridge {
   readonly settings: {
     readonly getPreferences: () => Promise<Result<Preferences>>;
     readonly setTelemetryConsent: (
-      enabled: boolean
+      input: { readonly enabled: boolean }
     ) => Promise<Result<Preferences>>;
   };
 
