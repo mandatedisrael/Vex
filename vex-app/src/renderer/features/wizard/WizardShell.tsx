@@ -29,19 +29,19 @@ import {
 import { useUiStore } from "../../stores/uiStore.js";
 import { useWizardState } from "../../lib/api/wizard.js";
 import { ProgressSidebar } from "./ProgressSidebar.js";
+import { AgentCoreStep } from "./steps/AgentCoreStep.js";
+import { ApiKeysStep } from "./steps/ApiKeysStep.js";
+import { EmbeddingStep } from "./steps/EmbeddingStep.js";
 import { KeystoreStep } from "./steps/KeystoreStep.js";
 import { WalletsStep } from "./steps/WalletsStep.js";
 import { PlaceholderStep } from "./steps/PlaceholderStep.js";
 
-type StepMilestone = "M9" | "M10" | "M11";
+type StepMilestone = "M10" | "M11";
 
 const PLACEHOLDER_MILESTONE: Record<
-  Exclude<WizardStepId, "keystore" | "wallets">,
+  Exclude<WizardStepId, "keystore" | "wallets" | "apiKeys" | "embedding" | "agentCore">,
   StepMilestone
 > = {
-  apiKeys: "M9",
-  embedding: "M9",
-  agentCore: "M9",
   provider: "M10",
   mode: "M11",
   wake: "M11",
@@ -61,6 +61,21 @@ function renderStep(
   if (stepId === "wallets") {
     return (
       <WalletsStep completedSteps={completedSteps} onAdvance={onAdvance} />
+    );
+  }
+  if (stepId === "apiKeys") {
+    return (
+      <ApiKeysStep completedSteps={completedSteps} onAdvance={onAdvance} />
+    );
+  }
+  if (stepId === "embedding") {
+    return (
+      <EmbeddingStep completedSteps={completedSteps} onAdvance={onAdvance} />
+    );
+  }
+  if (stepId === "agentCore") {
+    return (
+      <AgentCoreStep completedSteps={completedSteps} onAdvance={onAdvance} />
     );
   }
   return (

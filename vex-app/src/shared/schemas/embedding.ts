@@ -11,7 +11,7 @@ import { z } from "zod";
 import {
   MAX_EMBEDDING_DIM,
   MIN_EMBEDDING_DIM,
-} from "@vex-lib/embedding.js";
+} from "@vex-lib/embedding-constants.js";
 
 function isValidEmbeddingUrl(raw: string): boolean {
   let parsed: URL;

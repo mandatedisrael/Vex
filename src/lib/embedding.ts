@@ -14,8 +14,15 @@
 
 import { readFileSync } from "node:fs";
 
-export const MIN_EMBEDDING_DIM = 1;
-export const MAX_EMBEDDING_DIM = 8192;
+export {
+  MAX_EMBEDDING_DIM,
+  MIN_EMBEDDING_DIM,
+} from "./embedding-constants.js";
+
+import {
+  MAX_EMBEDDING_DIM,
+  MIN_EMBEDDING_DIM,
+} from "./embedding-constants.js";
 
 export interface EmbeddingDefaultValues {
   readonly baseUrl: string;

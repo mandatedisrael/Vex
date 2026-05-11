@@ -43,6 +43,18 @@ vi.mock("../steps/WalletsStep.js", () => ({
   WalletsStep: () => <div data-testid="wallets-step" />,
 }));
 
+vi.mock("../steps/ApiKeysStep.js", () => ({
+  ApiKeysStep: () => <div data-testid="apikeys-step" />,
+}));
+
+vi.mock("../steps/EmbeddingStep.js", () => ({
+  EmbeddingStep: () => <div data-testid="embedding-step" />,
+}));
+
+vi.mock("../steps/AgentCoreStep.js", () => ({
+  AgentCoreStep: () => <div data-testid="agentcore-step" />,
+}));
+
 vi.mock("../steps/PlaceholderStep.js", () => ({
   PlaceholderStep: ({ stepId, milestone }: { stepId: string; milestone: string }) => (
     <div data-testid="placeholder-step" data-step={stepId} data-milestone={milestone} />
@@ -125,7 +137,7 @@ describe("WizardShell", () => {
     await findByTestId("wallets-step");
   });
 
-  it("renders PlaceholderStep with M9 milestone for the apiKeys step (still placeholder)", async () => {
+  it("renders ApiKeysStep when persisted.currentStepId === 'apiKeys' (M9)", async () => {
     mockUseWizardState.mockReturnValue(
       makeQueryResult({
         ok: true,
@@ -138,9 +150,57 @@ describe("WizardShell", () => {
       })
     );
     const { findByTestId } = renderWithQuery(<WizardShell />);
+    await findByTestId("apikeys-step");
+  });
+
+  it("renders EmbeddingStep when persisted.currentStepId === 'embedding' (M9)", async () => {
+    mockUseWizardState.mockReturnValue(
+      makeQueryResult({
+        ok: true,
+        data: {
+          schemaVersion: 1,
+          currentStepId: "embedding",
+          completedSteps: ["keystore", "wallets", "apiKeys"],
+          completed: false,
+        },
+      })
+    );
+    const { findByTestId } = renderWithQuery(<WizardShell />);
+    await findByTestId("embedding-step");
+  });
+
+  it("renders AgentCoreStep when persisted.currentStepId === 'agentCore' (M9)", async () => {
+    mockUseWizardState.mockReturnValue(
+      makeQueryResult({
+        ok: true,
+        data: {
+          schemaVersion: 1,
+          currentStepId: "agentCore",
+          completedSteps: ["keystore", "wallets", "apiKeys", "embedding"],
+          completed: false,
+        },
+      })
+    );
+    const { findByTestId } = renderWithQuery(<WizardShell />);
+    await findByTestId("agentcore-step");
+  });
+
+  it("renders PlaceholderStep with M10 milestone for the provider step (still placeholder)", async () => {
+    mockUseWizardState.mockReturnValue(
+      makeQueryResult({
+        ok: true,
+        data: {
+          schemaVersion: 1,
+          currentStepId: "provider",
+          completedSteps: ["keystore", "wallets", "apiKeys", "embedding", "agentCore"],
+          completed: false,
+        },
+      })
+    );
+    const { findByTestId } = renderWithQuery(<WizardShell />);
     const node = await findByTestId("placeholder-step");
-    expect(node.getAttribute("data-step")).toBe("apiKeys");
-    expect(node.getAttribute("data-milestone")).toBe("M9");
+    expect(node.getAttribute("data-step")).toBe("provider");
+    expect(node.getAttribute("data-milestone")).toBe("M10");
   });
 
   it("flips view to placeholder when persisted.completed === true", async () => {

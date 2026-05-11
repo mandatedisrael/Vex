@@ -33,6 +33,9 @@ import {
   walletOpenBackupFolderInputSchema,
   walletRestoreInputSchema,
 } from "../shared/schemas/wallets.js";
+import { apiKeysSetInputSchema } from "../shared/schemas/api-keys.js";
+import { embeddingConfigureInputSchema } from "../shared/schemas/embedding.js";
+import { agentCoreConfigureInputSchema } from "../shared/schemas/agent-core.js";
 import type { VexBridge } from "../shared/types/bridge.js";
 
 function newRequestId(): string {
@@ -225,6 +228,27 @@ const api = {
         CH.onboarding.walletOpenBackupFolder,
         input,
         walletOpenBackupFolderInputSchema
+      );
+    },
+    apiKeysSet(input: import("../shared/schemas/api-keys.js").ApiKeysSetInput) {
+      return invokeWithSchema(
+        CH.onboarding.apiKeysSet,
+        input,
+        apiKeysSetInputSchema
+      );
+    },
+    embeddingConfigure(input: import("../shared/schemas/embedding.js").EmbeddingConfigureInput) {
+      return invokeWithSchema(
+        CH.onboarding.embeddingConfigure,
+        input,
+        embeddingConfigureInputSchema
+      );
+    },
+    agentCoreConfigure(input: import("../shared/schemas/agent-core.js").AgentCoreConfigureInput) {
+      return invokeWithSchema(
+        CH.onboarding.agentCoreConfigure,
+        input,
+        agentCoreConfigureInputSchema
       );
     },
   },

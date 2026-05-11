@@ -42,6 +42,18 @@ import type {
   WalletRestoreResult,
 } from "../schemas/wallets.js";
 import type {
+  ApiKeysSetInput,
+  ApiKeysSetResult,
+} from "../schemas/api-keys.js";
+import type {
+  EmbeddingConfigureInput,
+  EmbeddingConfigureResult,
+} from "../schemas/embedding.js";
+import type {
+  AgentCoreConfigureInput,
+  AgentCoreConfigureResult,
+} from "../schemas/agent-core.js";
+import type {
   HealthReport,
   NetworkProbe,
   OsInfo,
@@ -125,6 +137,15 @@ export interface VexBridge {
     readonly walletOpenBackupFolder: (
       input: WalletOpenBackupFolderInput
     ) => Promise<Result<WalletOpenBackupFolderResult>>;
+    readonly apiKeysSet: (
+      input: ApiKeysSetInput
+    ) => Promise<Result<ApiKeysSetResult>>;
+    readonly embeddingConfigure: (
+      input: EmbeddingConfigureInput
+    ) => Promise<Result<EmbeddingConfigureResult>>;
+    readonly agentCoreConfigure: (
+      input: AgentCoreConfigureInput
+    ) => Promise<Result<AgentCoreConfigureResult>>;
   };
 
   readonly settings: {
