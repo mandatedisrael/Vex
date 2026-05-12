@@ -30,6 +30,10 @@ import { registerAllIpcHandlers } from "./ipc/register-all.js";
 import { cleanupOnBoot, cleanupOnQuit } from "./lifecycle/secret-cleanup.js";
 import { globalCleanup } from "./lifecycle/cleanup-registry.js";
 import { createMainWindow } from "./windows/main-window.js";
+import {
+  disableSentry,
+  initSentryIfConsented,
+} from "./telemetry/sentry-lifecycle.js";
 
 /**
  * Remap Electron's userData onto CONFIG_DIR/.electron-state BEFORE any
@@ -107,6 +111,16 @@ app.whenReady().then(async () => {
   globalCleanup.add(() => cleanupOnQuit());
   void cleanupOnBoot().catch((err) => {
     log.error("[main] cleanupOnBoot failed", err);
+  });
+
+  // 6b. Sentry — honors prior opt-in if any. Idempotent + lazy-imports the
+  // SDK only when consent + DSN are both present (codex v3 hard fix #2).
+  // Tear-down on quit closes the transport + clears the offline queue.
+  void initSentryIfConsented().catch((err) => {
+    log.error("[main] initSentryIfConsented failed", err);
+  });
+  globalCleanup.add(async () => {
+    await disableSentry();
   });
 
   // 7. Main window

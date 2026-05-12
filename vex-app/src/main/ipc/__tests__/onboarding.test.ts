@@ -100,6 +100,8 @@ describe("vex.onboarding.getEnvState handler", () => {
       },
       walletStatus: { evm: "missing", solana: "missing" },
       provider: { configured: false, name: null, modelLabel: null },
+      mode: { selected: null, loopMode: null, hasInitialPrompt: false, coherent: false },
+      wake: { enabled: false, intervalMs: null, batchSize: null, coherent: true },
       setupCompleteFlag: false,
     });
     registerOnboardingHandlers();

@@ -5,7 +5,6 @@
 import { app, net } from "electron";
 import { promises as fs } from "node:fs";
 import os from "node:os";
-import path from "node:path";
 import { z } from "zod";
 import { CH } from "@shared/ipc/channels.js";
 import { ok, type Result } from "@shared/ipc/result.js";
@@ -18,6 +17,7 @@ import {
   type OsInfo,
   type OsPlatform,
 } from "@shared/schemas/system.js";
+import { SETUP_COMPLETE_FILE } from "../paths/config-dir.js";
 import { registerHandler } from "./register-handler.js";
 
 const empty = z.object({}).strict();
@@ -82,7 +82,7 @@ async function probeNetwork(): Promise<NetworkProbe> {
 
 async function setupCompleteFlag(): Promise<boolean> {
   try {
-    await fs.access(path.join(app.getPath("userData"), ".setup-complete"));
+    await fs.access(SETUP_COMPLETE_FILE);
     return true;
   } catch {
     return false;

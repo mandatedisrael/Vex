@@ -13,7 +13,10 @@ import { registerOnboardingHandlers } from "./onboarding.js";
 import { registerAgentCoreHandler } from "./onboarding/agent-core.js";
 import { registerApiKeysHandler } from "./onboarding/api-keys.js";
 import { registerEmbeddingHandler } from "./onboarding/embedding.js";
+import { registerFinalizeHandler } from "./onboarding/finalize.js";
+import { registerModeHandler } from "./onboarding/mode.js";
 import { registerProviderHandler } from "./onboarding/provider.js";
+import { registerWakeHandler } from "./onboarding/wake.js";
 import { registerWalletHandlers } from "./onboarding/wallets.js";
 import { registerSettingsHandlers } from "./settings.js";
 import { registerSystemHandlers } from "./system.js";
@@ -32,6 +35,9 @@ export function registerAllIpcHandlers(): void {
   teardowns.push(registerEmbeddingHandler());
   teardowns.push(registerAgentCoreHandler());
   teardowns.push(registerProviderHandler());
+  teardowns.push(registerModeHandler());
+  teardowns.push(registerWakeHandler());
+  teardowns.push(registerFinalizeHandler());
   teardowns.push(...registerSettingsHandlers());
   teardowns.push(registerTelemetryHandler());
 

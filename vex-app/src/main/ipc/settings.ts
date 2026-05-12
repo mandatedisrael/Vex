@@ -10,6 +10,10 @@ import {
   type Preferences,
 } from "@shared/schemas/preferences.js";
 import { preferencesStore } from "../preferences/store.js";
+import {
+  disableSentry,
+  initSentryIfConsented,
+} from "../telemetry/sentry-lifecycle.js";
 import { registerHandler } from "./register-handler.js";
 
 const empty = z.object({}).strict();
@@ -49,6 +53,14 @@ export function registerSettingsHandlers(): Array<() => void> {
             consentedAt: enabled ? new Date().toISOString() : null,
           },
         });
+        // M11: keep Sentry SDK lifecycle in sync with consent state.
+        // initSentryIfConsented + disableSentry are both idempotent so a
+        // double-flip (e.g. "off" → "off") is harmless.
+        if (enabled) {
+          await initSentryIfConsented();
+        } else {
+          await disableSentry();
+        }
         return ok(next);
       },
     })

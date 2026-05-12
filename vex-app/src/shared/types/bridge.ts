@@ -58,6 +58,18 @@ import type {
   ProviderPersistResult,
 } from "../schemas/provider.js";
 import type {
+  ModeSetInput,
+  ModeSetResult,
+} from "../schemas/mode.js";
+import type {
+  WakeSetInput,
+  WakeSetResult,
+} from "../schemas/wake.js";
+import type {
+  CompleteSetupInput,
+  CompleteSetupResult,
+} from "../schemas/finalize.js";
+import type {
   HealthReport,
   NetworkProbe,
   OsInfo,
@@ -153,6 +165,15 @@ export interface VexBridge {
     readonly providerPersist: (
       input: ProviderPersistInput
     ) => Promise<Result<ProviderPersistResult>>;
+    readonly modeSet: (
+      input: ModeSetInput
+    ) => Promise<Result<ModeSetResult>>;
+    readonly wakeSet: (
+      input: WakeSetInput
+    ) => Promise<Result<WakeSetResult>>;
+    readonly completeSetup: (
+      input: CompleteSetupInput
+    ) => Promise<Result<CompleteSetupResult>>;
   };
 
   readonly settings: {

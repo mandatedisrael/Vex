@@ -37,6 +37,9 @@ import { apiKeysSetInputSchema } from "../shared/schemas/api-keys.js";
 import { embeddingConfigureInputSchema } from "../shared/schemas/embedding.js";
 import { agentCoreConfigureInputSchema } from "../shared/schemas/agent-core.js";
 import { providerPersistInputSchema } from "../shared/schemas/provider.js";
+import { modeSetInputSchema } from "../shared/schemas/mode.js";
+import { wakeSetInputSchema } from "../shared/schemas/wake.js";
+import { completeSetupInputSchema } from "../shared/schemas/finalize.js";
 import type { VexBridge } from "../shared/types/bridge.js";
 
 function newRequestId(): string {
@@ -257,6 +260,27 @@ const api = {
         CH.onboarding.providerPersist,
         input,
         providerPersistInputSchema
+      );
+    },
+    modeSet(input: import("../shared/schemas/mode.js").ModeSetInput) {
+      return invokeWithSchema(
+        CH.onboarding.modeSet,
+        input,
+        modeSetInputSchema
+      );
+    },
+    wakeSet(input: import("../shared/schemas/wake.js").WakeSetInput) {
+      return invokeWithSchema(
+        CH.onboarding.wakeSet,
+        input,
+        wakeSetInputSchema
+      );
+    },
+    completeSetup(input: import("../shared/schemas/finalize.js").CompleteSetupInput) {
+      return invokeWithSchema(
+        CH.onboarding.completeSetup,
+        input,
+        completeSetupInputSchema
       );
     },
   },

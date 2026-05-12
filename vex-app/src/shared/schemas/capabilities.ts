@@ -16,6 +16,15 @@ export const capabilitiesSchema = z
     phase: phaseSchema,
     appVersion: z.string(),
     onboardingComplete: z.boolean(),
+    /**
+     * M11: `true` iff Sentry telemetry can be enabled in this build —
+     * i.e. a DSN is resolvable at runtime. Renderer hides the consent
+     * checkbox when false (replaces with a "telemetry unavailable in
+     * this build" notice). Phase 1 resolves DSN from
+     * `process.env.VEX_SENTRY_DSN`; M14 adds a build-time-baked
+     * fallback for packaged dev releases.
+     */
+    telemetryAvailable: z.boolean(),
     features: z
       .object({
         // Phase 1

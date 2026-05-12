@@ -6,7 +6,6 @@
 
 import { app } from "electron";
 import { promises as fs } from "node:fs";
-import path from "node:path";
 import { z } from "zod";
 import { CH } from "@shared/ipc/channels.js";
 import { ok, type Result } from "@shared/ipc/result.js";
@@ -14,14 +13,15 @@ import {
   capabilitiesSchema,
   type Capabilities,
 } from "@shared/schemas/capabilities.js";
+import { SETUP_COMPLETE_FILE } from "../paths/config-dir.js";
+import { resolveDsn } from "../telemetry/dsn.js";
 import { registerHandler } from "./register-handler.js";
 
 const inputSchema = z.object({}).strict();
 
 async function isOnboardingComplete(): Promise<boolean> {
   try {
-    const flagPath = path.join(app.getPath("userData"), ".setup-complete");
-    await fs.access(flagPath);
+    await fs.access(SETUP_COMPLETE_FILE);
     return true;
   } catch {
     return false;
@@ -36,10 +36,15 @@ export function registerCapabilitiesHandler(): () => void {
     outputSchema: capabilitiesSchema,
     handle: async (): Promise<Result<Capabilities>> => {
       const onboardingComplete = await isOnboardingComplete();
+      // Sentry-free DSN resolution per codex v3 hard fix #2 — keeping
+      // capabilities.get() out of the SDK load path so a renderer can
+      // poll for `telemetryAvailable` without ever touching @sentry/electron.
+      const telemetryAvailable = resolveDsn() !== null;
       const caps: Capabilities = capabilitiesSchema.parse({
         phase: "phase1",
         appVersion: app.getVersion(),
         onboardingComplete,
+        telemetryAvailable,
         features: {
           splash: true,
           systemCheck: true,

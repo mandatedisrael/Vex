@@ -1,17 +1,27 @@
 /**
- * vex.telemetry.reportRendererError — no-op stub bez consent.
+ * vex.telemetry.reportRendererError — Sentry-backed renderer error
+ * forwarder (M11 upgrade).
  *
- * Per plan §L: Sentry SDK NIE init przed user explicit consent. Renderer code
- * może bezpiecznie wywoływać `window.vex.telemetry.reportRendererError(...)`
- * — jeśli consent NIE granted, returns ok({}) bez network call.
+ * Behaviour:
+ *   - No consent → ok({recorded:false}) silently. Renderer uses the
+ *     same `window.vex.telemetry.reportRendererError` call path
+ *     regardless of consent state — no branching in renderer code.
+ *   - Consent granted but Sentry SDK not initialized (DSN missing /
+ *     init failed) → also ok({recorded:false}). The SDK lifecycle
+ *     module already logs the reason.
+ *   - Consent granted + SDK initialized → captureRendererError forwards
+ *     via dynamic import so the @sentry/electron module stays unloaded
+ *     pre-consent (codex v3 hard fix #2).
  *
- * Phase 2 (lub M11 z consent): zastąp ten stub real Sentry capture.
+ * The redacting `beforeSend` + breadcrumb allowlist handle the actual
+ * scrubbing on the SDK side.
  */
 
 import { z } from "zod";
 import { CH } from "@shared/ipc/channels.js";
 import { ok, type Result } from "@shared/ipc/result.js";
 import { preferencesStore } from "../preferences/store.js";
+import { captureRendererError } from "../telemetry/sentry-lifecycle.js";
 import { registerHandler } from "./register-handler.js";
 
 const reportInput = z
@@ -33,15 +43,14 @@ export function registerTelemetryHandler(): () => void {
     handle: async (input): Promise<Result<{ recorded: boolean }>> => {
       const prefs = await preferencesStore.load();
       if (!prefs.telemetry.enabled) {
-        // No-op: user has not opted in. Silently drop.
         return ok({ recorded: false });
       }
-      // Phase 1: even with consent, we do NOT log raw renderer error messages
-      // — they may contain wallet addresses, tx hashes, or other sensitive
-      // strings. Real Sentry capture with full redacting beforeSend hook lands
-      // in M11 (per plan §L). Until then, return recorded:false silently.
-      void input;
-      return ok({ recorded: false });
+      const recorded = await captureRendererError({
+        kind: input.kind,
+        message: input.message,
+        componentStack: input.componentStack ?? null,
+      });
+      return ok({ recorded });
     },
   });
 }
