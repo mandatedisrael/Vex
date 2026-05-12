@@ -1,0 +1,57 @@
+# E2E Test Stack — pgvector Postgres + EmbeddingGemma in Model Runner.
+# Postgres on host port 5777 (was 5555) so MCP E2E + dev share the same port.
+# Postgres uses tmpfs — data is wiped on `down` for fast scenario rebuilds.
+# Embeddings runtime uses Docker Model Runner (port 12434, fixed by runner).
+#
+# Requires: Docker Engine >=4.40, Compose >=2.38.1, Model Runner active.
+
+models:
+  embeddings:
+    # Pinned tag — same as docker-compose.dev.yml so the embedding contract is shared.
+    # Distributed under the Gemma Terms of Use — see https://ai.google.dev/gemma/terms.
+    model: ai/embeddinggemma:300M-Q8_0
+
+services:
+  vex-db:
+    build: ./postgres
+    ports:
+      - "5777:5432"
+    environment:
+      POSTGRES_DB: vex_test
+      POSTGRES_USER: vex
+      POSTGRES_PASSWORD: vex
+    # Dummy puller carrier — see docker-compose.dev.yml for the rationale.
+    # Per Compose docs, top-level `models:` alone does not trigger pull;
+    # at least one service must explicitly grant itself access via `models:`.
+    # Postgres ignores the auto-injected env vars but Compose now pulls
+    # ai/embeddinggemma:300M-Q8_0 as part of `compose up`.
+    models:
+      - embeddings
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vex -d vex_test"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+    # Postgres 18+ requires the mount at /var/lib/postgresql (parent), NOT
+    # /var/lib/postgresql/data. PGDATA is now version-specific
+    # (/var/lib/postgresql/18/docker) so the parent directory carries the data.
+    # See docker-library/postgres PR #1259 — mounting on /data fails fast on pg18+.
+    tmpfs:
+      - /var/lib/postgresql
+
+  # WSL2 workaround: Docker Desktop's "Enable host-side TCP support" binds port
+  # 12434 to Windows localhost, which is NOT the same as WSL2 localhost (separate
+  # network namespace). The agent running in WSL2 cannot reach Windows localhost
+  # directly. This sidecar listens on 12434 inside the compose network, forwards
+  # to model-runner.docker.internal:80 (Docker Desktop's internal DNS for Model
+  # Runner, reachable from any container), and exposes 12434 on the WSL2 host via
+  # Docker's normal port publishing. Net effect: `curl localhost:12434/...` works
+  # from WSL2 host. No-op on native Linux or macOS where host-side TCP already
+  # binds to the correct loopback — but harmless (second process can't bind the
+  # same port there, so just remove this service or leave it stopped).
+  embeddings-proxy:
+    image: alpine/socat:1.8.0.3
+    command: ["-d", "TCP-LISTEN:12434,fork,reuseaddr", "TCP:model-runner.docker.internal:80"]
+    ports:
+      - "12434:12434"
+    restart: unless-stopped
