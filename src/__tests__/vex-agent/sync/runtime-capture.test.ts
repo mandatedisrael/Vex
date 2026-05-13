@@ -1,9 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("@tools/0g-compute/compute-state.js", () => ({
-  loadComputeState: () => null,
-}));
-
 vi.mock("@vex-agent/db/repos/executions.js", () => ({
   recordExecution: vi.fn().mockResolvedValue(1),
 }));

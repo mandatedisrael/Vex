@@ -46,7 +46,7 @@ describe("capture contract — structural coverage", () => {
 
   it("pnl_spot tools all have capture:full", () => {
     const spot = getToolsByRole("pnl_spot");
-    expect(spot.length).toBe(7);
+    expect(spot.length).toBe(3);
     for (const [toolId, c] of spot) {
       expect(c.capture, `${toolId} should have capture:full`).toBe("full");
     }
@@ -178,8 +178,8 @@ describe("capture contract — runtime validator", () => {
   });
 
   it("passes capture:none regardless of tradeCapture", () => {
-    expect(validateCaptureContract("echobook.post.create", null)).toBe(true);
-    expect(validateCaptureContract("echobook.post.create", { type: "social" })).toBe(true);
+    expect(validateCaptureContract("polymarket.bridge.deposit", null)).toBe(true);
+    expect(validateCaptureContract("polymarket.bridge.deposit", { type: "bridge" })).toBe(true);
   });
 
   it("passes unknown toolId (not in matrix)", () => {
@@ -261,14 +261,6 @@ describe("capture contract — valuation expectations", () => {
     for (const toolId of ["polymarket.clob.buy", "polymarket.clob.sell"]) {
       const c = MUTATION_MATRIX.get(toolId)!;
       expect(c.valuationExpected, `${toolId} should be "conditional"`).toBe("conditional");
-    }
-  });
-
-  it("none tools have valuationExpected: 'none'", () => {
-    const noneSpotTools = ["jaine.swap.buy", "jaine.swap.sell", "slop.trade.buy", "slop.trade.sell"];
-    for (const toolId of noneSpotTools) {
-      const c = MUTATION_MATRIX.get(toolId)!;
-      expect(c.valuationExpected, `${toolId} should be "none"`).toBe("none");
     }
   });
 
@@ -401,15 +393,15 @@ describe("capture contract — required meta fields", () => {
 
 describe("capture contract — preview detection", () => {
   it("detects preview for tools with previewSupport", () => {
-    expect(isPreviewExecution("jaine.swap.sell", { dryRun: true })).toBe(true);
+    expect(isPreviewExecution("kyberswap.swap.sell", { dryRun: true })).toBe(true);
     expect(isPreviewExecution("kyberswap.limitOrder.batchFill", { dryRun: true })).toBe(true);
     expect(isPreviewExecution("khalani.bridge", { dryRun: true })).toBe(true);
     expect(isPreviewExecution("polymarket.clob.buy", { dryRun: true })).toBe(true);
   });
 
   it("does not detect preview when dryRun is false or absent", () => {
-    expect(isPreviewExecution("jaine.swap.sell", { dryRun: false })).toBe(false);
-    expect(isPreviewExecution("jaine.swap.sell", {})).toBe(false);
+    expect(isPreviewExecution("kyberswap.swap.sell", { dryRun: false })).toBe(false);
+    expect(isPreviewExecution("kyberswap.swap.sell", {})).toBe(false);
   });
 
   it("does not detect preview for tools without previewSupport", () => {

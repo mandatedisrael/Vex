@@ -1,10 +1,8 @@
 /**
  * Wizard Step 6 — Provider configuration (M10).
  *
- * Two tabs: OpenRouter (active, full inline flow) + 0G Compute
- * (Phase 2B placeholder — clickable but inert per codex turn 2
- * YELLOW). Single "Verify and save" action does verify-then-persist
- * atomically (codex turn 2 RED #1):
+ * OpenRouter inline flow. Single "Verify and save" action does
+ * verify-then-persist atomically (codex turn 2 RED #1):
  *
  *   1. Renderer reads apiKey from uncontrolled DOM ref + model from
  *      regular React state.
@@ -24,7 +22,7 @@
  * Skip-card branch: when `envState.provider.configured` is true the
  * user sees the current provider + modelLabel summary + Continue
  * button. "Reconfigure" reveals the form. Effective provider is
- * resolved in main per engine precedence (`registry.ts:41-108`).
+ * resolved in main per engine precedence.
  *
  * AGENT_MODEL is NOT a secret — model ids are public catalogue
  * entries — so it stays in React state. The OPENROUTER_API_KEY input
@@ -54,12 +52,6 @@ import {
 } from "../../../components/ui/card.js";
 import { Input } from "../../../components/ui/input.js";
 import { Label } from "../../../components/ui/label.js";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "../../../components/ui/tabs.js";
 import { PasswordField } from "../../../components/common/PasswordField.js";
 import { useEnvState } from "../../../lib/api/onboarding.js";
 import {
@@ -147,10 +139,6 @@ export function ProviderStep({
   const [serverError, setServerError] = useState<ServerError | null>(null);
   const [successLatencyMs, setSuccessLatencyMs] = useState<number | null>(null);
   const [showOverride, setShowOverride] = useState(false);
-  const [activeTab, setActiveTab] = useState<"openrouter" | "zerog">(
-    "openrouter",
-  );
-
   const apiKeyRef = useRef<HTMLInputElement | null>(null);
 
   const providerState =
@@ -243,9 +231,7 @@ export function ProviderStep({
           <CardDescription>
             {effectiveName === "openrouter"
               ? "OpenRouter is active. Settings apply on next agent restart."
-              : effectiveName === "0g-compute"
-                ? "0G Compute is active. Settings apply on next agent restart."
-                : "A provider is configured."}
+              : "A provider is configured."}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -292,167 +278,122 @@ export function ProviderStep({
       <CardHeader>
         <CardTitle>Inference provider</CardTitle>
         <CardDescription>
-          Vex needs an inference provider. Phase 1 supports OpenRouter
-          inline (hosted). 0G Compute inline ceremony ships in
-          Phase 2B.
+          Vex needs an OpenRouter key and model id before starting the
+          agent.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs
-          value={activeTab}
-          onValueChange={(v) =>
-            setActiveTab(v === "zerog" ? "zerog" : "openrouter")
-          }
+        <form
+          onSubmit={(e) => {
+            void onSubmit(e);
+          }}
+          noValidate
+          className="flex flex-col gap-5"
+          data-vex-wizard-provider-form="openrouter"
         >
-          <TabsList className="mb-5">
-            <TabsTrigger value="openrouter" data-vex-wizard-provider-tab="openrouter">
-              OpenRouter
-            </TabsTrigger>
-            <TabsTrigger value="zerog" data-vex-wizard-provider-tab="zerog">
-              0G Compute
-              <span className="ml-2 rounded-sm border border-muted-foreground/30 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                Phase 2B
-              </span>
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="vex-provider-key">OpenRouter API key</Label>
+            <PasswordField
+              id="vex-provider-key"
+              ref={apiKeyRef}
+              placeholder="sk-or-..."
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              Create or copy your key at{" "}
+              <a
+                href="https://openrouter.ai/keys"
+                target="_blank"
+                rel="noreferrer"
+                className="underline hover:text-foreground"
+              >
+                openrouter.ai/keys
+              </a>
+              . Stored on this machine in your local config and sent only
+              to OpenRouter when you invoke the agent.
+            </p>
+          </div>
 
-          <TabsContent value="openrouter">
-            <form
-              onSubmit={(e) => {
-                void onSubmit(e);
-              }}
-              noValidate
-              className="flex flex-col gap-5"
-              data-vex-wizard-provider-form="openrouter"
-            >
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="vex-provider-key">OpenRouter API key</Label>
-                <PasswordField
-                  id="vex-provider-key"
-                  ref={apiKeyRef}
-                  placeholder="sk-or-…"
-                  autoFocus
-                />
-                <p className="text-xs text-muted-foreground">
-                  Create or copy your key at{" "}
-                  <a
-                    href="https://openrouter.ai/keys"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline hover:text-foreground"
-                  >
-                    openrouter.ai/keys
-                  </a>
-                  . Stored on this machine in your local config and sent
-                  only to OpenRouter when you invoke the agent.
-                </p>
-              </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="vex-provider-model">Model id</Label>
+            <Input
+              id="vex-provider-model"
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="anthropic/claude-sonnet-4.5"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Browse model ids at{" "}
+              <a
+                href="https://openrouter.ai/models"
+                target="_blank"
+                rel="noreferrer"
+                className="underline hover:text-foreground"
+              >
+                openrouter.ai/models
+              </a>
+              .
+            </p>
+          </div>
 
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="vex-provider-model">Model id</Label>
-                <Input
-                  id="vex-provider-model"
-                  type="text"
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder="anthropic/claude-sonnet-4.5"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Browse model ids at{" "}
-                  <a
-                    href="https://openrouter.ai/models"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline hover:text-foreground"
-                  >
-                    openrouter.ai/models
-                  </a>
-                  .
-                </p>
-              </div>
+          {clientError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {clientError}
+            </p>
+          ) : null}
 
-              {clientError ? (
-                <p className="text-sm text-destructive" role="alert">
-                  {clientError}
-                </p>
-              ) : null}
-
-              {serverError ? (
-                <div
-                  role="alert"
-                  data-vex-provider-error={String(serverError.code)}
-                  className="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive-foreground"
-                >
-                  <strong className="block font-semibold">
-                    {uiCopyFor(String(serverError.code)).title}
-                  </strong>
-                  <p className="mt-1">
-                    {uiCopyFor(String(serverError.code)).body}
-                  </p>
-                  {serverError.correlationId ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Correlation id:{" "}
-                      <code className="font-mono">
-                        {serverError.correlationId}
-                      </code>
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {successLatencyMs !== null ? (
-                <div
-                  role="status"
-                  data-vex-provider-success="true"
-                  className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200"
-                >
-                  OpenRouter verified ({successLatencyMs}ms). Settings
-                  apply on next agent restart.
-                </div>
-              ) : null}
-
-              <div className="flex justify-end gap-3">
-                <Button
-                  type="submit"
-                  disabled={submitting || stepAdvance.isPending}
-                >
-                  {submitting
-                    ? "Verifying…"
-                    : stepAdvance.isPending
-                      ? "Continuing…"
-                      : flowMode === "back-edit"
-                        ? "Verify and return to review"
-                        : "Verify and save"}
-                </Button>
-              </div>
-            </form>
-          </TabsContent>
-
-          <TabsContent value="zerog">
+          {serverError ? (
             <div
-              className="flex flex-col gap-4 text-sm"
-              data-vex-wizard-provider-zerog="placeholder"
+              role="alert"
+              data-vex-provider-error={String(serverError.code)}
+              className="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive-foreground"
             >
-              <p>
-                0G Compute is a decentralised inference network. Full
-                GUI setup including the on-chain deposit ceremony
-                ships in Phase 2B. For now, use OpenRouter to finish
-                your wizard.
+              <strong className="block font-semibold">
+                {uiCopyFor(String(serverError.code)).title}
+              </strong>
+              <p className="mt-1">
+                {uiCopyFor(String(serverError.code)).body}
               </p>
-              <div>
-                <Button
-                  variant="ghost"
-                  onClick={() => setActiveTab("openrouter")}
-                  data-vex-wizard-provider-zerog-back="true"
-                >
-                  Back to OpenRouter
-                </Button>
-              </div>
+              {serverError.correlationId ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Correlation id:{" "}
+                  <code className="font-mono">
+                    {serverError.correlationId}
+                  </code>
+                </p>
+              ) : null}
             </div>
-          </TabsContent>
-        </Tabs>
+          ) : null}
+
+          {successLatencyMs !== null ? (
+            <div
+              role="status"
+              data-vex-provider-success="true"
+              className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200"
+            >
+              OpenRouter verified ({successLatencyMs}ms). Settings apply on
+              next agent restart.
+            </div>
+          ) : null}
+
+          <div className="flex justify-end gap-3">
+            <Button
+              type="submit"
+              disabled={submitting || stepAdvance.isPending}
+            >
+              {submitting
+                ? "Verifying..."
+                : stepAdvance.isPending
+                  ? "Continuing..."
+                  : flowMode === "back-edit"
+                    ? "Verify and return to review"
+                    : "Verify and save"}
+            </Button>
+          </div>
+        </form>
       </CardContent>
     </Card>
   );

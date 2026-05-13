@@ -89,8 +89,6 @@ vi.mock("@vex-agent/tools/protocols/catalog.js", () => ({
   } : undefined,
 }));
 
-vi.mock("@tools/0g-compute/compute-state.js", () => ({ loadComputeState: () => null }));
-
 const { executeProtocolTool } = await import("../../../vex-agent/tools/protocols/runtime.js");
 
 describe("pre-engine hardening — runtime gate", () => {
@@ -220,7 +218,7 @@ describe("pre-engine hardening — runtime gate", () => {
     fakeHandler.mockResolvedValueOnce({
       success: true,
       output: "OK",
-      data: { _tradeCapture: { type: "swap", chain: "0g", status: "executed" } },
+      data: { _tradeCapture: { type: "swap", chain: "ethereum", status: "executed" } },
     });
 
     await executeProtocolTool(

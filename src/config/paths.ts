@@ -28,12 +28,6 @@ export const KEYSTORE_FILE = join(CONFIG_DIR, "keystore.json");
 export const SOLANA_KEYSTORE_FILE = join(CONFIG_DIR, "solana-keystore.json");
 export const INTENTS_DIR = join(CONFIG_DIR, "intents");
 export const JWT_FILE = join(CONFIG_DIR, "jwt.json");
-export const SLOP_JWT_FILE = join(CONFIG_DIR, "slop-jwt.json");
-
-// 0G Storage paths
-export const STORAGE_DRIVE_FILE = join(CONFIG_DIR, "storage-drive.json");
-
-// Backup paths
 // App-specific .env (provider-neutral)
 export const ENV_FILE = join(CONFIG_DIR, ".env");
 

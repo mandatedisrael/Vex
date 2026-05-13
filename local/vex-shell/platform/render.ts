@@ -21,7 +21,7 @@ import type { BootstrapResult } from "./bootstrap.js";
 import { isSyncEnabled, isWakeEnabled } from "./runtime.js";
 
 export interface ProviderSummary {
-  name: "openrouter" | "0g-compute" | "none";
+  name: "openrouter" | "none";
   detail: string;
 }
 

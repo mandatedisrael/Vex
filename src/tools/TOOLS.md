@@ -12,21 +12,14 @@
 
 | Folder | Protocol / Service | Chain | Files | Docs |
 |--------|--------------------|-------|-------|------|
-| `0g-compute/` | 0G Compute Network (inference, ledger, monitor) | 0G | 11 | [0G-COMPUTE.md](0g-compute/0G-COMPUTE.md) |
-| `0g-storage/` | 0G Storage (file upload/download, virtual drive) | 0G | 5 | [0G-STORAGE.md](0g-storage/0G-STORAGE.md) |
-| `chainscan/` | ChainScan block explorer API | 0G | 4 | [CHAINSCAN.md](chainscan/CHAINSCAN.md) |
 | `dexscreener/` | DexScreener analytics (REST + WS) | Multi-chain | 5 | [DexScreener.md](dexscreener/DexScreener.md) |
-| `echobook/` | EchoBook social trading platform | — | 14 | [ECHOBOOK.md](echobook/ECHOBOOK.md) |
-| `jaine/` | Jaine DEX (Uniswap V3 fork, routing, subgraph) | 0G | 18 | [JAINE.md](jaine/JAINE.md) |
 | `khalani/` | Khalani cross-chain bridge (40+ chains) | Multi-chain | 7 | [Khalani.md](khalani/Khalani.md) |
 | `kyberswap/` | KyberSwap aggregator, limit orders, ZaaS | 18 EVM chains | 22 | [KyberSwap.md](kyberswap/KyberSwap.md) |
 | `polymarket/` | Polymarket prediction markets (CLOB, Gamma, Relayer) | Polygon | 22 | [Polymarket.md](polymarket/Polymarket.md) |
-| `slop/` | Slop.money bonding curves (math, auth, ABIs) | 0G | 8 | [SLOP.md](slop/SLOP.md) |
-| `slop-app/` | Slop.money social APIs (profile, chat, image, agents) | — | 4 | [SLOP-APP.md](slop-app/SLOP-APP.md) |
 | `solana-ecosystem/` | Jupiter (swap, prices, tokens, lend, predict) + shared Solana utils | Solana | 35 | [Jupiter.md](solana-ecosystem/jupiter/Jupiter.md) |
 | `wallet/` | Multi-chain keystore, signing, native balances | EVM + Solana | 12 | [WALLET.md](wallet/WALLET.md) |
 
-**Total: ~167 files across 13 modules**
+**Total: ~123 files across 6 modules**
 
 ---
 
@@ -43,11 +36,11 @@ constants.ts      — URLs, limits, addresses, fee tiers
 ```
 
 Some modules extend this with:
-- `abi/` — Contract ABIs for on-chain interaction (Jaine, Slop)
-- `subgraph/` — GraphQL clients for indexed data (Jaine)
+- `abi/` — Contract ABIs for on-chain interaction
+- `subgraph/` — GraphQL clients for indexed data
 - `ws-client.ts` — WebSocket streaming (DexScreener)
 - `signing.ts` — Protocol-specific cryptographic signing (Polymarket CLOB)
-- `auth.ts` — JWT/HMAC authentication flows (Slop, EchoBook, Polymarket)
+- `auth.ts` — JWT/HMAC authentication flows (Polymarket)
 
 ---
 
@@ -55,7 +48,6 @@ Some modules extend this with:
 
 | Chain Family | Chains | Protocols |
 |-------------|--------|-----------|
-| **0G Network** | 0G Mainnet (16661) | Jaine, Slop, ChainScan, 0G Compute, 0G Storage, EchoBook |
 | **EVM** | Ethereum, Polygon, Arbitrum, Optimism, BSC, Avalanche, Base, + 11 more | KyberSwap, Khalani, Polymarket, DexScreener |
 | **Solana** | Solana Mainnet | Jupiter (swap, lend, predict, prices, tokens) |
 
@@ -77,9 +69,9 @@ Some modules extend this with:
 
 | Dependency | Used by |
 |-----------|---------|
-| `viem` | Wallet, Jaine, Slop, Khalani, KyberSwap, Polymarket (EVM reads/writes) |
+| `viem` | Wallet, Khalani, KyberSwap, Polymarket (EVM reads/writes) |
 | `@solana/web3.js` | Wallet, Jupiter, Khalani-Solana |
 | `config/store.ts` | Every module (service URLs, contract addresses) |
 | `utils/http.ts` | Every REST client |
-| `utils/rateLimit.ts` | ChainScan, Jaine subgraph, KyberSwap |
+| `utils/rateLimit.ts` | KyberSwap |
 | `errors.ts` | Every module (VexError with domain-specific codes) |

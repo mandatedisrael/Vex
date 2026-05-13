@@ -18,13 +18,11 @@ import type {
 // ── Ecosystem derivation from groupId ──────────────────────────
 
 const GROUP_ECOSYSTEMS: Record<ProtocolNavigationGroupId, readonly string[]> = {
-  "0g-ecosystem": ["0g"],
   "evm-trading": ["evm"],
   "solana": ["solana"],
   "cross-chain": ["evm", "solana", "crosschain"],
   "prediction-markets": ["evm", "solana"],
   "market-research": ["multichain"],
-  "reserved": [],
 };
 
 // ── sourceClass derivation from namespace ──────────────────────
@@ -34,14 +32,9 @@ type SourceClass = ToolDiscoveryMetadata["sourceClass"];
 const NAMESPACE_SOURCE_CLASS: Record<string, SourceClass> = {
   dexscreener: "specialized_market",
   polymarket: "specialized_market",
-  chainscan: "onchain_verification",
-  echobook: "social",
   khalani: "protocol_native",
   kyberswap: "protocol_native",
   solana: "protocol_native",
-  jaine: "protocol_native",
-  slop: "protocol_native",
-  "slop-app": "social",
 };
 
 // ── Operation derivation ───────────────────────────────────────

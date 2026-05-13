@@ -366,7 +366,7 @@ describe("subagent handlers", () => {
       mockGetParentSession.mockResolvedValueOnce({ parentSessionId: "parent-s", subagentId: "sub-1" });
 
       const result = await handleSubagentRequestParent(
-        { question: "Which DEX for 0G swaps?" },
+        { question: "Which venue should handle this swap?" },
         childContext,
       );
 
@@ -375,8 +375,8 @@ describe("subagent handlers", () => {
       expect(result.engineSignal!.type).toBe("wait_for_parent");
       expect(result.engineSignal!.reason).toBe("waiting_for_parent");
       expect(mockSendStructuredMessage).toHaveBeenCalledWith(
-        "sub-1", "to_parent", "Which DEX for 0G swaps?", "request_parent",
-        expect.objectContaining({ question: "Which DEX for 0G swaps?" }),
+        "sub-1", "to_parent", "Which venue should handle this swap?", "request_parent",
+        expect.objectContaining({ question: "Which venue should handle this swap?" }),
       );
       expect(mockUpdateStatus).toHaveBeenCalledWith("sub-1", "waiting_for_parent");
     });
@@ -418,14 +418,14 @@ describe("subagent handlers", () => {
       });
 
       const result = await handleSubagentReply(
-        { id: "sub-1", reply: "Use Jaine", message_id: 42 },
+        { id: "sub-1", reply: "Use KyberSwap", message_id: 42 },
         baseContext,
       );
 
       expect(result.success).toBe(true);
       expect(mockSendStructuredMessage).toHaveBeenCalledWith(
-        "sub-1", "to_child", "Use Jaine", "reply",
-        expect.objectContaining({ reply: "Use Jaine" }),
+        "sub-1", "to_child", "Use KyberSwap", "reply",
+        expect.objectContaining({ reply: "Use KyberSwap" }),
         42,
       );
       expect(mockMarkHandled).toHaveBeenCalledWith(42);

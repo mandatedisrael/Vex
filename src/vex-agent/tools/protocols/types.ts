@@ -20,14 +20,7 @@ export type ProtocolNamespace =
   | "kyberswap"
   | "solana"
   | "polymarket"
-  | "0g-compute"
-  | "0g-storage"
-  | "jaine"
-  | "slop"
-  | "dexscreener"
-  | "echobook"
-  | "chainscan"
-  | "slop-app";
+  | "dexscreener";
 
 /**
  * Lifecycle state of a protocol manifest.

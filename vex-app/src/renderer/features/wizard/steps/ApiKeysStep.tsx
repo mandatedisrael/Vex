@@ -15,8 +15,6 @@
  * Polymarket trio: schema enforces all-or-none. Renderer only emits
  * the trio when the user types at least one of the three; if any
  * one is filled, the form requires all three before submit.
- *
- * CHAINSCAN: never rendered (user clarification locked).
  */
 
 import { useCallback, useRef, useState, type JSX } from "react";

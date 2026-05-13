@@ -20,15 +20,14 @@ pnpm exec tsx --tsconfig local/vex-shell/tsconfig.json local/vex-shell/index.ts
    4. **API keys** — `JUPITER_API_KEY` (required) + `TAVILY_API_KEY`,
       `RETTIWT_API_KEY` for `twitter_account` read-only X/Twitter research,
       Polymarket CLOB trio (`POLYMARKET_API_KEY` / `_API_SECRET` /
-      `_PASSPHRASE`), `CHAINSCAN_API_KEY` (optional).
+      `_PASSPHRASE`).
    5. **Embedding** — optional override of `EMBEDDING_{BASE_URL,MODEL,DIM,
       PROVIDER}`. `DIM` is locked when `knowledge_entries` is non-empty.
    6. **Agent core** — optional `AGENT_CONTEXT_LIMIT` /
       `AGENT_MAX_OUTPUT_TOKENS` / `AGENT_TEMPERATURE` + all six `SUBAGENT_*`.
    7. **Provider** — OpenRouter (API key prompt + manual model id text input
-      — find IDs at https://openrouter.ai/models) or 0G Compute (guided
-      readiness + deposit + fund + ack + smoke via the existing readline
-      flow). The `/v1/models` fetch was removed — operator picks the id.
+      — find IDs at https://openrouter.ai/models). The `/v1/models` fetch was
+      removed — operator picks the id.
    8. **Mode** — `agent` / `mission`, permission (`restricted` / `full`),
       and a mission goal when mission mode is selected. Wake is always-on and
       not user-configurable.
@@ -57,7 +56,7 @@ footer); inline edit forms appear in a yellow box with `Enter` to save and
 `Esc` to cancel.
 
 1. **Provider** — `k` edit OPENROUTER_API_KEY, `m` edit AGENT_MODEL +
-   re-switch, `o` activate OpenRouter, `g` activate 0G.
+   re-switch, `o` activate OpenRouter.
 2. **Session** — `n` new, `e` end current, `↑↓`
    navigate recent, `Enter` resume.
 3. **Mission** — `s` start ready mission (restricted), `a` abort active run.
@@ -136,9 +135,6 @@ Knobs (env vars; not surfaced in the wizard):
   currently runs with `maxIterations=15`. If setup keeps calling tools
   without a final text response, it will hit the iteration limit silently;
   watch for `stopReason=iteration_limit` in the Sidebar error line.
-- The wizard's 0G Compute branch still delegates to the readline-based
-  `chooseProvider()` for the on-chain ceremony (deposit + fund + ack +
-  smoke). Replacing it with a native @clack flow is a declared follow-up.
 - Settings tabs that mutate engine state (`runTool`, `rejectApproval`,
   `saveConfigPatch`, provider hot-switch, services start/stop) all run
   synchronously through `engine-actions.ts` + the engine exports added in

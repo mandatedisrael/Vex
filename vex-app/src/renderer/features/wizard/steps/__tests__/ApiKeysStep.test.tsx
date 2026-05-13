@@ -7,7 +7,7 @@
  *  - Form rejects partial Polymarket trio at the renderer level.
  *  - Successful submit clears all input refs synchronously and advances.
  *  - "Skip optional" advances without calling setApiKeys.
- *  - CHAINSCAN field NOT rendered.
+ *  - Legacy API-key fields are not rendered.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -261,12 +261,12 @@ describe("ApiKeysStep", () => {
     expect(mockSetApiKeys).not.toHaveBeenCalled();
   });
 
-  it("does NOT render a CHAINSCAN field anywhere in the form", () => {
+  it("does not render legacy API-key fields in the form", () => {
     mockUseEnvState.mockReturnValue(makeQueryResult(envState()));
     const { container } = renderWithQuery(
       <ApiKeysStep completedSteps={["keystore", "wallets"]} onAdvance={mockOnAdvance} flowMode="first-pass" />,
     );
     const html = container.innerHTML.toLowerCase();
-    expect(html).not.toContain("chainscan");
+    expect(html).not.toContain("legacyapikey");
   });
 });

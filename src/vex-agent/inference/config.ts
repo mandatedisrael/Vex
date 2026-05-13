@@ -26,7 +26,7 @@ import logger from "@utils/logger.js";
 
 // ── ENV-loaded config (validated at startup) ─────────────────────
 
-export type ProviderType = "openrouter" | "0g-compute";
+export type ProviderType = "openrouter";
 
 export interface EnvConfig {
   /** Explicit provider choice — auto-detected if not set */
@@ -43,7 +43,7 @@ export interface EnvConfig {
   maxOutputTokens: number;
 }
 
-const VALID_PROVIDERS = new Set<string>(["openrouter", "0g-compute"]);
+const VALID_PROVIDERS = new Set<string>(["openrouter"]);
 
 /**
  * Load and validate all inference ENV variables.
@@ -59,7 +59,7 @@ export function loadEnvConfig(): EnvConfig {
   let agentProvider: ProviderType | null = null;
   if (rawProvider !== null) {
     if (!VALID_PROVIDERS.has(rawProvider)) {
-      errors.push(`AGENT_PROVIDER="${rawProvider}" is invalid. Must be: openrouter, 0g-compute`);
+      errors.push(`AGENT_PROVIDER="${rawProvider}" is invalid. Must be: openrouter`);
     } else {
       agentProvider = rawProvider as ProviderType;
     }
@@ -160,9 +160,6 @@ export const OPENROUTER_LOW_BALANCE_USD = 5.0;
 
 /** OpenRouter SDK timeout (5 min) */
 export const OPENROUTER_SDK_TIMEOUT_MS = 300_000;
-
-/** 0G Compute default low balance threshold (0G tokens) */
-export const ZG_DEFAULT_ALERT_THRESHOLD = 1.2;
 
 /** Retry: max attempts for inference calls */
 export const INFERENCE_MAX_RETRIES = 2;

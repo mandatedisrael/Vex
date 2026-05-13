@@ -22,7 +22,7 @@ function fail(msg: string): ToolResult {
 interface TransferIntent {
   id: string;
   network: "eip155" | "solana";
-  chain?: string;  // EVM chain alias (default: "0g"). Ignored for solana.
+  chain?: string;  // EVM chain alias. Required for eip155; ignored for solana.
   to: string;
   amount: string;
   token: string | null;
@@ -51,6 +51,11 @@ export async function handleWalletSendPrepare(
     return fail("network must be eip155 or solana");
   }
 
+  const chain = str(params, "chain") || undefined;
+  if (network === "eip155" && !chain) {
+    return fail("Missing required: chain for eip155 transfers");
+  }
+
   // Validate amount is numeric
   const numAmount = Number(amount);
   if (!Number.isFinite(numAmount) || numAmount <= 0) {
@@ -67,7 +72,6 @@ export async function handleWalletSendPrepare(
   // Create intent
   intentCounter++;
   const intentId = `intent-${Date.now()}-${intentCounter}`;
-  const chain = str(params, "chain") || undefined;
   const intent: TransferIntent = {
     id: intentId,
     network,
@@ -88,6 +92,7 @@ export async function handleWalletSendPrepare(
   return ok({
     intentId,
     network,
+    chain,
     to,
     amount,
     token: token ?? "native",
@@ -140,7 +145,7 @@ export async function handleWalletSendConfirm(
   return executeEvmTransfer(intent);
 }
 
-// ── Solana transfer execution ──────────��─────────────────────────
+// ── Solana transfer execution ────────────────────────────────────
 
 async function executeSolanaTransfer(intent: TransferIntent): Promise<ToolResult> {
   const [{ Keypair }, { sendSol, sendSplToken }, { resolveJupiterToken }] = await Promise.all([
@@ -223,7 +228,10 @@ async function executeEvmTransfer(intent: TransferIntent): Promise<ToolResult> {
 
   const wallet = requireEvmWallet();
   const chains = await getKhalaniClient().getChains();
-  const chainAlias = intent.chain ?? "0g";
+  const chainAlias = intent.chain;
+  if (!chainAlias) {
+    return fail("Missing required: chain for eip155 transfers");
+  }
   const chainId = resolveChainId(chainAlias, chains);
   const chain = getChain(chainId, chains);
   const publicClient = createDynamicPublicClient(chain, chains);

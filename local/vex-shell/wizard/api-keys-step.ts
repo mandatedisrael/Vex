@@ -5,8 +5,7 @@
  * Optional: TAVILY (web_research), RETTIWT (twitter_account),
  * POLYMARKET CLOB trio
  *   (POLYMARKET_API_KEY + POLYMARKET_API_SECRET + POLYMARKET_PASSPHRASE —
- *   `requirePolyClobCredentials` fails on any missing), CHAINSCAN_API_KEY
- *   (no visibility gate — rate limits only).
+ *   `requirePolyClobCredentials` fails on any missing).
  *
  * The wizard does NOT auto-generate Polymarket creds (that's the
  * `polymarket_setup` tool's job); we only record whatever the operator
@@ -24,7 +23,6 @@ export interface ApiKeysOutcome {
   tavilyConfigured: boolean;
   rettiwtConfigured: boolean;
   polymarketConfigured: boolean;
-  chainscanConfigured: boolean;
 }
 
 const RETTIWT_AUTH_GUIDANCE = [
@@ -158,25 +156,6 @@ export async function runApiKeysStep(): Promise<ApiKeysOutcome> {
     polymarketConfigured = Boolean(step1.value && step2.value && step3.value);
   }
 
-  // ── CHAINSCAN (optional) ──────────────────────────────────────
-  let chainscanConfigured = Boolean(envMap.CHAINSCAN_API_KEY?.trim());
-  const wantChainscan = await confirm({
-    message: chainscanConfigured
-      ? "CHAINSCAN_API_KEY already set. Replace?"
-      : "Configure CHAINSCAN_API_KEY now? (rate-limit only — no visibility gate)",
-    initialValue: false,
-  });
-  if (isCancel(wantChainscan)) return emptyOutcome(true);
-  if (wantChainscan) {
-    const { value, aborted } = await promptEnv("CHAINSCAN_API_KEY", {
-      message: "Enter CHAINSCAN_API_KEY",
-      secret: true,
-      existing: envMap.CHAINSCAN_API_KEY,
-    });
-    if (aborted) return emptyOutcome(true);
-    chainscanConfigured = Boolean(value);
-  }
-
   synchronizeTrackedEnv();
 
   return {
@@ -185,7 +164,6 @@ export async function runApiKeysStep(): Promise<ApiKeysOutcome> {
     tavilyConfigured,
     rettiwtConfigured,
     polymarketConfigured,
-    chainscanConfigured,
   };
 }
 
@@ -196,6 +174,5 @@ function emptyOutcome(aborted: boolean): ApiKeysOutcome {
     tavilyConfigured: false,
     rettiwtConfigured: false,
     polymarketConfigured: false,
-    chainscanConfigured: false,
   };
 }

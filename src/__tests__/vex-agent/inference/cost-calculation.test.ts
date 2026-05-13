@@ -30,12 +30,6 @@ function calculateOpenRouterCost(usage: InferenceUsage, config: InferenceConfig)
   return { totalCost, currency: "USD", breakdown: { promptCost, completionCost, cachedSavings, reasoningCost } };
 }
 
-function calculateZeroGCost(usage: InferenceUsage, config: InferenceConfig): RequestCost {
-  const promptCost = (usage.promptTokens / 1_000_000) * config.inputPricePerM;
-  const completionCost = (usage.completionTokens / 1_000_000) * config.outputPricePerM;
-  return { totalCost: promptCost + completionCost, currency: "0G", breakdown: { promptCost, completionCost, cachedSavings: 0, reasoningCost: 0 } };
-}
-
 // ── OpenRouter cost tests ────────────────────────────────────────
 
 describe("OpenRouter cost calculation", () => {
@@ -123,59 +117,5 @@ describe("OpenRouter cost calculation", () => {
     expect(cost.breakdown.cachedSavings).toBe(0);
     expect(cost.breakdown.reasoningCost).toBe(0);
     expect(cost.totalCost).toBeCloseTo(0.06);
-  });
-});
-
-// ── 0G Compute cost tests ────────────────────────────────────────
-
-describe("0G Compute cost calculation", () => {
-  const zgConfig: InferenceConfig = {
-    provider: "0g-compute",
-    model: "deepseek-v3",
-    contextLimit: 64_000,
-    maxOutputTokens: 16384,
-    inputPricePerM: 1.0,      // 1 0G per M input
-    outputPricePerM: 3.2,     // 3.2 0G per M output
-    priceCurrency: "0G",
-    cachePricePerM: null,
-    reasoningPricePerM: null,
-  };
-
-  it("calculates simple prompt + completion cost", () => {
-    const usage: InferenceUsage = {
-      promptTokens: 20_000,
-      completionTokens: 5_000,
-      totalTokens: 25_000,
-    };
-    const cost = calculateZeroGCost(usage, zgConfig);
-
-    expect(cost.breakdown.promptCost).toBeCloseTo(0.02);    // 20K * 1.0/M
-    expect(cost.breakdown.completionCost).toBeCloseTo(0.016); // 5K * 3.2/M
-    expect(cost.totalCost).toBeCloseTo(0.036);
-    expect(cost.currency).toBe("0G");
-    expect(cost.breakdown.cachedSavings).toBe(0);
-    expect(cost.breakdown.reasoningCost).toBe(0);
-  });
-
-  it("handles zero usage", () => {
-    const usage: InferenceUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-    const cost = calculateZeroGCost(usage, zgConfig);
-    expect(cost.totalCost).toBe(0);
-  });
-
-  it("ignores cached/reasoning tokens (not supported)", () => {
-    const usage: InferenceUsage = {
-      promptTokens: 10_000,
-      completionTokens: 2_000,
-      totalTokens: 12_000,
-      cachedTokens: 5_000,
-      reasoningTokens: 500,
-    };
-    const cost = calculateZeroGCost(usage, zgConfig);
-
-    // Should NOT adjust for cache/reasoning
-    expect(cost.breakdown.cachedSavings).toBe(0);
-    expect(cost.breakdown.reasoningCost).toBe(0);
-    expect(cost.totalCost).toBeCloseTo(0.0164);
   });
 });

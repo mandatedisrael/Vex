@@ -10,8 +10,7 @@
  * Input validation:
  *   - `.trim().min(1).max(200)` for apiKey + model (codex turn 1 RED #4
  *     — whitespace-only bypass on plain `.min(1)`).
- *   - `provider` literal "openrouter" only in M10. 0G Compute is a
- *     Phase 2B inline-ceremony placeholder (decyzja #9 in plan).
+ *   - `provider` literal "openrouter" only.
  *
  * Output:
  *   - `fieldsWritten` in canonical order (matches engine resolution
@@ -23,7 +22,7 @@
 
 import { z } from "zod";
 
-export const providerNameSchema = z.enum(["openrouter", "0g-compute"]);
+export const providerNameSchema = z.enum(["openrouter"]);
 export type ProviderName = z.infer<typeof providerNameSchema>;
 
 const trimmedSecret = z.string().trim().min(1).max(200);
@@ -44,10 +43,9 @@ export type ProviderPersistInput = z.infer<typeof providerPersistInputSchema>;
  * Engine resolution precedence (`registry.ts:41-108`):
  *   1. Explicit `AGENT_PROVIDER` value
  *   2. `OPENROUTER_API_KEY` + `AGENT_MODEL` present → openrouter
- *   3. compute-state.json → 0g-compute
  * Writing all 3 keys ensures GUI's wizard choice is unambiguous even
- * when stale `AGENT_PROVIDER=0g-compute` lines exist from prior CLI
- * use or manual edits.
+ * when stale `AGENT_PROVIDER` lines exist from prior CLI use or manual
+ * edits.
  */
 export const PROVIDER_PERSIST_CANONICAL_ORDER = [
   "OPENROUTER_API_KEY",

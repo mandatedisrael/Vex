@@ -88,7 +88,7 @@ function renderOverview(): string {
     "",
     `- **Postgres + pgvector**: long-term knowledge layer (\`knowledge_entries\` table) and tool discovery embeddings (\`tool_embeddings\` table, populated on bootstrap).`,
     `- **Embedding model**: \`${overview.embeddingModel}\` at ${overview.embeddingDim}d via local Docker Model Runner. The same model embeds knowledge entries and tool descriptions.`,
-    `- **Inference providers**: OpenRouter (Anthropic / OpenAI / Azure routes) and 0G Compute (decentralized).`,
+    `- **Inference provider**: OpenRouter (Anthropic / OpenAI / Azure routes).`,
     "",
     "Pass `topic=querying` to learn how to drive discover_tools, or `topic=knowledge` for the memory layer.",
   ].join("\n");
@@ -112,8 +112,6 @@ function renderNamespaces(): string {
       : "";
     lines.push(`| \`${ns.namespace}\`${lifecycleTag} | ${ns.activeToolCount} | ${ns.description}${envHint} |`);
   }
-  lines.push("");
-  lines.push("Five legacy namespaces are deprecated and excluded from discovery (`embeddings/_DEPRECATED.md` in the source tree lists them and explains why).");
   lines.push("");
   lines.push("Drill into a namespace: `vex_namespace_tools(namespace=\"<name>\")`.");
   return lines.join("\n");

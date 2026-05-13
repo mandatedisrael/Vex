@@ -4,17 +4,13 @@
  * `engine/`) plus the wake / approval / mission overlays + cold-start
  * state captured by `bootstrapShell()`.
  *
- * Mutable shell state (last bootstrap result, last turn latency, last 0G
- * funding probe) lives here so `commands.ts::printStatus` and
+ * Mutable shell state (last bootstrap result, last turn latency) lives here
+ * so `commands.ts::printStatus` and
  * `commands.ts::handleDiagnostics` see a consistent picture.
  */
 
 import * as messagesRepo from "../../../src/vex-agent/db/repos/messages.js";
 import { getActiveProvider } from "../../../src/vex-agent/inference/registry.js";
-import {
-  checkComputeReadiness,
-  type ReadinessResult,
-} from "../../../src/tools/0g-compute/readiness.js";
 import { writeLine } from "./render.js";
 import {
   getMissionStatus,
@@ -26,24 +22,16 @@ import { formatContextWindow, formatSessionCost, formatTokenCount } from "./rend
 import { isSyncEnabled, isWakeEnabled } from "./runtime.js";
 import type { BootstrapResult, ColdStartState } from "./bootstrap.js";
 import { collectColdStartState } from "./bootstrap.js";
-import { diagnosticsLog } from "./log.js";
 
 const TAIL_LIMIT = 10;
 const LATENCY_BUFFER = 5;
-const FUNDING_CACHE_TTL_MS = 30_000;
 
 interface BootstrapSnapshot {
   result: BootstrapResult;
   capturedAt: number;
 }
 
-interface FundingSnapshot {
-  result: ReadinessResult;
-  capturedAt: number;
-}
-
 let lastBootstrap: BootstrapSnapshot | null = null;
-let lastFunding: FundingSnapshot | null = null;
 const recentLatencies: number[] = [];
 
 export function recordBootstrapResult(result: BootstrapResult): void {
@@ -64,27 +52,6 @@ export function getLatencyStats(): { last: number | null; avg: number | null; sa
   const last = recentLatencies[recentLatencies.length - 1] ?? null;
   const avg = recentLatencies.reduce((a, b) => a + b, 0) / recentLatencies.length;
   return { last, avg, samples: recentLatencies.length };
-}
-
-/**
- * Get the latest funding probe — refresh from chain only when the cache is
- * stale. Each on-chain probe burns a real network round-trip (broker reads
- * ledger + sub-account + ack), so we don't repeat per `/diagnostics`.
- */
-export async function getFundingStatus(force = false): Promise<ReadinessResult | null> {
-  if (!force && lastFunding && Date.now() - lastFunding.capturedAt < FUNDING_CACHE_TTL_MS) {
-    return lastFunding.result;
-  }
-  try {
-    const result = await checkComputeReadiness();
-    lastFunding = { result, capturedAt: Date.now() };
-    return result;
-  } catch (err) {
-    diagnosticsLog.warn("diagnostics.funding.probe_failed", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return lastFunding?.result ?? null;
-  }
 }
 
 export function renderColdStartSection(state: ColdStartState | null): void {
@@ -130,20 +97,6 @@ export function renderLatency(): void {
   );
 }
 
-export async function renderFunding(): Promise<void> {
-  writeLine("0G funding status:");
-  const probe = await getFundingStatus();
-  if (!probe) {
-    writeLine("  (probe unavailable)");
-    return;
-  }
-  writeLine(`  ready=${probe.ready} provider=${probe.provider ?? "(none)"}`);
-  for (const [label, check] of Object.entries(probe.checks)) {
-    const mark = check.ok ? "OK" : "MISSING";
-    writeLine(`  - ${label.padEnd(11)} ${mark}${check.detail ? `  ${check.detail}` : ""}`);
-  }
-}
-
 export async function renderDiagnostics(sessionId: string): Promise<void> {
   const session = await getSession(sessionId);
   writeLine();
@@ -181,8 +134,6 @@ export async function renderDiagnostics(sessionId: string): Promise<void> {
   renderLastBootstrap();
   writeLine();
   renderLatency();
-  writeLine();
-  await renderFunding();
 
   writeLine();
   writeLine(`Pending approvals (${pending.length}):`);

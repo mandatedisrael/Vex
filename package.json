@@ -46,8 +46,6 @@
     "vex:test:e2e": "pnpm --dir vex-app test:e2e"
   },
   "dependencies": {
-    "@0gfoundation/0g-ts-sdk": "^1.2.1",
-    "@0glabs/0g-serving-broker": "^0.7.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openrouter/sdk": "^0.9.11",
     "@solana/spl-token": "^0.4.14",
@@ -82,7 +80,6 @@
     "vitest": "^4.1.1"
   },
   "keywords": [
-    "0g",
     "defi",
     "blockchain",
     "mcp",

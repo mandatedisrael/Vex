@@ -4,13 +4,11 @@
  * Resolution priority:
  * 1. AGENT_PROVIDER env (explicit choice)
  * 2. OPENROUTER_API_KEY present → OpenRouter
- * 3. compute-state.json exists → 0G Compute
- * 4. null (agent won't start)
+ * 3. null (agent won't start)
  */
 
 import type { InferenceProvider } from "./types.js";
 import { loadEnvConfig } from "./config.js";
-import { loadComputeState } from "@tools/0g-compute/compute-state.js";
 import logger from "@utils/logger.js";
 
 // ── Lazy imports (avoid loading unused provider dependencies) ────
@@ -20,14 +18,8 @@ async function createOpenRouterProvider(): Promise<InferenceProvider> {
   return new OpenRouterProvider();
 }
 
-async function createZeroGProvider(): Promise<InferenceProvider> {
-  const { ZeroGComputeProvider } = await import("./0g-compute.js");
-  return new ZeroGComputeProvider();
-}
-
 const PROVIDER_FACTORIES: Record<string, () => Promise<InferenceProvider>> = {
   "openrouter": createOpenRouterProvider,
-  "0g-compute": createZeroGProvider,
 };
 
 // ── Singleton cache with concurrency-safe dedup ─────────────────
@@ -91,24 +83,8 @@ async function doResolve(): Promise<InferenceProvider | null> {
     }
   }
 
-  // 3. 0G Compute state exists
-  if (loadComputeState()) {
-    try {
-      const provider = await createZeroGProvider();
-      logger.info("inference.registry.resolved", {
-        provider: "0g-compute",
-        source: "compute-state.json",
-      });
-      return provider;
-    } catch (err) {
-      logger.warn("inference.registry.0g_failed", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
   logger.error("inference.registry.none_configured", {
-    hint: "Set OPENROUTER_API_KEY or configure 0G Compute via 'vex setup connect'",
+    hint: "Set OPENROUTER_API_KEY and AGENT_MODEL",
   });
   return null;
 }
@@ -149,7 +125,7 @@ export function getActiveProvider(): InferenceProvider | null {
 /**
  * Reset the cached provider. Used by `switchProvider()` for in-process
  * provider toggling and by tests that want a clean cache between cases.
- * The next `resolveProvider()` will re-read `process.env` and `compute-state.json`.
+ * The next `resolveProvider()` will re-read `process.env`.
  *
  * Bumping `generation` ensures any in-flight resolve from before the reset
  * does NOT commit its result to `cachedProvider` — callers that hit the
@@ -171,7 +147,7 @@ export function resetProvider(): void {
  * callers that need the previous selection should snapshot it first.
  */
 export async function switchProvider(
-  name: "openrouter" | "0g-compute",
+  name: "openrouter",
 ): Promise<InferenceProvider | null> {
   process.env.AGENT_PROVIDER = name;
   resetProvider();

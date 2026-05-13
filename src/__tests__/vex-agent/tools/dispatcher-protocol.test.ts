@@ -56,10 +56,8 @@ describe("dispatcher — protocol meta-tools", () => {
   it("discover_tools respects query filter", async () => {
     // Explicit limit > DEFAULT_DISCOVERY_LIMIT (5). The test asserts intent
     // ("a tool with 'balance' in id/description exists in the result"), not
-    // a specific top-5 ranking. Disabling the 0G ecosystem (chainscan etc.)
-    // shifted the candidate pool, so a small limit could drop khalani's
-    // balance tool below the cap; bumping to 50 keeps the test robust to
-    // such ranking shifts.
+    // a specific top-5 ranking. A small limit can drop khalani's balance
+    // tool below the cap; bumping to 50 keeps the test robust to ranking shifts.
     const result = await dispatchTool(
       { name: "discover_tools", args: { query: "balance", limit: 50 }, toolCallId: "call_4" },
       baseContext,
@@ -82,16 +80,16 @@ describe("dispatcher — protocol meta-tools", () => {
     expect(parsed.count).toBeLessThanOrEqual(2);
   });
 
-  it("discover_tools rejects reserved hidden namespaces", async () => {
+  it("discover_tools rejects unknown namespaces", async () => {
     const result = await dispatchTool(
-      { name: "discover_tools", args: { namespace: "0g-compute" }, toolCallId: "call_5b" },
+      { name: "discover_tools", args: { namespace: "removed-namespace" }, toolCallId: "call_5b" },
       baseContext,
     );
 
     expect(result.success).toBe(false);
     const parsed = JSON.parse(result.output);
     expect(parsed.success).toBe(false);
-    expect(parsed.warnings[0]).toContain("reserved");
+    expect(parsed.warnings[0]).toContain("Unknown namespace");
   });
 
   // ── execute_tool validation ──────────────────────────────────────

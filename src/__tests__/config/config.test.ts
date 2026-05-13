@@ -39,8 +39,9 @@ describe("config store", () => {
       const config = getDefaultConfig();
 
       expect(config.version).toBe(1);
-      expect(config.chain.chainId).toBe(16661);
-      expect(config.chain.rpcUrl).toBe("https://evmrpc.0g.ai");
+      expect(config.chain.chainId).toBe(1);
+      expect(config.chain.rpcUrl).toBe("https://ethereum-rpc.publicnode.com");
+      expect(config.chain.nativeCurrency.symbol).toBe("ETH");
       expect(config.wallet.address).toBeNull();
       expect(config.wallet.solanaAddress).toBeNull();
     });
@@ -71,7 +72,7 @@ describe("config store", () => {
       const config = loadConfig();
 
       expect(config.version).toBe(1);
-      expect(config.chain.chainId).toBe(16661);
+      expect(config.chain.chainId).toBe(1);
     });
 
     it("should load existing config file", () => {
@@ -80,11 +81,10 @@ describe("config store", () => {
       const customConfig = {
         version: 1,
         chain: {
-          chainId: 16661,
+          chainId: 1,
           rpcUrl: "https://custom-rpc.example.com",
           explorerUrl: "https://explorer.example.com",
         },
-        protocol: getDefaultConfig().protocol,
         wallet: {
           address: "0x1234567890123456789012345678901234567890",
         },
@@ -109,7 +109,7 @@ describe("config store", () => {
       const config = loadConfig();
 
       expect(config.version).toBe(1);
-      expect(config.chain.chainId).toBe(16661);
+      expect(config.chain.chainId).toBe(1);
     });
 
     it("should return defaults for unknown version", () => {

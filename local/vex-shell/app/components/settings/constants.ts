@@ -35,7 +35,6 @@ export const ENV_FIELDS: ReadonlyArray<{ key: string; secret: boolean }> = [
   { key: "POLYMARKET_API_KEY", secret: true },
   { key: "POLYMARKET_API_SECRET", secret: true },
   { key: "POLYMARKET_PASSPHRASE", secret: true },
-  { key: "CHAINSCAN_API_KEY", secret: true },
   { key: "DISCOVERY_QUERY_PRIVACY", secret: false },
   { key: "LOG_LEVEL", secret: false },
   { key: "LOG_FORMAT", secret: false },
@@ -71,11 +70,6 @@ export const CONFIG_FIELDS: ReadonlyArray<{
     patch: (v) => ({ services: { vexApiUrl: v } }),
   },
   {
-    key: "services.chainScanBaseUrl",
-    read: (c) => c.services.chainScanBaseUrl,
-    patch: (v) => ({ services: { chainScanBaseUrl: v } }),
-  },
-  {
     key: "services.khalaniApiUrl",
     read: (c) => c.services.khalaniApiUrl,
     patch: (v) => ({ services: { khalaniApiUrl: v } }),
@@ -84,11 +78,6 @@ export const CONFIG_FIELDS: ReadonlyArray<{
     key: "services.dexScreenerApiUrl",
     read: (c) => c.services.dexScreenerApiUrl,
     patch: (v) => ({ services: { dexScreenerApiUrl: v } }),
-  },
-  {
-    key: "services.jaineSubgraphUrl",
-    read: (c) => c.services.jaineSubgraphUrl,
-    patch: (v) => ({ services: { jaineSubgraphUrl: v } }),
   },
   {
     key: "services.kyberswapAggregatorUrl",

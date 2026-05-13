@@ -10,9 +10,6 @@
  * vex-app builds its own typed surface (Zod schemas + per-field UI
  * metadata) on top of the bare key names exported here.
  *
- * NO CHAINSCAN_API_KEY — the upstream API is no longer supported;
- * the GUI never renders the field. The CLI-side ENV_FIELDS keeps it
- * for backward compatibility with already-installed `.env` files.
  */
 
 export {
@@ -35,7 +32,6 @@ export const ENV_RETTIWT_API_KEY = "RETTIWT_API_KEY";
  * Order is canonical and surfaces in `fieldsWritten` IPC outputs so
  * UI rendering / log redaction can iterate deterministically.
  *
- * CHAINSCAN_API_KEY intentionally absent — see module docstring.
  */
 export const TRACKED_API_KEYS = [
   ENV_JUPITER_API_KEY,

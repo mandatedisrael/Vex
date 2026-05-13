@@ -31,18 +31,8 @@ import { KYBERSWAP_TOOLS } from "./kyberswap/manifest.js";
 import { KYBERSWAP_HANDLERS } from "./kyberswap/handlers.js";
 import { DEXSCREENER_TOOLS } from "./dexscreener/manifest.js";
 import { DEXSCREENER_HANDLERS } from "./dexscreener/handlers.js";
-import { CHAINSCAN_TOOLS } from "./0g/chainscan/manifest.js";
-import { CHAINSCAN_HANDLERS } from "./0g/chainscan/handlers.js";
-import { JAINE_TOOLS } from "./0g/jaine/manifest.js";
-import { JAINE_HANDLERS } from "./0g/jaine/handlers.js";
-import { SLOP_TOOLS } from "./0g/slop/manifest.js";
-import { SLOP_HANDLERS } from "./0g/slop/handlers.js";
-import { ECHOBOOK_TOOLS } from "./echobook/manifest.js";
-import { ECHOBOOK_HANDLERS } from "./echobook/handlers.js";
 import { POLYMARKET_TOOLS } from "./polymarket/manifest.js";
 import { POLYMARKET_HANDLERS } from "./polymarket/handlers.js";
-import { SLOP_APP_TOOLS } from "./0g/slop-app/manifest.js";
-import { SLOP_APP_HANDLERS } from "./0g/slop-app/handlers.js";
 
 // ── Namespace allowlist ──────────────────────────────────────────
 
@@ -51,14 +41,7 @@ export const PROTOCOL_NAMESPACE_ALLOWLIST: readonly ProtocolNamespace[] = [
   "kyberswap",
   "solana",
   "polymarket",
-  "0g-compute",
-  "0g-storage",
-  "jaine",
-  "slop",
   "dexscreener",
-  "echobook",
-  "chainscan",
-  "slop-app",
 ] as const;
 
 export const PROTOCOL_ADVERTISED_NAMESPACE_ALLOWLIST: readonly ProtocolNamespace[] =
@@ -75,9 +58,7 @@ export function isAdvertisedProtocolNamespace(value: string): value is ProtocolN
 // ── Namespace modules (registration table) ───────────────────────
 //
 // Single source of registration. Each row ties a namespace label to its
-// manifest array + handler record. Reserved namespaces (0g-compute,
-// 0g-storage) are in `PROTOCOL_NAMESPACE_ALLOWLIST` but have no module
-// entry here — they exist only for discovery-navigation metadata.
+// manifest array + handler record.
 
 export interface NamespaceModule {
   readonly namespace: ProtocolNamespace;
@@ -86,20 +67,11 @@ export interface NamespaceModule {
 }
 
 export const NAMESPACE_MODULES: readonly NamespaceModule[] = [
-  // Active namespaces — discoverable, executable, embedded for dense discovery.
   { namespace: "khalani", manifests: KHALANI_TOOLS, handlers: KHALANI_HANDLERS },
   { namespace: "solana", manifests: SOLANA_JUPITER_TOOLS, handlers: SOLANA_JUPITER_HANDLERS },
   { namespace: "kyberswap", manifests: KYBERSWAP_TOOLS, handlers: KYBERSWAP_HANDLERS },
   { namespace: "dexscreener", manifests: DEXSCREENER_TOOLS, handlers: DEXSCREENER_HANDLERS },
   { namespace: "polymarket", manifests: POLYMARKET_TOOLS, handlers: POLYMARKET_HANDLERS },
-  // lifecycle: deprecated_hidden — see lifecycle.ts + embeddings/_DEPRECATED.md.
-  // Manifests stay registered (so existing references compile), but discovery
-  // hides them and execute_tool refuses unless VEX_ALLOW_DEPRECATED_PROTOCOLS=1.
-  { namespace: "chainscan", manifests: CHAINSCAN_TOOLS, handlers: CHAINSCAN_HANDLERS },
-  { namespace: "jaine", manifests: JAINE_TOOLS, handlers: JAINE_HANDLERS },
-  { namespace: "slop", manifests: SLOP_TOOLS, handlers: SLOP_HANDLERS },
-  { namespace: "echobook", manifests: ECHOBOOK_TOOLS, handlers: ECHOBOOK_HANDLERS },
-  { namespace: "slop-app", manifests: SLOP_APP_TOOLS, handlers: SLOP_APP_HANDLERS },
 ];
 
 // ── Indices (built eagerly at module load) ───────────────────────
@@ -197,14 +169,7 @@ export type NamespaceDefault = "mixed_trading" | "bridge" | "non_portfolio";
 export const NAMESPACE_DEFAULTS: Record<ProtocolNamespace, NamespaceDefault> = {
   solana: "mixed_trading",
   kyberswap: "mixed_trading",
-  jaine: "mixed_trading",
-  slop: "mixed_trading",
   polymarket: "mixed_trading",
   khalani: "bridge",
   dexscreener: "non_portfolio",
-  chainscan: "non_portfolio",
-  echobook: "non_portfolio",
-  "slop-app": "non_portfolio",
-  "0g-compute": "non_portfolio",
-  "0g-storage": "non_portfolio",
 };

@@ -216,7 +216,7 @@ describe("position-projector", () => {
 
     it("opens lot without economics for none valuation", async () => {
       await projectPosition(makeActivity({
-        productType: "spot", tradeSide: "buy", instrumentKey: "0g:0xToken",
+        productType: "spot", tradeSide: "buy", instrumentKey: "ethereum:0xToken",
         outputAmount: "1000000", valuationSource: "none",
       }));
       expect(mockOpenLot).toHaveBeenCalledTimes(1);
@@ -282,20 +282,20 @@ describe("position-projector", () => {
     });
   });
 
-  // ── Cross-protocol 0G ─────────────────────────────────────────
+  // ── Spot buy/sell inventory continuity ─────────────────────────
 
-  describe("cross-protocol 0G", () => {
-    it("slop buy → lot, jaine sell → transactional reduce", async () => {
+  describe("spot buy/sell continuity", () => {
+    it("buy opens a lot and sell reduces it transactionally", async () => {
       await projectPosition(makeActivity({
-        productType: "spot", tradeSide: "buy", instrumentKey: "0g:0xToken",
-        outputAmount: "5000000000000000000", namespace: "slop", chain: "0g",
+        productType: "spot", tradeSide: "buy", instrumentKey: "ethereum:0xToken",
+        outputAmount: "5000000000000000000", namespace: "kyberswap", chain: "ethereum",
       }));
-      expect(mockOpenLot.mock.calls[0][0].instrumentKey).toBe("0g:0xToken");
+      expect(mockOpenLot.mock.calls[0][0].instrumentKey).toBe("ethereum:0xToken");
 
       queryResults.push({ id: 10, remaining_quantity_raw: "5000000000000000000", quantity_raw: "5000000000000000000", cost_basis_usd: null });
       await projectPosition(makeActivity({
-        productType: "spot", tradeSide: "sell", instrumentKey: "0g:0xToken",
-        inputAmount: "2000000000000000000", namespace: "jaine", chain: "0g",
+        productType: "spot", tradeSide: "sell", instrumentKey: "ethereum:0xToken",
+        inputAmount: "2000000000000000000", namespace: "kyberswap", chain: "ethereum",
       }));
       // Verify transaction happened
       const beginCall = mockClientQuery.mock.calls.find((c: unknown[]) => String(c[0]).includes("BEGIN"));

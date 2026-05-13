@@ -1,10 +1,3 @@
-/**
- * NOTE: A subset of tests below is `.skip`ped because the 0G ecosystem
- * (jaine, slop, slop-app, chainscan) and EchoBook namespaces are
- * currently disabled from discovery. Re-enable when the corresponding
- * `advertised` flags flip back to `true` in
- * src/vex-agent/tools/protocols/navigation/entries-0g.ts.
- */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import type { EngineContext, Permission, SessionKind } from "../../../../vex-agent/engine/types.js";
@@ -95,9 +88,8 @@ describe("prompt-stack", () => {
       }
     });
 
-    it.skip("renders explicit product groups instead of heuristic families", () => {
+    it("renders explicit product groups instead of heuristic families", () => {
       const prompt = buildProtocolsPrompt();
-      expect(prompt).toContain("### 0G Ecosystem");
       expect(prompt).toContain("### Cross-chain");
       expect(prompt).not.toContain("Families:");
     });
@@ -468,12 +460,6 @@ describe("prompt-stack", () => {
       expect(kyberSection).not.toContain("kyberswap.tokens.search");
     });
 
-    it.skip("chainscan is described as 0G-only in protocols", () => {
-      const prompt = buildProtocolsPrompt();
-      const chainscanSection = prompt.split("## chainscan")[1]?.split("##")[0] ?? "";
-      expect(chainscanSection).toContain("0G-only");
-    });
-
     it("polymarket section exposes subarea guidance", () => {
       const prompt = buildProtocolsPrompt();
       const polymarketSection = prompt.split("## polymarket")[1]?.split("##")[0] ?? "";
@@ -482,11 +468,6 @@ describe("prompt-stack", () => {
       expect(polymarketSection).toContain("CLOB trading");
     });
 
-    it.skip("echobook section renders 'Feeds, posts, and comments' path label", () => {
-      const prompt = buildProtocolsPrompt();
-      const echobookSection = prompt.split("## echobook")[1]?.split("##")[0] ?? "";
-      expect(echobookSection).toContain("Feeds, posts, and comments");
-    });
   });
 
   // ── Env-aware availability in protocols prompt ──────────────────

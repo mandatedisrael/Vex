@@ -25,13 +25,6 @@ describe("parseInstrumentKey", () => {
     expect(r.side).toBe("YES");
   });
 
-  it("0G spot: 0g:{addr}", () => {
-    const r = parseInstrumentKey("0g:0x1234");
-    expect(r.kind).toBe("spot");
-    expect(r.chain).toBe("0g");
-    expect(r.tokenAddress).toBe("0x1234");
-  });
-
   it("KyberSwap EVM spot: ethereum:{addr}", () => {
     const r = parseInstrumentKey("ethereum:0xWETH");
     expect(r.kind).toBe("spot");

@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-vi.mock("../../../tools/0g-compute/compute-state.js", () => ({
-  loadComputeState: () => null,
-}));
-
 vi.mock("../../../vex-agent/inference/openrouter.js", () => ({
   OpenRouterProvider: class {
     readonly id = "openrouter";
@@ -36,7 +32,7 @@ describe("registry", () => {
     expect(getActiveProvider()).toBeNull();
   });
 
-  it("returns null when no provider configured and no compute state", async () => {
+  it("returns null when no provider configured", async () => {
     const provider = await resolveProvider();
     expect(provider).toBeNull();
   });

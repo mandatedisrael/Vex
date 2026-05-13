@@ -30,12 +30,6 @@ describe("loadEnvConfig", () => {
     expect(config.agentProvider).toBe("openrouter");
   });
 
-  it("parses valid AGENT_PROVIDER=0g-compute", () => {
-    process.env.AGENT_PROVIDER = "0g-compute";
-    const config = loadEnvConfig();
-    expect(config.agentProvider).toBe("0g-compute");
-  });
-
   it("is case-insensitive for AGENT_PROVIDER", () => {
     process.env.AGENT_PROVIDER = "OpenRouter";
     const config = loadEnvConfig();
@@ -43,7 +37,7 @@ describe("loadEnvConfig", () => {
   });
 
   it("throws on invalid AGENT_PROVIDER", () => {
-    process.env.AGENT_PROVIDER = "gpt4all";
+    process.env.AGENT_PROVIDER = "local-provider";
     expect(() => loadEnvConfig()).toThrow("AGENT_PROVIDER");
   });
 

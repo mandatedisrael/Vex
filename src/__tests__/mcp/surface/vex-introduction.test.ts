@@ -10,9 +10,7 @@
  *     section (no namespace table);
  *   - `vex_namespace_tools()` lists active namespaces;
  *   - `vex_namespace_tools({namespace:"polymarket"})` includes per-tool
- *     headings;
- *   - `vex_namespace_tools({namespace:"chainscan"})` returns a deprecation
- *     message (lifecycle gate consistent with A2).
+ *     headings.
  */
 
 import { describe, it, expect } from "vitest";
@@ -69,13 +67,6 @@ describe("B1 — vex_introduction + vex_namespace_tools", () => {
     expect(result.output).toContain("# Namespace: `polymarket`");
     // At least one tool header present.
     expect(result.output).toMatch(/### `polymarket\./);
-  });
-
-  it("vex_namespace_tools({namespace:'chainscan'}) refuses with deprecation hint", async () => {
-    const result = await handleVexNamespaceTools({ namespace: "chainscan" });
-    expect(result.success).toBe(false);
-    expect(result.output).toContain("deprecated");
-    expect(result.output).toContain("VEX_ALLOW_DEPRECATED_PROTOCOLS=1");
   });
 
   it("vex_namespace_tools({namespace:'unknown'}) lists active namespaces in the error", async () => {

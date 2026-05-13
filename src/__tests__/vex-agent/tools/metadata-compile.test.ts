@@ -10,40 +10,40 @@ import type { ProtocolNamespaceNavigation } from "../../../vex-agent/tools/proto
 // ── Test fixtures ──────────────────────────────────────────────
 
 const MOCK_NAV: ProtocolNamespaceNavigation = {
-  namespace: "echobook",
+  namespace: "dexscreener",
   advertised: true,
-  groupId: "0g-ecosystem",
-  groupLabel: "0G Ecosystem",
-  summary: "EchoBook social trading surface.",
-  whenToUse: "Use for social actions.",
-  exampleQueries: ['discover_tools(query="feed")'],
-  aliases: ["echo book", "social feed"],
-  discoveryHints: ["posts feed", "comments"],
+  groupId: "market-research",
+  groupLabel: "Market research",
+  summary: "DexScreener token and pair analytics.",
+  whenToUse: "Use for token research.",
+  exampleQueries: ['discover_tools(query="trending tokens")'],
+  aliases: ["dex screener", "token research"],
+  discoveryHints: ["pair analytics", "trending tokens"],
   facets: [
     {
-      label: "Feeds and comments",
-      summary: "Browse feeds, fetch comments.",
-      toolPrefixes: ["echobook.feed", "echobook.comments"],
-      hints: ["posts feed", "comment thread"],
+      label: "Pairs and tokens",
+      summary: "Inspect pairs and token contracts.",
+      toolPrefixes: ["dexscreener.pairs", "dexscreener.tokens"],
+      hints: ["pair analytics", "token contract"],
     },
     {
-      label: "Profiles",
-      summary: "Inspect profiles.",
-      toolPrefixes: ["echobook.profile"],
-      hints: ["profile search", "user lookup"],
+      label: "Trending",
+      summary: "Find trending markets.",
+      toolPrefixes: ["dexscreener.trending"],
+      hints: ["trending tokens", "boosted tokens"],
     },
   ],
 };
 
 function makeManifest(overrides: Partial<ProtocolToolManifest> = {}): ProtocolToolManifest {
   return {
-    toolId: "echobook.comments.get",
-    namespace: "echobook",
+    toolId: "dexscreener.tokens.get",
+    namespace: "dexscreener",
     lifecycle: "active",
-    description: "Get comments on a post.",
+    description: "Get token pair analytics.",
     mutating: false,
-    params: [{ key: "postId", type: "number", required: true, description: "Post ID." }],
-    exampleParams: { postId: 42 },
+    params: [{ key: "tokenAddress", type: "string", required: true, description: "Token address." }],
+    exampleParams: { tokenAddress: "0x123" },
     ...overrides,
   };
 }
@@ -55,13 +55,13 @@ describe("compileToolDiscoveryMetadata", () => {
     const manifest = makeManifest();
     const result = compileToolDiscoveryMetadata(manifest, MOCK_NAV);
 
-    expect(result.aliases).toEqual(expect.arrayContaining(["echo book", "social feed"]));
-    expect(result.ecosystems).toEqual(["0g"]);
-    expect(result.sourceClass).toBe("social");
+    expect(result.aliases).toEqual(expect.arrayContaining(["dex screener", "token research"]));
+    expect(result.ecosystems).toEqual(["multichain"]);
+    expect(result.sourceClass).toBe("specialized_market");
     expect(result.sideEffectLevel).toBe("none");
     expect(result.operation).toEqual(["research"]);
-    expect(result.paramKeywords).toEqual(["postId"]);
-    expect(result.exampleIntents).toEqual(expect.arrayContaining(["posts feed", "comment thread"]));
+    expect(result.paramKeywords).toEqual(["tokenAddress"]);
+    expect(result.exampleIntents).toEqual(expect.arrayContaining(["pair analytics", "token contract"]));
   });
 
   it("tool discovery.canonicalSummary overrides inherited undefined", () => {
@@ -71,41 +71,41 @@ describe("compileToolDiscoveryMetadata", () => {
     const result = compileToolDiscoveryMetadata(manifest, MOCK_NAV);
 
     expect(result.canonicalSummary).toBe("Fetch threaded comments with depth.");
-    expect(result.ecosystems).toEqual(["0g"]);
-    expect(result.aliases).toEqual(expect.arrayContaining(["echo book"]));
+    expect(result.ecosystems).toEqual(["multichain"]);
+    expect(result.aliases).toEqual(expect.arrayContaining(["dex screener"]));
   });
 
   it("partial override merges arrays — tool ecosystems extend namespace ecosystems", () => {
     const manifest = makeManifest({
-      discovery: { ecosystems: ["ethereum"], aliases: ["0g comments"] },
+      discovery: { ecosystems: ["ethereum"], aliases: ["pair research"] },
     });
     const result = compileToolDiscoveryMetadata(manifest, MOCK_NAV);
 
-    expect(result.ecosystems).toEqual(expect.arrayContaining(["0g", "ethereum"]));
-    expect(result.aliases).toEqual(expect.arrayContaining(["echo book", "social feed", "0g comments"]));
-    expect(result.sourceClass).toBe("social");
+    expect(result.ecosystems).toEqual(expect.arrayContaining(["multichain", "ethereum"]));
+    expect(result.aliases).toEqual(expect.arrayContaining(["dex screener", "token research", "pair research"]));
+    expect(result.sourceClass).toBe("specialized_market");
   });
 
   it("tool without matching facet still gets namespace defaults", () => {
     const manifest = makeManifest({
-      toolId: "echobook.tradeProof.submit",
-      params: [{ key: "txHash", type: "string", required: true, description: "Tx hash." }],
+      toolId: "dexscreener.orders.get",
+      params: [{ key: "chainId", type: "string", required: true, description: "Chain ID." }],
     });
     const result = compileToolDiscoveryMetadata(manifest, MOCK_NAV);
 
-    expect(result.aliases).toEqual(expect.arrayContaining(["echo book", "social feed"]));
-    expect(result.ecosystems).toEqual(["0g"]);
+    expect(result.aliases).toEqual(expect.arrayContaining(["dex screener", "token research"]));
+    expect(result.ecosystems).toEqual(["multichain"]);
     expect(result.exampleIntents).toBeUndefined();
-    expect(result.paramKeywords).toEqual(["txHash"]);
+    expect(result.paramKeywords).toEqual(["chainId"]);
   });
 
   it("mutating tool derives sideEffectLevel: high and operation: execute", () => {
     const manifest = makeManifest({
-      toolId: "echobook.comment.create",
+      toolId: "dexscreener.watchlist.create",
       mutating: true,
       params: [
-        { key: "postId", type: "number", required: true, description: "Post ID." },
-        { key: "content", type: "string", required: true, description: "Comment text." },
+        { key: "chainId", type: "string", required: true, description: "Chain ID." },
+        { key: "tokenAddress", type: "string", required: true, description: "Token address." },
       ],
     });
     const result = compileToolDiscoveryMetadata(manifest, MOCK_NAV);
@@ -156,21 +156,21 @@ describe("compileToolDiscoveryMetadata", () => {
 
   it("deduplicates array values when override repeats inherited entries", () => {
     const manifest = makeManifest({
-      discovery: { aliases: ["echo book", "0g social"] },
+      discovery: { aliases: ["dex screener", "market scanner"] },
     });
     const result = compileToolDiscoveryMetadata(manifest, MOCK_NAV);
 
-    const echoBookCount = result.aliases!.filter((a) => a === "echo book").length;
-    expect(echoBookCount).toBe(1);
-    expect(result.aliases).toEqual(expect.arrayContaining(["echo book", "social feed", "0g social"]));
+    const dexScreenerCount = result.aliases!.filter((a) => a === "dex screener").length;
+    expect(dexScreenerCount).toBe(1);
+    expect(result.aliases).toEqual(expect.arrayContaining(["dex screener", "token research", "market scanner"]));
   });
 
   it("empty discovery object is treated as no overrides", () => {
     const manifest = makeManifest({ discovery: {} });
     const result = compileToolDiscoveryMetadata(manifest, MOCK_NAV);
 
-    expect(result.ecosystems).toEqual(["0g"]);
-    expect(result.sourceClass).toBe("social");
+    expect(result.ecosystems).toEqual(["multichain"]);
+    expect(result.sourceClass).toBe("specialized_market");
     expect(result.canonicalSummary).toBeUndefined();
   });
 
@@ -179,7 +179,7 @@ describe("compileToolDiscoveryMetadata", () => {
     // any consumer using compiled metadata MUST see the per-tool passage.
     // Regression test for a silent merge bug that would have dropped all
     // 61 manifest passages.
-    const passage = "Browse echobook posts and threads. Use this when the user wants to read the social feed. Example queries: show me the feed, what's new on echobook.";
+    const passage = "Browse token pair analytics. Use this when the user wants to research liquidity and market context. Example queries: show trending tokens, inspect this pair.";
     const manifest = makeManifest({
       discovery: { embeddingText: passage },
     });

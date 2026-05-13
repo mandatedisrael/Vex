@@ -10,8 +10,6 @@
  *  - Each VexErrorCode renders FIXED UI copy (NO SDK raw message —
  *    codex turn 3 YELLOW).
  *  - Success card with latencyMs + advance to "review".
- *  - 0G tab clickable + inert (Phase 2B badge, no form).
- *  - "Back to OpenRouter" button switches tabs.
  *  - External `<a target="_blank">` to openrouter.ai/models (no
  *    bridge call).
  *  - `providerListModels` NOT exposed on window.vex.onboarding.
@@ -366,57 +364,6 @@ describe("ProviderStep", () => {
       expect(text).toMatch(/Verify the key/i);
       expect(text).not.toContain("RAW_SDK_MESSAGE");
     });
-  });
-
-  it("0G tab is clickable and inert (Phase 2B badge, no submit)", () => {
-    mockUseEnvState.mockReturnValue(makeQueryResult(envState()));
-    const { container } = renderWithQuery(
-      <ProviderStep
-        completedSteps={["keystore", "wallets", "apiKeys", "embedding", "agentCore"]}
-        onAdvance={mockOnAdvance}
-        flowMode="first-pass"
-      />,
-    );
-    const zerogTab = container.querySelector(
-      '[data-vex-wizard-provider-tab="zerog"]',
-    )!;
-    expect(zerogTab).not.toBeNull();
-    // Badge inside the tab trigger (textContent of the tab includes
-    // "Phase 2B" — uniqueness within the tab is enough).
-    expect(zerogTab.textContent).toMatch(/Phase 2B/i);
-    fireEvent.click(zerogTab);
-    // Inert placeholder visible.
-    const placeholder = container.querySelector(
-      '[data-vex-wizard-provider-zerog="placeholder"]',
-    );
-    expect(placeholder).not.toBeNull();
-    expect(placeholder!.textContent).toMatch(/Phase 2B/i);
-    // No IPC fired by switching tabs.
-    expect(mockPersistProvider).not.toHaveBeenCalled();
-  });
-
-  it("Back to OpenRouter tab switch works", () => {
-    mockUseEnvState.mockReturnValue(makeQueryResult(envState()));
-    const { container } = renderWithQuery(
-      <ProviderStep
-        completedSteps={["keystore", "wallets", "apiKeys", "embedding", "agentCore"]}
-        onAdvance={mockOnAdvance}
-        flowMode="first-pass"
-      />,
-    );
-    fireEvent.click(
-      container.querySelector('[data-vex-wizard-provider-tab="zerog"]')!,
-    );
-    expect(
-      container.querySelector('[data-vex-wizard-provider-zerog="placeholder"]'),
-    ).not.toBeNull();
-    fireEvent.click(
-      container.querySelector('[data-vex-wizard-provider-zerog-back="true"]')!,
-    );
-    // The OpenRouter form remains accessible (form data attribute present).
-    expect(
-      container.querySelector('[data-vex-wizard-provider-form="openrouter"]'),
-    ).not.toBeNull();
   });
 
   it("renders external <a target=\"_blank\"> to openrouter.ai/models (no bridge)", () => {

@@ -143,8 +143,6 @@ describe("mcp docs — registry projection", () => {
       expect(namespaces).toContain("polymarket");
       expect(namespaces).toContain("kyberswap");
       expect(namespaces).toContain("khalani");
-      expect(namespaces).not.toContain("0g-compute");
-      expect(namespaces).not.toContain("0g-storage");
     });
 
     it("each namespace has a default portfolio role", () => {
@@ -235,10 +233,6 @@ describe("mcp docs — registry projection", () => {
       expect(buildProtocolNamespace("nonexistent")).toBeNull();
     });
 
-    it("returns null for reserved hidden namespace", () => {
-      expect(buildProtocolNamespace("0g-compute")).toBeNull();
-    });
-
     it("returns sorted tool list for solana", () => {
       const ns = buildProtocolNamespace("solana");
       expect(ns).not.toBeNull();
@@ -299,8 +293,6 @@ describe("mcp docs — registry projection", () => {
       const sorted = [...manifest.tools].sort();
       expect(manifest.tools).toEqual(sorted);
       expect(manifest.protocolNamespaces.length).toBeGreaterThan(0);
-      expect(manifest.protocolNamespaces).not.toContain("0g-compute");
-      expect(manifest.protocolNamespaces).not.toContain("0g-storage");
     });
 
     it("excludes subagent_* from manifest tools", () => {

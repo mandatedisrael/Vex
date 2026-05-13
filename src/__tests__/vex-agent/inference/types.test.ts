@@ -164,7 +164,7 @@ describe("types - structural integrity", () => {
     expect(tool.function.name).toBe("web_research");
   });
 
-  it("ProviderBalance supports both providers", () => {
+  it("ProviderBalance supports OpenRouter usage fields", () => {
     const orBalance: ProviderBalance = {
       available: 12.5,
       currency: "USD",
@@ -175,16 +175,7 @@ describe("types - structural integrity", () => {
       usageMonthly: 37.5,
     };
 
-    const zgBalance: ProviderBalance = {
-      available: 44.99,
-      currency: "0G",
-      isLow: false,
-      displayText: "44.9900 0G",
-      total: 100,
-      locked: 44.99,
-    };
-
     expect(orBalance.usageDaily).toBe(2.3);
-    expect(zgBalance.locked).toBe(44.99);
+    expect(orBalance.currency).toBe("USD");
   });
 });

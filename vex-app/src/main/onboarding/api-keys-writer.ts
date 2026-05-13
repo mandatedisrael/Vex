@@ -3,9 +3,7 @@
  *
  * Writes the optional set of API keys + the all-or-none Polymarket
  * trio into `${CONFIG_DIR}/.env` atomically. Caller wraps in
- * `withEnvWriteLock`. CHAINSCAN_API_KEY is intentionally absent from
- * both the Zod input schema and this writer — user clarification
- * locked it out of the GUI.
+ * `withEnvWriteLock`.
  *
  * Polymarket trio:
  *   The schema's `polymarket?: { apiKey, apiSecret, passphrase }`

@@ -1,8 +1,7 @@
 /**
  * Schemas for `vex.onboarding.apiKeysSet` (M9 Step 3).
  *
- * Field set per user clarification (CHAINSCAN_API_KEY removed from
- * GUI — kept in vex-shell ENV_FIELDS for CLI backward compat):
+ * Field set:
  *   - JUPITER_API_KEY (optional in input — user may already have it
  *     set via vex-shell; the wizard's Step-3 skip-card uses the
  *     envState `apiKeys.jupiterConfigured` boolean to decide whether

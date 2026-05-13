@@ -4,12 +4,6 @@
  *
  * Fixtures stay English-only; discover_tools is evaluated on English
  * capability phrases.
- *
- * NOTE: Fixtures whose `expectedAny` targets a 0G-ecosystem (jaine, slop,
- * slop-app, chainscan) or EchoBook tool are marked `disabled: true` because
- * those namespaces are currently unadvertised in discovery. Re-enable when
- * the corresponding `advertised` flags flip back to `true` in
- * src/vex-agent/tools/protocols/navigation/entries-0g.ts.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -20,8 +14,6 @@ interface GoldenFixture {
   expectedAny: readonly string[];
   k?: number;
   notes?: string;
-  /** Skip while target namespace is unadvertised in discovery. */
-  disabled?: boolean;
 }
 
 const FIXTURES: readonly GoldenFixture[] = [
@@ -42,16 +34,6 @@ const FIXTURES: readonly GoldenFixture[] = [
   { intent: "trending meme tokens", expectedAny: ["dexscreener.trending", "dexscreener.boosts"] },
   { intent: "community takeover", expectedAny: ["dexscreener.communityTakeovers"] },
   { intent: "pair liquidity analytics", expectedAny: ["dexscreener.pairs", "dexscreener.tokens"] },
-  { intent: "0g chain explorer", expectedAny: ["chainscan."], disabled: true },
-  { intent: "0g block height", expectedAny: ["chainscan.block", "chainscan."], disabled: true },
-  { intent: "0g account balance", expectedAny: ["chainscan.account"], disabled: true },
-  { intent: "echobook comments thread", expectedAny: ["echobook.comments"], disabled: true },
-  { intent: "0g social feed", expectedAny: ["echobook.feed", "echobook."], disabled: true },
-  { intent: "my slop tokens", expectedAny: ["slop.tokens.mine"], disabled: true },
-  { intent: "slop profile image", expectedAny: ["slop-app."], disabled: true },
-  { intent: "0g dex swap quote", expectedAny: ["jaine.swap"], disabled: true },
-  { intent: "wrap w0g", expectedAny: ["jaine.w0g"], disabled: true },
-
   // ── ambiguous / cross-namespace ───────────────────────────────────
   { intent: "wallet token balances", expectedAny: ["khalani.tokens", "solana.tokens", "polymarket.data"] },
   { intent: "prediction market events", expectedAny: ["polymarket.gamma.events", "solana.predict.events"] },
@@ -63,7 +45,7 @@ const FIXTURES: readonly GoldenFixture[] = [
   // Generic token-info query: many tools legitimately match (token resolvers,
   // bridges that take token addresses, swap tools that route by address). Accept
   // broad namespace prefixes — the goal is "some token-handling tool ranks".
-  { intent: "token address contract info", expectedAny: ["chainscan.", "dexscreener.", "khalani.", "solana.tokens", "kyberswap."] },
+  { intent: "token address contract info", expectedAny: ["dexscreener.", "khalani.", "solana.tokens", "kyberswap."] },
 
   // ── rare-chain lexical recall (validates structured `chains` field) ─
   { intent: "swap on plasma", expectedAny: ["kyberswap.swap"] },
@@ -105,8 +87,7 @@ describe("discovery golden harness", () => {
 
   for (const fixture of FIXTURES) {
     const k = fixture.k ?? 3;
-    const itFn = fixture.disabled ? it.skip : it;
-    itFn(`top-${k} for "${fixture.intent}" contains expected`, async () => {
+    it(`top-${k} for "${fixture.intent}" contains expected`, async () => {
       const result = await discoverProtocolCapabilities({
         query: fixture.intent,
         limit: k,

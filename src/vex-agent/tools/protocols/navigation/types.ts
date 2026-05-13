@@ -1,13 +1,11 @@
 import type { ProtocolNamespace } from "../types.js";
 
 export type ProtocolNavigationGroupId =
-  | "0g-ecosystem"
   | "cross-chain"
   | "evm-trading"
   | "solana"
   | "prediction-markets"
-  | "market-research"
-  | "reserved";
+  | "market-research";
 
 export interface ProtocolNavigationFacet {
   label: string;
@@ -37,11 +35,9 @@ export interface ProtocolNavigationGroup {
 }
 
 export const PROTOCOL_NAVIGATION_GROUP_ORDER: readonly ProtocolNavigationGroupId[] = [
-  "0g-ecosystem",
   "cross-chain",
   "evm-trading",
   "solana",
   "prediction-markets",
   "market-research",
-  "reserved",
 ] as const;

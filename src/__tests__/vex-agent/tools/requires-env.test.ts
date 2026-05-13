@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-vi.mock("@tools/0g-compute/compute-state.js", () => ({
-  loadComputeState: () => null,
-}));
-
 const { getOpenAITools, getAllTools, defaultVisibilityContext } = await import(
   "../../../vex-agent/tools/registry.js"
 );

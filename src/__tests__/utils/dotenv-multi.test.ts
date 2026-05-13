@@ -55,9 +55,9 @@ describe("appendMultipleToDotenvFile", () => {
     writeFileSync(
       envFile,
       [
-        'AGENT_PROVIDER="0g-compute"',
+        'AGENT_PROVIDER="unsupported-provider"',
         'OTHER_KEY="keep-me"',
-        'AGENT_PROVIDER="0g-compute"', // duplicate from manual edit
+        'AGENT_PROVIDER="unsupported-provider"', // duplicate from manual edit
         'AGENT_MODEL="old-model"',
       ].join("\n") + "\n",
     );
@@ -72,8 +72,8 @@ describe("appendMultipleToDotenvFile", () => {
     const content = readFileSync(envFile, "utf-8");
     // OTHER_KEY preserved exactly once.
     expect(content.match(/^OTHER_KEY=/gm)?.length).toBe(1);
-    // No leftover AGENT_PROVIDER="0g-compute" anywhere.
-    expect(content).not.toContain('AGENT_PROVIDER="0g-compute"');
+    // No leftover unsupported provider anywhere.
+    expect(content).not.toContain('AGENT_PROVIDER="unsupported-provider"');
     // No leftover AGENT_MODEL="old-model".
     expect(content).not.toContain('AGENT_MODEL="old-model"');
     // Canonical lines present.
@@ -85,7 +85,7 @@ describe("appendMultipleToDotenvFile", () => {
   it("handles CRLF line endings without losing unrelated keys", () => {
     writeFileSync(
       envFile,
-      'OTHER_A="alpha"\r\nAGENT_PROVIDER="0g-compute"\r\nOTHER_B="beta"\r\n',
+      'OTHER_A="alpha"\r\nAGENT_PROVIDER="unsupported-provider"\r\nOTHER_B="beta"\r\n',
     );
     appendMultipleToDotenvFile(
       {
@@ -97,7 +97,7 @@ describe("appendMultipleToDotenvFile", () => {
     const content = readFileSync(envFile, "utf-8");
     expect(content).toContain('OTHER_A="alpha"');
     expect(content).toContain('OTHER_B="beta"');
-    expect(content).not.toContain('AGENT_PROVIDER="0g-compute"');
+    expect(content).not.toContain('AGENT_PROVIDER="unsupported-provider"');
     expect(content).toContain('AGENT_PROVIDER="openrouter"');
   });
 
@@ -134,7 +134,7 @@ describe("appendMultipleToDotenvFile", () => {
         "",
         'JUPITER_API_KEY="jup-key"',
         "# Old provider section",
-        'AGENT_PROVIDER="0g-compute"',
+        'AGENT_PROVIDER="unsupported-provider"',
         'VEX_KEYSTORE_PASSWORD="pwd"',
       ].join("\n") + "\n",
     );
@@ -148,7 +148,7 @@ describe("appendMultipleToDotenvFile", () => {
     expect(content).toContain('JUPITER_API_KEY="jup-key"');
     expect(content).toContain('VEX_KEYSTORE_PASSWORD="pwd"');
     expect(content).toContain('AGENT_PROVIDER="openrouter"');
-    expect(content).not.toContain('AGENT_PROVIDER="0g-compute"');
+    expect(content).not.toContain('AGENT_PROVIDER="unsupported-provider"');
   });
 
   it("strips leading-whitespace stale lines (loader-honored edge case)", () => {
@@ -158,7 +158,7 @@ describe("appendMultipleToDotenvFile", () => {
     writeFileSync(
       envFile,
       [
-        "  AGENT_PROVIDER=\"0g-compute\"", // leading 2 spaces
+        "  AGENT_PROVIDER=\"unsupported-provider\"", // leading 2 spaces
         '\tAGENT_MODEL="stale-tab-prefixed"', // leading tab
         '   OPENROUTER_API_KEY="stale-3-spaces"',
       ].join("\n") + "\n",
@@ -173,7 +173,7 @@ describe("appendMultipleToDotenvFile", () => {
     );
     const content = readFileSync(envFile, "utf-8");
     // Stale leading-whitespace lines must be gone.
-    expect(content).not.toMatch(/AGENT_PROVIDER="0g-compute"/);
+    expect(content).not.toMatch(/AGENT_PROVIDER="unsupported-provider"/);
     expect(content).not.toMatch(/AGENT_MODEL="stale-tab-prefixed"/);
     expect(content).not.toMatch(/OPENROUTER_API_KEY="stale-3-spaces"/);
     // Canonical lines present at end of file.

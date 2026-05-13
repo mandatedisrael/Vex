@@ -1,10 +1,3 @@
-/**
- * NOTE: A subset of tests below is `.skip`ped because the 0G ecosystem
- * (jaine, slop, slop-app, chainscan) and EchoBook namespaces are
- * currently disabled from discovery. Re-enable when the corresponding
- * `advertised` flags flip back to `true` in
- * src/vex-agent/tools/protocols/navigation/entries-0g.ts.
- */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { discoverProtocolCapabilities } from "../../../vex-agent/tools/protocols/runtime.js";
 
@@ -44,21 +37,6 @@ describe("protocol discovery — metadata v1 wiring (PR3)", () => {
     const clobOrderbook = result.tools.find((t) => t.toolId === "polymarket.clob.orderbook");
     expect(clobOrderbook).toBeDefined();
     expect(clobOrderbook!.whyMatched).toContain("canonicalSummary");
-  });
-
-  it.skip("per-tool metadata aliases (not inherited from facet) appear as 'metadata' in whyMatched", async () => {
-    // echobook.comments.get has explicit discovery.aliases: ["0g comments", "echobook comments"].
-    // These are NOT in navigation strings → should appear as "metadata" tag.
-    // Inherited exampleIntents (from facet.hints) ARE in navigation → deduped out.
-    const result = await discoverProtocolCapabilities({
-      query: "0g comments",
-      namespace: "echobook",
-      limit: 50,
-    });
-    expect(result.success).toBe(true);
-    const commentTool = result.tools.find((t) => t.toolId === "echobook.comments.get");
-    expect(commentTool).toBeDefined();
-    expect(commentTool!.whyMatched).toContain("metadata");
   });
 
   it("prediction market orderbook ranks clob.orderbook above data.closedPositions", async () => {

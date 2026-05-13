@@ -99,12 +99,12 @@ describe("apiKeysSet handler", () => {
     expect(result.error?.code).toBe("onboarding.env_persist_failed");
   });
 
-  it("rejects payload carrying CHAINSCAN_API_KEY at the schema boundary", async () => {
+  it("rejects payload carrying an unknown API key at the schema boundary", async () => {
     registerApiKeysHandler();
     const fn = handlers.get(CH.onboarding.apiKeysSet)!;
     const result = (await fn(trustedSender, {
       requestId: "r3",
-      payload: { chainscanApiKey: "should-fail" },
+      payload: { legacyApiKey: "should-fail" },
     })) as { ok: boolean; error?: { code: string } };
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation.invalid_input");

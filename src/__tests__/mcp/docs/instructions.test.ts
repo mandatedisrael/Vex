@@ -1,12 +1,3 @@
-/**
- * NOTE: A subset of tests below is `.skip`ped because the 0G ecosystem
- * (jaine, slop, slop-app, chainscan) and EchoBook namespaces are
- * currently disabled from discovery — their descriptions and the
- * "0G Ecosystem" group label no longer appear in the MCP instructions
- * preamble. Re-enable when the corresponding `advertised` flags flip
- * back to `true` in
- * src/vex-agent/tools/protocols/navigation/entries-0g.ts.
- */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { buildInstructions } from "../../../mcp/docs/instructions.js";
 
@@ -123,27 +114,23 @@ describe("mcp docs — buildInstructions", () => {
     const text = buildInstructions();
     expect(text).toContain("solana");
     expect(text).toContain("polymarket");
-    expect(text).not.toContain("0g-compute");
-    expect(text).not.toContain("0g-storage");
   });
 
   // ── R5: per-namespace one-liner descriptions ────────────────────
 
-  it.skip("renders a one-liner description per namespace, not just the name (R5)", () => {
+  it("renders a one-liner description per namespace, not just the name (R5)", () => {
     const text = buildInstructions();
     // Anchor on real copy from descriptions.ts: khalani description must
-    // mention bridging, slop must mention bonding curve, echobook must
-    // mention social. If those substrings disappear from the preamble it
+    // mention bridging and polymarket must mention prediction markets. If
+    // those substrings disappear from the preamble it
     // means the renderer dropped descriptions and the model is back to
     // seeing namespace names with no context.
     expect(text.toLowerCase()).toContain("bridge");
-    expect(text.toLowerCase()).toContain("bonding curve");
-    expect(text.toLowerCase()).toContain("social");
+    expect(text.toLowerCase()).toContain("prediction");
   });
 
-  it.skip("groups namespaces by product family", () => {
+  it("groups namespaces by product family", () => {
     const text = buildInstructions();
-    expect(text).toContain("### 0G Ecosystem");
     expect(text).toContain("### Cross-chain");
     expect(text).toContain("### Prediction Markets");
   });

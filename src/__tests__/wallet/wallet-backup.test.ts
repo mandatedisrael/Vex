@@ -45,14 +45,14 @@ describe("wallet-backup", () => {
         cliVersion: "1.0.2",
         createdAt: new Date().toISOString(),
         walletAddress: "0x1234567890abcdef1234567890abcdef12345678",
-        chainId: 16661,
+        chainId: 1,
         files: ["keystore.json", "config.json"],
       };
 
       expect(manifest.version).toBe(1);
       expect(manifest.files).toContain("keystore.json");
       expect(manifest.files).toContain("config.json");
-      expect(manifest.chainId).toBe(16661);
+      expect(manifest.chainId).toBe(1);
       expect(manifest.walletAddress).toMatch(/^0x/);
     });
 
@@ -62,7 +62,7 @@ describe("wallet-backup", () => {
         cliVersion: "1.0.2",
         createdAt: new Date().toISOString(),
         walletAddress: null,
-        chainId: 16661,
+        chainId: 1,
         files: ["config.json"],
       };
 
@@ -162,7 +162,7 @@ describe("wallet-backup", () => {
         cliVersion: "1.0.2",
         createdAt: "2026-01-15T12:00:00.000Z",
         walletAddress: "0xabc",
-        chainId: 16661,
+        chainId: 1,
         files: ["keystore.json", "config.json"],
       };
 

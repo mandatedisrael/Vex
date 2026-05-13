@@ -1,10 +1,3 @@
-/**
- * NOTE: A subset of tests below is `.skip`ped because the 0G ecosystem
- * (jaine, slop, slop-app, chainscan) and EchoBook namespaces are
- * currently disabled from discovery. Re-enable when the corresponding
- * `advertised` flags flip back to `true` in
- * src/vex-agent/tools/protocols/navigation/entries-0g.ts.
- */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { discoverProtocolCapabilities } from "../../../vex-agent/tools/protocols/runtime.js";
 import {
@@ -69,19 +62,11 @@ describe("protocol discovery", () => {
     }
   });
 
-  it("rejects reserved hidden namespaces", async () => {
-    const result = await discoverProtocolCapabilities({ namespace: "0g-compute" });
+  it("rejects unknown namespaces", async () => {
+    const result = await discoverProtocolCapabilities({ namespace: "removed-namespace" });
     expect(result.success).toBe(false);
     expect(result.count).toBe(0);
     expect(result.warnings.length).toBeGreaterThan(0);
-  });
-
-  it.skip("returns echobook tools when filtering by echobook namespace", async () => {
-    const result = await discoverProtocolCapabilities({ namespace: "echobook", limit: 50 });
-    expect(result.count).toBeGreaterThan(0);
-    for (const tool of result.tools) {
-      expect(tool.namespace).toBe("echobook");
-    }
   });
 
   it("returns kyberswap tools when filtering by kyberswap namespace", async () => {
@@ -164,11 +149,12 @@ describe("protocol discovery", () => {
 
   // ── Warnings ─────────────────────────────────────────────────────
 
-  it("does not advertise reserved namespaces in generic discovery results", async () => {
+  it("only advertises known active namespaces in generic discovery results", async () => {
     const result = await discoverProtocolCapabilities({});
     const namespaces = new Set(result.tools.map((tool) => tool.namespace));
-    expect(namespaces.has("0g-compute")).toBe(false);
-    expect(namespaces.has("0g-storage")).toBe(false);
+    for (const namespace of namespaces) {
+      expect(PROTOCOL_ADVERTISED_NAMESPACE_ALLOWLIST as readonly string[]).toContain(namespace);
+    }
   });
 
   it("returns dexscreener tools when filtering by dexscreener namespace", async () => {
@@ -203,12 +189,6 @@ describe("protocol discovery", () => {
     expect(bridge!.mutating).toBe(true);
   });
 
-  it.skip("matches alias query for 0g explorer to chainscan", async () => {
-    const result = await discoverProtocolCapabilities({ query: "0g explorer" });
-    expect(result.success).toBe(true);
-    expect(result.tools[0]?.namespace).toBe("chainscan");
-  });
-
   it("matches polymarket clob from natural language query", async () => {
     // Query uses "polymarket orderbook" (namespace + discriminator) instead of the
     // ambiguous "prediction market orderbook" — which now ties polymarket.data.*
@@ -226,17 +206,11 @@ describe("protocol discovery", () => {
     expect(result.tools[0]?.toolId).toBe("dexscreener.communityTakeovers");
   });
 
-  it.skip("matches profile image query to slop app tools", async () => {
-    const result = await discoverProtocolCapabilities({ query: "profile image" });
-    expect(result.success).toBe(true);
-    expect(result.tools[0]?.namespace).toBe("slop-app");
-  });
-
-  // ── Defense in depth: reserved namespaces never leak ─────────────
+  // ── Defense in depth: only advertised namespaces leak ────────────
 
   it("free-text discovery only ever returns advertised namespaces", async () => {
     // Run a few diverse queries — every result must belong to advertised set.
-    const queries = ["", "bridge", "swap", "token", "0g", "market"];
+    const queries = ["", "bridge", "swap", "token", "market"];
     for (const query of queries) {
       const result = await discoverProtocolCapabilities({ query, limit: 200 });
       for (const tool of result.tools) {
@@ -271,26 +245,4 @@ describe("protocol discovery", () => {
   });
 
   // ── Facet-driven discovery (audit follow-up) ─────────────────────
-
-  it.skip("matches echobook comment tools via facet hints", async () => {
-    const result = await discoverProtocolCapabilities({
-      query: "comment thread",
-      namespace: "echobook",
-      limit: 50,
-    });
-    expect(result.success).toBe(true);
-    const ids = result.tools.map((t) => t.toolId);
-    expect(ids).toContain("echobook.comments.get");
-  });
-
-  it.skip("matches slop.tokens.mine via 'my tokens' facet hint", async () => {
-    const result = await discoverProtocolCapabilities({
-      query: "my tokens",
-      namespace: "slop",
-      limit: 50,
-    });
-    expect(result.success).toBe(true);
-    const ids = result.tools.map((t) => t.toolId);
-    expect(ids).toContain("slop.tokens.mine");
-  });
 });

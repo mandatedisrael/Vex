@@ -15,6 +15,6 @@ export const KHALANI_CHAINS: readonly string[] = [
   "Lens", "Linea", "Lisk", "Mantle", "Mode", "Monad",
   "Neon", "Optimism", "Plasma", "Polygon", "Redstone", "Scroll", "Sei",
   "Solana", "Soneium", "Sonic", "Sophon", "Story",
-  "Tron", "Unichain", "World Chain", "Zero Gravity", "0G", "Zilliqa",
+  "Tron", "Unichain", "World Chain", "Zilliqa",
   "zkSync", "Zora",
 ];

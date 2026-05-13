@@ -110,18 +110,6 @@ describe("envStateSchema", () => {
     expect(envStateSchema.safeParse(state).success).toBe(true);
   });
 
-  it("accepts provider name='0g-compute'", () => {
-    const state: EnvState = {
-      ...validState,
-      provider: {
-        configured: true,
-        name: "0g-compute",
-        modelLabel: "0x1234.../model-x",
-      },
-    };
-    expect(envStateSchema.safeParse(state).success).toBe(true);
-  });
-
   it("rejects unknown provider name enum", () => {
     const result = envStateSchema.safeParse({
       ...validState,

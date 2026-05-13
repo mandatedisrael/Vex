@@ -7,15 +7,11 @@ const RPC_TIMEOUT = 10_000; // 10 seconds
 let cachedClient: PublicClient | null = null;
 let cachedRpcUrl: string | null = null;
 
-function create0GChain(config: ReturnType<typeof loadConfig>): Chain {
+function createConfiguredEvmChain(config: ReturnType<typeof loadConfig>): Chain {
   return {
     id: config.chain.chainId,
-    name: "0G Mainnet",
-    nativeCurrency: {
-      name: "0G",
-      symbol: "0G",
-      decimals: 18,
-    },
+    name: config.chain.name,
+    nativeCurrency: config.chain.nativeCurrency,
     rpcUrls: {
       default: {
         http: [config.chain.rpcUrl],
@@ -23,7 +19,7 @@ function create0GChain(config: ReturnType<typeof loadConfig>): Chain {
     },
     blockExplorers: {
       default: {
-        name: "0G Explorer",
+        name: `${config.chain.name} Explorer`,
         url: config.chain.explorerUrl,
       },
     },
@@ -41,7 +37,7 @@ export function getPublicClient(): PublicClient {
 
   logger.debug(`Creating viem client for ${rpcUrl}`);
 
-  const chain = create0GChain(config);
+  const chain = createConfiguredEvmChain(config);
 
   cachedClient = createPublicClient({
     chain,

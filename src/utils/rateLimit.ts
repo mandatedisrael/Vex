@@ -1,6 +1,5 @@
 /**
  * Shared rate-limiting primitives.
- * Used by both ChainScan and Subgraph clients.
  */
 
 // --- Token bucket rate limiter ---

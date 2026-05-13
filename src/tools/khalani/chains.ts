@@ -49,8 +49,6 @@ export const CHAIN_ALIASES: Record<string, number> = {
   soneium: 1868,
 
   // Other supported
-  "0g": 16661,
-  zerogravity: 16661,
   gnosis: 100,
   cronos: 25,
   flow: 747,

@@ -12,10 +12,6 @@
 
 import { vi } from "vitest";
 
-vi.mock("@tools/0g-compute/compute-state.js", () => ({
-  loadComputeState: () => null,
-}));
-
 vi.mock("@tools/wallet/multi-auth.js", () => ({
   requireEvmWallet: () => ({
     family: "eip155",
@@ -38,7 +34,7 @@ vi.mock("@tools/wallet/family.js", () => ({
 }));
 
 const KHALANI_TEST_CHAINS = [
-  { id: 16661, name: "0G", type: "eip155" as const, nativeCurrency: { name: "0G", symbol: "0G", decimals: 18 } },
+  { id: 1, name: "Ethereum", type: "eip155" as const, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 } },
   { id: 20011000000, name: "Solana", type: "solana" as const, nativeCurrency: { name: "Solana", symbol: "SOL", decimals: 9 } },
 ];
 
@@ -48,13 +44,13 @@ vi.mock("@tools/khalani/client.js", () => ({
     getTopTokens: vi.fn().mockResolvedValue([]),
     searchTokens: vi.fn().mockResolvedValue({ data: [] }),
     getTokenBalances: vi.fn().mockImplementation(async (_address: string, chainIds?: number[]) => {
-      const chainId = chainIds?.[0] ?? 16661;
+      const chainId = chainIds?.[0] ?? 1;
       return [
         {
           address: chainId === 20011000000 ? "So11111111111111111111111111111111111111112" : "native",
           chainId,
-          symbol: chainId === 20011000000 ? "SOL" : "0G",
-          name: chainId === 20011000000 ? "Solana" : "0G",
+          symbol: chainId === 20011000000 ? "SOL" : "ETH",
+          name: chainId === 20011000000 ? "Solana" : "Ether",
           decimals: chainId === 20011000000 ? 9 : 18,
           extensions: { balance: "1000000000", price: { usd: "1.0" } },
         },

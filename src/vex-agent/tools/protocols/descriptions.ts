@@ -6,9 +6,7 @@
  */
 
 import type { ProtocolNamespace } from "./types.js";
-import { ZERO_G_PROTOCOL_NAVIGATION } from "./navigation/entries-0g.js";
 import { MARKET_PROTOCOL_NAVIGATION } from "./navigation/entries-market.js";
-import { RESERVED_PROTOCOL_NAVIGATION } from "./navigation/entries-reserved.js";
 import {
   PROTOCOL_NAVIGATION_GROUP_ORDER,
   type ProtocolNavigationFacet,
@@ -17,9 +15,7 @@ import {
 } from "./navigation/types.js";
 
 const NAVIGATION_LIST: readonly ProtocolNamespaceNavigation[] = [
-  ...ZERO_G_PROTOCOL_NAVIGATION,
   ...MARKET_PROTOCOL_NAVIGATION,
-  ...RESERVED_PROTOCOL_NAVIGATION,
 ] as const;
 
 export const PROTOCOL_NAMESPACE_NAVIGATION: Record<ProtocolNamespace, ProtocolNamespaceNavigation> = Object.fromEntries(

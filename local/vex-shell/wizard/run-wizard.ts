@@ -5,10 +5,10 @@
  *   1. system-check   — collectSystemChecks + startLocalServices + bootstrap
  *   2. keystore       — VEX_KEYSTORE_PASSWORD (create if missing)
  *   3. wallets        — create/import EVM + Solana keystores if missing
- *   4. api-keys       — JUPITER (req), TAVILY, POLYMARKET trio, CHAINSCAN
+ *   4. api-keys       — JUPITER (req), TAVILY, POLYMARKET trio
  *   5. embedding      — optional EMBEDDING_{BASE_URL,MODEL,DIM,PROVIDER}
  *   6. agent-core     — optional AGENT_* + SUBAGENT_*
- *   7. provider       — OpenRouter (key + model picker) or 0G Compute (guided)
+ *   7. provider       — OpenRouter (key + model picker)
  *   8. mode           — agent | mission + permission (restricted | full)
  *
  * Post-M12: wake step removed (always-on hardcoded); full_autonomous gone.

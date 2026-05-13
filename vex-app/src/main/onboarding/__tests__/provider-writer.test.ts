@@ -4,7 +4,7 @@
  * Real fs against tmp dir; verifies:
  *  - 3 keys (OPENROUTER_API_KEY + AGENT_MODEL + AGENT_PROVIDER) persisted
  *    in canonical order via `appendMultipleToDotenvFile`.
- *  - Stale `AGENT_PROVIDER=0g-compute` line gets REPLACED to openrouter
+ *  - Stale unsupported `AGENT_PROVIDER` line gets REPLACED to openrouter
  *    (codex turn 2 RED #2 — engine precedence-aware overwrite).
  *  - Duplicate AGENT_PROVIDER lines from manual edits are all stripped
  *    before canonical append.
@@ -67,12 +67,12 @@ describe("writeProvider", () => {
     expect(readDotenvFileValue("AGENT_PROVIDER", envFile)).toBe("openrouter");
   });
 
-  it("REPLACES stale AGENT_PROVIDER=0g-compute with openrouter (codex turn 2 RED #2)", async () => {
+  it("REPLACES stale unsupported AGENT_PROVIDER with openrouter (codex turn 2 RED #2)", async () => {
     writeFileSync(
       envFile,
       [
         'JUPITER_API_KEY="jup-key"',
-        'AGENT_PROVIDER="0g-compute"',
+        'AGENT_PROVIDER="unsupported-provider"',
         'OTHER_KEY="keep-me"',
       ].join("\n") + "\n",
     );
@@ -89,14 +89,14 @@ describe("writeProvider", () => {
     expect(readDotenvFileValue("JUPITER_API_KEY", envFile)).toBe("jup-key");
     expect(readDotenvFileValue("OTHER_KEY", envFile)).toBe("keep-me");
     const content = readFileSync(envFile, "utf-8");
-    expect(content).not.toContain('AGENT_PROVIDER="0g-compute"');
+    expect(content).not.toContain('AGENT_PROVIDER="unsupported-provider"');
   });
 
   it("strips duplicate AGENT_PROVIDER lines (manual edit edge case)", async () => {
     writeFileSync(
       envFile,
       [
-        'AGENT_PROVIDER="0g-compute"',
+        'AGENT_PROVIDER="unsupported-provider"',
         'AGENT_PROVIDER="openrouter"', // duplicate
         'AGENT_MODEL="stale-model"',
       ].join("\n") + "\n",

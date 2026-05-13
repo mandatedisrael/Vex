@@ -2,7 +2,7 @@
  * Inference layer types — shared contract for all providers.
  *
  * Provider-agnostic: no DB, no engine, no transport details.
- * Every provider (OpenRouter, 0G Compute) maps to these types.
+ * Every provider maps to these types.
  */
 
 import type { JsonSchema } from "../tools/types.js";
@@ -10,29 +10,29 @@ import type { JsonSchema } from "../tools/types.js";
 // ── Provider config (loaded once at startup) ─────────────────────
 
 export interface InferenceConfig {
-  /** Provider identifier: "openrouter" | "0g-compute" */
+  /** Provider identifier, e.g. "openrouter". */
   provider: string;
   /** Model ID, e.g. "anthropic/claude-sonnet-4" */
   model: string;
   /** Context window size in tokens — from AGENT_CONTEXT_LIMIT env */
   contextLimit: number;
-  /** Sampling temperature — OpenRouter only (0G ignores) */
+  /** Sampling temperature. */
   temperature?: number;
   /** Max output tokens per response — from AGENT_MAX_OUTPUT_TOKENS env */
   maxOutputTokens: number;
-  /** Price per 1M input tokens (USD or 0G) */
+  /** Price per 1M input tokens. */
   inputPricePerM: number;
-  /** Price per 1M output tokens (USD or 0G) */
+  /** Price per 1M output tokens. */
   outputPricePerM: number;
   /** Pricing currency */
   priceCurrency: PriceCurrency;
-  /** Price per 1M cached input tokens — OpenRouter only, null for 0G */
+  /** Price per 1M cached input tokens, when reported by the provider. */
   cachePricePerM: number | null;
-  /** Price per 1M reasoning tokens — OpenRouter only, null for 0G */
+  /** Price per 1M reasoning tokens, when reported by the provider. */
   reasoningPricePerM: number | null;
 }
 
-export type PriceCurrency = "USD" | "0G";
+export type PriceCurrency = "USD";
 
 // ── Per-request usage ────────────────────────────────────────────
 
@@ -112,12 +112,10 @@ export interface ProviderBalance {
   currency: PriceCurrency;
   /** Whether below alert threshold */
   isLow: boolean;
-  /** Human-readable display string, e.g. "$12.50 USD" or "44.99 0G" */
+  /** Human-readable display string, e.g. "$12.50 USD". */
   displayText: string;
   /** Total balance (credits purchased or ledger total) */
   total?: number;
-  /** Locked/committed balance (0G sub-account) */
-  locked?: number;
   /** Daily usage — OpenRouter only */
   usageDaily?: number;
   /** Monthly usage — OpenRouter only */
@@ -215,7 +213,6 @@ export interface InferenceProvider {
   /**
    * Streaming chat completion with tool calling.
    * Used by: UI chat (text deltas + tool call deltas).
-   * 0G Compute: fallback to non-streaming, yields single chunk.
    */
   chatCompletionStream(
     messages: ProviderMessage[],
@@ -231,8 +228,7 @@ export interface InferenceProvider {
 
   /**
    * Calculate cost for a single request using provider-specific pricing.
-   * OpenRouter: accounts for cache and reasoning pricing.
-   * 0G: simple prompt + completion calculation.
+   * Accounts for provider-specific cache and reasoning pricing.
    */
   calculateCost(usage: InferenceUsage, config: InferenceConfig): RequestCost;
 }

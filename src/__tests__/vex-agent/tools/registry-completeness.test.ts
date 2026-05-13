@@ -110,20 +110,6 @@ describe("registry completeness", () => {
     }
   });
 
-  it("reserved namespaces (known but without a module) still resolve through helpers", () => {
-    // `0g-compute` and `0g-storage` are in the allowlist but have no
-    // NAMESPACE_MODULES entry (reserved placeholders — navigation metadata
-    // only). The catalog helpers must handle them without crashing.
-    const modNamespaces = new Set(NAMESPACE_MODULES.map((m) => m.namespace));
-    const reserved = PROTOCOL_NAMESPACE_ALLOWLIST.filter((ns) => !modNamespaces.has(ns));
-    for (const ns of reserved) {
-      expect(isKnownProtocolNamespace(ns)).toBe(true);
-      // Reserved namespaces have no manifests, so count is 0 — not a crash.
-      // We don't assert a specific number here because navigation state can
-      // change; we just assert the helper is callable.
-      expect(NAMESPACE_DEFAULTS[ns]).toBeDefined();
-    }
-  });
 });
 
 // ── Internal tool loaders ─────────────────────────────────────────────

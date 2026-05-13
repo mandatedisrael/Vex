@@ -2,8 +2,6 @@
  * PnL lots repo — proj_pnl_lots.
  *
  * Spot DEX cost basis ledger. Buys open lots, sells close lots FIFO.
- * Cross-protocol: slop.trade.buy → jaine.swap.sell works because
- * both use instrumentKey = 0g:{tokenAddress}.
  */
 
 import { query, queryOne, execute } from "../client.js";

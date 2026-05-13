@@ -1,9 +1,8 @@
 /**
  * vex.onboarding.apiKeysSet — Wizard Step 3 IPC handler (M9).
  *
- * Validates input via Zod (CHAINSCAN intentionally absent from the
- * schema — payloads carrying it are rejected at the boundary), runs
- * the writer inside `withEnvWriteLock` so it cannot interleave with
+ * Validates input via Zod, then runs the writer inside `withEnvWriteLock`
+ * so it cannot interleave with
  * keystoreSet / embeddingConfigure / agentCoreConfigure on the same
  * `${CONFIG_DIR}/.env` file.
  *

@@ -47,21 +47,18 @@ export type ApiKeysState = z.infer<typeof apiKeysStateSchema>;
  *   `name`        — effective provider after resolution per engine
  *                   precedence (`registry.ts:41-108`). Null when no
  *                   provider is configured.
- *   `configured`  — `name !== null` AND prerequisites met (key+model
- *                   for openrouter, parseable compute-state.json for
- *                   0g-compute).
- *   `modelLabel`  — AGENT_MODEL for openrouter, compute-state.json's
- *                   `model` for 0g-compute. Treat as a public
- *                   identifier — safe to render in the wizard skip
- *                   card, but NOT logged at the handler boundary
- *                   (some custom OpenRouter routes may encode
- *                   organisation names). Capped at 200 chars
- *                   defensively against stale long .env values.
+ *   `configured`  — `name !== null` AND prerequisites met.
+ *   `modelLabel`  — AGENT_MODEL for OpenRouter. Treat as a public
+ *                   identifier — safe to render in the wizard skip card,
+ *                   but NOT logged at the handler boundary (some custom
+ *                   OpenRouter routes may encode organisation names).
+ *                   Capped at 200 chars defensively against stale long
+ *                   .env values.
  */
 export const providerStateSchema = z
   .object({
     configured: z.boolean(),
-    name: z.enum(["openrouter", "0g-compute"]).nullable(),
+    name: z.enum(["openrouter"]).nullable(),
     modelLabel: z.string().max(200).nullable(),
   })
   .strict();

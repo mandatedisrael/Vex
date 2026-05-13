@@ -190,7 +190,6 @@ Users can pass aliases instead of numeric chain IDs:
 | `abstract` | 2741 | `ink` | 57073 | `lens` | 232 |
 | `sei` | 1329 | `story` | 1514 | `world`/`worldchain` | 480 |
 | `lisk` | 1135 | `bob` | 60808 | `zora` | 7777777 |
-| `0g`/`zerogravity` | 16661 | `gnosis` | 100 | `cronos` | 25 |
 | `tron` | 728126428 | `flow` | 747 | `hyperevm` | 999 |
 | `injective` | 2525 | `neon` | 245022934 | `zilliqa` | 32769 |
 | `soneium` | 1868 | `redstone` | 690 | `sophon` | 50104 |

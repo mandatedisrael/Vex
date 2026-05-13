@@ -78,7 +78,7 @@ describe("activity-populator", () => {
   });
 
   it("reward → tradeSide=null", async () => {
-    await populateActivity(17, null, "slop.fees.claimCreator", "slop", { type: "reward", chain: "0g" });
+    await populateActivity(17, null, "polymarket.rewards.claim", "polymarket", { type: "reward", chain: "polygon" });
     expect(mockInsertActivity.mock.calls[0][0].tradeSide).toBeNull();
   });
 
@@ -92,10 +92,10 @@ describe("activity-populator", () => {
   });
 
   it("prefers inputTokenAddress over inputToken", async () => {
-    await populateActivity(21, null, "jaine.swap.sell", "jaine", {
-      type: "swap", chain: "0g", inputToken: "W0G", inputTokenAddress: "0xW0G_ADDR",
+    await populateActivity(21, null, "kyberswap.swap.sell", "kyberswap", {
+      type: "swap", chain: "ethereum", inputToken: "WETH", inputTokenAddress: "0xWETH_ADDR",
     });
-    expect(mockInsertActivity.mock.calls[0][0].inputToken).toBe("0xW0G_ADDR");
+    expect(mockInsertActivity.mock.calls[0][0].inputToken).toBe("0xWETH_ADDR");
   });
 
   it("falls back to inputToken when no address", async () => {

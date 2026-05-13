@@ -16,9 +16,9 @@ describe("seedSyncJobs", () => {
     vi.clearAllMocks();
   });
 
-  it("inserts 8 sync jobs (2 global + 6 per-namespace)", async () => {
+  it("inserts 6 sync jobs (2 global + 4 per-namespace)", async () => {
     await seedSyncJobs();
-    expect(mockExecute).toHaveBeenCalledTimes(8);
+    expect(mockExecute).toHaveBeenCalledTimes(6);
   });
 
   it("uses ON CONFLICT DO NOTHING (idempotent)", async () => {
@@ -44,7 +44,7 @@ describe("seedSyncJobs", () => {
     const postMutationCalls = mockExecute.mock.calls.filter(
       (call: unknown[]) => (call[1] as unknown[])[3] === "post_mutation",
     );
-    expect(postMutationCalls).toHaveLength(6); // khalani, solana, kyberswap, polymarket, jaine, slop
+    expect(postMutationCalls).toHaveLength(4); // khalani, solana, kyberswap, polymarket
     for (const call of postMutationCalls) {
       expect((call[1] as unknown[])[4]).toBeNull(); // no interval
     }

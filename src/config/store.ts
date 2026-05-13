@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Address } from "viem";
-import { CHAIN, PROTOCOL, SLOP } from "../constants/chain.js";
+import { CHAIN } from "../constants/chain.js";
 import { CONFIG_DIR, CONFIG_FILE } from "./paths.js";
 import { minLogger as logger } from "../utils/logger-shim.js";
 
@@ -9,44 +9,23 @@ export interface VexConfig {
   version: 1;
   chain: {
     chainId: number;
+    name: string;
     rpcUrl: string;
     explorerUrl: string;
-  };
-  protocol: {
-    w0g: Address;
-    jaineFactory: Address;
-    jaineRouter: Address;
-    nftPositionManager: Address;
-    quoter: Address;
-    w0gUsdcPool: Address;
-  };
-  slop: {
-    factory: Address;
-    tokenRegistry: Address;
-    feeCollector: Address;
-    graduationModule: Address;
-    securityModule: Address;
-    configVault: Address;
-    lpFeesHelper: Address;
-    revenueDistributor: Address;
+    nativeCurrency: {
+      name: string;
+      symbol: string;
+      decimals: number;
+    };
   };
   wallet: {
     address: Address | null;
     solanaAddress: string | null;
   };
   services: {
-    backendApiUrl: string;
-    proxyApiUrl: string;
-    chatWsUrl: string;
     vexApiUrl: string;
-    chainScanBaseUrl: string;
     khalaniApiUrl: string;
     dexScreenerApiUrl: string;
-    jaineSubgraphUrl: string;
-    slopWsUrl: string;
-    storageIndexerRpcUrl: string;
-    storageEvmRpcUrl: string;
-    storageFlowContract: string;
     kyberswapAggregatorUrl: string;
     kyberswapTokenApiUrl: string;
     kyberswapLimitOrderUrl: string;
@@ -78,26 +57,10 @@ export function getDefaultConfig(): VexConfig {
     version: 1,
     chain: {
       chainId: CHAIN.chainId,
+      name: CHAIN.name,
       rpcUrl: CHAIN.rpc,
       explorerUrl: CHAIN.explorer,
-    },
-    protocol: {
-      w0g: PROTOCOL.w0g,
-      jaineFactory: PROTOCOL.jaineFactory,
-      jaineRouter: PROTOCOL.jaineRouter,
-      nftPositionManager: PROTOCOL.nftPositionManager,
-      quoter: PROTOCOL.quoter,
-      w0gUsdcPool: PROTOCOL.w0gUsdcPool,
-    },
-    slop: {
-      factory: SLOP.factory,
-      tokenRegistry: SLOP.tokenRegistry,
-      feeCollector: SLOP.feeCollector,
-      graduationModule: SLOP.graduationModule,
-      securityModule: SLOP.securityModule,
-      configVault: SLOP.configVault,
-      lpFeesHelper: SLOP.lpFeesHelper,
-      revenueDistributor: SLOP.revenueDistributor,
+      nativeCurrency: CHAIN.nativeCurrency,
     },
     wallet: {
       address: null,
@@ -111,18 +74,9 @@ export function getDefaultConfig(): VexConfig {
       jupiterApiKey: "",
     },
     services: {
-      backendApiUrl: "https://be.slop.money/api",
-      proxyApiUrl: "https://ai.slop.money/api",
-      chatWsUrl: "https://ai.slop.money",
       vexApiUrl: "https://backend.vexlabs.ai/api",
-      chainScanBaseUrl: "https://chainscan.0g.ai/open",
       khalaniApiUrl: "https://api.hyperstream.dev",
       dexScreenerApiUrl: "https://api.dexscreener.com",
-      jaineSubgraphUrl: "https://api.goldsky.com/api/public/project_cmgl0cagfjymu01wc2mojevm6/subgraphs/jaine-v3-goldsky/0.0.2/gn",
-      slopWsUrl: "https://be.slop.money",
-      storageIndexerRpcUrl: "https://indexer-storage-turbo.0g.ai",
-      storageEvmRpcUrl: "https://evmrpc.0g.ai",
-      storageFlowContract: "0x62d4144db0f0a6fbbaeb6296c785c71b3d57c526",
       kyberswapAggregatorUrl: "https://aggregator-api.kyberswap.com",
       kyberswapTokenApiUrl: "https://token-api.kyberswap.com",
       kyberswapLimitOrderUrl: "https://limit-order.kyberswap.com",
@@ -183,24 +137,16 @@ export function loadConfig(): VexConfig {
 
     const {
       watchlist: _legacyWatchlist,
-      ...parsedWithoutWatchlist
+      ...parsedWithoutLegacy
     } = parsed;
 
     // Deep merge with defaults to handle missing fields
     return {
       ...defaults,
-      ...parsedWithoutWatchlist,
+      ...parsedWithoutLegacy,
       chain: {
         ...defaults.chain,
         ...((parsed.chain as Record<string, unknown> | undefined) ?? {}),
-      },
-      protocol: {
-        ...defaults.protocol,
-        ...((parsed.protocol as Record<string, unknown> | undefined) ?? {}),
-      },
-      slop: {
-        ...defaults.slop,
-        ...((parsed.slop as Record<string, unknown> | undefined) ?? {}),
       },
       wallet: {
         ...defaults.wallet,
@@ -264,8 +210,6 @@ export function configExists(): boolean {
  */
 export type VexConfigPatch = {
   chain?: Partial<VexConfig["chain"]>;
-  protocol?: Partial<VexConfig["protocol"]>;
-  slop?: Partial<VexConfig["slop"]>;
   wallet?: Partial<VexConfig["wallet"]>;
   solana?: Partial<VexConfig["solana"]>;
   services?: Partial<VexConfig["services"]>;
@@ -286,8 +230,6 @@ export function saveConfigPatch(patch: VexConfigPatch): VexConfig {
   const next: VexConfig = {
     ...current,
     ...(patch.chain ? { chain: { ...current.chain, ...patch.chain } } : {}),
-    ...(patch.protocol ? { protocol: { ...current.protocol, ...patch.protocol } } : {}),
-    ...(patch.slop ? { slop: { ...current.slop, ...patch.slop } } : {}),
     ...(patch.wallet ? { wallet: { ...current.wallet, ...patch.wallet } } : {}),
     ...(patch.solana ? { solana: { ...current.solana, ...patch.solana } } : {}),
     ...(patch.services ? { services: { ...current.services, ...patch.services } } : {}),

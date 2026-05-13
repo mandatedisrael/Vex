@@ -52,7 +52,7 @@ describe("resolveChainSlug", () => {
     expect(() => resolveChainSlug("solana")).toThrow(VexError);
     expect(() => resolveChainSlug("solana")).toThrow(/Unsupported KyberSwap chain/);
     expect(() => resolveChainSlug("")).toThrow(VexError);
-    expect(() => resolveChainSlug("0g")).toThrow(VexError);
+    expect(() => resolveChainSlug("unsupported-chain")).toThrow(VexError);
   });
 });
 
@@ -67,7 +67,7 @@ describe("chainIdToSlug", () => {
 
   it("returns undefined for unknown IDs", () => {
     expect(chainIdToSlug(999999)).toBeUndefined();
-    expect(chainIdToSlug(16661)).toBeUndefined(); // 0G not supported
+    expect(chainIdToSlug(999998)).toBeUndefined();
   });
 });
 

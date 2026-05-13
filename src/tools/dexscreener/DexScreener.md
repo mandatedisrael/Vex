@@ -261,10 +261,6 @@ DexScreener uses string chain IDs. Common values:
 | Berachain | `berachain` | Ronin | `ronin` |
 | Scroll | `scroll` | zkSync | `zksync` |
 
-DexScreener does **NOT** support 0G Network. For 0G DEX analytics use Jaine Subgraph.
-
----
-
 ## Error Handling
 
 | HTTP | Error Code | Retryable | Hint |

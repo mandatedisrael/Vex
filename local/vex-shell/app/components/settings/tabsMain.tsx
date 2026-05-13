@@ -1,7 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { readAppEnvMap } from "../../../../../src/cli/setup/status.js";
-import { loadComputeState } from "../../../../../src/tools/0g-compute/compute-state.js";
 import { getOpenAITools } from "../../../../../src/vex-agent/tools/registry.js";
 import {
   type MissionRunStatus,
@@ -46,22 +45,6 @@ export function handleProviderInput(store: Store, input: string): void {
     });
     return;
   }
-  if (input === "g") {
-    void (async () => {
-      const result = await switchProviderFlow("0g-compute");
-      if (result.ok) {
-        const state = loadComputeState();
-        store.setState({
-          provider: state
-            ? { name: "0g-compute", detail: `provider=${state.activeProvider.slice(0, 10)}… model=${state.model}` }
-            : { name: "0g-compute", detail: "active" },
-        });
-        setToast(store, "ok", "Switched to 0G Compute.");
-      } else {
-        setToast(store, "error", result.error);
-      }
-    })();
-  }
   if (input === "o") {
     void (async () => {
       const result = await switchProviderFlow("openrouter");
@@ -80,7 +63,6 @@ export function handleProviderInput(store: Store, input: string): void {
 export function ProviderTab({ store }: { store: Store }): React.JSX.Element {
   const provider = useStore(store, (s) => s.provider);
   const envMap = readAppEnvMap();
-  const computeState = loadComputeState();
   return (
     <Box flexDirection="column">
       <Label>Active provider</Label>
@@ -93,17 +75,8 @@ export function ProviderTab({ store }: { store: Store }): React.JSX.Element {
         <Text>API key: {maskSecret(envMap.OPENROUTER_API_KEY)}</Text>
         <Text>Model:   {envMap.AGENT_MODEL ?? "<unset>"}</Text>
       </Box>
-      <Box marginTop={1} flexDirection="column">
-        <Label>0G Compute</Label>
-        <Text>
-          compute-state:{" "}
-          {computeState
-            ? `${computeState.activeProvider.slice(0, 10)}… / ${computeState.model}`
-            : "<none>"}
-        </Text>
-      </Box>
       <Box marginTop={1}>
-        <Hint>k — edit API key. m — edit model id. o — activate OpenRouter. g — activate 0G.</Hint>
+        <Hint>k — edit API key. m — edit model id. o — activate OpenRouter.</Hint>
       </Box>
     </Box>
   );

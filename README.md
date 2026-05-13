@@ -428,12 +428,12 @@ Vex's surface is intentionally small at the agent level and deep underneath.
 
 - **33 agent level tools** register in the engine.
 - **23 of those** are visible through the MCP bridge in a fully configured environment. The exact number dips if `TAVILY_API_KEY` is unset (hides `web_research`) or `RETTIWT_API_KEY` is unset (hides `twitter_account`), and rises by one if `POLYMARKET_API_KEY` is unset (shows `polymarket_setup` for one shot credential provisioning).
-- **240 protocol manifests** federate through two meta tools, `discover_tools` for semantic search and `execute_tool` for typed dispatch by `toolId`.
+- **140 protocol manifests** federate through two meta tools, `discover_tools` for semantic search and `execute_tool` for typed dispatch by `toolId`.
 - **40+ EVM chains plus Solana** are resolved dynamically from the Khalani chain registry at call time. There is no hardcoded chain list to rot.
 
 ### Protocol namespaces
 
-All 10 advertised namespaces are live in code. Two (`0g-compute`, `0g-storage`) are reserved placeholders, declared in the allowlist but not yet wired, so `discover_tools` hides them.
+Five protocol namespaces are live in code and reachable through `discover_tools`.
 
 | Namespace | Tools | Mutating | Read only | Gated by | Role |
 |---|---:|---:|---:|---|---|
@@ -442,15 +442,8 @@ All 10 advertised namespaces are live in code. Two (`0g-compute`, `0g-storage`) 
 | `kyberswap` | 21 | 11 | 10 | None | EVM swap, zap, limit orders, chain and token registry |
 | `khalani` | 9 | 1 | 8 | None | Cross chain bridge plus canonical token and chain registry |
 | `dexscreener` | 11 | 0 | 11 | None | Market research, trending, paid order verification |
-| `jaine` (0G) | 24 | 6 | 18 | None | 0G DEX: pools, swaps, allowance, wrap |
-| `slop` (0G) | 13 | 6 | 7 | None | 0G bonding curve launchpad |
-| `slop-app` | 10 | 4 | 6 | None | Slop.money app APIs (profile, image, agents, chat) |
-| `chainscan` (0G) | 20 | 0 | 20 | None | 0G explorer: account, tx, contract, decode, stats |
-| `echobook` | 33 | 13 | 20 | None | Social trading feed: posts, comments, social graph, communities, trade proofs |
-| `0g-compute` | 0 | 0 | 0 | n/a | Reserved |
-| `0g-storage` | 0 | 0 | 0 | n/a | Reserved |
 
-**Totals: 240 manifests across 10 live namespaces, 57 mutating, 183 read only.**
+**Totals: 140 manifests across 5 live namespaces, 28 mutating, 112 read only.**
 
 ### Agent level tools (non protocol)
 
@@ -648,7 +641,7 @@ Embeddings change. Models get deprecated, dimensions get bumped, research moves.
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `AGENT_PROVIDER` | Inference provider, `openrouter` or `0g-compute` | openrouter |
+| `AGENT_PROVIDER` | Inference provider, `openrouter` | openrouter |
 | `AGENT_MODEL` | Model identifier for the chosen provider | provider dependent |
 | `AGENT_CONTEXT_LIMIT` | Prompt window for top level agent | 128000 |
 | `AGENT_MAX_OUTPUT_TOKENS` | Completion cap per turn | 16384 |
@@ -700,11 +693,10 @@ Both require Postgres with migration 010 applied, populated `tool_embeddings`, a
 | Runtime | Node 22 or newer, TypeScript 5.6 strict | Type safety end to end, no `any`. |
 | Persistence | PostgreSQL with pgvector | One store for transcripts, episodes, knowledge, blobs, handoffs, wake rows, leases. No ops sprawl. |
 | Validation | Zod 4.x | Every boundary input narrowed to typed values at the seam. |
-| Inference | OpenRouter (default) or 0G compute | Provider swap is a single registry call. |
+| Inference | OpenRouter | Provider selection is configured through the registry. |
 | Bridge | `@modelcontextprotocol/sdk` 1.29 | Stdio and streamable HTTP out of the box. |
 | EVM | `viem` 2.45 plus `ethers` 6 | Chain registry resolved dynamically from Khalani. |
 | Solana | `@solana/web3.js` 1.98, SPL Token | Jupiter API for swaps and lending. |
-| 0G | `@0gfoundation/0g-ts-sdk`, `@0glabs/0g-serving-broker` | Native 0G DEX, launchpad, explorer, compute SDK. |
 | Testing | Vitest, Testcontainers with Postgres plus pgvector | Integration tests spin fresh databases. E2E live tests replay real scenarios. |
 | Logging | winston to stderr only | Safe for stdio JSON RPC transport. |
 
@@ -756,7 +748,7 @@ src/
     knowledge/            # Policy, ranking, content hash, recall payload
     tools/                # Tool registry, dispatcher, internal handlers, protocol manifests
     db/                   # Migrations, repos (messages, sessions, episodes, knowledge, wake, blobs, handoffs, leases)
-    inference/            # Provider registry (OpenRouter, 0G compute), config, context bands
+    inference/            # Provider registry (OpenRouter), config, context bands
     embeddings/           # Embedding client
     scripts/              # Reembed, export, import, benchmarks, compliance checks
     e2e/                  # Live test scenarios with dated runs

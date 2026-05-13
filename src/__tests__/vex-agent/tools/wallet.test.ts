@@ -28,9 +28,9 @@ vi.mock("viem", () => ({
 }));
 
 const MOCK_CHAIN = {
-  id: 16661, name: "0G", type: "eip155" as const,
-  nativeCurrency: { name: "0G", symbol: "0G", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc.0g.example.com"] } },
+  id: 1, name: "Ethereum", type: "eip155" as const,
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: { default: { http: ["https://ethereum.example.com"] } },
 };
 const MOCK_SOLANA_CHAIN = {
   id: 20011000000, name: "Solana", type: "solana" as const,
@@ -41,14 +41,14 @@ const MOCK_SOLANA_CHAIN = {
 vi.mock("@tools/khalani/client.js", () => ({
   getKhalaniClient: () => ({
     getTokenBalances: async (_address: string, chainIds?: number[]) => {
-      const chainId = chainIds?.[0] ?? 16661;
+      const chainId = chainIds?.[0] ?? 1;
       if (chainId === 20011000000) {
         return [
           { address: "So11111111111111111111111111111111111111112", chainId, symbol: "SOL", name: "Solana", decimals: 9, extensions: { balance: "2000000000", price: { usd: "100.00" } } },
         ];
       }
       return [
-        { address: "native", chainId, symbol: "0G", name: "0G", decimals: 18, extensions: { balance: "5000000000000000000", price: { usd: "0.05" } } },
+        { address: "native", chainId, symbol: "ETH", name: "Ether", decimals: 18, extensions: { balance: "5000000000000000000", price: { usd: "3000.00" } } },
         { address: "0xUSDC", chainId, symbol: "USDC", name: "USD Coin", decimals: 6, extensions: { balance: "100000000", price: { usd: "1.00" } } },
       ];
     },
@@ -56,7 +56,7 @@ vi.mock("@tools/khalani/client.js", () => ({
   }),
 }));
 
-const mockResolveChainId = vi.fn().mockReturnValue(16661);
+const mockResolveChainId = vi.fn().mockReturnValue(1);
 const mockGetChain = vi.fn().mockReturnValue(MOCK_CHAIN);
 
 vi.mock("@tools/khalani/chains.js", () => ({
@@ -174,12 +174,12 @@ describe("wallet_read", () => {
     const result = await handleWalletRead({ wallet: "eip155" }, baseContext);
     const data = JSON.parse(result.output);
     const tokens = data.wallets[0].tokens;
-    expect(tokens.map((token: { symbol: string }) => token.symbol)).toContain("0G");
-    const zeroG = tokens.find((token: {
+    expect(tokens.map((token: { symbol: string }) => token.symbol)).toContain("ETH");
+    const eth = tokens.find((token: {
       symbol: string;
       extensions?: { price?: { usd?: string } };
-    }) => token.symbol === "0G");
-    expect(zeroG?.extensions?.price?.usd).toBe("0.05");
+    }) => token.symbol === "ETH");
+    expect(eth?.extensions?.price?.usd).toBe("3000.00");
   });
 
   // ── errors ─────────────────────────────────────────────────────
@@ -208,12 +208,21 @@ describe("wallet_send_prepare", () => {
 
   it("creates a transfer intent for EVM", async () => {
     const result = await handleWalletSendPrepare(
-      { network: "eip155", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "0.5" },
+      { network: "eip155", chain: "ethereum", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "0.5" },
       baseContext,
     );
     expect(result.success).toBe(true);
     const data = JSON.parse(result.output);
     expect(data.network).toBe("eip155");
+  });
+
+  it("fails for EVM without chain", async () => {
+    const result = await handleWalletSendPrepare(
+      { network: "eip155", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "0.5" },
+      baseContext,
+    );
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("chain for eip155");
   });
 
   it("creates intent with SPL token", async () => {
@@ -336,7 +345,7 @@ describe("wallet_send_confirm", () => {
 
   it("executes EVM native transfer after prepare", async () => {
     const prepResult = await handleWalletSendPrepare(
-      { network: "eip155", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "0.1" },
+      { network: "eip155", chain: "ethereum", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "0.1" },
       baseContext,
     );
     const intentId = JSON.parse(prepResult.output).intentId;
@@ -448,7 +457,7 @@ describe("wallet_send_confirm — EVM branches", () => {
   it("ERC-20 branch calls writeContract with transfer ABI", async () => {
     const tokenAddress = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
     const prepResult = await handleWalletSendPrepare(
-      { network: "eip155", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "100", token: tokenAddress },
+      { network: "eip155", chain: "ethereum", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "100", token: tokenAddress },
       baseContext,
     );
     const intentId = JSON.parse(prepResult.output).intentId;
@@ -472,7 +481,7 @@ describe("wallet_send_confirm — EVM branches", () => {
 
   it("ERC-721 branch calls writeContract with safeTransferFrom ABI", async () => {
     const prepResult = await handleWalletSendPrepare(
-      { network: "eip155", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "1", token: "nft:0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D:42" },
+      { network: "eip155", chain: "ethereum", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "1", token: "nft:0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D:42" },
       baseContext,
     );
     const intentId = JSON.parse(prepResult.output).intentId;
@@ -495,7 +504,7 @@ describe("wallet_send_confirm — EVM branches", () => {
 
   it("native branch calls sendTransaction (not writeContract)", async () => {
     const prepResult = await handleWalletSendPrepare(
-      { network: "eip155", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "0.5" },
+      { network: "eip155", chain: "ethereum", to: "0x1234567890abcdef1234567890abcdef12345678", amount: "0.5" },
       baseContext,
     );
     const intentId = JSON.parse(prepResult.output).intentId;

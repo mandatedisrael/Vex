@@ -1,7 +1,7 @@
 /**
  * Retry and timeout utilities for inference calls.
  *
- * Used by both OpenRouter (fallback for SDK errors) and 0G Compute (raw fetch).
+ * Used by OpenRouter fallback paths.
  * Never used for writes or streaming — only idempotent reads.
  */
 

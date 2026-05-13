@@ -316,11 +316,11 @@ export async function directRunTool(
 /**
  * Switch the active inference provider in-process. Does NOT run guided
  * credential/setup flows — those live in the UI layer (2C+). Call this after
- * the wizard has persisted `OPENROUTER_API_KEY` / `AGENT_MODEL` or the 0G
- * compute-state file; `switchProvider` then resolves the provider factory.
+ * the wizard has persisted `OPENROUTER_API_KEY` / `AGENT_MODEL`;
+ * `switchProvider` then resolves the provider factory.
  */
 export async function switchProviderFlow(
-  name: "openrouter" | "0g-compute",
+  name: "openrouter",
 ): Promise<ActionResult<InferenceProvider>> {
   try {
     const provider = await switchProvider(name);
@@ -328,10 +328,7 @@ export async function switchProviderFlow(
       return {
         ok: false,
         error: `switchProvider("${name}") returned null.`,
-        hint:
-          name === "openrouter"
-            ? "Check OPENROUTER_API_KEY + AGENT_MODEL in ~/.vex/.env."
-            : "Check compute-state.json exists and 0G readiness passes.",
+        hint: "Check OPENROUTER_API_KEY + AGENT_MODEL in ~/.vex/.env.",
       };
     }
     return { ok: true, value: provider };

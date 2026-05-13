@@ -18,8 +18,8 @@
  * This is the **first slice of the per-provider projection layer** described
  * in `agents_dm/vex-tool-surface-longterm-architecture.md` Phase 1. The full
  * layer (six emitters keyed on `(provider, apiVersion)`) builds on this
- * baseline. Until then, both OpenRouter and 0G Compute call this same
- * function — single source of truth for tool-schema strict normalization.
+ * baseline. OpenRouter calls this same function as the single source of truth
+ * for tool-schema strict normalization.
  *
  * The function is idempotent and pure: passing the same schema twice yields
  * the same output and does not mutate the input. Tests in

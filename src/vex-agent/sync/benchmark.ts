@@ -8,7 +8,6 @@
 
 const CHAIN_BENCHMARKS: Record<string, string> = {
   solana: "SOL",
-  "0g": "0G",
   ethereum: "ETH",
   polygon: "MATIC",
   arbitrum: "ETH",

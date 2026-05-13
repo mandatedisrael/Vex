@@ -6,7 +6,7 @@
  * canonical values → temp+rename + mode 0o600. This is the codex
  * turn 2 RED #2 fix: 3 separate `appendToDotenvFile` calls only
  * serialise via `withEnvWriteLock`; they do NOT make the multi-key
- * update transactional, and a stale `AGENT_PROVIDER=0g-compute`
+ * update transactional, and a stale unsupported `AGENT_PROVIDER`
  * (manual edit / future code) would silently override the wizard's
  * choice via engine precedence (`registry.ts:47-69`).
  *

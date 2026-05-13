@@ -1,7 +1,7 @@
 /**
  * Canonical chain hint resolution.
  *
- * _tradeCapture.chain returns varied formats: "solana", "polygon", "0g",
+ * _tradeCapture.chain returns varied formats: "solana", "polygon",
  * "ethereum", "base", stringified chainId. This normalizes to { family, chainIds }
  * for selective balance sync.
  */

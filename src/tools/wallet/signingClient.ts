@@ -10,8 +10,8 @@ export function getSigningClient(privateKey: Hex) {
     account,
     chain: {
       id: cfg.chain.chainId,
-      name: "0G",
-      nativeCurrency: { name: "0G", symbol: "0G", decimals: 18 },
+      name: cfg.chain.name,
+      nativeCurrency: cfg.chain.nativeCurrency,
       rpcUrls: { default: { http: [cfg.chain.rpcUrl] } },
     },
     transport: http(cfg.chain.rpcUrl, { timeout: 30_000, retryCount: 2 }),

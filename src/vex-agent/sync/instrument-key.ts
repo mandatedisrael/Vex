@@ -6,7 +6,6 @@
  *   solana:{mint}                    → spot (Solana)
  *   solana:predict:{marketId}:{side} → prediction (Jupiter)
  *   polymarket:{conditionId}:{outcome} → prediction (Polymarket)
- *   0g:{address}                     → spot (Jaine/Slop on 0G)
  *   {slug}:{address}                 → spot (KyberSwap on EVM)
  *   {slug}:lp:{pool}                → lp (KyberSwap zap)
  *   {slug}:lo:{maker}:{taker}       → limit_order (KyberSwap)
@@ -43,7 +42,7 @@ export function parseInstrumentKey(key: string): ParsedInstrumentKey {
     return { chain: parts[0], kind: "limit_order" };
   }
 
-  // {chain}:{address} — spot (solana:{mint}, 0g:{addr}, ethereum:{addr}, etc.)
+  // {chain}:{address} — spot (solana:{mint}, ethereum:{addr}, etc.)
   if (parts.length === 2) {
     return { chain: parts[0], tokenAddress: parts[1], kind: "spot" };
   }

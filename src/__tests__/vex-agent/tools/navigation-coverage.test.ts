@@ -9,10 +9,7 @@ describe("navigation facet coverage", () => {
   it("every advertised protocol tool maps to at least one facet", () => {
     // Regression guard: a manifest landing without a matching facet means
     // the tool will silently fall outside `Paths` guidance and lose its
-    // discovery boost. The two known historic gaps were
-    // `echobook.comments.get` (facet had `echobook.post` but no
-    // `echobook.comment`/`echobook.comments`) and `slop.tokens.mine`
-    // (facet had `slop.token` which doesn't match the plural prefix).
+    // discovery boost.
     const orphans: string[] = [];
     for (const tool of PROTOCOL_TOOLS) {
       if (!isAdvertisedProtocolNamespace(tool.namespace)) continue;

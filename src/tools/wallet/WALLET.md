@@ -1,6 +1,6 @@
 # Wallet — Multi-chain Keystore & Signing
 
-> Encrypted keystore management for EVM (0G, Polygon, 18+ chains) and Solana wallets. AES-256-GCM encryption with scrypt KDF, atomic file writes, viem clients for on-chain reads/writes, multi-chain auth dispatch, and native balance fetching across 40+ chains.
+> Encrypted keystore management for EVM and Solana wallets. AES-256-GCM encryption with scrypt KDF, atomic file writes, viem clients for on-chain reads/writes, multi-chain auth dispatch, and native balance fetching across 40+ chains.
 >
 > **Last updated: 2026-03-30**
 >
@@ -17,8 +17,8 @@ src/tools/wallet/
   auth.ts             — requireWalletAndKeystore() — single entry point for EVM wallet+key
   multi-auth.ts       — Multi-chain dispatch: requireEvmWallet(), requireSolanaWallet(), requireWalletForChain()
   family.ts           — Chain family normalization (eip155/solana) + display formatting
-  client.ts           — viem PublicClient for 0G (cached singleton, read-only)
-  signingClient.ts    — viem WalletClient for 0G (signing, per-call)
+  client.ts           — viem PublicClient for the configured EVM chain (cached singleton, read-only)
+  signingClient.ts    — viem WalletClient for the configured EVM chain (signing, per-call)
   create.ts           — EVM wallet creation (generate key → encrypt → save config)
   import.ts           — EVM wallet import (validate key → encrypt → save config)
   solana-create.ts    — Solana wallet creation (Keypair.generate → encrypt → save config)
@@ -122,11 +122,11 @@ Solana auth includes address mismatch detection (derived vs configured).
 
 ### `client.ts` — Read-only (cached)
 
-`getPublicClient()` — singleton viem `PublicClient` for 0G Network. 10s timeout, 2 retries. Cache invalidated if RPC URL changes.
+`getPublicClient()` — singleton viem `PublicClient` for the configured EVM chain. 10s timeout, 2 retries. Cache invalidated if RPC URL changes.
 
 ### `signingClient.ts` — Write (per-call)
 
-`getSigningClient(privateKey)` — creates viem `WalletClient` for 0G. 30s timeout. Not cached (different keys).
+`getSigningClient(privateKey)` — creates viem `WalletClient` for the configured EVM chain. 30s timeout. Not cached (different keys).
 
 ---
 
@@ -174,12 +174,8 @@ Fetches native currency balance across multiple chains:
 
 Nearly every module that touches on-chain:
 - `bot/executor.ts` — trade execution
-- `tools/0g-compute/` — broker authentication
-- `tools/jaine/` — swap routing, allowance management
 - `tools/khalani/` — cross-chain bridge execution
 - `tools/polymarket/` — EIP-712 order signing
-- `tools/echobook/` — auth (nonce signing)
-- `tools/slop/` — auth (nonce signing)
 - `commands/wallet/` — CLI wallet operations
 - `commands/send.ts` — native transfers
 - `password/` — health checks, decrypt validation

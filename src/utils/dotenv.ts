@@ -120,10 +120,8 @@ export function removeFromDotenvFile(key: string, envPath: string): boolean {
  * stale-key drift M10 already fixed for provider state.
  *
  * Used by M10 provider-writer to guarantee that OPENROUTER_API_KEY,
- * AGENT_MODEL, and AGENT_PROVIDER are written as one consistent set
- * (no partial state, no duplicate AGENT_PROVIDER=0g-compute lines
- * left behind from prior CLI or manual edits). M11 mode/wake writers
- * additionally rely on the null-as-delete semantics.
+ * AGENT_MODEL, and AGENT_PROVIDER are written as one consistent set.
+ * M11 mode/wake writers additionally rely on the null-as-delete semantics.
  *
  * Throws on fs/permission errors — caller wraps in Result.
  */
@@ -141,10 +139,9 @@ export function appendMultipleToDotenvFile(
 
   // Strip ALL existing occurrences of every key (handles duplicates +
   // lines with leading horizontal whitespace, which `loadDotenvFileIntoProcess`
-  // accepts because it `line.trim()`s before parsing — a stale line like
-  // `   AGENT_PROVIDER="0g-compute"` survives if we don't match it here,
-  // and the loader's first-match-wins rule would pick the stale value
-  // over the canonical one we append below.
+  // accepts because it `line.trim()`s before parsing. The loader's
+  // first-match-wins rule would pick a stale value over the canonical one we
+  // append below.
   for (const key of Object.keys(updates)) {
     const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const regex = new RegExp(

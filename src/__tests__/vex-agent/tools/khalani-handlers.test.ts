@@ -1,6 +1,5 @@
 /**
- * Khalani handlers — parity with `echobook-handlers.test.ts` /
- * `polymarket-handlers.test.ts` (plan §4a). Asserts structural coverage
+ * Khalani handlers — parity with the other protocol handler tests. Asserts structural coverage
  * (handler ↔ manifest pairing, count, all functions) and required-param
  * rejection paths that don't need a live Khalani client.
  *
