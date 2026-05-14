@@ -30,6 +30,7 @@ import {
   type JSX,
 } from "react";
 import { PASSWORD_MIN_LENGTH } from "@shared/schemas/secrets.js";
+import { getErrorCopy } from "../../../../lib/errors/error-copy.js";
 import type { PolymarketAutoSetupResult } from "@shared/schemas/api-keys.js";
 import { Button } from "../../../../components/ui/button.js";
 import {
@@ -114,41 +115,21 @@ export function PolymarketSudoModal({
         });
 
         if (!result.ok) {
-          const code = result.error.code;
-          switch (code) {
-            case "wallet.password_invalid":
-              setError("Niepoprawne master password.");
-              break;
-            case "wallet.keystore_locked":
-              setError("Vault locked. Re-unlock Vex first.");
-              break;
-            case "wallet.keystore_missing":
-              setError("EVM wallet required.");
-              break;
-            case "wallet.risk_confirmation_required":
-              // Defense in depth: parent races may have lost the
-              // confirm state. Bubble up to the parent, which is
-              // responsible for transitioning to the confirm phase.
-              // We do NOT call onClose here — onRiskConfirmationRequired
-              // already moves the parent off the submitting phase, and
-              // calling both would race-overwrite the new phase to idle.
-              onRiskConfirmationRequired();
-              return;
-            case "provider.polymarket_setup_failed":
-              setError(
-                `Polymarket setup failed. ${result.error.message}`,
-              );
-              break;
-            case "provider.unavailable":
-              setError("Polymarket service unavailable. Try again later.");
-              break;
-            case "onboarding.env_persist_failed":
-              setError("Failed to save credentials to vault.");
-              break;
-            default:
-              setError(result.error.message);
-              break;
+          // Workflow-control branch: a race between the renderer's
+          // overwriteConfirmed state and the main-side recheck can produce
+          // this code. Bubble up to the parent so it re-opens the confirm
+          // modal. We do NOT call onClose here — onRiskConfirmationRequired
+          // moves the parent off the submitting phase, and calling both
+          // would race-overwrite the new phase to idle.
+          if (result.error.code === "wallet.risk_confirmation_required") {
+            onRiskConfirmationRequired();
+            return;
           }
+          // Pure copy-mapping for every other code goes through the helper.
+          // `wallet.keystore_missing` here is EVM-specific because the
+          // Polymarket auto-setup signs with the EVM wallet keystore.
+          const copy = getErrorCopy(result.error, { chain: "evm" });
+          setError(copy.message);
           return;
         }
 
@@ -161,7 +142,7 @@ export function PolymarketSudoModal({
         const message =
           cause instanceof Error
             ? cause.message
-            : "Nieznany błąd podczas auto-setup Polymarket.";
+            : "Unexpected error during Polymarket auto-setup.";
         setError(message);
       } finally {
         setPending(false);
@@ -214,11 +195,12 @@ export function PolymarketSudoModal({
               className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground"
               role="alert"
             >
-              Vex użyje twojego EVM walleta do podpisania żądania
-              uwierzytelnienia na Polymarket, pobierze klucz API, sekret i
-              passphrase, i zapisze je w zaszyfrowanym vault. Klucze NIE
-              zostaną pokazane na ekranie ani skopiowane do schowka. Wpisz
-              master password, aby zatwierdzić tę operację.
+              Vex will use your EVM wallet to sign a Polymarket
+              authentication request, retrieve an API key, secret, and
+              passphrase, and save them to the encrypted vault. The
+              credentials will NOT be displayed on screen or copied to the
+              clipboard. Enter your master password to authorize this
+              operation.
             </p>
 
             <label className="flex items-start gap-2 text-sm">
@@ -230,7 +212,7 @@ export function PolymarketSudoModal({
                 className="mt-0.5 h-4 w-4 rounded border-input"
                 data-vex-polymarket-sudo-ack
               />
-              <span>Rozumiem i akceptuję</span>
+              <span>I understand and accept the risks</span>
             </label>
 
             <div className="flex flex-col gap-2">

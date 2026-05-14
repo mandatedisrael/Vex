@@ -30,6 +30,54 @@ const polymarketTrioSchema = z
 
 export type PolymarketTrioInput = z.infer<typeof polymarketTrioSchema>;
 
+/**
+ * Renderer-side input shape for the manual Polymarket trio (three text
+ * inputs that the user may have filled in fully, partly, or not at all).
+ * Values are POST-trim — empty strings mean "not filled".
+ */
+export interface PolymarketManualTrioInput {
+  readonly apiKey: string;
+  readonly apiSecret: string;
+  readonly passphrase: string;
+}
+
+export type PolymarketManualTrioStatus = "empty" | "complete" | "partial";
+
+export interface PolymarketManualTrioResult {
+  readonly kind: PolymarketManualTrioStatus;
+  /**
+   * Names of the missing fields when `kind === "partial"`. Names match the
+   * key in `PolymarketManualTrioInput` so the caller can localise / highlight
+   * exactly the right inputs.
+   */
+  readonly missing: ReadonlyArray<keyof PolymarketManualTrioInput>;
+}
+
+/**
+ * Pure helper for the renderer to classify whether the user filled the
+ * manual Polymarket trio. Does NOT relax the boundary contract — the IPC
+ * schema (`apiKeysSetInputSchema.polymarket`) still demands a complete
+ * trio when present; this helper just lets the renderer surface a clear
+ * UX message before submit.
+ */
+export function validatePolymarketManualTrio(
+  input: PolymarketManualTrioInput,
+): PolymarketManualTrioResult {
+  const present = {
+    apiKey: input.apiKey.length > 0,
+    apiSecret: input.apiSecret.length > 0,
+    passphrase: input.passphrase.length > 0,
+  } as const;
+  const filled = Object.values(present).filter(Boolean).length;
+  if (filled === 0) return { kind: "empty", missing: [] };
+  if (filled === 3) return { kind: "complete", missing: [] };
+  const missing: Array<keyof PolymarketManualTrioInput> = [];
+  if (!present.apiKey) missing.push("apiKey");
+  if (!present.apiSecret) missing.push("apiSecret");
+  if (!present.passphrase) missing.push("passphrase");
+  return { kind: "partial", missing };
+}
+
 export const apiKeysSetInputSchema = z
   .object({
     jupiterApiKey: optionalSecret,

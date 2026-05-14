@@ -145,7 +145,7 @@ describe("UnlockScreen", () => {
     fireEvent.input(input, { target: { value: "wrong-password-12" } });
     fireEvent.click(view.getByRole("button", { name: /Unlock/i }));
 
-    await view.findByText(/Master password is incorrect\./i);
+    await view.findByText(/Master password is incorrect/i);
     expect(input.value).toBe("wrong-password-12");
     expect(mockSetCurrentView).not.toHaveBeenCalled();
   });
@@ -191,7 +191,7 @@ describe("UnlockScreen", () => {
       if (node === null) throw new Error("throttle alert not rendered yet");
       return node;
     });
-    expect(throttleNode.textContent).toMatch(/Too many attempts\./);
+    expect(throttleNode.textContent).toMatch(/Too many attempts/);
     expect(throttleNode.textContent).toMatch(/8s/);
 
     const button = view.getByRole("button", { name: /Unlock/i }) as HTMLButtonElement;

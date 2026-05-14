@@ -19,6 +19,7 @@ import {
   type WizardStepId,
   type WizardState,
 } from "@shared/schemas/wizard.js";
+import { Button } from "../../components/ui/button.js";
 import {
   Card,
   CardContent,
@@ -160,9 +161,19 @@ export function WizardShell(): JSX.Element {
           <CardContent className="flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">{message}</p>
             <p className="text-xs text-muted-foreground">
-              Restart Vex — the wizard recovers its progress from local
-              state on the next launch.
+              Most setup-state failures are transient — retry once, then
+              restart Vex if the problem persists.
             </p>
+            <Button
+              type="button"
+              onClick={() => {
+                void wizardStateQuery.refetch();
+              }}
+              disabled={wizardStateQuery.isFetching}
+              data-vex-wizard-retry
+            >
+              {wizardStateQuery.isFetching ? "Retrying…" : "Retry"}
+            </Button>
           </CardContent>
         </Card>
       </main>

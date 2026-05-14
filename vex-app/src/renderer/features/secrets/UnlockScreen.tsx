@@ -10,6 +10,7 @@ import { Input } from "../../components/ui/input.js";
 import { Label } from "../../components/ui/label.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { PASSWORD_MIN_LENGTH } from "@shared/schemas/secrets.js";
+import { getErrorCopy } from "../../lib/errors/error-copy.js";
 
 /**
  * Inline lock-icon SVG. `lucide-react` is not a vex-app dependency, so we
@@ -95,15 +96,19 @@ export function UnlockScreen(): JSX.Element {
           && typeof result.error.retryAfterMs === "number"
           && result.error.retryAfterMs >= 0
         ) {
+          // Workflow-specific UX (countdown banner) — message comes from
+          // the shared copy helper so the wording stays consistent with
+          // other throttle surfaces (export, polymarket).
+          const copy = getErrorCopy(result.error);
           setThrottle({
-            message: result.error.message,
+            message: copy.message,
             retryAtMs: Date.now() + result.error.retryAfterMs,
           });
           setNow(Date.now());
           setError(null);
           return;
         }
-        setError(result.error.message);
+        setError(getErrorCopy(result.error).message);
         return;
       }
       if (passwordRef.current) passwordRef.current.value = "";
@@ -144,7 +149,7 @@ export function UnlockScreen(): JSX.Element {
                 role="alert"
                 data-vex-unlock-throttle="active"
               >
-                {throttle.message} Try again in {throttleRemainingSeconds}s.
+                {throttle.message} ({throttleRemainingSeconds}s)
               </p>
             ) : error ? (
               <p className="text-sm text-destructive" role="alert">

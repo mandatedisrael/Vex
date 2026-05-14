@@ -41,6 +41,7 @@ import {
   type JSX,
 } from "react";
 import { PASSWORD_MIN_LENGTH } from "@shared/schemas/secrets.js";
+import { getErrorCopy } from "../../lib/errors/error-copy.js";
 import { Button } from "../../components/ui/button.js";
 import {
   Dialog,
@@ -230,34 +231,12 @@ export function ExportPrivateKeyModal({
           // sitting in the DOM between attempts.
           wipePasswordField();
 
-          const code = result.error.code;
-          switch (code) {
-            case "wallet.password_invalid":
-              setError("Niepoprawne hasło.");
-              break;
-            case "wallet.export_throttled": {
-              const retryMs = result.error.retryAfterMs ?? 0;
-              const retrySec = Math.max(1, Math.ceil(retryMs / 1000));
-              setError(`Zbyt wiele prób. Spróbuj ponownie za ${retrySec}s.`);
-              break;
-            }
-            case "wallet.keystore_locked":
-              setError(
-                "Sesja została zablokowana. Zamknij to okno i odblokuj Vex ponownie.",
-              );
-              scheduleSessionLockAutoClose();
-              break;
-            case "wallet.keystore_missing":
-              setError(
-                `Wallet keystore nie istnieje dla ${CHAIN_LABEL[chain]}.`,
-              );
-              break;
-            case "wallet.keystore_corrupt":
-              setError("Wallet keystore jest uszkodzony.");
-              break;
-            default:
-              setError(result.error.message);
-              break;
+          const copy = getErrorCopy(result.error, { chain });
+          setError(copy.message);
+          // Helper signals that this error should auto-route the user back
+          // to the global unlock screen — schedule the modal dismiss.
+          if (copy.autoCloseMs !== undefined) {
+            scheduleSessionLockAutoClose();
           }
           return;
         }
@@ -276,7 +255,7 @@ export function ExportPrivateKeyModal({
         const message =
           cause instanceof Error
             ? cause.message
-            : "Nieznany błąd podczas eksportu klucza.";
+            : "Unexpected error during private key export.";
         wipePasswordField();
         setError(message);
       } finally {
@@ -331,12 +310,12 @@ export function ExportPrivateKeyModal({
                 className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
                 role="alert"
               >
-                Twój klucz prywatny zostanie skopiowany do schowka systemu. Vex{" "}
-                <strong>spróbuje</strong> wyczyścić schowek po 10 sekundach,
-                ale to best-effort (crash lub utrata zasilania może
-                uniemożliwić cleanup). Każdy z dostępem do twojego komputera w
-                tym oknie może odczytać klucz. Nie wklejaj w niezaufanych
-                miejscach. Klucz NIE zostanie pokazany na ekranie.
+                Your private key will be copied to the system clipboard. Vex{" "}
+                <strong>will attempt</strong> to clear the clipboard after 10
+                seconds, but this is best-effort — a crash or power loss may
+                prevent cleanup. Anyone with access to this computer during
+                that window can read the key. Do not paste it into untrusted
+                applications. The key will NOT be shown on screen.
               </p>
 
               <label className="flex items-start gap-2 text-sm">
@@ -348,7 +327,7 @@ export function ExportPrivateKeyModal({
                   className="mt-0.5 h-4 w-4 rounded border-input"
                   data-vex-export-ack
                 />
-                <span>Rozumiem ryzyko i akceptuję</span>
+                <span>I understand and accept the risks</span>
               </label>
 
               <div className="flex flex-col gap-2">
@@ -388,7 +367,7 @@ export function ExportPrivateKeyModal({
               role="status"
               data-vex-export-status="copied"
             >
-              Skopiowano. Schowek wyczyści się za {clearCountdown}s.
+              Copied. Clipboard will be scrubbed in {clearCountdown}s.
             </p>
           ) : null}
 
@@ -398,7 +377,7 @@ export function ExportPrivateKeyModal({
               role="status"
               data-vex-export-status="cleared"
             >
-              Vex spróbował wyczyścić schowek. Okno zamknie się za chwilę…
+              Vex attempted to scrub the clipboard. This window will close shortly.
             </p>
           ) : null}
         </DialogBody>

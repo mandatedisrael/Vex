@@ -206,7 +206,7 @@ describe("ExportPrivateKeyModal", () => {
       if (node === null) throw new Error("copied banner not rendered");
       return node;
     });
-    expect(banner.textContent).toMatch(/Skopiowano/);
+    expect(banner.textContent).toMatch(/Copied/);
     expect(banner.textContent).toMatch(/10s/);
     // Form is replaced by the banner — submit button is gone.
     expect(
@@ -321,7 +321,7 @@ describe("ExportPrivateKeyModal", () => {
     await waitFor(() => {
       const err = view.container.querySelector("[data-vex-export-error]");
       if (err === null) throw new Error("error not rendered");
-      expect(err.textContent).toMatch(/Niepoprawne hasło/);
+      expect(err.textContent).toMatch(/Master password is incorrect/);
     });
     expect(input.value).toBe("");
     // Risk acknowledgement stays checked — operator only needs to retype
@@ -349,7 +349,7 @@ describe("ExportPrivateKeyModal", () => {
     await waitFor(() => {
       const err = view.container.querySelector("[data-vex-export-error]");
       if (err === null) throw new Error("error not rendered");
-      expect(err.textContent).toMatch(/Zbyt wiele prób/);
+      expect(err.textContent).toMatch(/Too many attempts/);
       expect(err.textContent).toMatch(/8s/);
     });
   });
@@ -373,7 +373,7 @@ describe("ExportPrivateKeyModal", () => {
     await waitFor(() => {
       const err = view.container.querySelector("[data-vex-export-error]");
       if (err === null) throw new Error("error not rendered");
-      expect(err.textContent).toMatch(/Sesja została zablokowana/);
+      expect(err.textContent).toMatch(/Vault session locked/);
     });
     // Auto-close kicks in after ~3s.
     await waitFor(
@@ -403,7 +403,7 @@ describe("ExportPrivateKeyModal", () => {
     await waitFor(() => {
       const err = view.container.querySelector("[data-vex-export-error]");
       if (err === null) throw new Error("error not rendered");
-      expect(err.textContent).toMatch(/Wallet keystore nie istnieje/);
+      expect(err.textContent).toMatch(/wallet keystore not found/);
       expect(err.textContent).toMatch(/Solana/);
     });
   });

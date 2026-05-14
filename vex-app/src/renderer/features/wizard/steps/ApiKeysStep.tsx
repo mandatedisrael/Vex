@@ -27,6 +27,7 @@
 import { useCallback, useRef, useState, type JSX } from "react";
 import {
   type ApiKeysSetInput,
+  validatePolymarketManualTrio,
 } from "@shared/schemas/api-keys.js";
 import {
   type WizardStepId,
@@ -81,9 +82,12 @@ function buildPayload(refs: FieldRefs): ApiKeysSetInput | { error: string } {
   const pmSecret = refs.polymarketSecret.current?.value.trim() ?? "";
   const pmPass = refs.polymarketPassphrase.current?.value.trim() ?? "";
 
-  const polymarketTouched = pmKey.length > 0 || pmSecret.length > 0 || pmPass.length > 0;
-  const polymarketComplete = pmKey.length > 0 && pmSecret.length > 0 && pmPass.length > 0;
-  if (polymarketTouched && !polymarketComplete) {
+  const trio = validatePolymarketManualTrio({
+    apiKey: pmKey,
+    apiSecret: pmSecret,
+    passphrase: pmPass,
+  });
+  if (trio.kind === "partial") {
     return {
       error:
         "Polymarket needs all three fields (API key, secret, passphrase) — or leave them all blank.",
@@ -94,7 +98,7 @@ function buildPayload(refs: FieldRefs): ApiKeysSetInput | { error: string } {
     ...(jupiter.length > 0 ? { jupiterApiKey: jupiter } : {}),
     ...(tavily.length > 0 ? { tavilyApiKey: tavily } : {}),
     ...(rettiwt.length > 0 ? { rettiwtApiKey: rettiwt } : {}),
-    ...(polymarketComplete
+    ...(trio.kind === "complete"
       ? {
           polymarket: {
             apiKey: pmKey,

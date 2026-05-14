@@ -229,7 +229,7 @@ describe("PolymarketSudoModal", () => {
         "[data-vex-polymarket-sudo-error]",
       );
       if (err === null) throw new Error("error not rendered");
-      expect(err.textContent).toMatch(/Niepoprawne master password/);
+      expect(err.textContent).toMatch(/Master password is incorrect/);
     });
   });
 
@@ -254,7 +254,7 @@ describe("PolymarketSudoModal", () => {
         "[data-vex-polymarket-sudo-error]",
       );
       if (err === null) throw new Error("error not rendered");
-      expect(err.textContent).toMatch(/Vault locked/);
+      expect(err.textContent).toMatch(/Vault session locked/);
     });
   });
 
@@ -279,7 +279,7 @@ describe("PolymarketSudoModal", () => {
         "[data-vex-polymarket-sudo-error]",
       );
       if (err === null) throw new Error("error not rendered");
-      expect(err.textContent).toMatch(/EVM wallet required/);
+      expect(err.textContent).toMatch(/EVM wallet keystore not found/);
     });
   });
 
@@ -356,7 +356,7 @@ describe("PolymarketSudoModal", () => {
         "[data-vex-polymarket-sudo-error]",
       );
       if (err === null) throw new Error("error not rendered");
-      expect(err.textContent).toMatch(/Polymarket service unavailable/);
+      expect(err.textContent).toMatch(/Polymarket service is unavailable/);
     });
   });
 
@@ -381,7 +381,7 @@ describe("PolymarketSudoModal", () => {
         "[data-vex-polymarket-sudo-error]",
       );
       if (err === null) throw new Error("error not rendered");
-      expect(err.textContent).toMatch(/Failed to save credentials/);
+      expect(err.textContent).toMatch(/Failed to save credentials to vault/);
     });
   });
 

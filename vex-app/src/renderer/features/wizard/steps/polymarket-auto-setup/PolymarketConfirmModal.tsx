@@ -87,9 +87,9 @@ export function PolymarketConfirmModal({
 
         <DialogBody>
           <p className="text-sm text-foreground">
-            Polymarket jest już skonfigurowany. Auto-setup wyderiveuje
-            nowe credentialsy i nadpisze obecne w vault. Stare creds będą
-            stracone.
+            Polymarket is already configured. Auto-setup will derive new
+            credentials and overwrite the current ones in the vault. The
+            existing credentials will be lost.
           </p>
         </DialogBody>
 
