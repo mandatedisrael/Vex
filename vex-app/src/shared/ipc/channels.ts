@@ -43,6 +43,11 @@ export const CH = {
     lock: "vex:secrets:lock",
   },
 
+  // Wallet — sudo-style ops on existing keystores (Phase 2 feature #6)
+  wallet: {
+    exportPrivateKey: "vex:wallet:exportPrivateKey",
+  },
+
   // Onboarding — wizard step actions (M7–M11)
   onboarding: {
     getEnvState: "vex:onboarding:getEnvState",

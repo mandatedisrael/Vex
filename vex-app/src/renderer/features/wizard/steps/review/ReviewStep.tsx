@@ -23,6 +23,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { Result } from "@shared/ipc/result.js";
 import type { Capabilities } from "@shared/schemas/capabilities.js";
 import { type WizardStepId } from "@shared/schemas/wizard.js";
+import type { WalletChain } from "@shared/schemas/wallets.js";
 import { Button } from "../../../../components/ui/button.js";
 import {
   Card,
@@ -33,6 +34,7 @@ import {
 } from "../../../../components/ui/card.js";
 import { useEnvState } from "../../../../lib/api/onboarding.js";
 import { useCompleteSetup } from "../../../../lib/api/finalize.js";
+import { ExportPrivateKeyModal } from "../../../wallets/ExportPrivateKeyModal.js";
 import { AgentCoreStep } from "../AgentCoreStep.js";
 import { ApiKeysStep } from "../ApiKeysStep.js";
 import { EmbeddingStep } from "../EmbeddingStep.js";
@@ -98,6 +100,14 @@ export function ReviewStep({
   const [telemetryConsent, setTelemetryConsent] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  /**
+   * Export-private-key target chain. Non-null while the modal is open.
+   * Gated to `mode === "reconfigure"` via `WalletsCard.onExport` being
+   * absent when in setup mode.
+   */
+  const [exportingChain, setExportingChain] = useState<WalletChain | null>(
+    null,
+  );
 
   const env = envQuery.data?.ok === true ? envQuery.data.data : null;
   const caps =
@@ -189,6 +199,10 @@ export function ReviewStep({
             envState={env}
             onEdit={() => setEditingStep("wallets")}
             editDisabled={editDisabled}
+            mode={mode}
+            {...(isReconfigure
+              ? { onExport: (chain: WalletChain) => setExportingChain(chain) }
+              : {})}
           />
           <ApiKeysCard
             envState={env}
@@ -266,6 +280,13 @@ export function ReviewStep({
           {typeof onAdvance === "function" ? "" : ""}
         </span>
       </CardContent>
+      {exportingChain !== null ? (
+        <ExportPrivateKeyModal
+          chain={exportingChain}
+          walletAddress={env.walletAddresses?.[exportingChain] ?? ""}
+          onClose={() => setExportingChain(null)}
+        />
+      ) : null}
     </Card>
   );
 }

@@ -23,6 +23,7 @@ import { registerSecretsHandlers } from "./secrets.js";
 import { registerSettingsHandlers } from "./settings.js";
 import { registerSystemHandlers } from "./system.js";
 import { registerTelemetryHandler } from "./telemetry.js";
+import { registerWalletExportHandler } from "./wallet-export.js";
 
 export function registerAllIpcHandlers(): void {
   const teardowns: Array<() => void> = [];
@@ -34,6 +35,7 @@ export function registerAllIpcHandlers(): void {
   teardowns.push(...registerSecretsHandlers());
   teardowns.push(...registerOnboardingHandlers());
   teardowns.push(...registerWalletHandlers());
+  teardowns.push(registerWalletExportHandler());
   teardowns.push(registerApiKeysHandler());
   teardowns.push(registerEmbeddingHandler());
   teardowns.push(registerAgentCoreHandler());

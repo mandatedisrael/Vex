@@ -218,6 +218,48 @@ export function createSecretVault(
   return contents;
 }
 
+/**
+ * Verify the master password against the on-disk vault without unlocking the
+ * session, upgrading KDF params, or returning the decrypted payload. Used for
+ * sudo-style re-authentication on sensitive ops (e.g. wallet private-key
+ * export) that should NOT mutate session state or write to disk.
+ *
+ * Throws `LocalSecretVaultError` with code:
+ *   - "missing"          — vault file does not exist
+ *   - "corrupt"          — file present but JSON/schema-invalid
+ *   - "invalid_password" — bit-flipped ciphertext / auth-tag mismatch is
+ *                          indistinguishable from a wrong password; this
+ *                          covers both cases. Reserved "corrupt" for
+ *                          structurally-invalid file shape only (parseVaultFile).
+ *
+ * Returns `undefined` on success — by design no secrets are returned.
+ * No disk write on success or failure (no opportunistic KDF upgrade).
+ */
+export function verifySecretVaultPassword(
+  password: string,
+  options: LocalSecretVaultOptions = {},
+): void {
+  const filePath = resolveVaultPath(options);
+  if (!existsSync(filePath)) {
+    throw new LocalSecretVaultError("Secret vault is not configured.", "missing");
+  }
+
+  let raw: string;
+  try {
+    raw = readFileSync(filePath, "utf8");
+  } catch (cause) {
+    throw new LocalSecretVaultError("Could not read secret vault.", "io", cause);
+  }
+
+  // parseVaultFile raises `corrupt` on JSON/schema failure — surface as-is.
+  const parsedFile = parseVaultFile(raw);
+
+  // decryptContents wraps any AES-GCM/scrypt failure as `invalid_password`.
+  // Discard the decrypted payload — verification only needs to confirm the
+  // password unwraps the vault; callers MUST NOT use this to harvest secrets.
+  decryptContents(parsedFile, password);
+}
+
 export function unlockSecretVault(
   password: string,
   options: LocalSecretVaultOptions = {},

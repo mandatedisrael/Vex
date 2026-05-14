@@ -30,6 +30,8 @@ import type {
   WizardState,
 } from "../schemas/wizard.js";
 import type {
+  WalletExportPrivateKeyInput,
+  WalletExportPrivateKeyResult,
   WalletGenerateEvmResult,
   WalletGenerateSolanaResult,
   WalletImportEvmInput,
@@ -141,6 +143,26 @@ export interface VexBridge {
       input: SecretsUnlockInput
     ) => Promise<Result<SecretsUnlockResult>>;
     readonly lock: () => Promise<Result<SecretsLockResult>>;
+  };
+
+  /**
+   * Sudo-style wallet operations on existing keystores. Distinct from
+   * `onboarding.wallet*` which create/import keystores during setup —
+   * these run post-onboarding and require a fresh password challenge.
+   */
+  readonly wallet: {
+    /**
+     * Re-authenticate the user, decrypt the chain's keystore inside
+     * main, and place the raw private key on the OS clipboard with an
+     * auto-clear lease. The renderer never sees the secret — the
+     * Result only reports `copied: true` + how long until clipboard
+     * is wiped. Triggers `wallet.export_throttled` (with retryAfterMs)
+     * on rapid retries, and relocks the vault after 5 wrong-password
+     * attempts in a single process lifetime.
+     */
+    readonly exportPrivateKey: (
+      input: WalletExportPrivateKeyInput
+    ) => Promise<Result<WalletExportPrivateKeyResult>>;
   };
 
   readonly onboarding: {

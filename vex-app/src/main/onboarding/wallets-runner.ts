@@ -106,8 +106,11 @@ export function mapWalletEngineError(cause: unknown): Result<never, VexError> {
           redacted: true,
         });
       case ENGINE_CODE.KEYSTORE_NOT_FOUND:
+        // Distinct from KEYSTORE_CORRUPT: file is absent vs present-but-bad.
+        // Surface as `wallet.keystore_missing` so the renderer can route
+        // the user to Generate / Import instead of Restore-from-backup.
         return err({
-          code: "wallet.keystore_corrupt",
+          code: "wallet.keystore_missing",
           domain: "wallet",
           message: "Keystore file is missing.",
           retryable: false,

@@ -161,4 +161,20 @@ describe("mapWalletEngineError", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("wallet.password_invalid");
   });
+
+  it("maps KEYSTORE_NOT_FOUND to wallet.keystore_missing (distinct from corrupt)", () => {
+    const result = mapWalletEngineError(
+      new FakeVexError("KEYSTORE_NOT_FOUND", "file missing")
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("wallet.keystore_missing");
+  });
+
+  it("maps KEYSTORE_CORRUPT to wallet.keystore_corrupt (file present but bad)", () => {
+    const result = mapWalletEngineError(
+      new FakeVexError("KEYSTORE_CORRUPT", "bad schema")
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("wallet.keystore_corrupt");
+  });
 });

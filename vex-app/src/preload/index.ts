@@ -27,6 +27,7 @@ import {
   setWizardStateInputSchema,
 } from "../shared/schemas/wizard.js";
 import {
+  walletExportPrivateKeyInputSchema,
   walletGenerateInputSchema,
   walletImportEvmInputSchema,
   walletImportSolanaInputSchema,
@@ -190,6 +191,18 @@ const api = {
     },
     lock() {
       return invokeWithSchema(CH.secrets.lock, {}, secretsLockInputSchema);
+    },
+  },
+
+  wallet: {
+    exportPrivateKey(
+      input: import("../shared/schemas/wallets.js").WalletExportPrivateKeyInput
+    ) {
+      return invokeWithSchema(
+        CH.wallet.exportPrivateKey,
+        input,
+        walletExportPrivateKeyInputSchema
+      );
     },
   },
 

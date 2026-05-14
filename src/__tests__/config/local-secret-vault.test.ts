@@ -22,6 +22,7 @@ import {
   secretVaultExists,
   stripManagedSecretsFromDotenvFile,
   unlockSecretVault,
+  verifySecretVaultPassword,
   writeSecretVaultSecrets,
 } from "../../lib/local-secret-vault.js";
 
@@ -251,5 +252,100 @@ describe("local secret vault", () => {
     // regenerates salt+iv on every call, so any rewrite would change the
     // file content even when params already match.
     expect(readFileSync(vaultFile, "utf8")).toBe(beforeRaw);
+  });
+
+  describe("verifySecretVaultPassword", () => {
+    it("returns undefined on correct password without throwing", () => {
+      createSecretVault("master-password", { filePath: vaultFile });
+      // The function signature is `void`; the runtime confirms no value
+      // is returned even though the implementation discards decrypted secrets.
+      const result: void = verifySecretVaultPassword("master-password", {
+        filePath: vaultFile,
+      });
+      expect(result).toBeUndefined();
+    });
+
+    it("throws LocalSecretVaultError with code 'invalid_password' on wrong password", () => {
+      createSecretVault("master-password", { filePath: vaultFile });
+      let caught: unknown = null;
+      try {
+        verifySecretVaultPassword("wrong-password", { filePath: vaultFile });
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeInstanceOf(LocalSecretVaultError);
+      if (caught instanceof LocalSecretVaultError) {
+        expect(caught.code).toBe("invalid_password");
+      }
+    });
+
+    it("throws with code 'missing' when the vault file does not exist", () => {
+      // Don't create the vault.
+      let caught: unknown = null;
+      try {
+        verifySecretVaultPassword("master-password", { filePath: vaultFile });
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeInstanceOf(LocalSecretVaultError);
+      if (caught instanceof LocalSecretVaultError) {
+        expect(caught.code).toBe("missing");
+      }
+    });
+
+    it("throws with code 'corrupt' when the vault file is structurally invalid JSON", () => {
+      writeFileSync(vaultFile, "{not valid json", {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      let caught: unknown = null;
+      try {
+        verifySecretVaultPassword("master-password", { filePath: vaultFile });
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeInstanceOf(LocalSecretVaultError);
+      if (caught instanceof LocalSecretVaultError) {
+        expect(caught.code).toBe("corrupt");
+      }
+    });
+
+    it("does not rewrite the file on successful verify (no opportunistic upgrade)", () => {
+      // Use a legacy-KDF vault — unlockSecretVault WOULD rewrite this on
+      // successful unlock. verifySecretVaultPassword MUST NOT.
+      writeLegacyVault(
+        vaultFile,
+        "master-password",
+        { OPENROUTER_API_KEY: "sk-or-test" },
+        { name: "scrypt", N: 16384, r: 8, p: 1, dkLen: 32 },
+      );
+
+      const beforeRaw = readFileSync(vaultFile, "utf8");
+      const beforeMtime = statSync(vaultFile).mtimeMs;
+      const beforeKdf = readVaultKdf(vaultFile);
+
+      verifySecretVaultPassword("master-password", { filePath: vaultFile });
+
+      // Disk write assertion: byte-identical + mtime unchanged + KDF unchanged.
+      expect(readFileSync(vaultFile, "utf8")).toBe(beforeRaw);
+      expect(statSync(vaultFile).mtimeMs).toBe(beforeMtime);
+      expect(readVaultKdf(vaultFile)).toEqual(beforeKdf);
+      // Sanity: legacy KDF still in place — proves the opportunistic upgrade
+      // path that unlockSecretVault runs was NOT triggered here.
+      expect(readVaultKdf(vaultFile).N).toBe(16384);
+    });
+
+    it("does not rewrite the file on wrong-password failure either", () => {
+      createSecretVault("master-password", { filePath: vaultFile });
+      const beforeRaw = readFileSync(vaultFile, "utf8");
+      const beforeMtime = statSync(vaultFile).mtimeMs;
+
+      expect(() =>
+        verifySecretVaultPassword("wrong-password", { filePath: vaultFile }),
+      ).toThrow(LocalSecretVaultError);
+
+      expect(readFileSync(vaultFile, "utf8")).toBe(beforeRaw);
+      expect(statSync(vaultFile).mtimeMs).toBe(beforeMtime);
+    });
   });
 });
