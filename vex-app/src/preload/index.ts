@@ -56,7 +56,7 @@ function newRequestId(): string {
   return crypto.randomUUID();
 }
 
-function preloadValidationError(): Result<never, VexError> {
+function preloadValidationError(correlationId: string): Result<never, VexError> {
   return err({
     code: "validation.invalid_input",
     domain: "preload",
@@ -64,6 +64,7 @@ function preloadValidationError(): Result<never, VexError> {
     retryable: false,
     userActionable: false,
     redacted: true,
+    correlationId,
   });
 }
 
@@ -72,14 +73,15 @@ async function invokeWithSchema<T, I = unknown>(
   payload: I,
   inputSchema?: z.ZodType<I>
 ): Promise<Result<T, VexError>> {
+  // Generate the correlation id up front so validation errors carry it too.
+  const requestId = newRequestId();
   if (inputSchema) {
     // Preload-side validation: catch invalid renderer payloads before crossing IPC.
     const parsed = inputSchema.safeParse(payload);
     if (!parsed.success) {
-      return preloadValidationError() as Result<T, VexError>;
+      return preloadValidationError(requestId) as Result<T, VexError>;
     }
   }
-  const requestId = newRequestId();
   return (await ipcRenderer.invoke(channel, {
     requestId,
     payload: payload ?? {},

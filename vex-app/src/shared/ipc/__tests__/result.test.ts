@@ -16,6 +16,7 @@ describe("Result helpers", () => {
       retryable: false,
       userActionable: false,
       redacted: true,
+      correlationId: "test-correlation-id",
     };
     const r = err(e);
     expect(r.ok).toBe(false);

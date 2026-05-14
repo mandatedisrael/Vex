@@ -564,7 +564,9 @@ describe("success path — EVM", () => {
     });
     expect(mockClipboardWriteText).toHaveBeenCalledWith(EVM_SECRET);
     expect(mockRecordExportSuccess).toHaveBeenCalledTimes(1);
-    expect(mockGlobalCleanupAdd).toHaveBeenCalledTimes(1);
+    // 2 = handler-registration cleanup (auto-added by registerHandler) +
+    // clipboard-lease cleanup (added by the handler when it took the lease).
+    expect(mockGlobalCleanupAdd).toHaveBeenCalledTimes(2);
     expect(__getActiveLeaseTokenForTests()).not.toBeNull();
   });
 
@@ -736,7 +738,9 @@ describe("clipboard lease lifecycle", () => {
       requestId: "lease-quit",
       payload: VALID_INPUT_EVM,
     });
-    expect(cleanupTasks.size).toBe(1);
+    // 2 = registerHandler auto-cleanup (handler removal on quit) +
+    // clipboard-lease cleanup (conditional clear on quit).
+    expect(cleanupTasks.size).toBe(2);
     expect(clipboardText).toBe(SECRET);
 
     // Simulate app quit firing globalCleanup.runAll() — task should

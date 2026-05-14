@@ -6,20 +6,37 @@
  *  - parses input via Zod schema (request envelope)
  *  - validates outgoing data via Zod outputSchema (defense-in-depth — catches
  *    handler bugs that produce wrong-shape Result<T>)
+ *  - validates outgoing error shape (defense-in-depth — catches handlers that
+ *    return malformed `{ ok: false, error }` instead of using `err(...)` factory)
  *  - returns Result<T, VexError> (never throws raw)
- *  - logs internal errors with correlationId
+ *  - logs internal errors with correlationId (structural diagnosis only —
+ *    raw error objects are NEVER logged because they may contain secrets
+ *    leaked from a handler that returned an unredacted shape)
+ *  - auto-registers cleanup with globalCleanup so app quit removes the handler
+ *
+ * The unregister function returned to callers is idempotent: removing the
+ * handler from ipcMain twice is safe, and the globalCleanup hook is detached
+ * once invoked so it never double-runs.
  */
 
+import { randomUUID } from "node:crypto";
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import { app } from "electron";
 import type { z } from "zod";
 import { requestEnvelopeSchema } from "@shared/ipc/envelope.js";
 import {
   err,
+  VEX_DOMAINS,
+  VEX_ERROR_CODES,
   type Result,
   type VexDomain,
   type VexError,
+  type VexErrorCode,
 } from "@shared/ipc/result.js";
+
+const ERROR_CODE_SET: ReadonlySet<string> = new Set(VEX_ERROR_CODES);
+const DOMAIN_SET: ReadonlySet<string> = new Set(VEX_DOMAINS);
+import { globalCleanup } from "../lifecycle/cleanup-registry.js";
 import { log } from "../logger/index.js";
 
 const TRUSTED_PRODUCTION_ORIGIN = "app://vex";
@@ -46,6 +63,106 @@ function assertTrustedSender(event: IpcMainInvokeEvent): void {
   }
 }
 
+const STRUCTURAL_KEYS_LIMIT = 16;
+
+/**
+ * Best-effort structural summary of an unknown thrown/returned value.
+ * Used in error logs so we never echo the raw object (which may contain a
+ * secret if a handler returned the wrong shape).
+ */
+function summarizeUnknown(value: unknown): {
+  readonly type: string;
+  readonly keys: ReadonlyArray<string>;
+  readonly truncated: boolean;
+} {
+  if (value === null) return { type: "null", keys: [], truncated: false };
+  if (value instanceof Error) {
+    return { type: `Error:${value.name}`, keys: [], truncated: false };
+  }
+  const type = typeof value;
+  if (type === "object") {
+    const allKeys = Object.keys(value as object);
+    return {
+      type: "object",
+      keys: allKeys.slice(0, STRUCTURAL_KEYS_LIMIT),
+      truncated: allKeys.length > STRUCTURAL_KEYS_LIMIT,
+    };
+  }
+  return { type, keys: [], truncated: false };
+}
+
+const VALID_ERROR_KEYS = new Set([
+  "code",
+  "domain",
+  "message",
+  "retryable",
+  "userActionable",
+  "redacted",
+  "details",
+  "correlationId",
+  "retryAfterMs",
+]);
+
+/**
+ * Runtime guard for the VexError shape. Catches handlers that returned a raw
+ * object literal that LOOKS like an error but is missing required fields, or
+ * that has extra fields (which might leak secrets through unredacted paths).
+ * `code` and `domain` are validated against `VEX_ERROR_CODES` / `VEX_DOMAINS`
+ * (runtime mirrors of the type unions; kept in sync via the type-level
+ * exhaustiveness assertions at the bottom of result.ts).
+ */
+function isValidVexErrorShape(value: unknown): value is Omit<VexError, "correlationId"> & { correlationId?: string } {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  // Closed-by-convention enums are validated at runtime here so a handler
+  // typo doesn't escape into the public surface.
+  if (typeof v["code"] !== "string" || !ERROR_CODE_SET.has(v["code"])) return false;
+  if (typeof v["domain"] !== "string" || !DOMAIN_SET.has(v["domain"])) return false;
+  if (typeof v["message"] !== "string") return false;
+  if (typeof v["retryable"] !== "boolean") return false;
+  if (typeof v["userActionable"] !== "boolean") return false;
+  if (v["redacted"] !== true) return false;
+  // correlationId optional at validation time — auto-filled below from
+  // ctx.requestId. If present, it must still be a non-empty string.
+  if ("correlationId" in v) {
+    if (typeof v["correlationId"] !== "string" || v["correlationId"].length === 0) {
+      return false;
+    }
+  }
+  // Optional fields: shape-check when present so leaked exotic values
+  // (e.g. functions, BigInts) can't slip through the boundary.
+  if ("retryAfterMs" in v) {
+    const r = v["retryAfterMs"];
+    if (typeof r !== "number" || !Number.isFinite(r) || r < 0) return false;
+  }
+  if ("details" in v) {
+    const d = v["details"];
+    if (d === null || typeof d !== "object" || Array.isArray(d)) return false;
+  }
+  // Reject foreign keys — they may carry leaked secrets through a path the
+  // redactor hasn't been taught about.
+  for (const key of Object.keys(v)) {
+    if (!VALID_ERROR_KEYS.has(key)) return false;
+  }
+  return true;
+}
+
+function contractViolation(
+  domain: VexDomain,
+  correlationId: string,
+  code: VexErrorCode = "internal.contract_violation",
+): VexError {
+  return {
+    code,
+    domain,
+    message: "Internal error.",
+    retryable: false,
+    userActionable: false,
+    redacted: true,
+    correlationId,
+  };
+}
+
 export interface HandlerArgs<I, O> {
   readonly channel: string;
   readonly domain: VexDomain;
@@ -66,7 +183,9 @@ export function registerHandler<I, O>(args: HandlerArgs<I, O>): () => void {
   const envelope = requestEnvelopeSchema(args.inputSchema);
 
   const fn = async (event: IpcMainInvokeEvent, raw: unknown): Promise<Result<O>> => {
-    let requestId = "<unknown>";
+    // Generate a fallback UUID FIRST so even an unparseable envelope still
+    // produces a correlatable error response (and log entry).
+    let requestId = randomUUID();
     try {
       assertTrustedSender(event);
       const parsed = envelope.safeParse(raw);
@@ -87,39 +206,58 @@ export function registerHandler<I, O>(args: HandlerArgs<I, O>): () => void {
         event,
       });
 
-      // Output validation (defense-in-depth)
-      if (result.ok && args.outputSchema) {
-        const outValidation = args.outputSchema.safeParse(result.data);
-        if (!outValidation.success) {
-          log.error(
-            `[ipc:${args.channel}] correlationId=${requestId}: handler produced invalid output shape`,
-            outValidation.error.format()
-          );
-          return err({
-            code: "internal.contract_violation",
-            domain: args.domain,
-            message: "Internal error.",
-            retryable: false,
-            userActionable: false,
-            redacted: true,
-            correlationId: requestId,
-          });
+      if (result.ok) {
+        // Output validation (defense-in-depth)
+        if (args.outputSchema) {
+          const outValidation = args.outputSchema.safeParse(result.data);
+          if (!outValidation.success) {
+            log.error(
+              `[ipc:${args.channel}] correlationId=${requestId} handler produced invalid output shape`,
+              outValidation.error.format(),
+            );
+            return err(contractViolation(args.domain, requestId));
+          }
         }
+        return result;
       }
 
+      // Error path normalization (defense-in-depth): if the handler returned
+      // a malformed error shape, never forward it — wrap. Crucially, we log
+      // ONLY structural diagnosis (type + keys), never the raw object, since
+      // a malformed shape might contain unredacted secrets a leaked through
+      // an ad-hoc literal.
+      if (!isValidVexErrorShape(result.error)) {
+        const summary = summarizeUnknown(result.error);
+        log.error(
+          `[ipc:${args.channel}] correlationId=${requestId} handler returned invalid error shape type=${summary.type} keys=${summary.keys.join(",")}${summary.truncated ? " truncated=true" : ""}`,
+        );
+        return err(contractViolation(args.domain, requestId));
+      }
+
+      // Valid error shape — ensure correlationId matches the request even if
+      // the handler attached a different one (e.g. a stale id from a helper)
+      // or omitted it entirely (the validator allows that path). A mismatch
+      // is a handler bug worth logging (structurally) but not user-visible.
+      if (result.error.correlationId !== requestId) {
+        if (typeof result.error.correlationId === "string") {
+          log.warn(
+            `[ipc:${args.channel}] correlationId=${requestId} handler attached mismatched correlationId=${result.error.correlationId}`,
+          );
+        }
+        return err({ ...result.error, correlationId: requestId });
+      }
       return result;
     } catch (error: unknown) {
-      // Pass `error` as a separate arg so the redactor can scrub it BEFORE the
-      // string is emitted. Template-embedding the message would bypass redaction.
-      const message =
-        error instanceof Error ? error.message : "Unknown internal error";
+      const isUntrusted =
+        error instanceof Error && error.message.startsWith("Untrusted IPC sender");
+      // Structural-only log: never pass the raw `error` to the logger because
+      // a handler-thrown object may carry secrets the redactor can't fingerprint.
+      const summary = summarizeUnknown(error);
       log.error(
-        `[ipc:${args.channel}] correlationId=${requestId}: handler threw`,
-        error
+        `[ipc:${args.channel}] correlationId=${requestId} handler threw type=${summary.type} keys=${summary.keys.join(",")}${summary.truncated ? " truncated=true" : ""}${isUntrusted ? " untrusted=true" : ""}`,
       );
 
-      const isUntrusted = message.startsWith("Untrusted IPC sender");
-      const errorPayload: VexError = {
+      return err({
         code: isUntrusted ? "validation.invalid_sender" : "internal.contract_violation",
         domain: args.domain,
         message: isUntrusted
@@ -129,14 +267,25 @@ export function registerHandler<I, O>(args: HandlerArgs<I, O>): () => void {
         userActionable: false,
         redacted: true,
         correlationId: requestId,
-      };
-      return err(errorPayload);
+      });
     }
   };
 
   ipcMain.handle(args.channel, fn);
 
-  return () => {
+  let unregistered = false;
+  const removeFromCleanup = globalCleanup.add(() => {
+    if (unregistered) return;
+    unregistered = true;
     ipcMain.removeHandler(args.channel);
+  });
+
+  return () => {
+    if (unregistered) return;
+    unregistered = true;
+    ipcMain.removeHandler(args.channel);
+    // Detach from globalCleanup so app quit doesn't try to remove a
+    // handler that's already gone.
+    void removeFromCleanup();
   };
 }
