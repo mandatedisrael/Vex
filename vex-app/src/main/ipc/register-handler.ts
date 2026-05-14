@@ -38,6 +38,37 @@ const ERROR_CODE_SET: ReadonlySet<string> = new Set(VEX_ERROR_CODES);
 const DOMAIN_SET: ReadonlySet<string> = new Set(VEX_DOMAINS);
 import { globalCleanup } from "../lifecycle/cleanup-registry.js";
 import { log } from "../logger/index.js";
+import { cancelledError, isAbortError } from "./cancel-helpers.js";
+
+/**
+ * Module-scoped registry mapping a request's correlationId to the
+ * AbortController whose signal flows into the handler. The `vex:cancel`
+ * IPC handler reaches into this registry by correlationId and calls
+ * `.abort()` on the controller; the originating handler's `ctx.signal`
+ * therefore fires, and any spawn/fetch/wait it owns aborts.
+ *
+ * The registry is in-process only: a renderer-issued cancel cannot
+ * outlive the main process. Cleaned in the handler's `finally` so
+ * completed/failed requests can never be "cancelled" after the fact
+ * (the registry lookup returns undefined → cancel returns
+ * `{cancelled: false}`).
+ */
+const cancelRegistry = new Map<string, AbortController>();
+
+export function getCancelController(
+  correlationId: string,
+): AbortController | undefined {
+  return cancelRegistry.get(correlationId);
+}
+
+/**
+ * Test-only: clear the cancel registry. Tests that spawn fake handlers
+ * and want a clean slate between cases use this to drop any controllers
+ * that survived a failed-test finally block.
+ */
+export function __resetCancelRegistryForTests(): void {
+  cancelRegistry.clear();
+}
 
 const TRUSTED_PRODUCTION_ORIGIN = "app://vex";
 const TRUSTED_DEV_ORIGIN = "http://127.0.0.1:5173";
@@ -163,6 +194,24 @@ function contractViolation(
   };
 }
 
+export interface HandlerContext {
+  readonly requestId: string;
+  readonly event: IpcMainInvokeEvent;
+  /**
+   * AbortSignal that fires when the renderer issues `vex:cancel` for
+   * this request's correlationId, or when the main process is tearing
+   * the handler down (future hook — not wired yet). Always defined:
+   * a handler that does not care can ignore the field. Handlers that
+   * own long-running work (subprocess spawn, network fetch, polling
+   * loop) should plumb this signal down into the primitive that
+   * supports `AbortSignal`. When the signal aborts, throwing/letting
+   * the handler return normally is fine — `registerHandler` normalises
+   * AbortError-shaped failures into the `internal.cancelled` Result
+   * without ever surfacing the raw error to logs.
+   */
+  readonly signal: AbortSignal;
+}
+
 export interface HandlerArgs<I, O> {
   readonly channel: string;
   readonly domain: VexDomain;
@@ -173,10 +222,7 @@ export interface HandlerArgs<I, O> {
    * Skip only for empty-shape responses or when schema would echo input verbatim.
    */
   readonly outputSchema?: z.ZodType<O>;
-  readonly handle: (
-    input: I,
-    ctx: { readonly requestId: string; readonly event: IpcMainInvokeEvent }
-  ) => Promise<Result<O>>;
+  readonly handle: (input: I, ctx: HandlerContext) => Promise<Result<O>>;
 }
 
 export function registerHandler<I, O>(args: HandlerArgs<I, O>): () => void {
@@ -201,10 +247,39 @@ export function registerHandler<I, O>(args: HandlerArgs<I, O>): () => void {
         });
       }
       requestId = parsed.data.requestId;
-      const result = await args.handle(parsed.data.payload, {
-        requestId,
-        event,
-      });
+      const controller = new AbortController();
+      cancelRegistry.set(requestId, controller);
+      let result: Result<O>;
+      try {
+        result = await args.handle(parsed.data.payload, {
+          requestId,
+          event,
+          signal: controller.signal,
+        });
+      } finally {
+        // Always drop the controller so a late `vex:cancel` for a
+        // completed request returns `{cancelled: false}` instead of
+        // racing against the next request that re-uses the id (won't
+        // happen with UUIDs in practice but the invariant is cheap).
+        cancelRegistry.delete(requestId);
+      }
+      // If the handler returned via the abort path — either explicitly
+      // returned `err(cancelledError(...))` or threw an AbortError that
+      // we'll catch below — normalise here so the `internal.cancelled`
+      // code is always what the renderer sees on user cancel. Handlers
+      // that returned a normal Result.error with a different code are
+      // not rewritten; only literal aborts collapse to cancelled.
+      if (controller.signal.aborted && result.ok === false) {
+        if (result.error.code !== "internal.cancelled") {
+          // Replace with the canonical cancelled shape. Logging is
+          // info-level — user cancellation is not an error to surface
+          // through error-rate dashboards.
+          log.info(
+            `[ipc:${args.channel}] correlationId=${requestId} normalised handler error code=${result.error.code} -> internal.cancelled (signal aborted)`,
+          );
+          result = err(cancelledError(args.domain, requestId));
+        }
+      }
 
       if (result.ok) {
         // Output validation (defense-in-depth)
@@ -248,6 +323,17 @@ export function registerHandler<I, O>(args: HandlerArgs<I, O>): () => void {
       }
       return result;
     } catch (error: unknown) {
+      // User-initiated cancel: handler's spawn/fetch/wait threw an
+      // AbortError because `ctx.signal` aborted. Normalise to
+      // `internal.cancelled` and log at info, not error — this is the
+      // success outcome of the cancel button, not an internal failure
+      // we want telemetry firing on.
+      if (isAbortError(error)) {
+        log.info(
+          `[ipc:${args.channel}] correlationId=${requestId} handler aborted (user cancel)`,
+        );
+        return err(cancelledError(args.domain, requestId));
+      }
       const isUntrusted =
         error instanceof Error && error.message.startsWith("Untrusted IPC sender");
       // Structural-only log: never pass the raw `error` to the logger because

@@ -6,6 +6,7 @@
  */
 
 import { globalCleanup } from "../lifecycle/cleanup-registry.js";
+import { registerCancelHandler } from "./cancel.js";
 import { registerCapabilitiesHandler } from "./capabilities.js";
 import { registerDatabaseHandlers } from "./database.js";
 import { registerDockerHandlers } from "./docker.js";
@@ -29,6 +30,7 @@ import { registerWalletExportHandler } from "./wallet-export.js";
 export function registerAllIpcHandlers(): void {
   const teardowns: Array<() => void> = [];
 
+  teardowns.push(registerCancelHandler());
   teardowns.push(registerCapabilitiesHandler());
   teardowns.push(...registerSystemHandlers());
   teardowns.push(...registerDockerHandlers());

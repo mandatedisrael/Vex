@@ -7,9 +7,26 @@
  * `vex.docker.onComposeLogs` event channel is reserved for a richer
  * log viewer that lands when the wizard does (M11 has its own log
  * panel needs).
+ *
+ * PR3: user-cancellable bootstrap. The Cancel button calls into
+ * `composeUpAbortable`'s `cancel` handle, which fires a `vex:cancel`
+ * IPC for THIS request's correlationId. Main aborts the corresponding
+ * handler's signal; spawn-runner SIGTERMs the in-flight subprocess;
+ * the original `composeUp` IPC then resolves to
+ * `Result<E:internal.cancelled>`. While the cancel request is in
+ * flight we show a transient "Cancelling…" state — once the response
+ * lands we fall back into the regular error UI (with retry).
+ *
+ * IMPORTANT: we do NOT call `cancel()` from the useEffect cleanup
+ * function. React StrictMode dev mode mounts + cleans up + remounts
+ * every effect on initial load, which would race the cancel call
+ * against the joined single-flight in main and leave the renderer in
+ * a flaky state. The cleanup `cancelled` flag only suppresses stale
+ * promise resolutions; user-initiated cancellation goes through the
+ * button click.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComposeLog, ComposeUpResult } from "@shared/schemas/docker.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { Button } from "../../components/ui/button.js";
@@ -17,7 +34,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/ca
 
 const MAX_LOG_LINES = 20;
 
-type Phase = "running" | "ready" | "reused" | "error";
+type Phase = "running" | "cancelling" | "ready" | "reused" | "error";
 
 interface PhaseState {
   readonly phase: Phase;
@@ -29,6 +46,7 @@ export function ComposeBootstrap(): JSX.Element {
   const [logs, setLogs] = useState<ReadonlyArray<ComposeLog>>([]);
   const [state, setState] = useState<PhaseState>({ phase: "running", message: null });
   const [retryToken, setRetryToken] = useState(0);
+  const cancelRef = useRef<(() => void) | null>(null);
 
   // Direct IPC call instead of useMutation. We deliberately NO LONGER
   // guard with `startedRef` — React 18 dev StrictMode runs effects
@@ -42,12 +60,23 @@ export function ComposeBootstrap(): JSX.Element {
     let cancelled = false;
     setState({ phase: "running", message: null });
 
+    const invocation = window.vex.docker.composeUpAbortable({});
+    cancelRef.current = invocation.cancel;
+
     void (async () => {
       try {
-        const result = await window.vex.docker.composeUp({});
+        const result = await invocation.promise;
         if (cancelled) return;
         if (!result.ok) {
-          setState({ phase: "error", message: result.error.message });
+          // `internal.cancelled` flows through the same error path; the
+          // copy is surfaced through error-copy.ts in the renderer (or
+          // a local override if we want a surface-specific phrase like
+          // "Startup cancelled."). For now the canonical message stays.
+          const message =
+            result.error.code === "internal.cancelled"
+              ? "Startup cancelled."
+              : result.error.message;
+          setState({ phase: "error", message });
           return;
         }
         const data: ComposeUpResult = result.data;
@@ -69,6 +98,13 @@ export function ComposeBootstrap(): JSX.Element {
 
     return () => {
       cancelled = true;
+      // Intentionally NOT calling invocation.cancel() — see file
+      // header comment. StrictMode dev double-mount would otherwise
+      // cancel mount-1's request while mount-2 re-fires; main's
+      // single-flight would join mount-2 onto mount-1's already-
+      // cancelled work and we'd get a permanent "cancelled" state on
+      // first render.
+      cancelRef.current = null;
     };
   }, [retryToken]);
 
@@ -83,6 +119,19 @@ export function ComposeBootstrap(): JSX.Element {
   const handleRetry = useCallback((): void => {
     setLogs([]);
     setRetryToken((n) => n + 1);
+  }, []);
+
+  const handleCancel = useCallback((): void => {
+    const cancel = cancelRef.current;
+    if (cancel === null) return;
+    // Transient phase — the cancel IPC + main's abort handling +
+    // spawn-runner's SIGTERM are not instant. Disabling the button
+    // and showing "Cancelling…" prevents repeat clicks and gives the
+    // user feedback that the action was registered. Once the original
+    // `composeUp` promise resolves (to internal.cancelled), the state
+    // flips to "error" with the cancelled message.
+    setState({ phase: "cancelling", message: "Cancelling…" });
+    cancel();
   }, []);
 
   const status = state.phase;
@@ -103,16 +152,18 @@ export function ComposeBootstrap(): JSX.Element {
               ? lastLog
                 ? lastLog.line
                 : "Checking Docker daemon…"
-              : status === "ready"
-                ? state.message ?? "Postgres is healthy on the configured port."
-                : status === "reused"
-                  ? state.message ??
-                    "Reusing the existing Vex compose project that is already running."
-                  : status === "error"
-                    ? state.message ?? "Failed to bring services up. See logs for details."
-                    : "Initializing…"}
+              : status === "cancelling"
+                ? "Cancelling…"
+                : status === "ready"
+                  ? state.message ?? "Postgres is healthy on the configured port."
+                  : status === "reused"
+                    ? state.message ??
+                      "Reusing the existing Vex compose project that is already running."
+                    : status === "error"
+                      ? state.message ?? "Failed to bring services up. See logs for details."
+                      : "Initializing…"}
           </p>
-          {status === "running" ? (
+          {status === "running" || status === "cancelling" ? (
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-popover">
               <div className="h-full w-1/3 animate-pulse bg-primary" />
             </div>
@@ -132,6 +183,20 @@ export function ComposeBootstrap(): JSX.Element {
             </pre>
           ) : null}
           <div className="flex justify-end gap-2">
+            {status === "running" ? (
+              <Button
+                variant="outline"
+                onClick={handleCancel}
+                data-vex-compose-cancel
+              >
+                Cancel
+              </Button>
+            ) : null}
+            {status === "cancelling" ? (
+              <Button variant="outline" disabled data-vex-compose-cancelling>
+                Cancelling…
+              </Button>
+            ) : null}
             {status === "error" ? (
               <Button variant="outline" onClick={handleRetry}>
                 Retry

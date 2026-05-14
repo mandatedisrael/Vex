@@ -89,6 +89,71 @@ async function invokeWithSchema<T, I = unknown>(
 }
 
 /**
+ * Abortable shape returned by long-running calls that opt in to user
+ * cancellation. The renderer holds onto `cancel`; calling it fires
+ * `vex:cancel` for THIS request's correlationId, which main looks up
+ * in its in-process registry and aborts the corresponding handler's
+ * `ctx.signal`. The original `promise` then resolves to
+ * `Result<E:internal.cancelled>` (not a rejection — cancellation is
+ * a normal Result outcome).
+ *
+ * `cancel` is idempotent: calling it multiple times only emits the
+ * first abort request; subsequent calls return `{cancelled: false}`
+ * from main and are dropped on the floor here.
+ */
+interface Abortable<T> {
+  readonly promise: Promise<Result<T, VexError>>;
+  readonly cancel: () => void;
+}
+
+/**
+ * Preload-internal helper. NOT exposed through `window.vex.*` per
+ * Codex turn 13 — surfacing a generic `abortableInvoke(channel, …)`
+ * would let the renderer cancel arbitrary IPC requests, including
+ * ones whose handlers don't opt in to cancellation. Instead we wrap
+ * specific channels (currently only `docker.composeUp`) into a
+ * sibling bridge method.
+ */
+function abortableInvoke<T, I = unknown>(
+  channel: string,
+  payload: I,
+  inputSchema?: z.ZodType<I>
+): Abortable<T> {
+  const requestId = newRequestId();
+  if (inputSchema) {
+    const parsed = inputSchema.safeParse(payload);
+    if (!parsed.success) {
+      return {
+        promise: Promise.resolve(
+          preloadValidationError(requestId) as Result<T, VexError>
+        ),
+        cancel: () => {},
+      };
+    }
+  }
+  const promise = ipcRenderer.invoke(channel, {
+    requestId,
+    payload: payload ?? {},
+  }) as Promise<Result<T, VexError>>;
+  let cancelSent = false;
+  const cancel = (): void => {
+    if (cancelSent) return;
+    cancelSent = true;
+    // Fire-and-forget. Catch the promise so a rejected `vex:cancel`
+    // (e.g. main tearing down on app quit) does not surface as an
+    // unhandled rejection. The original `promise` is what carries the
+    // cancellation outcome back to the renderer.
+    void ipcRenderer
+      .invoke(CH.cancel, {
+        requestId: newRequestId(),
+        payload: { correlationId: requestId },
+      })
+      .catch(() => undefined);
+  };
+  return { promise, cancel };
+}
+
+/**
  * Domain-namespaced event subscription helper. Renderer never sees raw
  * channel strings — every subscription comes through a typed bridge
  * method (`vex.docker.onInstallProgress`, etc.) that calls into this.
@@ -156,6 +221,20 @@ const api = {
     },
     composeUp(input: { pgPort?: number } = {}) {
       return invokeWithSchema(
+        CH.docker.composeUp,
+        input,
+        z
+          .object({ pgPort: z.number().int().min(1).max(65535).optional() })
+          .strict()
+      );
+    },
+    composeUpAbortable(input: { pgPort?: number } = {}) {
+      // Same channel + same schema as composeUp; the difference is the
+      // renderer gets a `cancel()` handle back. The main-side handler
+      // is unchanged — `registerHandler` always creates an
+      // AbortController + plumbs ctx.signal regardless of whether the
+      // renderer ends up using it.
+      return abortableInvoke(
         CH.docker.composeUp,
         input,
         z

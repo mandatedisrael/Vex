@@ -91,6 +91,20 @@ export interface TelemetryReportInput {
   readonly componentStack?: string | null;
 }
 
+/**
+ * Shape returned by long-running bridge methods that support user
+ * cancellation (PR3). Renderer holds onto `cancel`; calling it asks
+ * main to abort the in-flight handler. The original `promise` then
+ * resolves to `Result<E:internal.cancelled>` — cancellation is a
+ * normal Result outcome, not a rejection.
+ *
+ * `cancel` is idempotent: subsequent calls after the first are no-ops.
+ */
+export interface AbortableInvocation<T> {
+  readonly promise: Promise<Result<T>>;
+  readonly cancel: () => void;
+}
+
 export interface VexBridge {
   readonly capabilities: {
     readonly get: () => Promise<Result<Capabilities>>;
@@ -111,6 +125,21 @@ export interface VexBridge {
     readonly composeUp: (input: {
       readonly pgPort?: number;
     }) => Promise<Result<ComposeUpResult>>;
+    /**
+     * Abortable variant of `composeUp` (PR3). Returns
+     * `{promise, cancel}` so the renderer can let the user abort an
+     * in-flight bootstrap (e.g. a slow image pull). On cancel, the
+     * returned promise resolves to `Result<E:internal.cancelled>`.
+     *
+     * NOTE: this hits the SAME IPC channel as `composeUp` and shares
+     * the same main-side single-flight semantics. A joined caller's
+     * cancel detaches THAT caller's wait only — it never aborts the
+     * shared compose subprocess (only the initiator's signal flows
+     * into `runSpawn`).
+     */
+    readonly composeUpAbortable: (input: {
+      readonly pgPort?: number;
+    }) => AbortableInvocation<ComposeUpResult>;
     readonly composeDown: () => Promise<Result<ComposeDownResult>>;
     /**
      * Subscribe to install progress events. Returns an idempotent

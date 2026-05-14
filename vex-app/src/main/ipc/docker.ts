@@ -8,7 +8,7 @@
 
 import { z } from "zod";
 import { CH, EV } from "@shared/ipc/channels.js";
-import { ok, type Result } from "@shared/ipc/result.js";
+import { err, ok, type Result } from "@shared/ipc/result.js";
 import {
   composeDownResultSchema,
   composeUpResultSchema,
@@ -37,6 +37,11 @@ import { CONFIG_DIR } from "../paths/config-dir.js";
 import { setDbConnection } from "../database/connection-state.js";
 import { broadcastToAllWindows } from "../lifecycle/broadcast.js";
 import { registerHandler } from "./register-handler.js";
+import {
+  cancelledError,
+  isAbortError,
+  raceWithAbort,
+} from "./cancel-helpers.js";
 
 const empty = z.object({}).strict();
 const installInputSchema = z
@@ -156,14 +161,28 @@ export function registerDockerHandlers(): Array<() => void> {
       domain: "docker",
       inputSchema: composeUpInputSchema,
       outputSchema: composeUpResultSchema,
-      handle: async (input): Promise<Result<ComposeUpResult>> => {
+      handle: async (input, ctx): Promise<Result<ComposeUpResult>> => {
         const key = `pgPort=${input.pgPort ?? "default"}`;
         if (composeUpInFlight !== null && composeUpInFlightKey === key) {
           log.info(
             `[ipc:vex:docker:composeUp] joining in-flight invocation (key=${key})`
           );
-          const reused = await composeUpInFlight;
-          return ok(finalizeAndShape(reused));
+          // Joined-caller detach semantics: race the shared promise
+          // against THIS caller's abort signal. If MY signal aborts I
+          // return cancelled WITHOUT touching `composeUpInFlight`;
+          // the shared work continues for the initiator (and any
+          // joiners that did NOT cancel). Codex turn 11 + turn 13
+          // locked this contract — a joiner must not be able to
+          // abort the shared `runSpawn`.
+          try {
+            const reused = await raceWithAbort(composeUpInFlight, ctx.signal);
+            return ok(finalizeAndShape(reused));
+          } catch (cause) {
+            if (isAbortError(cause)) {
+              return err(cancelledError("docker", ctx.requestId));
+            }
+            throw cause;
+          }
         }
 
         log.info(
@@ -171,11 +190,32 @@ export function registerDockerHandlers(): Array<() => void> {
         );
         const startedAt = Date.now();
         const deps = buildRenderDeps();
-        const run = composeUp(deps, {
-          ...(input.pgPort !== undefined ? { pgPort: input.pgPort } : {}),
-          onLogLine: (stream, line) =>
-            composeLogBus.emit({ stream, line, ts: Date.now() }),
-        });
+        // Initiator plumbs ITS OWN signal into composeUp → runSpawn.
+        // Codex turn 14 RED #1: runSpawn resolves with `{aborted:
+        // true}` on signal abort rather than throwing, and
+        // lifecycle.composeUp converts that into a normal
+        // `ok({kind: "failed"})` outcome. To get a clean cancellation
+        // contract for BOTH the initiator and any joined callers, the
+        // shared promise must reject with AbortError when the
+        // initiator's signal aborted. We wrap the composeUp call in
+        // an async IIFE that re-promotes the silent abort: this means
+        //   - initiator's catch below catches AbortError → cancelled
+        //   - joiners' raceWithAbort sees the shared rejection →
+        //     they catch AbortError → cancelled
+        const run: Promise<InternalComposeUpResult> = (async () => {
+          const innerResult = await composeUp(deps, {
+            ...(input.pgPort !== undefined ? { pgPort: input.pgPort } : {}),
+            signal: ctx.signal,
+            onLogLine: (stream, line) =>
+              composeLogBus.emit({ stream, line, ts: Date.now() }),
+          });
+          if (ctx.signal.aborted) {
+            const abortErr = new Error("composeUp cancelled by user");
+            abortErr.name = "AbortError";
+            throw abortErr;
+          }
+          return innerResult;
+        })();
         composeUpInFlight = run;
         composeUpInFlightKey = key;
         try {
@@ -194,6 +234,11 @@ export function registerDockerHandlers(): Array<() => void> {
             ts: Date.now(),
           });
           return ok(finalizeAndShape(result));
+        } catch (cause) {
+          if (isAbortError(cause)) {
+            return err(cancelledError("docker", ctx.requestId));
+          }
+          throw cause;
         } finally {
           if (composeUpInFlight === run) {
             composeUpInFlight = null;

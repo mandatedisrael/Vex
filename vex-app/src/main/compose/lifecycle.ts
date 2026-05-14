@@ -96,7 +96,8 @@ async function clearStaleSecretCache(
   deps: RenderDeps,
   outPath: string,
   installId: string,
-  onLogLine?: (stream: "stdout" | "stderr", line: string) => void
+  onLogLine?: (stream: "stdout" | "stderr", line: string) => void,
+  signal?: AbortSignal
 ): Promise<ClearStaleSecretCacheResult> {
   // Codex review round 2 RED #1 + round 3 RED #1 — destructive
   // recovery gate. The original M5 logic tears the project down
@@ -110,6 +111,12 @@ async function clearStaleSecretCache(
       "stderr",
       "[recovery] Stale bind-mount cache detected, but setup is already complete (or its status cannot be confirmed) — refusing to wipe user data."
     );
+    return { wiped: false };
+  }
+  // Codex turn 14 RED #2 — destructive path must honour cancellation.
+  // If the user cancelled before we enter the wipe stage, bail without
+  // touching anything; the caller will surface internal.cancelled.
+  if (signal?.aborted === true) {
     return { wiped: false };
   }
 
@@ -134,10 +141,18 @@ async function clearStaleSecretCache(
     {
       cwd: path.dirname(outPath),
       timeoutMs: 30_000,
+      ...(signal !== undefined ? { signal } : {}),
       onStdoutLine: (line) => onLogLine?.("stdout", `[recovery] ${line}`),
       onStderrLine: (line) => onLogLine?.("stderr", `[recovery] ${line}`),
     }
   );
+  // Bail BEFORE any file removal if the user cancelled while the
+  // `compose down` subprocess was running. Removing the install-id /
+  // secrets / compose tree is the destructive part — refusing here
+  // keeps the on-disk state recoverable.
+  if (signal?.aborted === true) {
+    return { wiped: false };
+  }
   // Reset all per-install state so the next render regenerates a fresh
   // install_id, password, and compose YAML. The new install_id yields
   // a brand-new volume namespace, and the new password hash forces
@@ -146,6 +161,11 @@ async function clearStaleSecretCache(
   const secretsDir = path.join(deps.userDataDir, "local-infra", "secrets");
   const composeDir = path.join(deps.userDataDir, "compose");
   for (const target of [installIdPath, secretsDir, composeDir]) {
+    if (signal?.aborted === true) {
+      // Stop mid-loop — partial wipe is still safe (the next composeUp
+      // run will detect the incomplete state and re-clear on retry).
+      return { wiped: false };
+    }
     try {
       await fs.rm(target, { recursive: true, force: true });
       onLogLine?.("stdout", `[recovery] Cleared ${target}`);
@@ -557,7 +577,8 @@ export async function composeUp(
       deps,
       rendered.outPath,
       rendered.installId,
-      onLogLine
+      onLogLine,
+      signal
     );
     if (!cleared.wiped) {
       // Setup gate refused — return failure WITHOUT destructive
