@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
@@ -7,6 +8,13 @@ import { defineConfig, type Plugin } from "vite";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rendererRoot = path.resolve(__dirname, "src/renderer");
+
+// JSON read instead of `import pkg from "./package.json" assert {...}` —
+// import-assert syntax has drifted between TS/Node versions; readFileSync
+// is stable and the renderer config already uses node:url / node:path.
+const pkg = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8")
+) as { readonly version: string };
 
 /**
  * Production CSP is strict (skill §7). Vite's dev server injects HMR
@@ -66,6 +74,10 @@ export default defineConfig(({ command }) => ({
   envDir: __dirname,
   envPrefix: "VITE_",
   publicDir: path.resolve(rendererRoot, "public"),
+
+  define: {
+    __VEX_APP_VERSION__: JSON.stringify(pkg.version),
+  },
 
   plugins: [
     react(),

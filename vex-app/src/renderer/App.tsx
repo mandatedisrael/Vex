@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Splash } from "./features/splash/Splash.js";
+import { IntroScreen } from "./features/splash/IntroScreen.js";
 import { SystemCheck } from "./features/systemCheck/SystemCheck.js";
 import { BootstrapPanel } from "./features/docker/BootstrapPanel.js";
 import { ComposeBootstrap } from "./features/compose/ComposeBootstrap.js";
@@ -38,7 +38,7 @@ export function App(): JSX.Element {
   // module) until M7+ wizard step views need real per-step prop wiring
   // or lazy loading (codex turn 4).
   const views: Record<View, () => JSX.Element> = {
-    splash: () => <Splash onComplete={handleSplashComplete} />,
+    splash: () => <IntroScreen onComplete={handleSplashComplete} />,
     systemCheck: () => <SystemCheck />,
     dockerBootstrap: () => <BootstrapPanel />,
     composeBootstrap: () => <ComposeBootstrap />,
