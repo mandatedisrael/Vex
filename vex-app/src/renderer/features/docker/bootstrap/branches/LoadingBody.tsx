@@ -7,7 +7,7 @@
 
 import { HugeiconsIcon } from "@hugeicons/react";
 import { HourglassIcon } from "@hugeicons/core-free-icons";
-import { StatusTile } from "../StatusTile.js";
+import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
 
 export function LoadingBody(): JSX.Element {
   return (

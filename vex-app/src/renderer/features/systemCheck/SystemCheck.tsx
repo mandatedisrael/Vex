@@ -157,6 +157,7 @@ export function SystemCheck(): JSX.Element {
 
   return (
     <div
+      data-vex-onboarding="true"
       data-vex-screen="systemCheck"
       className="relative h-screen w-screen overflow-hidden bg-[var(--color-bg-primary)] text-[var(--color-text-primary)]"
     >

@@ -16,9 +16,9 @@
 
 import { HugeiconsIcon } from "@hugeicons/react";
 import { PauseIcon, PlayIcon } from "@hugeicons/core-free-icons";
-import { StatusTile } from "../StatusTile.js";
-import { PrimaryButton } from "../PrimaryButton.js";
-import { DocsLink } from "../DocsLink.js";
+import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
+import { PrimaryButton } from "../../../../components/onboarding/PrimaryButton.js";
+import { DocsLink } from "../../../../components/onboarding/DocsLink.js";
 import {
   DOCKER_DESKTOP_MAC_URL,
   DOCKER_DESKTOP_WIN_URL,

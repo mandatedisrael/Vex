@@ -52,29 +52,37 @@
   --font-display: var(--font-sans);
 }
 
-/* Splash-scoped accent: electric blue matching intro.png eye-glow.
- * Local to [data-vex-screen="intro"] so the rest of the app keeps indigo
- * (--color-accent-primary) identity. Components fall back via:
- *   var(--intro-accent, var(--color-accent-primary)) */
+/* Shared onboarding accent: electric blue (#3275f8) matching the
+ * eye-glow in the anime portrait backgrounds. Applied via the
+ * `data-vex-onboarding="true"` attribute on the outer wrapper of each
+ * onboarding screen (intro, systemCheck, dockerBootstrap,
+ * composeBootstrap, migrations, wizard). Shared primitives read
+ * `var(--vex-onboarding-accent, var(--color-accent-primary))` so they
+ * degrade to the global indigo accent outside the onboarding flow.
+ *
+ * Promoted from per-screen scoped tokens once the 4th onboarding
+ * screen (composeBootstrap) adopted the same visual identity. The
+ * per-screen aliases below are kept as zero-touch back-compat for any
+ * Tailwind arbitrary-value references in sub-files; a future cleanup
+ * commit can drop them after grep confirms no remaining usages. */
+[data-vex-onboarding="true"] {
+  --vex-onboarding-accent: #3275f8;
+}
+
 [data-vex-screen="intro"] {
-  --intro-accent: #3275f8;
+  --intro-accent: var(--vex-onboarding-accent);
 }
 
-/* SystemCheck-scoped accent: same electric blue (the onboarding flow
- * shares the anime portrait + blue eye-glow aesthetic across screens).
- * Kept per-screen rather than promoted to a shared --vex-onboarding-*
- * token until 3+ onboarding screens adopt the same visual system
- * (codex round 7 SHOULD-FIX #5 — avoid premature shared abstraction). */
 [data-vex-screen="systemCheck"] {
-  --systemcheck-accent: #3275f8;
+  --systemcheck-accent: var(--vex-onboarding-accent);
 }
 
-/* DockerBootstrap-scoped accent: third onboarding screen sharing the
- * electric-blue identity. After composeBootstrap (4th usage) consider
- * promoting these three scopes to a shared --vex-onboarding-accent
- * token applied via [data-vex-onboarding] wrapper. */
 [data-vex-screen="dockerBootstrap"] {
-  --dockerbootstrap-accent: #3275f8;
+  --dockerbootstrap-accent: var(--vex-onboarding-accent);
+}
+
+[data-vex-screen="composeBootstrap"] {
+  --composebootstrap-accent: var(--vex-onboarding-accent);
 }
 
 html,

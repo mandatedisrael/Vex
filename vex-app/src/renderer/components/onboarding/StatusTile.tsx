@@ -10,7 +10,7 @@
  */
 
 import { type ReactNode } from "react";
-import { cn } from "../../../lib/utils.js";
+import { cn } from "../../lib/utils.js";
 
 export type StatusTone = "success" | "warning" | "info" | "danger" | "muted";
 
@@ -26,7 +26,7 @@ const toneChrome: Record<StatusTone, string> = {
     "border-[color-mix(in_oklab,var(--color-success)_35%,transparent)] bg-[color-mix(in_oklab,var(--color-success)_10%,transparent)] text-[var(--color-success)]",
   warning:
     "border-[color-mix(in_oklab,var(--color-warning)_35%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_10%,transparent)] text-[var(--color-warning)]",
-  info: "border-[color-mix(in_oklab,var(--dockerbootstrap-accent)_35%,transparent)] bg-[color-mix(in_oklab,var(--dockerbootstrap-accent)_10%,transparent)] text-[var(--dockerbootstrap-accent)]",
+  info: "border-[color-mix(in_oklab,var(--vex-onboarding-accent)_35%,transparent)] bg-[color-mix(in_oklab,var(--vex-onboarding-accent)_10%,transparent)] text-[var(--vex-onboarding-accent)]",
   danger:
     "border-[color-mix(in_oklab,var(--color-danger)_35%,transparent)] bg-[color-mix(in_oklab,var(--color-danger)_10%,transparent)] text-[var(--color-danger)]",
   muted:

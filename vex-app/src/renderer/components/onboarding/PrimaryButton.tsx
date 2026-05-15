@@ -10,7 +10,7 @@
 
 import type { ComponentProps, ElementType } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { cn } from "../../../lib/utils.js";
+import { cn } from "../../lib/utils.js";
 
 type HugeiconIcon = ComponentProps<typeof HugeiconsIcon>["icon"];
 
@@ -38,7 +38,7 @@ export function PrimaryButton({
         className={cn(
           "inline-flex items-center justify-center gap-2 self-start rounded-xl border border-white/[0.12] bg-white/[0.05] px-4 py-2.5 font-mono text-xs uppercase tracking-[0.2em] text-[var(--color-text-primary)] backdrop-blur-md",
           "hover:border-white/[0.2] hover:bg-white/[0.1]",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dockerbootstrap-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]",
           "active:scale-[0.98] transition-all duration-150",
           "disabled:cursor-not-allowed disabled:opacity-60",
         )}
@@ -54,11 +54,11 @@ export function PrimaryButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/[0.16] bg-[var(--dockerbootstrap-accent)]/85 px-4 py-3 font-mono text-sm uppercase tracking-[0.22em] text-white backdrop-blur-md",
+        "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/[0.16] bg-[var(--vex-onboarding-accent)]/85 px-4 py-3 font-mono text-sm uppercase tracking-[0.22em] text-white backdrop-blur-md",
         "shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_10px_40px_rgba(50,117,248,0.28)]",
-        "hover:bg-[var(--dockerbootstrap-accent)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.26),0_14px_50px_rgba(50,117,248,0.42)]",
+        "hover:bg-[var(--vex-onboarding-accent)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.26),0_14px_50px_rgba(50,117,248,0.42)]",
         "active:scale-[0.98] active:duration-100",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dockerbootstrap-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]",
         "disabled:cursor-not-allowed disabled:opacity-60",
         "transition-all duration-300 ease-out",
       )}

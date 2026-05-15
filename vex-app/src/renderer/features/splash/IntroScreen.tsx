@@ -76,6 +76,7 @@ export function IntroScreen({
 
   return (
     <div
+      data-vex-onboarding="true"
       data-vex-screen="intro"
       className="relative h-screen w-screen overflow-hidden bg-[var(--color-bg-primary)] text-[var(--color-text-primary)]"
     >

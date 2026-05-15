@@ -10,8 +10,8 @@
 
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AlertCircleIcon } from "@hugeicons/core-free-icons";
-import { StatusTile } from "../StatusTile.js";
-import { DocsLink } from "../DocsLink.js";
+import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
+import { DocsLink } from "../../../../components/onboarding/DocsLink.js";
 import { DOCKER_ENGINE_LINUX_URL } from "../constants.js";
 // Type-only import — `useDockerStatus` is referenced solely as
 // `typeof useDockerStatus` to derive the data shape. `verbatimModuleSyntax`

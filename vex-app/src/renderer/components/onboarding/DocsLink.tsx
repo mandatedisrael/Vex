@@ -22,7 +22,7 @@ export function DocsLink({ href, label }: DocsLinkProps): JSX.Element {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 self-start text-xs text-[var(--dockerbootstrap-accent)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dockerbootstrap-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]"
+      className="inline-flex items-center gap-1 self-start text-xs text-[var(--vex-onboarding-accent)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]"
     >
       {label}
       <HugeiconsIcon icon={ArrowUpRight01Icon} size={12} aria-hidden />

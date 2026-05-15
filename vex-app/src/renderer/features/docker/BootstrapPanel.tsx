@@ -53,7 +53,7 @@ import type {
 import {
   ContinueButton,
   RecheckButton,
-} from "./bootstrap/FooterButtons.js";
+} from "../../components/onboarding/FooterButtons.js";
 import { LoadingBody } from "./bootstrap/branches/LoadingBody.js";
 import { ReadyBody } from "./bootstrap/branches/ReadyBody.js";
 import { DaemonStoppedBody } from "./bootstrap/branches/DaemonStoppedBody.js";
@@ -192,6 +192,7 @@ export function BootstrapPanel(): JSX.Element {
 
   return (
     <div
+      data-vex-onboarding="true"
       data-vex-screen="dockerBootstrap"
       className="relative h-screen w-screen overflow-hidden bg-[var(--color-bg-primary)] text-[var(--color-text-primary)]"
     >

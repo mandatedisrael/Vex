@@ -17,8 +17,8 @@
 
 import { HugeiconsIcon } from "@hugeicons/react";
 import { TerminalIcon } from "@hugeicons/core-free-icons";
-import { StatusTile } from "../StatusTile.js";
-import { DocsLink } from "../DocsLink.js";
+import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
+import { DocsLink } from "../../../../components/onboarding/DocsLink.js";
 import { LinuxManualInstructions } from "../../LinuxManualInstructions.js";
 import { cn } from "../../../../lib/utils.js";
 import {

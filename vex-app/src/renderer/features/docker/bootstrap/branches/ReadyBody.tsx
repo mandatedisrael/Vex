@@ -7,7 +7,7 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CheckmarkCircle01Icon } from "@hugeicons/core-free-icons";
 import type { DockerStatus } from "@shared/schemas/docker.js";
-import { StatusTile } from "../StatusTile.js";
+import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
 
 interface ReadyBodyProps {
   readonly status: DockerStatus | null;
