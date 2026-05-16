@@ -1,5 +1,5 @@
 /**
- * Wizard Step 1 — Master password (M7).
+ * Wizard Step 1 — Master password (M7; PR6 redesign — onboarding glass).
  *
  * Creates or unlocks the encrypted local secret vault via
  * `vex.onboarding.keystoreSet`. The form is uncontrolled (React Hook Form
@@ -9,7 +9,7 @@
  * or persistent storage on the renderer side.
  *
  * Skip-badge: when `envState.hasKeystorePassword === true` the form
- * is hidden and a "Already configured ✓" card with a Continue button
+ * is hidden and a "Already configured ✓" panel with a Continue button
  * is shown instead. After a successful keystoreSet we ALSO flip a
  * local `passwordPersisted` flag so the badge appears immediately —
  * the env-state query invalidation is async and may not have refreshed
@@ -19,6 +19,11 @@
  *
  * UX copy refers to the credential as "master password", not
  * "keystore". Concrete file paths are intentionally not surfaced in the UI.
+ *
+ * Chrome lives in `WizardStepPanel` — `data-vex-wizard-keystore="form"`
+ * and `data-vex-wizard-keystore="skip"` are forwarded onto the panel
+ * root via the typed `panelDataAttr` prop so the existing test
+ * selectors keep working (codex round 2 BLOCKED #1).
  */
 
 import { useCallback, useRef, useState, type JSX } from "react";
@@ -30,13 +35,6 @@ import {
   type WizardStepId,
 } from "@shared/schemas/wizard.js";
 import { Button } from "../../../components/ui/button.js";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../../../components/ui/card.js";
 import { Label } from "../../../components/ui/label.js";
 import { PasswordField } from "../../../components/common/PasswordField.js";
 import { StrengthMeter } from "../../../components/common/StrengthMeter.js";
@@ -46,6 +44,8 @@ import {
   useStepAdvance,
   type WizardFlowMode,
 } from "../../../lib/api/wizard.js";
+import { WIZARD_STEP_META } from "../wizard-icons.js";
+import { WizardStepPanel } from "../WizardStepPanel.js";
 
 export interface KeystoreStepProps {
   readonly completedSteps: ReadonlyArray<WizardStepId>;
@@ -59,8 +59,12 @@ const PASSWORD_METER_ID = "vex-keystore-password-meter";
 const PASSWORD_ERROR_ID = "vex-keystore-password-error";
 const CONFIRM_ERROR_ID = "vex-keystore-confirm-error";
 
-function joinIds(...ids: ReadonlyArray<string | false | null | undefined>): string | undefined {
-  const filtered = ids.filter((v): v is string => typeof v === "string" && v.length > 0);
+function joinIds(
+  ...ids: ReadonlyArray<string | false | null | undefined>
+): string | undefined {
+  const filtered = ids.filter(
+    (v): v is string => typeof v === "string" && v.length > 0,
+  );
   return filtered.length > 0 ? filtered.join(" ") : undefined;
 }
 
@@ -138,43 +142,43 @@ export function KeystoreStep({
     await advanceToWallets();
   });
 
+  const meta = WIZARD_STEP_META.keystore;
+
   if (hasExisting && !envLoading) {
     return (
-      <Card className="w-full max-w-2xl" data-vex-wizard-keystore="skip">
-        <CardHeader>
-          <CardTitle>Master password already configured</CardTitle>
-          <CardDescription>
-            Vex has an encrypted local secret vault for this install.
-            Continue to keep using it.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <p className="text-sm text-muted-foreground">
+      <WizardStepPanel
+        panelDataAttr={{ kind: "keystore", value: "skip" }}
+        icon={meta.icon}
+        title="Master password already configured"
+        description="Vex has an encrypted local secret vault for this install. Continue to keep using it."
+        footer={
+          <Button
+            onClick={() => {
+              void advanceToWallets();
+            }}
+            disabled={stepAdvance.isPending}
+          >
+            {stepAdvance.isPending
+              ? "Continuing…"
+              : flowMode === "back-edit"
+                ? "Return to review"
+                : "Continue"}
+          </Button>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-[var(--color-text-secondary)]">
             To rotate the password, complete setup and use the future
             Settings panel. Wallet keystores are not re-encrypted
             automatically when the password changes.
           </p>
           {advanceError ? (
-            <p className="text-sm text-destructive" role="alert">
+            <p className="text-sm text-[var(--color-danger)]" role="alert">
               {advanceError}
             </p>
           ) : null}
-          <div className="flex justify-end">
-            <Button
-              onClick={() => {
-                void advanceToWallets();
-              }}
-              disabled={stepAdvance.isPending}
-            >
-              {stepAdvance.isPending
-                ? "Continuing…"
-                : flowMode === "back-edit"
-                  ? "Return to review"
-                  : "Continue"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </WizardStepPanel>
     );
   }
 
@@ -183,93 +187,87 @@ export function KeystoreStep({
   const submitting = keystoreSet.isPending || stepAdvance.isPending;
 
   return (
-    <Card className="w-full max-w-2xl" data-vex-wizard-keystore="form">
-      <CardHeader>
-        <CardTitle>Set your master password</CardTitle>
-        <CardDescription>
-          This password unlocks the encrypted local vault and protects
-          wallet keystores when you create them in the next step. It stays
-          on this machine.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          onSubmit={(e) => {
-            void onSubmit(e);
-          }}
-          noValidate
-          className="flex flex-col gap-5"
-        >
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={PASSWORD_INPUT_ID}>Master password</Label>
-            <PasswordField
-              id={PASSWORD_INPUT_ID}
-              autoFocus
-              aria-invalid={passwordError ? true : undefined}
-              aria-describedby={joinIds(
-                PASSWORD_METER_ID,
-                passwordError ? PASSWORD_ERROR_ID : undefined
-              )}
-              {...passwordReg}
-              ref={(el) => {
-                passwordReg.ref(el);
-                passwordInputRef.current = el;
-              }}
-            />
-            <StrengthMeter id={PASSWORD_METER_ID} value={passwordValue} />
-            {passwordError ? (
-              <p
-                id={PASSWORD_ERROR_ID}
-                className="text-xs text-destructive"
-                role="alert"
-              >
-                {passwordError}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={CONFIRM_INPUT_ID}>Confirm password</Label>
-            <PasswordField
-              id={CONFIRM_INPUT_ID}
-              aria-invalid={confirmError ? true : undefined}
-              aria-describedby={joinIds(
-                confirmError ? CONFIRM_ERROR_ID : undefined
-              )}
-              {...confirmReg}
-              ref={(el) => {
-                confirmReg.ref(el);
-                confirmInputRef.current = el;
-              }}
-            />
-            {confirmError ? (
-              <p
-                id={CONFIRM_ERROR_ID}
-                className="text-xs text-destructive"
-                role="alert"
-              >
-                {confirmError}
-              </p>
-            ) : null}
-          </div>
-
-          {advanceError ? (
-            <p className="text-sm text-destructive" role="alert">
-              {advanceError}
+    <WizardStepPanel
+      panelDataAttr={{ kind: "keystore", value: "form" }}
+      icon={meta.icon}
+      title="Set your master password"
+      description="This password unlocks the encrypted local vault and protects wallet keystores when you create them in the next step. It stays on this machine."
+      formProps={{
+        onSubmit: (e) => {
+          void onSubmit(e);
+        },
+        noValidate: true,
+      }}
+      footer={
+        <Button type="submit" disabled={submitting}>
+          {submitting
+            ? "Saving…"
+            : flowMode === "back-edit"
+              ? "Save and return to review"
+              : "Save and continue"}
+        </Button>
+      }
+    >
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={PASSWORD_INPUT_ID}>Master password</Label>
+          <PasswordField
+            id={PASSWORD_INPUT_ID}
+            autoFocus
+            aria-invalid={passwordError ? true : undefined}
+            aria-describedby={joinIds(
+              PASSWORD_METER_ID,
+              passwordError ? PASSWORD_ERROR_ID : undefined,
+            )}
+            {...passwordReg}
+            ref={(el) => {
+              passwordReg.ref(el);
+              passwordInputRef.current = el;
+            }}
+          />
+          <StrengthMeter id={PASSWORD_METER_ID} value={passwordValue} />
+          {passwordError ? (
+            <p
+              id={PASSWORD_ERROR_ID}
+              className="text-xs text-[var(--color-danger)]"
+              role="alert"
+            >
+              {passwordError}
             </p>
           ) : null}
+        </div>
 
-          <div className="flex justify-end">
-            <Button type="submit" disabled={submitting}>
-              {submitting
-                ? "Saving…"
-                : flowMode === "back-edit"
-                  ? "Save and return to review"
-                  : "Save and continue"}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={CONFIRM_INPUT_ID}>Confirm password</Label>
+          <PasswordField
+            id={CONFIRM_INPUT_ID}
+            aria-invalid={confirmError ? true : undefined}
+            aria-describedby={joinIds(
+              confirmError ? CONFIRM_ERROR_ID : undefined,
+            )}
+            {...confirmReg}
+            ref={(el) => {
+              confirmReg.ref(el);
+              confirmInputRef.current = el;
+            }}
+          />
+          {confirmError ? (
+            <p
+              id={CONFIRM_ERROR_ID}
+              className="text-xs text-[var(--color-danger)]"
+              role="alert"
+            >
+              {confirmError}
+            </p>
+          ) : null}
+        </div>
+
+        {advanceError ? (
+          <p className="text-sm text-[var(--color-danger)]" role="alert">
+            {advanceError}
+          </p>
+        ) : null}
+      </div>
+    </WizardStepPanel>
   );
 }

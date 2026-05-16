@@ -85,6 +85,10 @@
   --composebootstrap-accent: var(--vex-onboarding-accent);
 }
 
+[data-vex-screen="wizard"] {
+  --wizard-accent: var(--vex-onboarding-accent);
+}
+
 html,
 body,
 #root {

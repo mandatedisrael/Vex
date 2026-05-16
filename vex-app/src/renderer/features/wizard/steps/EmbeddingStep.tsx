@@ -1,5 +1,5 @@
 /**
- * Wizard Step 4 — Embedding configuration (M9).
+ * Wizard Step 4 — Embedding configuration (M9; PR6 redesign — glass).
  *
  * Skip-card when `envState.embeddings.allFieldsConfigured` is true.
  * Otherwise: form with the 4 EMBEDDING_* fields. URL is validated
@@ -20,6 +20,9 @@
  * the next knowledge operation" because `loadEmbeddingConfig()` is
  * called per-tool invocation in the engine (no agent restart needed
  * for embeddings).
+ *
+ * Chrome lives in `WizardStepPanel` — `data-vex-wizard-embedding`
+ * forwarded onto the panel root.
  */
 
 import { useCallback, useState, type JSX } from "react";
@@ -41,13 +44,6 @@ import {
   type WizardStepId,
 } from "@shared/schemas/wizard.js";
 import { Button } from "../../../components/ui/button.js";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../../../components/ui/card.js";
 import { Input } from "../../../components/ui/input.js";
 import { Label } from "../../../components/ui/label.js";
 import { useEnvState } from "../../../lib/api/onboarding.js";
@@ -56,6 +52,8 @@ import {
   useStepAdvance,
   type WizardFlowMode,
 } from "../../../lib/api/wizard.js";
+import { WIZARD_STEP_META } from "../wizard-icons.js";
+import { WizardStepPanel } from "../WizardStepPanel.js";
 
 export interface EmbeddingStepProps {
   readonly completedSteps: ReadonlyArray<WizardStepId>;
@@ -187,32 +185,29 @@ export function EmbeddingStep({
     [form, configure, advanceToAgentCore],
   );
 
+  const meta = WIZARD_STEP_META.embedding;
+
   if (allConfigured && !showOverride) {
     return (
-      <Card className="w-full max-w-2xl" data-vex-wizard-embedding="skip">
-        <CardHeader>
-          <CardTitle>Embedding configuration is set</CardTitle>
-          <CardDescription>
-            {embeddingsState?.baseUrlRedacted ? (
-              <>
-                Vex is using <code>{embeddingsState.baseUrlRedacted}</code>{" "}
-                (bundled EmbeddingGemma 300M, dim {EMBEDDING_DIM}){" "}
-                {embeddingsState.reachable
-                  ? "— reachable ✓"
-                  : "— not reachable yet; the runtime may still be loading the model."}
-              </>
-            ) : (
-              "Bundled EmbeddingGemma 300M is configured."
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {advanceError ? (
-            <p className="text-sm text-destructive" role="alert">
-              {advanceError}
-            </p>
-          ) : null}
-          <div className="flex justify-between gap-3">
+      <WizardStepPanel
+        panelDataAttr={{ kind: "embedding", value: "skip" }}
+        icon={meta.icon}
+        title="Embedding configuration is set"
+        description={
+          embeddingsState?.baseUrlRedacted ? (
+            <>
+              Vex is using <code>{embeddingsState.baseUrlRedacted}</code>{" "}
+              (bundled EmbeddingGemma 300M, dim {EMBEDDING_DIM}){" "}
+              {embeddingsState.reachable
+                ? "— reachable ✓"
+                : "— not reachable yet; the runtime may still be loading the model."}
+            </>
+          ) : (
+            "Bundled EmbeddingGemma 300M is configured."
+          )
+        }
+        footer={
+          <>
             <Button
               variant="ghost"
               onClick={() => setShowOverride(true)}
@@ -232,9 +227,19 @@ export function EmbeddingStep({
                   ? "Return to review"
                   : "Continue"}
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </>
+        }
+      >
+        {advanceError ? (
+          <p className="text-sm text-[var(--color-danger)]" role="alert">
+            {advanceError}
+          </p>
+        ) : (
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            Override to point at a different OpenAI-compatible endpoint.
+          </p>
+        )}
+      </WizardStepPanel>
     );
   }
 
@@ -242,23 +247,46 @@ export function EmbeddingStep({
   const isDbDown = serverError?.code === "embedding.db_unavailable";
 
   return (
-    <Card className="w-full max-w-2xl" data-vex-wizard-embedding="form">
-      <CardHeader>
-        <CardTitle>Embedding configuration</CardTitle>
-        <CardDescription>
+    <WizardStepPanel
+      panelDataAttr={{ kind: "embedding", value: "form" }}
+      icon={meta.icon}
+      title="Embedding configuration"
+      description={
+        <>
           Vex needs an OpenAI-compatible embedding endpoint to power
           knowledge recall. The bundled stack runs llama.cpp:server with
           EmbeddingGemma 300M on{" "}
           <code>127.0.0.1:{DEFAULT_EMBED_PORT}</code> — point this at
           your own OpenAI / Ollama / remote endpoint if you prefer.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </>
+      }
+      formProps={{
+        onSubmit: (e) => {
+          void onSubmit(e);
+        },
+        noValidate: true,
+      }}
+      footer={
+        <Button
+          type="submit"
+          disabled={configure.isPending || stepAdvance.isPending}
+        >
+          {configure.isPending
+            ? "Saving…"
+            : stepAdvance.isPending
+              ? "Continuing…"
+              : flowMode === "back-edit"
+                ? "Save and return to review"
+                : "Save and continue"}
+        </Button>
+      }
+    >
+      <div className="flex flex-col gap-5">
         {isDimLocked && serverError?.details ? (
           <div
             role="alert"
             data-vex-embedding-warning="dim-locked"
-            className="mb-5 rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive-foreground"
+            className="rounded-md border border-[color-mix(in_oklab,var(--color-danger)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-danger)_10%,transparent)] p-4 text-sm text-[var(--color-danger)]"
           >
             <strong className="block font-semibold">Dim change blocked.</strong>
             <p className="mt-1">
@@ -278,109 +306,89 @@ export function EmbeddingStep({
           <div
             role="alert"
             data-vex-embedding-warning="db-unavailable"
-            className="mb-5 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-4 text-sm text-yellow-200"
+            className="rounded-md border border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_10%,transparent)] p-4 text-sm text-[var(--color-warning)]"
           >
-            <strong className="block font-semibold">Database unavailable.</strong>
+            <strong className="block font-semibold">
+              Database unavailable.
+            </strong>
             <p className="mt-1">{serverError?.message}</p>
             <p className="mt-2 text-xs">
               Verify Docker services are running, then retry.
             </p>
           </div>
         ) : null}
-        <form
-          onSubmit={(e) => {
-            void onSubmit(e);
-          }}
-          noValidate
-          className="flex flex-col gap-5"
-        >
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="vex-embed-baseurl">Base URL</Label>
-            <Input
-              id="vex-embed-baseurl"
-              type="url"
-              placeholder={buildEmbeddingBaseUrl()}
-              autoComplete="off"
-              value={form.baseUrl}
-              onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
-              autoFocus
-            />
-          </div>
 
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="vex-embed-baseurl">Base URL</Label>
+          <Input
+            id="vex-embed-baseurl"
+            type="url"
+            placeholder={buildEmbeddingBaseUrl()}
+            autoComplete="off"
+            value={form.baseUrl}
+            onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
+            autoFocus
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="vex-embed-model">Model</Label>
+          <Input
+            id="vex-embed-model"
+            type="text"
+            placeholder={EMBEDDING_MODEL_ALIAS}
+            autoComplete="off"
+            value={form.model}
+            onChange={(e) => setForm({ ...form, model: e.target.value })}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="vex-embed-model">Model</Label>
+            <Label htmlFor="vex-embed-dim">Dim</Label>
             <Input
-              id="vex-embed-model"
+              id="vex-embed-dim"
+              type="number"
+              inputMode="numeric"
+              min={MIN_EMBEDDING_DIM}
+              max={MAX_EMBEDDING_DIM}
+              placeholder={String(EMBEDDING_DIM)}
+              value={form.dim}
+              onChange={(e) => setForm({ ...form, dim: e.target.value })}
+            />
+            <p className="text-xs text-[var(--color-text-muted)]">
+              {MIN_EMBEDDING_DIM}–{MAX_EMBEDDING_DIM}. Common: 384, 768, 1024, 1536.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="vex-embed-provider">Provider tag</Label>
+            <Input
+              id="vex-embed-provider"
               type="text"
-              placeholder={EMBEDDING_MODEL_ALIAS}
+              placeholder={EMBEDDING_PROVIDER}
               autoComplete="off"
-              value={form.model}
-              onChange={(e) => setForm({ ...form, model: e.target.value })}
+              value={form.provider}
+              onChange={(e) => setForm({ ...form, provider: e.target.value })}
             />
           </div>
+        </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="vex-embed-dim">Dim</Label>
-              <Input
-                id="vex-embed-dim"
-                type="number"
-                inputMode="numeric"
-                min={MIN_EMBEDDING_DIM}
-                max={MAX_EMBEDDING_DIM}
-                placeholder={String(EMBEDDING_DIM)}
-                value={form.dim}
-                onChange={(e) => setForm({ ...form, dim: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                {MIN_EMBEDDING_DIM}–{MAX_EMBEDDING_DIM}. Common: 384, 768, 1024, 1536.
-              </p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="vex-embed-provider">Provider tag</Label>
-              <Input
-                id="vex-embed-provider"
-                type="text"
-                placeholder={EMBEDDING_PROVIDER}
-                autoComplete="off"
-                value={form.provider}
-                onChange={(e) => setForm({ ...form, provider: e.target.value })}
-              />
-            </div>
-          </div>
-
-          {validationError ? (
-            <p className="text-sm text-destructive" role="alert">
-              {validationError}
-            </p>
-          ) : null}
-          {!isDimLocked && !isDbDown && serverError?.message ? (
-            <p className="text-sm text-destructive" role="alert">
-              {serverError.message}
-            </p>
-          ) : null}
-          {advanceError ? (
-            <p className="text-sm text-destructive" role="alert">
-              {advanceError}
-            </p>
-          ) : null}
-
-          <div className="flex justify-end gap-3">
-            <Button
-              type="submit"
-              disabled={configure.isPending || stepAdvance.isPending}
-            >
-              {configure.isPending
-                ? "Saving…"
-                : stepAdvance.isPending
-                  ? "Continuing…"
-                  : flowMode === "back-edit"
-                    ? "Save and return to review"
-                    : "Save and continue"}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+        {validationError ? (
+          <p className="text-sm text-[var(--color-danger)]" role="alert">
+            {validationError}
+          </p>
+        ) : null}
+        {!isDimLocked && !isDbDown && serverError?.message ? (
+          <p className="text-sm text-[var(--color-danger)]" role="alert">
+            {serverError.message}
+          </p>
+        ) : null}
+        {advanceError ? (
+          <p className="text-sm text-[var(--color-danger)]" role="alert">
+            {advanceError}
+          </p>
+        ) : null}
+      </div>
+    </WizardStepPanel>
   );
 }

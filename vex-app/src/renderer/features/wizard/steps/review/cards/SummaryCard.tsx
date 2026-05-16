@@ -1,24 +1,29 @@
 /**
- * Shared review summary primitive (M11).
+ * Shared review summary primitive (M11; PR6 redesign — glass tile).
  *
  * Each domain card under `cards/` uses this to render the same
  * label / status / children / Edit-button layout. Pulling the layout
  * out keeps every domain card under ~70 LOC and prevents drift
  * between cards (e.g. one renders the Edit button at the top, another
  * at the bottom — confusing operator UX during finalize review).
+ *
+ * PR6: the shell switched to the onboarding glass aesthetic; this
+ * tile now mirrors the `WizardStepPanel` surface so the review screen
+ * doesn't double-wrap a shadcn card inside a glass panel.
  */
 
 import type { JSX, ReactNode } from "react";
+import { cn } from "../../../../../lib/utils.js";
 import { Button } from "../../../../../components/ui/button.js";
 
 export type SummaryStatus = "ok" | "missing" | "partial" | "warning" | "info";
 
 const STATUS_DOT: Record<SummaryStatus, string> = {
-  ok: "bg-emerald-500",
-  missing: "bg-rose-500",
-  partial: "bg-amber-500",
-  warning: "bg-amber-500",
-  info: "bg-slate-400",
+  ok: "bg-[var(--color-success)]",
+  missing: "bg-[var(--color-danger)]",
+  partial: "bg-[var(--color-warning)]",
+  warning: "bg-[var(--color-warning)]",
+  info: "bg-[var(--color-text-muted)]",
 };
 
 export interface SummaryCardProps {
@@ -42,19 +47,27 @@ export function SummaryCard({
 }: SummaryCardProps): JSX.Element {
   return (
     <div
-      className="flex flex-col gap-2 rounded-md border border-border bg-card/40 p-3"
       data-vex-review-card={testId}
+      className={cn(
+        "flex flex-col gap-2 rounded-xl border border-white/[0.08]",
+        "bg-white/[0.03] px-3 py-2.5 backdrop-blur-md",
+        "shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+      )}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span
             aria-hidden
-            className={`h-2 w-2 rounded-full ${STATUS_DOT[status]}`}
+            className={cn("h-2 w-2 rounded-full", STATUS_DOT[status])}
           />
-          <span className="text-sm font-medium">{title}</span>
+          <span className="text-sm font-medium text-[var(--color-text-primary)]">
+            {title}
+          </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">{statusLabel}</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
+            {statusLabel}
+          </span>
           {onEdit ? (
             <Button
               type="button"
@@ -69,7 +82,9 @@ export function SummaryCard({
         </div>
       </div>
       {children ? (
-        <div className="text-xs text-muted-foreground">{children}</div>
+        <div className="text-xs text-[var(--color-text-secondary)]">
+          {children}
+        </div>
       ) : null}
     </div>
   );

@@ -58,7 +58,7 @@ export function SentryConsentCard({
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-md border border-border bg-card/40 p-3"
+      className="flex flex-col gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
       data-vex-review-card="sentry-consent"
     >
       <label className="flex cursor-pointer items-start gap-3">
@@ -70,10 +70,10 @@ export function SentryConsentCard({
           className="mt-1"
         />
         <span className="flex flex-col">
-          <span className="text-sm font-medium">
+          <span className="text-sm font-medium text-[var(--color-text-primary)]">
             Send anonymous error reports to help improve Vex
           </span>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-[var(--color-text-secondary)]">
             Default: off. You can change this any time from Settings (Phase 2).
           </span>
         </span>
@@ -82,14 +82,16 @@ export function SentryConsentCard({
       <details
         open={showDetails}
         onToggle={(e) => setShowDetails((e.target as HTMLDetailsElement).open)}
-        className="rounded-md border border-border bg-background/60 p-3"
+        className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3"
       >
-        <summary className="cursor-pointer text-xs font-medium">
+        <summary className="cursor-pointer text-xs font-medium text-[var(--color-text-primary)]">
           What we collect / never collect
         </summary>
-        <div className="mt-3 flex flex-col gap-3 text-xs">
+        <div className="mt-3 flex flex-col gap-3 text-xs text-[var(--color-text-secondary)]">
           <div>
-            <p className="font-semibold">Collected (only with this opt-in):</p>
+            <p className="font-semibold text-[var(--color-text-primary)]">
+              Collected (only with this opt-in):
+            </p>
             <ul className="mt-1 list-disc pl-5">
               {COLLECTED_BULLETS.map((b) => (
                 <li key={b}>{b}</li>
@@ -97,7 +99,7 @@ export function SentryConsentCard({
             </ul>
           </div>
           <div>
-            <p className="font-semibold text-emerald-700 dark:text-emerald-400">
+            <p className="font-semibold text-[var(--color-success)]">
               Never sent (regardless of consent):
             </p>
             <ul className="mt-1 list-disc pl-5">
@@ -106,7 +108,7 @@ export function SentryConsentCard({
               ))}
             </ul>
           </div>
-          <p className="text-muted-foreground">
+          <p className="text-[var(--color-text-muted)]">
             Stack traces and breadcrumbs are scrubbed in the main process
             before they leave your machine — see <code>main/logger/redact.ts</code>{" "}
             and <code>main/telemetry/before-send.ts</code> in the source.
