@@ -1,16 +1,22 @@
 /**
- * Component tests for the Migrations screen (M6). Mocks `window.vex`
- * per skill §12 — never reaches a real IPC bridge.
+ * Component tests for the Migrations screen after the glass-aesthetic
+ * redesign. Mocks `window.vex` per skill §12 — never reaches a real
+ * IPC bridge.
  *
- * Coverage:
- *   - applied result renders Continue button
- *   - noop result auto-advances to placeholder via setCurrentView
- *   - err result renders Retry button + error message
- *   - progress events from the bus drive live "Applying X/total" text
+ * Preserves the four pre-existing assertions:
+ *   - applied result renders Continue button (no Retry)
+ *   - noop result auto-advances via openWizard("setup")
+ *   - err result renders Retry button (no Continue)
+ *   - progress events from the bus drive live UI updates
+ *
+ * Adds branch-level coverage for the redesign:
+ *   - applied → ReadyBody shows "{N} migrations applied"
+ *   - err with `details.failedAt` → ErrorBody shows version + file
+ *   - data-vex-onboarding wrapper attribute set
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { JSX } from "react";
 import type { MigrateProgress } from "@shared/schemas/database.js";
@@ -67,7 +73,7 @@ afterEach(() => {
 const { Migrations } = await import("../Migrations.js");
 
 describe("Migrations component", () => {
-  it("renders applied phase with Continue button", async () => {
+  it("renders applied phase with Continue button (preserved)", async () => {
     mockMigrate.mockResolvedValue({
       ok: true,
       data: {
@@ -78,12 +84,12 @@ describe("Migrations component", () => {
       },
     });
     const { findByText, queryByRole } = renderWithQuery(<Migrations />);
-    await findByText(/Applied 2 migrations/);
+    await findByText(/2 migrations applied/);
     expect(queryByRole("button", { name: /Continue/ })).toBeTruthy();
     expect(queryByRole("button", { name: /Retry/ })).toBeNull();
   });
 
-  it("auto-advances to wizard on noop", async () => {
+  it("auto-advances to wizard on noop (preserved)", async () => {
     mockMigrate.mockResolvedValue({
       ok: true,
       data: {
@@ -96,11 +102,11 @@ describe("Migrations component", () => {
       () => {
         expect(mockOpenWizard).toHaveBeenCalledWith("setup");
       },
-      { timeout: 1500 }
+      { timeout: 1500 },
     );
   });
 
-  it("renders error phase with Retry when result is err", async () => {
+  it("renders error phase with Retry when result is err (preserved)", async () => {
     mockMigrate.mockResolvedValue({
       ok: false,
       error: {
@@ -118,7 +124,7 @@ describe("Migrations component", () => {
     expect(queryByRole("button", { name: /Continue/ })).toBeNull();
   });
 
-  it("renders live progress from the bus", async () => {
+  it("renders live progress from the bus (preserved)", async () => {
     mockMigrate.mockImplementation(() => new Promise(() => {}));
     const { findByText } = renderWithQuery(<Migrations />);
 
@@ -134,7 +140,7 @@ describe("Migrations component", () => {
       file: "",
       ts: 1,
     });
-    await findByText(/Preparing to apply 5 migrations/);
+    await findByText(/Planning 5 migrations/);
 
     progressCb?.({
       phase: "start",
@@ -144,6 +150,113 @@ describe("Migrations component", () => {
       file: "003_x.sql",
       ts: 2,
     });
-    await findByText(/Applying 3\/5: 003_x\.sql/);
+    await findByText(/Applying 3 of 5/);
+    await findByText(/003_x\.sql/);
+  });
+
+  it("ErrorBody shows failedAt context when details has version + file", async () => {
+    mockMigrate.mockResolvedValue({
+      ok: false,
+      error: {
+        code: "data.migration_failed",
+        domain: "database",
+        message: "Migration v15 failed.",
+        retryable: true,
+        userActionable: false,
+        redacted: true,
+        details: { failedAt: { version: 15, file: "015_add_index.sql" } },
+      },
+    });
+    const { container, findByText } = renderWithQuery(<Migrations />);
+    // Wait for the failure path to land (message in StatusTile detail).
+    await findByText(/Migration v15 failed/);
+    // failedAt block lives in a `<p>` with mixed inline children
+    // (text + <span>v15</span> + <code>file</code>); RTL's default
+    // text matcher splits across nodes, so we assert against the
+    // section's flattened textContent instead.
+    expect(container.textContent).toMatch(/Failed at migration/);
+    expect(container.textContent).toMatch(/v15/);
+    expect(container.textContent).toMatch(/015_add_index\.sql/);
+  });
+
+  it("ErrorBody omits failedAt context when details is missing or shape is wrong", async () => {
+    mockMigrate.mockResolvedValue({
+      ok: false,
+      error: {
+        code: "data.migration_failed",
+        domain: "database",
+        message: "Unknown migration failure.",
+        retryable: true,
+        userActionable: false,
+        redacted: true,
+        // No `details` field → extractFailedAt returns null.
+      },
+    });
+    const { findByText, queryByText } = renderWithQuery(<Migrations />);
+    await findByText(/Unknown migration failure/);
+    expect(queryByText(/Failed at migration/)).toBeNull();
+  });
+
+  it("ErrorBody disclosure shows applied-before-failure list when progress events fired", async () => {
+    let resolveMigrate: ((value: unknown) => void) | undefined;
+    mockMigrate.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveMigrate = resolve;
+        }),
+    );
+    const { findByText, queryByText, container } = renderWithQuery(
+      <Migrations />,
+    );
+    await waitFor(() => {
+      expect(progressCb).not.toBeNull();
+    });
+    // Emit two `applied` progress events; the ref-based history snapshot
+    // must capture them by the time the migrate() promise rejects.
+    progressCb?.({
+      phase: "applied",
+      index: 0,
+      total: 3,
+      version: 1,
+      file: "001_init.sql",
+      ts: 1,
+    });
+    progressCb?.({
+      phase: "applied",
+      index: 1,
+      total: 3,
+      version: 2,
+      file: "002_indexes.sql",
+      ts: 2,
+    });
+    resolveMigrate?.({
+      ok: false,
+      error: {
+        code: "data.migration_failed",
+        domain: "database",
+        message: "Migration v3 failed.",
+        retryable: true,
+        userActionable: false,
+        redacted: true,
+      },
+    });
+    await findByText(/Migration v3 failed/);
+    const disclosure = queryByText(/Show 2 applied before failure/);
+    expect(disclosure).not.toBeNull();
+    // Clicking the disclosure renders the bounded buffer contents.
+    // act() wraps the state update so React flushes before we assert.
+    await act(async () => {
+      fireEvent.click(disclosure!);
+    });
+    expect(container.textContent).toMatch(/001_init\.sql/);
+    expect(container.textContent).toMatch(/002_indexes\.sql/);
+  });
+
+  it("outer container carries data-vex-onboarding + data-vex-screen attributes", async () => {
+    mockMigrate.mockImplementation(() => new Promise(() => {}));
+    const { container } = renderWithQuery(<Migrations />);
+    const root = container.querySelector('[data-vex-screen="migrations"]');
+    expect(root).not.toBeNull();
+    expect(root?.getAttribute("data-vex-onboarding")).toBe("true");
   });
 });

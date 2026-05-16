@@ -1,107 +1,128 @@
 /**
- * Migrations bootstrap surface (M6) — runs `vex.database.migrate()`
- * after Compose reaches `running`/`reused` and before the placeholder
- * shell. Pattern mirrors ComposeBootstrap (StrictMode-safe direct
- * async + `cancelled` flag, no useMutation; main-side single-flight
- * dedup handles double-mount races).
+ * Database migrations orchestrator — 5th onboarding surface in the
+ * Vex flow (intro → systemCheck → dockerBootstrap → composeBootstrap →
+ * **migrations** → wizard). Visual system inherits the shared glass
+ * aesthetic established by the four preceding screens
+ * (`data-vex-onboarding="true"`, right-side iOS Liquid Glass panel,
+ * full-bleed `setup.png` background, `--vex-onboarding-accent`).
  *
- * Subscribes to `onProgress` BEFORE invoking migrate so the bus's
- * replay-on-subscribe covers the early planned/start handshake even
- * if the renderer mounts a tick after main has emitted.
+ * Flow:
+ *   1. Subscribe to the progress bus BEFORE invoking `migrate()`. The
+ *      bus replays the latest event to late subscribers, so the
+ *      planned/total handshake survives StrictMode double-mount and
+ *      single-flight join.
+ *   2. Run `window.vex.database.migrate()`. On success, invalidate the
+ *      onboarding envState query (migrate seeds embedding env defaults
+ *      so the wizard sees fresh values).
+ *   3. Dispatch to a per-kind branch body (Running / Noop / Ready /
+ *      Error). Noop auto-advances to the wizard after
+ *      NOOP_AUTO_ADVANCE_MS; Ready waits for Continue; Error offers
+ *      Retry (no cancel — SQL aborts aren't safe, the IPC contract
+ *      intentionally omits a cancel handle).
+ *
+ * StrictMode safety: cleanup uses a `cancelled` flag to suppress stale
+ * promise resolutions, never calls a cancel handle (none exists).
+ *
+ * Progress regression guard: the progress callback updates `current`
+ * via a functional setState that only mutates while `phase.kind ===
+ * "running"`, so a late event cannot pull a terminal state back into
+ * running (codex review v2 constraint #3).
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { MigrateProgress } from "@shared/schemas/database.js";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { DatabaseSync01Icon } from "@hugeicons/core-free-icons";
+
 import { useUiStore } from "../../stores/uiStore.js";
 import { onboardingKeys } from "../../lib/api/queryKeys.js";
-import { Button } from "../../components/ui/button.js";
+import { cn } from "../../lib/utils.js";
+import { ContinueButton } from "../../components/onboarding/FooterButtons.js";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../components/ui/card.js";
-
-const MAX_LOG_LINES = 20;
-const NOOP_AUTOADVANCE_MS = 500;
-
-type Phase = "running" | "ready" | "noop" | "error";
-
-interface PhaseState {
-  readonly phase: Phase;
-  readonly message: string | null;
-}
-
-function describeLatest(latest: MigrateProgress | null): string {
-  if (latest === null) return "Initializing migrations…";
-  if (latest.phase === "planned") {
-    return latest.total === 0
-      ? "Schema is up to date."
-      : `Preparing to apply ${latest.total} migration${
-          latest.total === 1 ? "" : "s"
-        }…`;
-  }
-  const human = latest.phase === "start" ? "Applying" : "Applied";
-  return `${human} ${latest.index + 1}/${latest.total}: ${latest.file}`;
-}
+  APPLIED_HISTORY_MAX,
+  MIGRATIONS_STEP,
+  NOOP_AUTO_ADVANCE_MS,
+  TOTAL_ONBOARDING_STEPS,
+} from "./migrations/constants.js";
+import type { Phase } from "./migrations/types.js";
+import { extractFailedAt } from "./migrations/extractFailedAt.js";
+import { RunningBody } from "./migrations/branches/RunningBody.js";
+import { NoopBody } from "./migrations/branches/NoopBody.js";
+import { ReadyBody } from "./migrations/branches/ReadyBody.js";
+import { ErrorBody } from "./migrations/branches/ErrorBody.js";
 
 export function Migrations(): JSX.Element {
   const openWizard = useUiStore((s) => s.openWizard);
   const queryClient = useQueryClient();
-  const [progress, setProgress] = useState<ReadonlyArray<MigrateProgress>>([]);
-  const [latest, setLatest] = useState<MigrateProgress | null>(null);
-  const [state, setState] = useState<PhaseState>({
-    phase: "running",
-    message: null,
-  });
+  const reducedMotion = useReducedMotion();
+  const [phase, setPhase] = useState<Phase>({ kind: "running", current: null });
   const [retryToken, setRetryToken] = useState(0);
+  // History of `applied`-phase files, snapshot into ErrorBody on
+  // failure. Stored in a ref (not state) so the migrate effect's
+  // closure reads the latest value at the moment of error capture
+  // without needing to re-run on every progress event (codex post-impl
+  // SHOULD-FIX P2 — stale closure fix).
+  const appliedHistoryRef = useRef<readonly string[]>([]);
 
-  // Subscribe BEFORE invoking migrate. The bus replays the latest event
-  // to new subscribers so a late-mounted listener (StrictMode dev double
-  // mount, or a joined single-flight call) still gets the planned/total
-  // handshake. Codex turn 1 other-gaps.
+  // Subscribe BEFORE invoking migrate so the bus's replay-on-subscribe
+  // covers the early planned/start handshake even if the renderer
+  // mounts a tick after main has emitted.
   useEffect(() => {
     const off = window.vex.database.onProgress((payload) => {
-      setLatest(payload);
-      setProgress((prev) => [...prev, payload].slice(-MAX_LOG_LINES));
+      if (payload.phase === "applied") {
+        // Bounded buffer — codex post-impl SHOULD-FIX P3.
+        appliedHistoryRef.current = [
+          ...appliedHistoryRef.current,
+          payload.file,
+        ].slice(-APPLIED_HISTORY_MAX);
+      }
+      // Update `current` only while the phase is still running. A late
+      // event must not pull a terminal phase back into running.
+      setPhase((prev) =>
+        prev.kind === "running" ? { kind: "running", current: payload } : prev,
+      );
     });
     return () => off();
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    setState({ phase: "running", message: null });
+    setPhase({ kind: "running", current: null });
 
     void (async () => {
       try {
         const result = await window.vex.database.migrate();
         if (cancelled) return;
         if (!result.ok) {
-          setState({ phase: "error", message: result.error.message });
+          const failedAt = extractFailedAt(result.error.details);
+          setPhase({
+            kind: "error",
+            message: result.error.message,
+            failedAt,
+            appliedBeforeFailure: appliedHistoryRef.current,
+          });
           return;
         }
-        // Main process seeds bundled EMBEDDING_* defaults into the
-        // `.env` on the migrate success path (M11.5.4 — see
-        // `vex.database.migrate` handler). Invalidate the envState
-        // query so Step 4 sees the fresh values instead of waiting
-        // for the 10s staleTime window — without this the wizard can
-        // render the manual form even though defaults were just
-        // written (codex review turn 2 YELLOW #2).
+        // Migrate seeds embedding env defaults — invalidate the
+        // envState query so the wizard sees fresh values without
+        // waiting for the staleTime window.
         await queryClient.invalidateQueries({
           queryKey: onboardingKeys.envState(),
         });
         const data = result.data;
         if (data.kind === "applied") {
-          setState({ phase: "ready", message: data.message });
+          setPhase({ kind: "ready", appliedCount: data.applied });
         } else {
-          setState({ phase: "noop", message: data.message });
+          setPhase({ kind: "noop" });
         }
       } catch (err: unknown) {
         if (cancelled) return;
-        setState({
-          phase: "error",
+        setPhase({
+          kind: "error",
           message: err instanceof Error ? err.message : "Unknown error",
+          failedAt: null,
+          appliedBeforeFailure: appliedHistoryRef.current,
         });
       }
     })();
@@ -111,79 +132,115 @@ export function Migrations(): JSX.Element {
     };
   }, [retryToken, queryClient]);
 
-  // No migrations to apply → auto-advance to the wizard after a short
-  // delay so the user sees the up-to-date message without needing to
-  // click. The wizard itself decides whether to render Step 1 or
-  // skip-to-app based on `wizard-state.json` + envState (M7).
+  // Auto-advance the noop branch to the wizard after a short
+  // confirmation flash. Effect scope keeps the timer cleanly scoped
+  // (no timer ref smuggled into phase state — codex review v2 #4).
   useEffect(() => {
-    if (state.phase !== "noop") return;
-    const timer = setTimeout(() => openWizard("setup"), NOOP_AUTOADVANCE_MS);
-    return () => clearTimeout(timer);
-  }, [state.phase, openWizard]);
+    if (phase.kind !== "noop") return;
+    const timer = window.setTimeout(
+      () => openWizard("setup"),
+      NOOP_AUTO_ADVANCE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [phase.kind, openWizard]);
 
   const handleRetry = useCallback((): void => {
-    setProgress([]);
-    setLatest(null);
+    appliedHistoryRef.current = [];
     setRetryToken((n) => n + 1);
   }, []);
 
-  const isRunning = state.phase === "running";
+  const handleContinue = useCallback((): void => {
+    openWizard("setup");
+  }, [openWizard]);
 
   return (
-    <main
-      className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background p-8 text-foreground"
+    <div
+      data-vex-onboarding="true"
       data-vex-screen="migrations"
+      className="relative h-screen w-screen overflow-hidden bg-[var(--color-bg-primary)] text-[var(--color-text-primary)]"
     >
-      <Card className="w-full max-w-2xl">
-        <CardHeader>
-          <CardTitle>Applying database migrations</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <p className="text-sm text-muted-foreground">
-            {state.phase === "running"
-              ? describeLatest(latest)
-              : state.phase === "ready"
-                ? state.message ?? "Migrations applied."
-                : state.phase === "noop"
-                  ? state.message ?? "All migrations already applied."
-                  : state.message ?? "Migration failed. See details below."}
-          </p>
-          {isRunning ? (
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-popover">
-              <div className="h-full w-1/3 animate-pulse bg-primary" />
-            </div>
-          ) : null}
-          {progress.length > 0 ? (
-            <pre className="max-h-48 overflow-y-auto rounded-md border border-border bg-popover/40 p-3 text-xs leading-relaxed text-muted-foreground">
-              {progress.map((p, idx) => (
-                <div key={`${p.ts}-${idx}`}>
-                  {p.phase === "planned"
-                    ? `[planned] ${p.total} migration${
-                        p.total === 1 ? "" : "s"
-                      } pending`
-                    : `[${p.phase}] ${p.index + 1}/${p.total} — ${p.file}`}
-                </div>
-              ))}
-            </pre>
-          ) : null}
-          <div className="flex justify-end gap-2">
-            {state.phase === "error" ? (
-              <Button
-                variant="outline"
-                onClick={handleRetry}
-                disabled={isRunning}
+      <img
+        src="/setup.png"
+        alt=""
+        aria-hidden
+        draggable={false}
+        className="absolute inset-0 h-full w-full object-cover object-center"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-[rgba(5,8,22,0.6)]"
+      />
+
+      <div className="pointer-events-none absolute right-8 top-6">
+        <img
+          src="/logo_clean.png"
+          alt=""
+          aria-hidden
+          draggable={false}
+          className="h-10 w-10 object-contain drop-shadow-[0_2px_8px_rgba(50,117,248,0.35)]"
+        />
+      </div>
+
+      <section
+        aria-labelledby="migrations-heading"
+        className="relative ml-auto flex h-full w-[44%] min-w-[420px] max-w-[560px] flex-col items-center justify-center px-8"
+      >
+        <motion.div
+          initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: reducedMotion ? 0 : 0.45, ease: "easeOut" }}
+          className={cn(
+            "flex w-full max-h-[88vh] flex-col overflow-hidden rounded-3xl border border-white/[0.12] bg-white/[0.05] backdrop-blur-2xl",
+            "shadow-[inset_0_1px_0_rgba(255,255,255,0.14),inset_0_-1px_0_rgba(0,0,0,0.2),0_18px_60px_rgba(0,0,0,0.45)]",
+          )}
+        >
+          <header className="flex items-start gap-3 border-b border-white/[0.06] px-6 py-5">
+            <span
+              aria-hidden
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.1] bg-[var(--vex-onboarding-accent)]/15 text-[var(--vex-onboarding-accent)]"
+            >
+              <HugeiconsIcon icon={DatabaseSync01Icon} size={22} aria-hidden />
+            </span>
+            <div className="flex flex-col gap-1">
+              <h1
+                id="migrations-heading"
+                className="text-xl font-semibold tracking-tight text-[var(--color-text-primary)]"
               >
-                Retry
-              </Button>
-            ) : null}
-            {state.phase === "ready" ? (
-              <Button onClick={() => openWizard("setup")}>
-                Continue
-              </Button>
+                Database migrations
+              </h1>
+              <p className="text-xs text-[var(--color-text-secondary)]">
+                Bringing your local schema up to date.
+              </p>
+            </div>
+          </header>
+
+          <div className="flex-1 overflow-y-auto px-5 py-5">
+            {phase.kind === "running" ? (
+              <RunningBody current={phase.current} />
+            ) : phase.kind === "noop" ? (
+              <NoopBody />
+            ) : phase.kind === "ready" ? (
+              <ReadyBody appliedCount={phase.appliedCount} celebrate={true} />
+            ) : phase.kind === "error" ? (
+              <ErrorBody
+                message={phase.message}
+                failedAt={phase.failedAt}
+                appliedBeforeFailure={phase.appliedBeforeFailure}
+                onRetry={handleRetry}
+              />
             ) : null}
           </div>
-        </CardContent>
-      </Card>
-    </main>
+
+          <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] px-6 py-4">
+            <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--color-text-muted)]">
+              Step {MIGRATIONS_STEP} of {TOTAL_ONBOARDING_STEPS}
+            </span>
+            {phase.kind === "ready" ? (
+              <ContinueButton onClick={handleContinue} />
+            ) : null}
+          </div>
+        </motion.div>
+      </section>
+    </div>
   );
 }
