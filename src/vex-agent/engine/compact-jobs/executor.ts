@@ -144,8 +144,28 @@ export function startCompactJobsExecutor(
 // ── Per-job processing ───────────────────────────────────────────
 
 async function processJob(job: CompactJob, workerId: string): Promise<void> {
-  const heartbeatTimer = setInterval(() => {
-    void heartbeat(job.id, workerId).catch(() => undefined);
+  // Cancellation flag — flipped to `true` when the heartbeat reports the
+  // worker has lost ownership of this row (another worker recovered the
+  // stale claim). Checked between expensive stages so we cap wasted work
+  // and avoid the doubly-claimed compact path producing duplicate Track 2
+  // output. The owner-checked `markCompleted` / `markFailed` at terminal
+  // states already prevents state corruption — this is the upstream
+  // cost-control guard codex P2 round 3 requested.
+  let claimLost = false;
+  const heartbeatTimer = setInterval(async () => {
+    try {
+      const ok = await heartbeat(job.id, workerId);
+      if (!ok && !claimLost) {
+        claimLost = true;
+        logger.warn("compact-worker.claim_lost", {
+          jobId: job.id,
+          sessionId: job.sessionId,
+          workerId,
+        });
+      }
+    } catch {
+      // Network/DB hiccup — don't flip the flag on transient errors.
+    }
   }, WORKER_HEARTBEAT_INTERVAL_MS);
 
   try {
@@ -154,6 +174,7 @@ async function processJob(job: CompactJob, workerId: string): Promise<void> {
       job.sourceStartMessageId,
       job.sourceEndMessageId,
     );
+    if (claimLost) return;
     if (archivedPrefix.length === 0) {
       // An empty range against committed source_*_message_id values means
       // the archive write was rolled back, the messages were re-archived
@@ -172,6 +193,7 @@ async function processJob(job: CompactJob, workerId: string): Promise<void> {
     }
 
     const chunkerOutput = await callChunkerLLM(job, archivedPrefix);
+    if (claimLost) return;
 
     let inserted = 0;
     let rejectedExclusion = 0;
@@ -255,6 +277,8 @@ async function processJob(job: CompactJob, workerId: string): Promise<void> {
       // are the bytes stored. Without this split the repo would regenerate
       // fresh outstanding-item UUIDs/timestamps and the embedded body would
       // describe a body the DB no longer contains.
+      if (claimLost) return;
+
       const prep = prepareMemoryRender({
         theme,
         happenedMd: r1.text,
@@ -263,6 +287,7 @@ async function processJob(job: CompactJob, workerId: string): Promise<void> {
         outstandingTexts: rOuts.map((r) => r.text),
       });
       const embedded = await embedDocument(theme, prep.bodyMd);
+      if (claimLost) return;
 
       const result = await insertPreparedMemory(
         {
@@ -290,6 +315,16 @@ async function processJob(job: CompactJob, workerId: string): Promise<void> {
         prep,
       );
       if (result.inserted) inserted += 1;
+    }
+
+    if (claimLost) {
+      logger.warn("compact-worker.exit_after_claim_lost", {
+        jobId: job.id,
+        sessionId: job.sessionId,
+        workerId,
+        chunksInserted: inserted,
+      });
+      return;
     }
 
     const completedOk = await markCompleted(job.id, workerId, {

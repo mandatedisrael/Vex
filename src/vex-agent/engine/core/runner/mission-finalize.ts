@@ -79,6 +79,21 @@ export async function finalizeMissionRunStatus(
     return "failed";
   }
 
+  // PR2 cutover: the runtime escalates to `compact_unable_at_critical` when
+  // the forced-fallback compact returns `noop` twice in a row at critical
+  // band — the agent cannot make forward progress without compaction it
+  // refuses to perform. Treat as a paused error (operator intervention
+  // surface) rather than a hard "failed" finalisation: the run row stays
+  // visible for /retry just like provider-error pauses, and the parent
+  // mission row stays `running` so the active-run lookup still surfaces it.
+  if (stopReason === "compact_unable_at_critical") {
+    await missionRunsRepo.updateStatus(runId, "paused_error", stopReason, {
+      summary: stopPayload?.summary ?? "Two consecutive forced-fallback noops at critical pressure — operator review required.",
+      evidence: stopPayload?.evidence,
+    });
+    return "running";
+  }
+
   return "running";
 }
 

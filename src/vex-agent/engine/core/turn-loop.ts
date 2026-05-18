@@ -134,8 +134,24 @@ export async function runTurnLoop(
   // PR2: post-compact bridge counter — drives resume packet injection for the
   // first `POST_COMPACT_BRIDGE_CYCLES` turns after any compact (agent-driven
   // or forced fallback). Set to N at compact time; decremented each turn the
-  // packet is built. In-memory only; lost on app restart (codex contract).
+  // packet is built. In-memory only; armed once at loop entry whenever the
+  // session has ever been compacted (`sessions.checkpoint_generation > 0`)
+  // so a wake-resume or app-restart that lost the in-memory counter still
+  // shows the post-compact bridge for the first two turns — without that
+  // arm, the agent resumes blind after every `waiting_for_wake` pause whose
+  // forced-compact-before-wait fired (codex P2 round 3).
   let postCompactBridgeRemaining = 0;
+  try {
+    const initialSession = await sessionsRepo.getSession(context.sessionId);
+    if (initialSession && initialSession.checkpointGeneration > 0) {
+      postCompactBridgeRemaining = POST_COMPACT_BRIDGE_CYCLES;
+    }
+  } catch (err) {
+    logger.warn("turn-loop.bridge_arm_failed", {
+      sessionId: context.sessionId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   // PR2: critical-band noop counter — increments each time forced fallback
   // returns `noop` at critical band. Reset to 0 on any committed compact OR

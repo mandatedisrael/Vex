@@ -35,7 +35,9 @@ describe("stop-conditions", () => {
   describe("isRuntimePause", () => {
     const runtimeReasons: StopReason[] = [
       "approval_required", "checkpoint_pause", "iteration_limit",
-      "timeout", "waiting_for_parent", "waiting_for_wake", "system_error",
+      "timeout", "waiting_for_parent", "waiting_for_wake",
+      "waiting_for_compact_commit", "compact_unable_at_critical",
+      "system_error",
     ];
 
     for (const reason of runtimeReasons) {
@@ -47,6 +49,17 @@ describe("stop-conditions", () => {
     it("rejects business reasons", () => {
       expect(isRuntimePause("goal_reached")).toBe(false);
       expect(isRuntimePause("user_stopped")).toBe(false);
+    });
+
+    // PR2 cutover (codex P1 round 3) — compact_unable_at_critical was added
+    // to the RuntimeStopReason union; missing classification here would let
+    // mission-finalize fall through to "running" and leave the run row
+    // visibly orphaned. Pin the classification explicitly.
+    it("classifies compact_unable_at_critical as runtime pause (NOT business stop, NOT resumable)", () => {
+      expect(isRuntimePause("compact_unable_at_critical")).toBe(true);
+      expect(isBusinessStop("compact_unable_at_critical")).toBe(false);
+      expect(isResumablePause("compact_unable_at_critical")).toBe(false);
+      expect(shouldTerminateRun("compact_unable_at_critical")).toBe(false);
     });
   });
 
