@@ -67,6 +67,12 @@ export async function handleKnowledgeWrite(
     source = sourceRaw;
   }
 
+  logger.info("knowledge.write.with_source", {
+    kind,
+    source: source ?? "observed",
+    pinned: pinned ?? false,
+  });
+
   const validUntil = computeValidUntil(ttlHours, pinned, new Date());
 
   // Short-circuit on content_hash BEFORE loading the embedding config or

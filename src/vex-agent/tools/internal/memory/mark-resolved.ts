@@ -47,6 +47,11 @@ export async function handleMarkOutstandingResolved(
   }
   const { memory_id, outstanding_item_id, resolution_note } = parsed.data;
 
+  logger.info("mark_outstanding_resolved.called", {
+    sessionId: context.sessionId,
+    memoryId: memory_id,
+  });
+
   // Verify the chunk belongs to this session (defense-in-depth).
   const existing = await getById(memory_id);
   if (!existing) {

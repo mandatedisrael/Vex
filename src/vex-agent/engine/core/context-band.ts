@@ -64,6 +64,47 @@ export function isPressureCritical(band: ContextUsageBand): boolean {
   return band === "critical";
 }
 
+const BAND_ORDER: readonly ContextUsageBand[] = ["normal", "warning", "barrier", "critical"];
+
+export function bandRank(band: ContextUsageBand): number {
+  return BAND_ORDER.indexOf(band);
+}
+
+/**
+ * Result of a single band observation. `emit === true` iff the caller should
+ * surface a `compact.band_observed` log line: either the initial observation
+ * was already elevated above `normal`, or this observation crosses upward
+ * from a strictly lower band. Downward / same-band observations return
+ * `emit: false` but still rotate the observer's internal `previousBand` so a
+ * later upward transition still triggers correctly.
+ */
+export interface BandObservation {
+  readonly band: ContextUsageBand;
+  readonly emit: boolean;
+  readonly fromBand: ContextUsageBand | null;
+}
+
+/**
+ * Per-loop band observer. Captures `previousBand` in closure state so a single
+ * runTurnLoop invocation tracks transitions across all its iterations. Tests
+ * exercise this factory directly; the production caller wraps it with the
+ * logger emit.
+ */
+export function createBandObserver(
+  contextLimit: number,
+): (tokenCount: number) => BandObservation {
+  let previousBand: ContextUsageBand | null = null;
+  return (tokenCount: number): BandObservation => {
+    const band = computeBand(tokenCount, contextLimit);
+    const isInitialElevated = previousBand === null && band !== "normal";
+    const isUpwardTransition =
+      previousBand !== null && bandRank(band) > bandRank(previousBand);
+    const fromBand = previousBand;
+    previousBand = band;
+    return { band, emit: isInitialElevated || isUpwardTransition, fromBand };
+  };
+}
+
 /**
  * Compute the token-fraction used by the context-pressure banner. Returns
  * a clamped [0, 1] value safe to format as a percentage.

@@ -81,6 +81,13 @@ export async function handleKnowledgeSupersede(
     source = sourceRaw;
   }
 
+  logger.info("knowledge.supersede.with_source", {
+    kind,
+    source: source ?? "observed",
+    pinned: pinned ?? false,
+    previousId,
+  });
+
   // Optional narrative fields for the successor row.
   const rawChange = str(params, "change_summary");
   const changeSummary = rawChange.length > 0 ? rawChange : null;

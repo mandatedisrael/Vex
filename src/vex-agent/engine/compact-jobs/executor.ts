@@ -41,6 +41,7 @@ import {
 import { redact, type RedactionResult } from "@vex-agent/memory/redaction.js";
 import { scanLiveState } from "@vex-agent/memory/exclusion-rules.js";
 import { validateTheme, buildFallbackTheme } from "@vex-agent/memory/theme-validation.js";
+import { shouldEmitHeartbeatFailure } from "./heartbeat-rate-limit.js";
 import {
   MAX_CHUNKS_PER_COMPACT,
   MAX_OUTSTANDING_ITEMS_PER_CHUNK,
@@ -144,6 +145,7 @@ export function startCompactJobsExecutor(
 // ── Per-job processing ───────────────────────────────────────────
 
 async function processJob(job: CompactJob, workerId: string): Promise<void> {
+  const startMs = Date.now();
   // Cancellation flag — flipped to `true` when the heartbeat reports the
   // worker has lost ownership of this row (another worker recovered the
   // stale claim). Checked between expensive stages so we cap wasted work
@@ -163,8 +165,18 @@ async function processJob(job: CompactJob, workerId: string): Promise<void> {
           workerId,
         });
       }
-    } catch {
-      // Network/DB hiccup — don't flip the flag on transient errors.
+    } catch (err) {
+      // Network/DB hiccup — don't flip the claim-lost flag (transient ≠ owner
+      // loss). Rate-limited per workerId so a long outage window emits one
+      // log per minute instead of one per tick.
+      if (shouldEmitHeartbeatFailure(workerId)) {
+        logger.warn("compact-worker.heartbeat_failed", {
+          jobId: job.id,
+          sessionId: job.sessionId,
+          workerId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }, WORKER_HEARTBEAT_INTERVAL_MS);
 
@@ -327,6 +339,7 @@ async function processJob(job: CompactJob, workerId: string): Promise<void> {
       return;
     }
 
+    const inferenceModel = process.env.AGENT_MODEL ?? "unknown";
     const completedOk = await markCompleted(job.id, workerId, {
       chunksInserted: inserted,
       chunksRejectedByExclusion: rejectedExclusion,
@@ -336,10 +349,21 @@ async function processJob(job: CompactJob, workerId: string): Promise<void> {
       // policy can populate it in a follow-up PR.
       chunksRejectedByRedaction: 0,
       inferenceProvider: "openrouter",
-      inferenceModel: process.env.AGENT_MODEL ?? "unknown",
+      inferenceModel,
       costUsd: null, // cost telemetry deferred to PR3
     });
-    if (!completedOk) {
+    if (completedOk) {
+      logger.info("compact-worker.completed", {
+        jobId: job.id,
+        sessionId: job.sessionId,
+        generation: job.checkpointGeneration,
+        chunksInserted: inserted,
+        chunksRejectedByExclusion: rejectedExclusion,
+        chunksRejectedByRedaction: 0,
+        durationMs: Date.now() - startMs,
+        inferenceModel,
+      });
+    } else {
       // Owner-check failed — another worker recovered the claim mid-run or
       // the row was already terminated. Log so operator can spot the race;
       // no retry, the chunks are already in the DB so the work is durable.

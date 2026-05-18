@@ -56,6 +56,12 @@ export async function handleMemoryRecall(
   const { query, k } = parsed.data;
   const topK = clampMemoryRecallK(k);
 
+  logger.info("memory_recall.called", {
+    sessionId: context.sessionId,
+    queryLen: query.length,
+    k: topK,
+  });
+
   // Empty-store short-circuit. Stats query is one round-trip; cheaper than
   // an embedding call when the session has nothing recallable yet.
   const stats = await getSessionMemoryStats(
@@ -63,6 +69,9 @@ export async function handleMemoryRecall(
     MEMORY_BANNER_RECENT_THEMES_LIMIT,
   );
   if (stats.activeCount === 0) {
+    logger.info("memory_recall.empty_store", {
+      sessionId: context.sessionId,
+    });
     return {
       success: true,
       output:

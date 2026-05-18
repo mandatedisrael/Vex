@@ -66,6 +66,14 @@ export async function handleCompactNow(
   }
   const { conversation_summary, preserve_md, thread_themes_hints } = parsed.data;
 
+  logger.info("compact.now.called", {
+    sessionId: context.sessionId,
+    summaryLen: conversation_summary.length,
+    preserveLen: preserve_md?.length ?? 0,
+    themeCount: thread_themes_hints?.length ?? 0,
+    band: context.contextUsageBand,
+  });
+
   const result = await executeCompactNow({
     sessionId: context.sessionId,
     agentSummary: conversation_summary,
@@ -75,7 +83,7 @@ export async function handleCompactNow(
   });
 
   if (result.kind === "noop") {
-    logger.info("compact_now.noop", {
+    logger.info("compact.now.noop", {
       sessionId: context.sessionId,
       reason: result.reason,
     });

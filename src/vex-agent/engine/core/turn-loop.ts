@@ -56,7 +56,7 @@ import type { PromptStackOptions } from "../prompts/index.js";
 import { executeTurn, saveAssistantMessage } from "./turn.js";
 import type { ParsedToolCall } from "@vex-agent/inference/types.js";
 import { evaluateRuntimeStopConditions } from "./stop-conditions.js";
-import { computeBand, pressureFraction, type ContextUsageBand } from "./context-band.js";
+import { computeBand, createBandObserver, pressureFraction, type ContextUsageBand } from "./context-band.js";
 import { persistToolResultWithOverflow } from "./tool-output-overflow.js";
 import { dispatchTool } from "@vex-agent/tools/dispatcher.js";
 import type { InternalToolContext } from "@vex-agent/tools/internal/types.js";
@@ -172,6 +172,30 @@ export async function runTurnLoop(
   // left to compact), inflating the counter falsely.
   let skipCriticalCheckNextIter = false;
 
+  // PR3-telemetry: per-loop band-transition observer. Emits
+  // `compact.band_observed` on upward transitions and on initial elevated
+  // state. The pure observer factory tracks `previousBand` internally; the
+  // wrapper below adds the structured log when the observer says emit.
+  const bandObserver = createBandObserver(loopConfig.contextLimit);
+  const observeBand = (
+    tokenCount: number,
+    source: "iteration_start" | "post_forced_fallback" | "post_turn_text",
+  ): ContextUsageBand => {
+    const obs = bandObserver(tokenCount);
+    if (obs.emit) {
+      logger.info("compact.band_observed", {
+        sessionId: context.sessionId,
+        fromBand: obs.fromBand,
+        toBand: obs.band,
+        fraction: pressureFraction(tokenCount, loopConfig.contextLimit),
+        tokenCount,
+        contextLimit: loopConfig.contextLimit,
+        source,
+      });
+    }
+    return obs.band;
+  };
+
   async function mergeOperatorInstructions(): Promise<void> {
     lastSeenOperatorMessageId = await appendPendingOperatorInstructions({
       sessionId: context.sessionId,
@@ -242,7 +266,7 @@ export async function runTurnLoop(
     // Compute on entry; may be re-evaluated after a committed fallback so the
     // banner + tool projection below see the post-compact state on the very
     // first provider call after the runtime intervenes.
-    let turnBand = computeBand(currentTokenCount, loopConfig.contextLimit);
+    let turnBand = observeBand(currentTokenCount, "iteration_start");
 
     if (turnBand !== "critical") {
       // Counter resets the moment the band drops out of critical — even if the
@@ -272,7 +296,7 @@ export async function runTurnLoop(
         // mutating tool the agent now needs OR keep the directive
         // "compact_now is your only option" copy in the prompt — wasting the
         // first post-compact turn. Codex flagged this as P1 #2.
-        turnBand = computeBand(currentTokenCount, loopConfig.contextLimit);
+        turnBand = observeBand(currentTokenCount, "post_forced_fallback");
       } else {
         criticalNoopCounter++;
         logger.warn("compact.forced_fallback.noop", {
@@ -314,6 +338,12 @@ export async function runTurnLoop(
         const generation = freshSession?.checkpointGeneration ?? 0;
         const packet = await buildResumePacket(context.sessionId, generation);
         if (packet.length > 0) {
+          logger.info("compact.resume_packet.rendered", {
+            sessionId: context.sessionId,
+            generation,
+            packetLengthChars: packet.length,
+            bridgeRemainingBeforeDecrement: postCompactBridgeRemaining,
+          });
           turnPromptOptions.resumePacket = packet;
         }
       } catch (err) {
@@ -346,6 +376,7 @@ export async function runTurnLoop(
       context, liveMessages, currentSummary, provider, config, turnTools, turnPromptOptions,
     );
     currentTokenCount = turnResult.promptTokens;
+    observeBand(currentTokenCount, "post_turn_text");
 
     if (abortSignal?.aborted) {
       stopReason = "user_stopped";
