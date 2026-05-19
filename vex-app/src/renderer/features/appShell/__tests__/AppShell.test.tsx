@@ -3,6 +3,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Result } from "@shared/ipc/result.js";
 import type {
+  ChatSubmitInput,
+  ChatSubmitResult,
+} from "@shared/schemas/chat.js";
+import type {
   SessionCreateInput,
   SessionDeleteResult,
   SessionListItem,
@@ -70,6 +74,9 @@ const sessionsSetPinnedMock = vi.fn<
 const sessionsDeleteMock = vi.fn<
   (input: { readonly id: string }) => Promise<Result<SessionDeleteResult>>
 >();
+const chatSubmitMock = vi.fn<
+  (input: ChatSubmitInput) => Promise<Result<ChatSubmitResult>>
+>();
 const healthMock = vi.fn<() => Promise<Result<HealthReport>>>();
 
 beforeAll(() => {
@@ -117,6 +124,7 @@ beforeEach(() => {
   sessionsCreateMock.mockReset();
   sessionsSetPinnedMock.mockReset();
   sessionsDeleteMock.mockReset();
+  chatSubmitMock.mockReset();
   healthMock.mockReset();
   useUiStore.setState({
     sidebarOpen: true,
@@ -136,7 +144,7 @@ beforeEach(() => {
       mode: input.mode,
       permission: input.permission,
       title: input.name,
-      initialGoal: input.mode === "mission" ? input.initialGoal : null,
+      initialGoal: null,
       startedAt: localIsoDaysAgo(0),
       endedAt: null,
       missionStatus: null,
@@ -161,6 +169,17 @@ beforeEach(() => {
     };
   });
   sessionsDeleteMock.mockResolvedValue({ ok: true, data: { outcome: "removed" } });
+  chatSubmitMock.mockResolvedValue({
+    ok: true,
+    data: {
+      text: "Message sent.",
+      toolCallsMade: 0,
+      pendingApprovals: [],
+      stopReason: null,
+      missionStatus: null,
+      treatedAsInitialGoal: false,
+    },
+  });
   healthMock.mockResolvedValue({ ok: true, data: makeHealthReport("ok") });
   Object.defineProperty(window, "vex", {
     configurable: true,
@@ -171,6 +190,9 @@ beforeEach(() => {
         create: sessionsCreateMock,
         setPinned: sessionsSetPinnedMock,
         delete: sessionsDeleteMock,
+      },
+      chat: {
+        submit: chatSubmitMock,
       },
       system: {
         health: healthMock,
@@ -236,21 +258,31 @@ describe("AppShell", () => {
     expect(sidebar?.getAttribute("data-vex-sidebar-open")).toBe("true");
   });
 
-  it("keeps composer text local and stages a draft without session IPC", async () => {
+  it("submits composer text to the active session via chat IPC", async () => {
+    const row = makeAgentRow("Quick chat");
+    sessionsListMock.mockResolvedValueOnce({ ok: true, data: [row] });
+    sessionsGetMock.mockResolvedValue({ ok: true, data: row });
+    useUiStore.setState({ activeSessionId: row.id });
+
     renderShell();
+    await screen.findByText("Quick chat");
 
     const draft = screen.getByLabelText("Session draft") as HTMLTextAreaElement;
     fireEvent.change(draft, {
       target: { value: "Research $TAO liquidity and thesis" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Stage draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
 
-    expect(draft.value).toBe("");
-    expect(screen.getAllByText("Draft staged.").length).toBeGreaterThan(0);
-    expect(sessionsGetMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(chatSubmitMock).toHaveBeenCalledTimes(1));
+    expect(chatSubmitMock).toHaveBeenCalledWith({
+      sessionId: row.id,
+      message: "Research $TAO liquidity and thesis",
+    });
+    await waitFor(() => expect(draft.value).toBe(""));
+    await screen.findByText("Message sent.");
   });
 
-  it("creates a mission session with restricted permission and user-entered name", async () => {
+  it("creates a mission session without collecting the goal in the modal", async () => {
     renderShell();
 
     fireEvent.click(screen.getAllByRole("button", { name: "New session" })[0]!);
@@ -258,9 +290,7 @@ describe("AppShell", () => {
       target: { value: "LP rebalance run" },
     });
     fireEvent.click(screen.getByRole("radio", { name: /Mission/i }));
-    fireEvent.change(screen.getByLabelText("Goal"), {
-      target: { value: "Rebalance Arbitrum LP range" },
-    });
+    expect(screen.queryByLabelText("Goal")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(sessionsCreateMock).toHaveBeenCalledTimes(1));
@@ -268,8 +298,52 @@ describe("AppShell", () => {
       mode: "mission",
       name: "LP rebalance run",
       permission: "restricted",
-      initialGoal: "Rebalance Arbitrum LP range",
     });
+  });
+
+  it("treats the first mission chat message as the initial goal", async () => {
+    const missionRow: SessionListItem = {
+      id: "55555555-5555-4555-8555-555555555555",
+      mode: "mission",
+      permission: "restricted",
+      title: "New mission",
+      initialGoal: null,
+      startedAt: localIsoDaysAgo(0),
+      endedAt: null,
+      missionStatus: null,
+      pinnedAt: null,
+    };
+    sessionsListMock.mockResolvedValueOnce({ ok: true, data: [missionRow] });
+    sessionsGetMock.mockResolvedValue({ ok: true, data: missionRow });
+    chatSubmitMock.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        text: null,
+        toolCallsMade: 0,
+        pendingApprovals: [],
+        stopReason: null,
+        missionStatus: "draft",
+        treatedAsInitialGoal: true,
+      },
+    });
+    useUiStore.setState({ activeSessionId: missionRow.id });
+
+    renderShell();
+    await screen.findByText("New mission");
+
+    const draft = screen.getByLabelText("Session draft") as HTMLTextAreaElement;
+    expect(draft.placeholder).toBe("Describe the mission goal.");
+    fireEvent.change(draft, {
+      target: { value: "Rebalance Arbitrum LP range" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(chatSubmitMock).toHaveBeenCalledTimes(1));
+    expect(chatSubmitMock).toHaveBeenCalledWith({
+      sessionId: missionRow.id,
+      message: "Rebalance Arbitrum LP range",
+    });
+    await screen.findByText("Mission goal received.");
   });
 
   it("blocks Create until the user types a session name", async () => {

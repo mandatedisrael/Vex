@@ -1,10 +1,10 @@
 /**
  * Single node in the horizontal wizard stepper. Three visual states:
  *
- *   - pending   — empty circle with index, dim border, dim label
- *   - active    — accent-tinted circle with the step's unique DotMatrix
+ *   - pending   — index, dim label
+ *   - active    — the step's unique DotMatrix
  *                 loader (per `STEPPER_LOADER_VARIANTS`)
- *   - completed — success-tinted circle with a checkmark glyph
+ *   - completed — success-tinted checkmark glyph
  *
  * Active wins over completed when the current step id matches — a
  * back-edit return from review can leave a step both "active" and
@@ -35,17 +35,14 @@ export interface StepperNodeProps {
 }
 
 const NODE_BASE = cn(
-  "relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-  "border backdrop-blur-md transition-colors duration-200",
+  "relative z-10 flex h-9 w-9 shrink-0 items-center justify-center",
+  "transition-colors duration-200",
 );
 
 const NODE_CHROME: Record<StepperNodeStatus, string> = {
-  pending:
-    "border-white/[0.12] bg-white/[0.03] text-[var(--color-text-muted)]",
-  active:
-    "border-[color-mix(in_oklab,var(--vex-onboarding-accent)_55%,transparent)] bg-[color-mix(in_oklab,var(--vex-onboarding-accent)_18%,transparent)] text-[var(--color-text-primary)] shadow-[0_0_0_4px_color-mix(in_oklab,var(--vex-onboarding-accent)_14%,transparent)]",
-  completed:
-    "border-[color-mix(in_oklab,var(--color-success)_45%,transparent)] bg-[color-mix(in_oklab,var(--color-success)_14%,transparent)] text-[var(--color-success)]",
+  pending: "text-[var(--color-text-muted)]",
+  active: "text-[var(--color-text-primary)]",
+  completed: "text-[var(--color-success)]",
 };
 
 const LABEL_CHROME: Record<StepperNodeStatus, string> = {

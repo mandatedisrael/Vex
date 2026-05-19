@@ -261,8 +261,8 @@ function SessionRow({
         >
           <span
             className={cn(
-              "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.035] text-[#8da5ff]",
-              selected && "border-[#3275f8]/42 bg-[#3275f8]/13 text-[#adc0ff]",
+              "relative flex h-9 w-9 shrink-0 items-center justify-center text-[#8da5ff]",
+              selected && "text-[#adc0ff]",
             )}
           >
             <HugeiconsIcon icon={Icon} size={17} aria-hidden />

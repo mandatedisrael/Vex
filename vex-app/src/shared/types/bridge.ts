@@ -77,6 +77,10 @@ import type {
   SessionSetPinnedResult,
 } from "../schemas/sessions.js";
 import type {
+  ChatSubmitInput,
+  ChatSubmitResult,
+} from "../schemas/chat.js";
+import type {
   HealthReport,
   NetworkProbe,
   OsInfo,
@@ -278,6 +282,16 @@ export interface VexBridge {
     readonly delete: (
       input: SessionDeleteInput
     ) => Promise<Result<SessionDeleteResult>>;
+  };
+
+  readonly chat: {
+    /**
+     * Submit operator text for the active session. Mission sessions treat
+     * their first submit as the initial goal before entering setup.
+     */
+    readonly submit: (
+      input: ChatSubmitInput
+    ) => Promise<Result<ChatSubmitResult>>;
   };
 
   readonly settings: {

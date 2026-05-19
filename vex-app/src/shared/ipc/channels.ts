@@ -79,6 +79,11 @@ export const CH = {
     delete: "vex:sessions:delete",
   },
 
+  // Chat — operator text routed to agent or mission setup/run.
+  chat: {
+    submit: "vex:chat:submit",
+  },
+
   // Settings — read-only Phase 1 (Phase 2 dodaje setters)
   settings: {
     getPreferences: "vex:settings:getPreferences",

@@ -14,6 +14,10 @@ export default defineConfig({
     alias: {
       "@shared": path.resolve(__dirname, "src/shared"),
       "@vex-lib": path.resolve(__dirname, "../src/lib"),
+      "@vex-agent": path.resolve(__dirname, "../src/vex-agent"),
+      "@tools": path.resolve(__dirname, "../src/tools"),
+      "@utils": path.resolve(__dirname, "../src/utils"),
+      "@config": path.resolve(__dirname, "../src/config"),
       "@": path.resolve(__dirname, "src/renderer"),
     },
   },

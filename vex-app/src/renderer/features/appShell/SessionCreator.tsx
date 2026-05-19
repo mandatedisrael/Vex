@@ -5,10 +5,9 @@
  * straight onto it.
  *
  * Form invariants mirror the IPC schema discriminated union:
- *   - mode = agent → goal field disabled + ignored
- *   - mode = mission → goal required, trim().min(1)
- * The submit button stays disabled when the form is invalid for the
- * selected mode.
+ *   - mode + permission are immutable session axes
+ *   - mission goal text is captured by the first chat submit, not here
+ * The submit button stays disabled when the form is invalid.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -21,7 +20,6 @@ import {
   ZapIcon,
 } from "@hugeicons/core-free-icons";
 import {
-  INITIAL_GOAL_MAX_LENGTH,
   SESSION_TITLE_MAX_LENGTH,
   type SessionCreateInput,
   type SessionMode,
@@ -102,10 +100,8 @@ export function SessionCreator({
   const [name, setName] = useState<string>("");
   const [mode, setMode] = useState<SessionMode>("agent");
   const [permission, setPermission] = useState<SessionPermission>("restricted");
-  const [goal, setGoal] = useState<string>("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement | null>(null);
-  const goalRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Reset state on every (re)open so the next opening starts clean.
   useEffect(() => {
@@ -113,14 +109,12 @@ export function SessionCreator({
       setName("");
       setMode("agent");
       setPermission("restricted");
-      setGoal("");
       setSubmitError(null);
     }
   }, [open]);
 
-  // Focus the Name input first when the dialog opens — it is the first
-  // required field. Mission goal autofocus stays as-is and takes
-  // precedence below once the user switches into mission mode.
+  // Focus the Name input first when the dialog opens — it is the only
+  // text field in this modal. Mission goal capture happens in chat.
   useEffect(() => {
     if (!open) return;
     const id = requestAnimationFrame(() => {
@@ -129,23 +123,9 @@ export function SessionCreator({
     return () => cancelAnimationFrame(id);
   }, [open]);
 
-  // Mission mode: focus the goal textarea so the keyboard user can type
-  // immediately. Defer to next tick so the dialog finishes its open
-  // transition first.
-  useEffect(() => {
-    if (mode !== "mission" || !open) return;
-    const id = requestAnimationFrame(() => {
-      goalRef.current?.focus();
-    });
-    return () => cancelAnimationFrame(id);
-  }, [mode, open]);
-
   const trimmedName = name.trim();
-  const trimmedGoal = goal.trim();
   const nameInvalid = trimmedName.length === 0;
-  const goalInvalid = mode === "mission" ? trimmedGoal.length === 0 : false;
-  const submitDisabled =
-    nameInvalid || goalInvalid || createMutation.isPending;
+  const submitDisabled = nameInvalid || createMutation.isPending;
 
   const onSubmit = useCallback(
     async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -154,12 +134,7 @@ export function SessionCreator({
       setSubmitError(null);
       const input: SessionCreateInput =
         mode === "mission"
-          ? {
-              mode: "mission",
-              name: trimmedName,
-              permission,
-              initialGoal: trimmedGoal,
-            }
+          ? { mode: "mission", name: trimmedName, permission }
           : { mode: "agent", name: trimmedName, permission };
       const outcome = await createMutation.mutateAsync(input);
       if (!outcome.ok) {
@@ -176,7 +151,6 @@ export function SessionCreator({
       permission,
       setActiveSessionId,
       submitDisabled,
-      trimmedGoal,
       trimmedName,
     ],
   );
@@ -257,34 +231,6 @@ export function SessionCreator({
               </div>
             </fieldset>
 
-            {mode === "mission" ? (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="vex-session-goal">Goal</Label>
-                <textarea
-                  ref={goalRef}
-                  id="vex-session-goal"
-                  required
-                  maxLength={INITIAL_GOAL_MAX_LENGTH}
-                  value={goal}
-                  onChange={(e) => setGoal(e.target.value)}
-                  rows={4}
-                  placeholder="Describe what you want the mission to accomplish."
-                  className={cn(
-                    "min-h-24 w-full rounded-lg border border-white/[0.08] bg-white/[0.035] px-3 py-2 text-sm shadow-sm",
-                    "placeholder:text-muted-foreground",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8]",
-                  )}
-                />
-                <div className="flex items-center justify-between gap-3 text-xs text-[var(--color-text-secondary)]">
-                  <p>
-                    Vex will refine this with you in the first turn before
-                    the mission starts.
-                  </p>
-                  <span aria-live="polite">{goal.length} / {INITIAL_GOAL_MAX_LENGTH}</span>
-                </div>
-              </div>
-            ) : null}
-
             {submitError !== null ? (
               <p className="text-sm text-destructive" role="alert">
                 {submitError}
@@ -352,8 +298,8 @@ function RadioCard({
         onChange={onChange}
         className="sr-only"
       />
-      <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-black/[0.18] text-[#8da5ff]">
-        <HugeiconsIcon icon={icon} size={17} aria-hidden />
+      <span className="flex h-8 w-8 items-center justify-center text-[#8da5ff]">
+        <HugeiconsIcon icon={icon} size={19} aria-hidden />
       </span>
       <span className="font-medium text-foreground">{title}</span>
       <span className="text-xs text-[var(--color-text-secondary)]">

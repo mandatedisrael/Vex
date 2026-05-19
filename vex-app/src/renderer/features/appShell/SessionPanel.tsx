@@ -17,6 +17,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import { DotmHex3 } from "../../components/ui/dotm-hex-3.js";
+import { useSubmitChat } from "../../lib/api/chat.js";
 import { cn } from "../../lib/utils.js";
 import { useSession } from "../../lib/api/sessions.js";
 import { useUiStore } from "../../stores/uiStore.js";
@@ -73,8 +74,12 @@ const TRUST_BADGES: ReadonlyArray<{
 export function SessionPanel(): JSX.Element {
   const activeSessionId = useUiStore((s) => s.activeSessionId);
   const detailQuery = useSession(activeSessionId);
+  const submitChat = useSubmitChat();
   const [draft, setDraft] = useState<string>("");
-  const [draftState, setDraftState] = useState<"idle" | "staged">("idle");
+  const [composerNotice, setComposerNotice] = useState<{
+    readonly tone: "info" | "error";
+    readonly text: string;
+  } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Auto-grow the textarea up to MAX_TEXTAREA_PX (~6 rows of leading-7),
   // then scroll. Runs before paint so users never see a flicker when
@@ -93,19 +98,43 @@ export function SessionPanel(): JSX.Element {
   }, [activeSessionId, detailQuery.data]);
 
   const onSubmit = useCallback(
-    (event: FormEvent<HTMLFormElement>): void => {
+    async (event: FormEvent<HTMLFormElement>): Promise<void> => {
       event.preventDefault();
-      if (draft.trim().length === 0) return;
+      const message = draft.trim();
+      if (message.length === 0 || activeSession === null || submitChat.isPending) {
+        return;
+      }
+      setComposerNotice(null);
+      const outcome = await submitChat.mutateAsync({
+        sessionId: activeSession.id,
+        message,
+      });
+      if (!outcome.ok) {
+        setComposerNotice({ tone: "error", text: outcome.error.message });
+        return;
+      }
       setDraft("");
-      setDraftState("staged");
+      setComposerNotice({
+        tone: "info",
+        text:
+          outcome.data.text ??
+          (outcome.data.treatedAsInitialGoal
+            ? "Mission goal received."
+            : "Message sent."),
+      });
     },
-    [draft],
+    [activeSession, draft, submitChat],
   );
 
   const applyQuickAction = useCallback((prompt: string): void => {
     setDraft(prompt);
-    setDraftState("idle");
+    setComposerNotice(null);
   }, []);
+
+  const submitDisabled =
+    draft.trim().length === 0 ||
+    activeSession === null ||
+    submitChat.isPending;
 
   return (
     <div className="flex h-full min-h-0 w-full items-center px-8 py-10 sm:px-12 lg:px-20">
@@ -171,10 +200,16 @@ export function SessionPanel(): JSX.Element {
             value={draft}
             onChange={(event) => {
               setDraft(event.target.value);
-              setDraftState("idle");
+              setComposerNotice(null);
             }}
             rows={1}
-            placeholder="What do you want Vex to do?"
+            placeholder={
+              activeSession?.mode === "mission" &&
+              (activeSession.initialGoal === null ||
+                activeSession.initialGoal.trim().length === 0)
+                ? "Describe the mission goal."
+                : "What do you want Vex to do?"
+            }
             aria-label="Session draft"
             className={cn(
               "block w-full resize-none overflow-y-auto bg-transparent px-5 pt-3.5 pb-2 text-base leading-7 text-foreground outline-none",
@@ -186,21 +221,23 @@ export function SessionPanel(): JSX.Element {
           <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-1">
             <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--color-text-muted)]">
               <span className="font-mono text-sm text-[#6f91ff]">/</span>
-              <span className="truncate">for commands</span>
-              {draftState === "staged" ? (
+              <span className="truncate">
+                {activeSession === null ? "select a session first" : "for commands"}
+              </span>
+              {submitChat.isPending ? (
                 <span
                   role="status"
                   className="ml-2 hidden text-[#8da5ff] sm:inline"
                 >
-                  Draft staged.
+                  Sending…
                 </span>
               ) : null}
             </div>
 
             <button
               type="submit"
-              disabled={draft.trim().length === 0}
-              aria-label="Stage draft"
+              disabled={submitDisabled}
+              aria-label="Send message"
               className="flex h-10 w-12 shrink-0 items-center justify-center rounded-full bg-[#3758ff] text-white shadow-[0_0_28px_rgba(55,88,255,0.36)] transition-colors hover:bg-[#4668ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8da5ff] disabled:cursor-not-allowed disabled:opacity-45"
             >
               <HugeiconsIcon icon={ArrowUp01Icon} size={20} aria-hidden />
@@ -208,9 +245,15 @@ export function SessionPanel(): JSX.Element {
           </div>
         </form>
 
-        {draftState === "staged" ? (
-          <p role="status" className="mt-3 text-xs text-[#8da5ff] sm:hidden">
-            Draft staged.
+        {composerNotice !== null ? (
+          <p
+            role={composerNotice.tone === "error" ? "alert" : "status"}
+            className={cn(
+              "mt-3 text-xs",
+              composerNotice.tone === "error" ? "text-destructive" : "text-[#8da5ff]",
+            )}
+          >
+            {composerNotice.text}
           </p>
         ) : null}
 
@@ -275,7 +318,7 @@ function SessionContext({
     const title = getSessionTitle(activeSession);
     return (
       <div className="mt-7 flex max-w-[620px] flex-wrap items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3 py-2 text-xs text-[var(--color-text-secondary)] backdrop-blur-xl">
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#3275f8]/12 text-[#8da5ff]">
+        <span className="flex h-8 w-8 items-center justify-center text-[#8da5ff]">
           <HugeiconsIcon icon={Icon} size={16} aria-hidden />
         </span>
         <span className="min-w-[180px] flex-1 truncate text-sm text-foreground">

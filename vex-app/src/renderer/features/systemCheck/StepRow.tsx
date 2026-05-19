@@ -1,7 +1,7 @@
 /**
  * Single row in the System Check list.
  *
- * Layout (left → right): brand/glyph icon tile · label + detail · status badge.
+ * Layout (left → right): brand/glyph icon · label + detail · status badge.
  *
  * The `data-step-status` attribute remains the stable selector across
  * refactors (e2e + unit tests rely on it). `badgeLabel` decouples the
@@ -66,7 +66,7 @@ export function StepRow({
     >
       <span
         aria-hidden
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-[var(--color-text-primary)]"
+        className="flex h-10 w-10 shrink-0 items-center justify-center text-[var(--color-text-primary)]"
       >
         {icon}
       </span>

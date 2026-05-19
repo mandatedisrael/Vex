@@ -147,9 +147,7 @@ CREATE TABLE sessions (
   checkpoint_generation INTEGER NOT NULL DEFAULT 0,
   mode TEXT NOT NULL DEFAULT 'agent' CHECK (mode IN ('agent', 'mission')),
   permission TEXT NOT NULL DEFAULT 'restricted' CHECK (permission IN ('restricted', 'full')),
-  initial_goal TEXT,
-  CONSTRAINT sessions_mission_requires_initial_goal
-    CHECK (mode <> 'mission' OR (initial_goal IS NOT NULL AND btrim(initial_goal) <> ''))
+  initial_goal TEXT
 );
 CREATE INDEX idx_sessions_scope ON sessions(scope, started_at DESC);
 CREATE INDEX idx_sessions_mode ON sessions(mode);

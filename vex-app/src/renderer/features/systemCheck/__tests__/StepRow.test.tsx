@@ -78,7 +78,7 @@ describe("StepRow", () => {
     expect(container.querySelector('[data-step-status="warn"]')).not.toBeNull();
   });
 
-  it("renders the supplied icon inside the icon tile", () => {
+  it("renders the supplied icon inside the icon slot", () => {
     const { getByTestId } = render(
       <StepRow label="x" status="ok" detail={null} icon={dummyIcon()} />,
     );

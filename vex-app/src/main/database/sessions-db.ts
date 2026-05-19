@@ -9,22 +9,20 @@
  *
  * SQL is the contract here. The base Vex Agent migrations create:
  *   sessions(id PK, scope, started_at, ended_at, ..., mode CHECK ('agent'|'mission'),
- *            permission CHECK ('restricted'|'full'), initial_goal,
- *            CHECK (mode <> 'mission' OR btrim(initial_goal) <> ''))
+ *            permission CHECK ('restricted'|'full'), initial_goal)
  *   missions(id PK, root_session_id FK, status, title, goal, ...)
  *   mission_runs(id PK, mission_id FK, session_id FK, status, ...)
  *
  * Mission creation pipeline:
- *   1. INSERT sessions (mode='mission', permission, initial_goal)
- *   2. INSERT missions (id, root_session_id=session.id, status='draft', goal=initial_goal)
+ *   1. INSERT sessions (mode='mission', permission, initial_goal=NULL)
+ *   2. INSERT missions (id, root_session_id=session.id, status='draft')
  *   3. Do NOT create mission_runs here — that happens later via startMission()
  *      after the conversational setup flow refines the contract.
  * Steps 1+2 run inside a single BEGIN/COMMIT — a crash after step 1 must NOT
  * leave a mission session without its missions row.
  *
- * The `goal` value on the freshly created missions row is seeded from
- * `initialGoal` as a sane default; the engine's mission-setup conversational
- * flow rewrites it once the contract is negotiated.
+ * The first chat submit for a mission stores the initial goal snapshot and
+ * lets the engine's mission-setup conversational flow refine the draft.
  */
 
 import { Client, type ClientConfig } from "pg";
@@ -200,7 +198,7 @@ async function loadMissionStatus(
  *
  * Side effects:
  *   - INSERT into sessions (always)
- *   - INSERT into missions (mission mode only — status='draft', goal=initialGoal)
+ *   - INSERT into missions (mission mode only — status='draft', goal=NULL)
  *
  * NO LLM calls. The first turn of the mission setup flow runs later, when
  * the renderer opens the session and the engine's `processMissionSetupTurn`
@@ -213,8 +211,7 @@ export async function createSession(
   const mode: SessionMode = input.mode;
   const permission: SessionPermission = input.permission;
   const title: string = input.name;
-  const initialGoal: string | null =
-    input.mode === "mission" ? input.initialGoal : null;
+  const initialGoal: string | null = null;
 
   return withClient(async (client) => {
     try {
@@ -224,16 +221,10 @@ export async function createSession(
         [id, VEX_APP_SESSION_SCOPE, mode, permission, initialGoal, title],
       );
       if (mode === "mission") {
-        // Seed missions.goal with the user's initial intent — the
-        // conversational mission-setup flow refines it later. We pass
-        // an empty {} / [] for the optional contract fields so the
-        // engine validator can lift them on its own pass without
-        // tripping NOT NULL constraints (none exist on these columns,
-        // but defaults are documented as JSONB '{}' / '[]').
         const missionId = randomUUID();
         await client.query(
-          "INSERT INTO missions (id, root_session_id, status, goal) VALUES ($1, $2, 'draft', $3)",
-          [missionId, id, initialGoal],
+          "INSERT INTO missions (id, root_session_id, status) VALUES ($1, $2, 'draft')",
+          [missionId, id],
         );
       }
       const sessionResult = await client.query<SessionRow>(
@@ -255,6 +246,64 @@ export async function createSession(
         log.warn("[sessions-db] ROLLBACK after createSession failure failed", rbCause);
       }
       return dbError("createSession transaction failed", cause);
+    }
+  });
+}
+
+/**
+ * Persist the first mission chat message as the session-level initial goal
+ * snapshot and seed the current draft's `goal` if it is still empty.
+ *
+ * This is deliberately separate from `createSession`: the modal captures only
+ * immutable axes, while chat owns the mission intent text. The guarded UPDATE
+ * makes repeat submits/races idempotent — only the first non-empty goal wins.
+ */
+export async function setInitialMissionGoalIfUnset(
+  id: string,
+  goal: string,
+): Promise<Result<boolean, VexError>> {
+  return withClient(async (client) => {
+    try {
+      await client.query("BEGIN");
+      const sessionUpdate = await client.query<{ id: string }>(
+        `UPDATE sessions
+            SET initial_goal = $3
+          WHERE id = $1
+            AND scope = $2
+            AND mode = 'mission'
+            AND deleted_at IS NULL
+            AND (initial_goal IS NULL OR btrim(initial_goal) = '')
+          RETURNING id`,
+        [id, VEX_APP_SESSION_SCOPE, goal],
+      );
+
+      const changed = (sessionUpdate.rowCount ?? 0) > 0;
+      if (changed) {
+        await client.query(
+          `UPDATE missions
+              SET goal = $2, updated_at = NOW()
+            WHERE id = (
+              SELECT id
+                FROM missions
+               WHERE root_session_id = $1
+                 AND status NOT IN ('completed', 'failed', 'cancelled')
+               ORDER BY created_at DESC
+               LIMIT 1
+            )
+              AND (goal IS NULL OR btrim(goal) = '')`,
+          [id, goal],
+        );
+      }
+
+      await client.query("COMMIT");
+      return ok(changed);
+    } catch (cause) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rbCause) {
+        log.warn("[sessions-db] ROLLBACK after setInitialMissionGoalIfUnset failure failed", rbCause);
+      }
+      return dbError("setInitialMissionGoalIfUnset failed", cause);
     }
   });
 }

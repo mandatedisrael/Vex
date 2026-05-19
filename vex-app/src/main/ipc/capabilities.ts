@@ -1,7 +1,8 @@
 /**
  * vex.capabilities.get() — feature flags + phase tracking.
  *
- * Phase 1 surface only. Phase 2 features all `false` until those milestones land.
+ * Phase 1 shell plus landed Phase 2 slices. Feature flags flip only after
+ * the corresponding typed bridge + main handler is implemented.
  */
 
 import { app } from "electron";
@@ -51,8 +52,8 @@ export function registerCapabilitiesHandler(): () => void {
           dockerBootstrap: false, // M4
           wizard: false, // M7+
           wallets: false, // M8
-          chat: false,
-          missions: false,
+          chat: true,
+          missions: true,
           portfolio: false,
           memory: false,
           tools: false,

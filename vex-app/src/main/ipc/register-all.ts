@@ -8,6 +8,7 @@
 import { globalCleanup } from "../lifecycle/cleanup-registry.js";
 import { registerCancelHandler } from "./cancel.js";
 import { registerCapabilitiesHandler } from "./capabilities.js";
+import { registerChatSubmitHandler } from "./chat.js";
 import { registerDatabaseHandlers } from "./database.js";
 import { registerDockerHandlers } from "./docker.js";
 import { registerOnboardingHandlers } from "./onboarding.js";
@@ -53,6 +54,7 @@ export function registerAllIpcHandlers(): void {
   teardowns.push(registerSessionsGetHandler());
   teardowns.push(registerSessionsSetPinnedHandler());
   teardowns.push(registerSessionsDeleteHandler());
+  teardowns.push(registerChatSubmitHandler());
   teardowns.push(...registerSettingsHandlers());
   teardowns.push(registerTelemetryHandler());
   teardowns.push(registerSupportHandler());

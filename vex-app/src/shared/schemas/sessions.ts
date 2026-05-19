@@ -7,12 +7,12 @@
  * Invariants (immutable per session):
  *   - `mode` ∈ { "agent", "mission" }
  *   - `permission` ∈ { "restricted", "full" }
- *   - `initialGoal` required + non-empty (trimmed) when `mode === "mission"`,
- *     forbidden otherwise (DB CHECK enforces non-empty on mission rows).
+ *   - `initialGoal` is nullable for all modes. Mission sessions start
+ *     without a goal; the first chat turn becomes the initial mission goal.
  *
  * The `sessionCreateInputSchema` is a discriminated union on `mode` so the
- * Goal textarea in the renderer is structurally tied to mission mode —
- * preload + main can't accept a goal on an agent row by mistake.
+ * renderer + preload + main agree on the immutable session axes. Mission goal
+ * capture belongs to `vex.chat.submit`, not to the create-session modal.
  *
  * Migration 020 adds two GUI-only columns: `title` (user-entered display
  * name, mandatory at create time, capped at 80 chars on UI side / 120 on
@@ -28,9 +28,8 @@ export const SESSION_TITLE_MAX_LENGTH = 80;
 
 /**
  * User-entered session name. Required for both agent and mission sessions —
- * the sidebar always renders the user's title, even when a mission row also
- * carries `initialGoal`. Trimmed + bounded; DB CHECK gives a 40-char safety
- * margin (120) over the UI cap (80).
+ * the sidebar always renders the user's title. Trimmed + bounded; DB CHECK
+ * gives a 40-char safety margin (120) over the UI cap (80).
  */
 export const sessionTitleSchema = z
   .string()
@@ -60,9 +59,8 @@ export const missionRunStatusSchema = z.enum([
 export type MissionRunStatus = z.infer<typeof missionRunStatusSchema>;
 
 /**
- * IPC input for `vex.sessions.create`. Discriminated union on `mode`:
- *   - agent: no goal field at all (typed `never` blocks accidental sends)
- *   - mission: `initialGoal` REQUIRED, trimmed, bounded
+ * IPC input for `vex.sessions.create`. Goal text is intentionally absent:
+ * mission sessions receive their first goal through `vex.chat.submit`.
  */
 export const sessionCreateInputSchema = z.discriminatedUnion("mode", [
   z
@@ -77,11 +75,6 @@ export const sessionCreateInputSchema = z.discriminatedUnion("mode", [
       mode: z.literal("mission"),
       name: sessionTitleSchema,
       permission: sessionPermissionSchema,
-      initialGoal: z
-        .string()
-        .trim()
-        .min(1, "Goal is required for missions.")
-        .max(INITIAL_GOAL_MAX_LENGTH, `Goal must be ${INITIAL_GOAL_MAX_LENGTH} characters or less.`),
     })
     .strict(),
 ]);

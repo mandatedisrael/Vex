@@ -128,8 +128,9 @@ export interface CreateSessionOptions {
   /** Permission is immutable per session. Defaults to `"restricted"`. */
   permission?: SessionPermission;
   /**
-   * Snapshot of user goal at creation. REQUIRED when `mode === "mission"`
-   * (DB CHECK enforces non-empty trim); ignored for `mode === "agent"`.
+   * Optional snapshot of the first mission goal. Mission sessions can be
+   * created without it; GUI chat sets it on the first user turn.
+   * Ignored for `mode === "agent"`.
    */
   initialGoal?: string | null;
   /**
@@ -142,8 +143,8 @@ export interface CreateSessionOptions {
 
 /**
  * Create a session row. `ON CONFLICT DO NOTHING` keeps the first-writer-wins
- * semantics existing transports depend on. Caller is responsible for
- * supplying `initialGoal` when `mode === "mission"` — DB CHECK enforces it.
+ * semantics existing transports depend on. Mission rows may start without
+ * `initialGoal`; setup/chat flows can fill it later.
  */
 export async function createSession(
   id: string,

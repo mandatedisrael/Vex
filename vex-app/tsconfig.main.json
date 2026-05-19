@@ -9,7 +9,11 @@
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["src/shared/*"],
-      "@vex-lib/*": ["../src/lib/*"]
+      "@vex-lib/*": ["../src/lib/*"],
+      "@vex-agent/*": ["../src/vex-agent/*"],
+      "@tools/*": ["../src/tools/*"],
+      "@utils/*": ["../src/utils/*"],
+      "@config/*": ["../src/config/*"]
     }
   },
   "include": ["src/main", "src/shared", "../src/lib"],

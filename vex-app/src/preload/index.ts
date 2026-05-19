@@ -43,6 +43,7 @@ import { agentCoreConfigureInputSchema } from "../shared/schemas/agent-core.js";
 import { providerPersistInputSchema } from "../shared/schemas/provider.js";
 import { completeSetupInputSchema } from "../shared/schemas/finalize.js";
 import { createBugReportInputSchema } from "../shared/schemas/bug-reports.js";
+import { chatSubmitInputSchema } from "../shared/schemas/chat.js";
 import {
   secretsLockInputSchema,
   secretsUnlockInputSchema,
@@ -436,6 +437,16 @@ const api = {
         CH.sessions.delete,
         input,
         sessionDeleteInputSchema
+      );
+    },
+  },
+
+  chat: {
+    submit(input: import("../shared/schemas/chat.js").ChatSubmitInput) {
+      return invokeWithSchema(
+        CH.chat.submit,
+        input,
+        chatSubmitInputSchema
       );
     },
   },
