@@ -22,6 +22,7 @@ export type VexDomain =
   | "settings"
   | "updater"
   | "telemetry"
+  | "support"
   | "permissions"
   | "system"
   | "docker"
@@ -69,6 +70,7 @@ export type VexErrorCode =
   | "provider.polymarket_setup_failed"
   | "provider.unavailable"
   | "provider.test_failed"
+  | "support.persist_failed"
   | "internal.contract_violation"
   | "internal.cancelled"
   | "internal.unexpected";
@@ -142,6 +144,7 @@ export const VEX_ERROR_CODES = [
   "provider.polymarket_setup_failed",
   "provider.unavailable",
   "provider.test_failed",
+  "support.persist_failed",
   "internal.contract_violation",
   "internal.cancelled",
   "internal.unexpected",
@@ -157,6 +160,7 @@ export const VEX_DOMAINS = [
   "settings",
   "updater",
   "telemetry",
+  "support",
   "permissions",
   "system",
   "docker",

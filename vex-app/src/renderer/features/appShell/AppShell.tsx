@@ -20,6 +20,7 @@
 import { useCallback, useState } from "react";
 import type { JSX } from "react";
 import { EditInfrastructureButton } from "./EditInfrastructureButton.js";
+import { ReportIssueButton } from "./ReportIssueButton.js";
 import { SessionCreator } from "./SessionCreator.js";
 import { SessionPanel } from "./SessionPanel.js";
 import { SessionsList } from "./SessionsList.js";
@@ -43,7 +44,10 @@ export function AppShell(): JSX.Element {
           />
           <span className="text-sm font-semibold tracking-tight">Vex</span>
         </div>
-        <EditInfrastructureButton />
+        <div className="flex items-center gap-2">
+          <ReportIssueButton />
+          <EditInfrastructureButton />
+        </div>
       </header>
 
       <SessionsList onCreate={openCreator} />

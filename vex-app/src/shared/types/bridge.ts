@@ -84,6 +84,10 @@ import type {
   SecretsUnlockInput,
   SecretsUnlockResult,
 } from "../schemas/secrets.js";
+import type {
+  CreateBugReportInput,
+  CreateBugReportResult,
+} from "../schemas/bug-reports.js";
 
 export interface TelemetryReportInput {
   readonly kind: "caught" | "uncaught" | "boundary";
@@ -267,5 +271,17 @@ export interface VexBridge {
     readonly reportRendererError: (
       input: TelemetryReportInput
     ) => Promise<Result<{ recorded: boolean }>>;
+  };
+
+  /**
+   * Local-first bug report sink (Phase 1). Persists to the local
+   * `bug_reports` table after redaction. Distinct from Sentry telemetry —
+   * this path runs without consent because the data stays on the user's
+   * disk. Phase 3 will add an opt-in upload path on top of the same table.
+   */
+  readonly support: {
+    readonly createBugReport: (
+      input: CreateBugReportInput
+    ) => Promise<Result<CreateBugReportResult>>;
   };
 }

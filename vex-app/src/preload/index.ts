@@ -42,6 +42,7 @@ import { embeddingConfigureInputSchema } from "../shared/schemas/embedding.js";
 import { agentCoreConfigureInputSchema } from "../shared/schemas/agent-core.js";
 import { providerPersistInputSchema } from "../shared/schemas/provider.js";
 import { completeSetupInputSchema } from "../shared/schemas/finalize.js";
+import { createBugReportInputSchema } from "../shared/schemas/bug-reports.js";
 import {
   secretsLockInputSchema,
   secretsUnlockInputSchema,
@@ -438,6 +439,16 @@ const api = {
         CH.telemetry.reportRendererError,
         input,
         reportRendererErrorSchema
+      );
+    },
+  },
+
+  support: {
+    createBugReport(input) {
+      return invokeWithSchema(
+        CH.support.createBugReport,
+        input,
+        createBugReportInputSchema
       );
     },
   },

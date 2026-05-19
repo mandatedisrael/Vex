@@ -88,9 +88,14 @@ export const CH = {
     check: "vex:updater:check",
   },
 
-  // Telemetry — renderer-side error reporting (no-op stub bez consent)
+  // Telemetry — renderer-side error reporting (Sentry, opt-in only)
   telemetry: {
     reportRendererError: "vex:telemetry:reportRendererError",
+  },
+
+  // Support — local-first bug report sink (Phase 1: persist; Phase 3: upload)
+  support: {
+    createBugReport: "vex:support:createBugReport",
   },
 
   // Cancellation

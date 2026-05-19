@@ -23,6 +23,7 @@ import { registerSessionsGetHandler } from "./sessions/get.js";
 import { registerSessionsListHandler } from "./sessions/list.js";
 import { registerSecretsHandlers } from "./secrets.js";
 import { registerSettingsHandlers } from "./settings.js";
+import { registerSupportHandler } from "./support.js";
 import { registerSystemHandlers } from "./system.js";
 import { registerTelemetryHandler } from "./telemetry.js";
 import { registerWalletExportHandler } from "./wallet-export.js";
@@ -50,6 +51,7 @@ export function registerAllIpcHandlers(): void {
   teardowns.push(registerSessionsGetHandler());
   teardowns.push(...registerSettingsHandlers());
   teardowns.push(registerTelemetryHandler());
+  teardowns.push(registerSupportHandler());
 
   globalCleanup.add(() => {
     for (const t of teardowns) t();
