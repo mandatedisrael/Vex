@@ -31,6 +31,7 @@ import { cleanupOnBoot, cleanupOnQuit } from "./lifecycle/secret-cleanup.js";
 import { globalCleanup } from "./lifecycle/cleanup-registry.js";
 import { lockSecretSession } from "./secrets/session.js";
 import { createMainWindow } from "./windows/main-window.js";
+import { installMinimalMenu } from "./menu.js";
 import {
   disableSentry,
   initSentryIfConsented,
@@ -134,6 +135,10 @@ app.whenReady().then(async () => {
   globalCleanup.add(async () => {
     await disableSentry();
   });
+
+  // 6c. Strip the default File/Edit/View/Window menu (or replace with
+  // a minimal macOS template that preserves clipboard accelerators).
+  installMinimalMenu();
 
   // 7. Main window
   await createMainWindow();

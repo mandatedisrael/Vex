@@ -20,6 +20,11 @@ import {
   clampToVisibleArea,
   type DisplayInfo,
 } from "./visibility.js";
+import {
+  computeFirstRunBounds,
+  computeMinConstraints,
+  isFirstRun,
+} from "./bounds.js";
 
 /**
  * Safety timeout (ms) before forcing `win.show()` if `ready-to-show`
@@ -91,23 +96,46 @@ export async function createMainWindow(): Promise<BrowserWindow> {
       return null;
     }
   })();
-  const normalized = clampToVisibleArea(prefs.window, allDisplays, primary);
+  // First-run: no persisted x/y yet — scale the initial window to
+  // ~85% of the primary work area so the app launches at a sensible
+  // size on whatever monitor the user is on, rather than the legacy
+  // 1280×800 baked into defaultPreferences. After the first close,
+  // persistState writes real bounds and isFirstRun returns false.
+  const firstRun = isFirstRun(prefs.window);
+  const effectiveSaved =
+    firstRun && primary !== null
+      ? { ...prefs.window, ...computeFirstRunBounds(primary.workArea) }
+      : prefs.window;
+  const normalized = clampToVisibleArea(effectiveSaved, allDisplays, primary);
+  const { minWidth, minHeight } = computeMinConstraints(normalized);
   log.info(
-    `[window] saved=${JSON.stringify(prefs.window)} normalized=${JSON.stringify(
+    `[window] saved=${JSON.stringify(prefs.window)} firstRun=${firstRun} effective=${JSON.stringify(effectiveSaved)} normalized=${JSON.stringify(
       normalized
-    )} displays=${JSON.stringify(allDisplays.map((d) => d.workArea))}`
+    )} min={w:${minWidth},h:${minHeight}} displays=${JSON.stringify(allDisplays.map((d) => d.workArea))}`
   );
+
+  // BrowserWindow.icon: macOS reads only the .app bundle .icns, but on
+  // Linux + Windows this controls the taskbar/title-bar icon. In dev the
+  // renderer is served by Vite from src/renderer/public/, in packaged or
+  // E2E builds it lives under dist/renderer/. Compute the gate once and
+  // reuse for both `icon` and `loadURL` below.
+  const loadBuiltBundle =
+    app.isPackaged || process.env["VEX_E2E_LOAD_BUILT"] === "1";
+  const iconPath = loadBuiltBundle
+    ? path.join(__dirname, "../renderer/icon.png")
+    : path.resolve(__dirname, "../../src/renderer/public/icon.png");
 
   const win = new BrowserWindow({
     width: normalized.width,
     height: normalized.height,
     x: normalized.x ?? undefined,
     y: normalized.y ?? undefined,
-    minWidth: 1024,
-    minHeight: 720,
+    minWidth,
+    minHeight,
     show: false,
     backgroundColor: "#0A0E27",
     title: "Vex",
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
@@ -204,8 +232,6 @@ export async function createMainWindow(): Promise<BrowserWindow> {
   // load path through the `app://vex/` protocol. The renderer bundle must
   // exist on disk (i.e. `pnpm run build` has run); CI orders the e2e job
   // after the build step to enforce that.
-  const loadBuiltBundle =
-    app.isPackaged || process.env["VEX_E2E_LOAD_BUILT"] === "1";
   if (loadBuiltBundle) {
     await win.loadURL(`${APP_ORIGIN}/index.html`);
   } else {

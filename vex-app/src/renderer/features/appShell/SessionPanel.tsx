@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, JSX } from "react";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
@@ -6,7 +6,6 @@ import {
   ArrowUp01Icon,
   BitcoinWalletIcon,
   BridgeIcon,
-  BubbleChatSparkIcon,
   ChartCandlestickIcon,
   DatabaseLightningIcon,
   Exchange01Icon,
@@ -15,18 +14,12 @@ import {
   Shield02Icon,
   SparklesIcon,
   Target02Icon,
-  Wallet01Icon,
 } from "@hugeicons/core-free-icons";
-import { Ethereum } from "@thesvg/react";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import { DotmHex3 } from "../../components/ui/dotm-hex-3.js";
 import { cn } from "../../lib/utils.js";
-import { useSession, useSessionsList } from "../../lib/api/sessions.js";
+import { useSession } from "../../lib/api/sessions.js";
 import { useUiStore } from "../../stores/uiStore.js";
-
-interface SessionPanelProps {
-  readonly onCreate: () => void;
-}
 
 interface QuickAction {
   readonly label: string;
@@ -76,15 +69,21 @@ const TRUST_BADGES: ReadonlyArray<{
   { label: "You stay in control", icon: SparklesIcon },
 ];
 
-export function SessionPanel({ onCreate }: SessionPanelProps): JSX.Element {
+export function SessionPanel(): JSX.Element {
   const activeSessionId = useUiStore((s) => s.activeSessionId);
-  const listQuery = useSessionsList();
   const detailQuery = useSession(activeSessionId);
   const [draft, setDraft] = useState<string>("");
   const [draftState, setDraftState] = useState<"idle" | "staged">("idle");
-
-  const sessionsCount =
-    listQuery.data && listQuery.data.ok ? listQuery.data.data.length : 0;
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Auto-grow the textarea up to MAX_TEXTAREA_PX (~6 rows of leading-7),
+  // then scroll. Runs before paint so users never see a flicker when
+  // a quick-action chip slams a multi-line prompt into the field.
+  useLayoutEffect((): void => {
+    const el = textareaRef.current;
+    if (el === null) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [draft]);
 
   const activeSession = useMemo((): SessionListItem | null => {
     if (activeSessionId === null) return null;
@@ -160,39 +159,30 @@ export function SessionPanel({ onCreate }: SessionPanelProps): JSX.Element {
               ? detailQuery.data.error.message
               : null
           }
-          sessionsCount={sessionsCount}
-          onCreate={onCreate}
         />
 
         <form
           onSubmit={onSubmit}
-          className="mt-6 overflow-hidden rounded-xl border border-[#3275f8]/38 bg-[#061026]/66 shadow-[0_0_54px_rgba(30,78,210,0.16)] backdrop-blur-2xl"
+          className="mt-6 overflow-hidden rounded-3xl border border-[#3275f8]/38 bg-[#061026]/66 shadow-[0_0_54px_rgba(30,78,210,0.16)] backdrop-blur-2xl"
         >
-          <div className="relative">
-            <textarea
-              value={draft}
-              onChange={(event) => {
-                setDraft(event.target.value);
-                setDraftState("idle");
-              }}
-              rows={5}
-              placeholder="What do you want Vex to do?"
-              aria-label="Session draft"
-              className={cn(
-                "min-h-[144px] w-full resize-none bg-transparent px-5 py-5 pr-14 text-base leading-7 text-foreground outline-none",
-                "placeholder:text-[var(--color-text-muted)]",
-              )}
-            />
-            <button
-              type="button"
-              aria-label="Expand composer"
-              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.035] text-[var(--color-text-secondary)] transition-colors hover:bg-white/[0.08] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8]"
-            >
-              <HugeiconsIcon icon={BubbleChatSparkIcon} size={16} aria-hidden />
-            </button>
-          </div>
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setDraftState("idle");
+            }}
+            rows={1}
+            placeholder="What do you want Vex to do?"
+            aria-label="Session draft"
+            className={cn(
+              "block w-full resize-none overflow-y-auto bg-transparent px-5 pt-3.5 pb-2 text-base leading-7 text-foreground outline-none",
+              "min-h-[52px] max-h-[200px]",
+              "placeholder:text-[var(--color-text-muted)]",
+            )}
+          />
 
-          <div className="flex flex-col gap-3 border-t border-white/[0.07] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-1">
             <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--color-text-muted)]">
               <span className="font-mono text-sm text-[#6f91ff]">/</span>
               <span className="truncate">for commands</span>
@@ -206,20 +196,14 @@ export function SessionPanel({ onCreate }: SessionPanelProps): JSX.Element {
               ) : null}
             </div>
 
-            <div className="flex min-w-0 items-center gap-2">
-              <div className="hidden h-10 min-w-0 items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.035] px-3 text-xs text-[var(--color-text-secondary)] sm:flex">
-                <Ethereum width={16} height={16} aria-hidden focusable={false} />
-                <span className="truncate">One wallet</span>
-              </div>
-              <button
-                type="submit"
-                disabled={draft.trim().length === 0}
-                aria-label="Stage draft"
-                className="flex h-10 w-12 shrink-0 items-center justify-center rounded-lg bg-[#3758ff] text-white shadow-[0_0_28px_rgba(55,88,255,0.36)] transition-colors hover:bg-[#4668ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8da5ff] disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                <HugeiconsIcon icon={ArrowUp01Icon} size={20} aria-hidden />
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={draft.trim().length === 0}
+              aria-label="Stage draft"
+              className="flex h-10 w-12 shrink-0 items-center justify-center rounded-full bg-[#3758ff] text-white shadow-[0_0_28px_rgba(55,88,255,0.36)] transition-colors hover:bg-[#4668ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8da5ff] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <HugeiconsIcon icon={ArrowUp01Icon} size={20} aria-hidden />
+            </button>
           </div>
         </form>
 
@@ -252,15 +236,11 @@ function SessionContext({
   activeSessionId,
   loading,
   error,
-  sessionsCount,
-  onCreate,
 }: {
   readonly activeSession: SessionListItem | null;
   readonly activeSessionId: string | null;
   readonly loading: boolean;
   readonly error: string | null;
-  readonly sessionsCount: number;
-  readonly onCreate: () => void;
 }): JSX.Element {
   if (loading) {
     return (
@@ -312,18 +292,10 @@ function SessionContext({
     );
   }
 
-  if (sessionsCount > 0) return <div className="mt-7 h-0" aria-hidden />;
-
-  return (
-    <button
-      type="button"
-      onClick={onCreate}
-      className="mt-7 inline-flex h-10 items-center gap-2 rounded-lg border border-[#3275f8]/35 bg-[#3275f8]/10 px-4 text-sm font-medium text-[#8da5ff] transition-colors hover:bg-[#3275f8]/16 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8]"
-    >
-      <HugeiconsIcon icon={Wallet01Icon} size={16} aria-hidden />
-      New session
-    </button>
-  );
+  // Sessions-list sidebar owns the "New session" CTA. The welcome
+  // panel keeps the layout spacer so the chat input position is
+  // identical in the empty-state and the has-sessions empty-active state.
+  return <div className="mt-7 h-0" aria-hidden />;
 }
 
 function ContextPill({ children }: { readonly children: string }): JSX.Element {

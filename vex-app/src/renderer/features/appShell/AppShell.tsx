@@ -43,7 +43,7 @@ export function AppShell(): JSX.Element {
         <SessionsList onCreate={openCreator} />
 
         <section className="min-w-0 flex-1 pb-12">
-          <SessionPanel onCreate={openCreator} />
+          <SessionPanel />
         </section>
       </div>
 

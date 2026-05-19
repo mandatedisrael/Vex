@@ -45,6 +45,7 @@ mac:
   entitlementsInherit: build/entitlements.mac.inherit.plist
   # Dev/test only. Production release config must set this to true.
   notarize: false
+  icon: build/icon.icns
 
 win:
   target:
@@ -54,6 +55,7 @@ win:
       arch: [x64, arm64]
   # Dev/test only. Production release config must set this to true.
   verifyUpdateCodeSignature: false
+  icon: build/icon.ico
 
 linux:
   category: Finance
@@ -62,3 +64,6 @@ linux:
       arch: [x64, arm64]
     - target: deb
       arch: [x64, arm64]
+  # Single high-res PNG — electron-builder fans out to hicolor sizes
+  # (16/32/48/64/128/256/512/1024) for AppImage and deb packaging.
+  icon: build/icon.png
