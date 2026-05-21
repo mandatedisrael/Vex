@@ -31,8 +31,22 @@ const mockGetOperatorInstructionsAfter = vi.fn().mockResolvedValue([]);
 vi.mock("@vex-agent/db/repos/messages.js", () => ({
   addMessage: (...a: unknown[]) => mockAddMessage(...a),
   addEngineMessage: (...a: unknown[]) => mockAddEngineMessage(...a),
+  addMessageReturningId: vi.fn().mockResolvedValue({
+    id: 1,
+    role: "assistant",
+    content: "",
+    timestamp: new Date().toISOString(),
+  }),
   getLiveMessages: (...a: unknown[]) => mockGetLiveMessages(...a),
   getOperatorInstructionsAfter: (...a: unknown[]) => mockGetOperatorInstructionsAfter(...a),
+}));
+
+// Puzzle 2: engine writes transcript via `events/index.ts` barrel.
+// Map back to existing legacy spies so transcript-write assertions pass.
+vi.mock("@vex-agent/engine/events/index.js", () => ({
+  appendMessage: (...a: unknown[]) => mockAddMessage(...a),
+  appendEngineMessage: (...a: unknown[]) => mockAddEngineMessage(...a),
+  emitTranscriptAppend: vi.fn(),
 }));
 
 vi.mock("@vex-agent/db/repos/mission-runs.js", () => ({
@@ -80,6 +94,67 @@ vi.mock("@vex-agent/db/client.js", () => ({
   execute: vi.fn(),
   query: vi.fn().mockResolvedValue([]),
   queryOne: vi.fn().mockResolvedValue(null),
+  getPool: vi.fn().mockReturnValue({
+    connect: vi.fn().mockResolvedValue({
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }),
+  }),
+  queryWith: vi.fn().mockResolvedValue([]),
+  queryOneWith: vi.fn().mockImplementation(async (_exec: unknown, sql: string) => {
+    if (typeof sql === "string" && sql.includes("INSERT INTO messages") && sql.includes("RETURNING id, created_at")) {
+      return { id: 1, created_at: new Date().toISOString() };
+    }
+    return null;
+  }),
+  executeWith: vi.fn().mockResolvedValue(1),
+  withTransaction: vi.fn().mockImplementation(async (fn: (client: unknown) => Promise<unknown>) => {
+    const stubClient = {
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    };
+    return await fn(stubClient);
+  }),
+}));
+
+// Puzzle 3 atomic lease helpers.
+vi.mock("@vex-agent/engine/runtime/lease-and-status.js", () => ({
+  claimRunLeaseAndFlipToRunning: vi.fn().mockResolvedValue({
+    outcome: "claimed",
+    previousStatus: "paused_wake",
+    lease: {
+      sessionId: "s", missionRunId: "r", ownerId: "test-owner",
+      processKind: "electron_main",
+      acquiredAt: new Date(), heartbeatAt: new Date(), expiresAt: new Date(),
+    },
+    wakeCancelledCount: 0,
+  }),
+  claimSessionLease: vi.fn().mockResolvedValue({
+    outcome: "claimed",
+    lease: {
+      sessionId: "s", missionRunId: null, ownerId: "test-owner",
+      processKind: "electron_main",
+      acquiredAt: new Date(), heartbeatAt: new Date(), expiresAt: new Date(),
+    },
+  }),
+  observeAndApplyControl: vi.fn().mockResolvedValue({ outcome: "no_request" }),
+}));
+
+vi.mock("@vex-agent/engine/runtime/lease-handle.js", () => ({
+  createLeaseHandle: vi.fn().mockReturnValue({
+    lease: {
+      sessionId: "s", missionRunId: null, ownerId: "test-owner",
+      processKind: "electron_main",
+      acquiredAt: new Date(), heartbeatAt: new Date(), expiresAt: new Date(),
+    },
+    ownerId: "test-owner",
+    release: vi.fn().mockResolvedValue(undefined),
+    onLeaseLost: vi.fn(),
+  }),
+}));
+
+vi.mock("@vex-agent/engine/runtime/release-and-emit.js", () => ({
+  releaseLeaseAndEmitControlState: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@vex-agent/tools/protocols/catalog.js", () => ({

@@ -23,6 +23,68 @@ vi.mock("@vex-agent/db/repos/missions.js", () => ({
 
 vi.mock("@vex-agent/db/repos/messages.js", () => ({
   addEngineMessage: (...args: unknown[]) => mockAddEngineMessage(...args),
+  addMessageReturningId: vi.fn().mockResolvedValue({
+    id: 1, role: "system", content: "", timestamp: new Date().toISOString(),
+  }),
+}));
+
+vi.mock("@vex-agent/engine/events/index.js", () => ({
+  appendMessage: vi.fn(),
+  appendEngineMessage: (...args: unknown[]) => mockAddEngineMessage(...args),
+  emitTranscriptAppend: vi.fn(),
+}));
+
+vi.mock("@vex-agent/db/client.js", () => ({
+  execute: vi.fn(),
+  query: vi.fn().mockResolvedValue([]),
+  queryOne: vi.fn().mockResolvedValue(null),
+  getPool: vi.fn().mockReturnValue({
+    connect: vi.fn().mockResolvedValue({
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }),
+  }),
+  queryWith: vi.fn().mockResolvedValue([]),
+  queryOneWith: vi.fn().mockImplementation(async (_exec: unknown, sql: string) => {
+    if (typeof sql === "string" && sql.includes("INSERT INTO messages") && sql.includes("RETURNING id, created_at")) {
+      return { id: 1, created_at: new Date().toISOString() };
+    }
+    return null;
+  }),
+  executeWith: vi.fn().mockResolvedValue(1),
+  withTransaction: vi.fn().mockImplementation(async (fn: (client: unknown) => Promise<unknown>) => {
+    const stubClient = {
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    };
+    return await fn(stubClient);
+  }),
+}));
+
+vi.mock("@vex-agent/engine/runtime/lease-and-status.js", () => ({
+  claimRunLeaseAndFlipToRunning: vi.fn().mockResolvedValue({
+    outcome: "claimed", previousStatus: "paused_wake",
+    lease: { sessionId: "s", missionRunId: "r", ownerId: "test-owner", processKind: "electron_main", acquiredAt: new Date(), heartbeatAt: new Date(), expiresAt: new Date() },
+    wakeCancelledCount: 0,
+  }),
+  claimSessionLease: vi.fn().mockResolvedValue({
+    outcome: "claimed",
+    lease: { sessionId: "s", missionRunId: null, ownerId: "test-owner", processKind: "electron_main", acquiredAt: new Date(), heartbeatAt: new Date(), expiresAt: new Date() },
+  }),
+  observeAndApplyControl: vi.fn().mockResolvedValue({ outcome: "no_request" }),
+}));
+
+vi.mock("@vex-agent/engine/runtime/lease-handle.js", () => ({
+  createLeaseHandle: vi.fn().mockReturnValue({
+    lease: { sessionId: "s", missionRunId: null, ownerId: "test-owner", processKind: "electron_main", acquiredAt: new Date(), heartbeatAt: new Date(), expiresAt: new Date() },
+    ownerId: "test-owner",
+    release: vi.fn().mockResolvedValue(undefined),
+    onLeaseLost: vi.fn(),
+  }),
+}));
+
+vi.mock("@vex-agent/engine/runtime/release-and-emit.js", () => ({
+  releaseLeaseAndEmitControlState: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../../../../vex-agent/engine/core/runner/mission.js", () => ({

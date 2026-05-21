@@ -10,11 +10,47 @@
  * targets a mission run.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// Puzzle 3 atomic lease helpers — `wake/executor.ts` dynamically imports
+// `claimRunLeaseAndFlipToRunning` instead of the previous `casFlipToRunning`
+// dep. Tests inject `WakeDeps` for the public surface; the lease helper
+// imports below cover the private dynamic-import path so they never hit
+// the real `withTransaction` → `getPool().connect()` (which would
+// ECONNREFUSED at 127.0.0.1:5777 in the test environment).
+const mockClaimRunLeaseAndFlipToRunning = vi.fn();
+const mockReleaseLease = vi.fn().mockResolvedValue(undefined);
+const mockCreateLeaseHandle = vi.fn();
+
+vi.mock("@vex-agent/engine/runtime/lease-and-status.js", () => ({
+  claimRunLeaseAndFlipToRunning: (...a: unknown[]) => mockClaimRunLeaseAndFlipToRunning(...a),
+  claimSessionLease: vi.fn(),
+  observeAndApplyControl: vi.fn().mockResolvedValue({ outcome: "no_request" }),
+}));
+
+vi.mock("@vex-agent/engine/runtime/lease-handle.js", () => ({
+  createLeaseHandle: (...a: unknown[]) => mockCreateLeaseHandle(...a),
+}));
+
+vi.mock("@vex-agent/engine/runtime/release-and-emit.js", () => ({
+  releaseLeaseAndEmitControlState: (...a: unknown[]) => mockReleaseLease(...a),
+}));
 
 import { tick, type WakeDeps } from "../../../../vex-agent/engine/wake/executor.js";
 import type { LoopWakeRequest } from "../../../../vex-agent/db/repos/loop-wake.js";
 import type { MissionRun } from "../../../../vex-agent/db/repos/mission-runs.js";
+
+function makeStubLease(missionRunId: string | null = "run-1") {
+  return {
+    sessionId: "sess-1",
+    missionRunId,
+    ownerId: "test-owner",
+    processKind: "electron_main" as const,
+    acquiredAt: new Date(),
+    heartbeatAt: new Date(),
+    expiresAt: new Date(),
+  };
+}
 
 function makeWake(overrides: Partial<LoopWakeRequest> = {}): LoopWakeRequest {
   return {
@@ -64,7 +100,28 @@ function makeDeps(overrides: Partial<WakeDeps> = {}): WakeDeps {
 }
 
 describe("wake.executor.tick", () => {
-  it("resumes a paused_wake mission run only after CAS claim", async () => {
+  beforeEach(() => {
+    mockClaimRunLeaseAndFlipToRunning.mockReset();
+    // Default: atomic claim succeeds with previousStatus=paused_wake (wake
+    // executor only ever calls the helper after observing paused_wake).
+    mockClaimRunLeaseAndFlipToRunning.mockResolvedValue({
+      outcome: "claimed",
+      previousStatus: "paused_wake",
+      lease: makeStubLease(),
+      wakeCancelledCount: 1,
+    });
+    mockCreateLeaseHandle.mockReset();
+    mockCreateLeaseHandle.mockReturnValue({
+      lease: makeStubLease(),
+      ownerId: "test-owner",
+      release: vi.fn().mockResolvedValue(undefined),
+      onLeaseLost: vi.fn(),
+    });
+    mockReleaseLease.mockReset();
+    mockReleaseLease.mockResolvedValue(undefined);
+  });
+
+  it("resumes a paused_wake mission run only after atomic claim", async () => {
     const wake = makeWake();
     const run = makeRun();
     const deps = makeDeps({
@@ -76,8 +133,18 @@ describe("wake.executor.tick", () => {
 
     expect(results).toHaveLength(1);
     expect(results[0]!.outcome).toEqual({ kind: "resumed", runId: "run-1" });
-    expect(deps.casFlipToRunning).toHaveBeenCalledWith("run-1", ["paused_wake"]);
-    expect(deps.casFlipToRunning).toHaveBeenCalledBefore(deps.injectWakeBanner as never);
+    // Puzzle 3: production migrated from `deps.casFlipToRunning` (non-atomic
+    // CAS-then-lease) to the atomic `claimRunLeaseAndFlipToRunning` helper.
+    expect(mockClaimRunLeaseAndFlipToRunning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "sess-1",
+        missionRunId: "run-1",
+        fromStatuses: ["paused_wake"],
+      }),
+    );
+    expect(mockClaimRunLeaseAndFlipToRunning).toHaveBeenCalledBefore(
+      deps.injectWakeBanner as never,
+    );
     expect(deps.injectWakeBanner).toHaveBeenCalledWith(
       "sess-1",
       "continue monitoring",
@@ -99,15 +166,18 @@ describe("wake.executor.tick", () => {
       currentStatus: "running",
     });
     expect(deps.injectWakeBanner).not.toHaveBeenCalled();
-    expect(deps.casFlipToRunning).not.toHaveBeenCalled();
+    expect(mockClaimRunLeaseAndFlipToRunning).not.toHaveBeenCalled();
     expect(deps.resumeMissionRun).not.toHaveBeenCalled();
   });
 
-  it("skips banner and resume when the CAS claim loses to another resumer", async () => {
+  it("skips banner and resume when the atomic claim loses to another resumer", async () => {
+    mockClaimRunLeaseAndFlipToRunning.mockResolvedValueOnce({
+      outcome: "status_mismatch",
+      currentStatus: "running",
+    });
     const deps = makeDeps({
       claimDue: vi.fn().mockResolvedValue([makeWake()]),
       getMissionRun: vi.fn().mockResolvedValue(makeRun()),
-      casFlipToRunning: vi.fn().mockResolvedValue(null),
     });
 
     const results = await tick(new Date(), 10, deps);

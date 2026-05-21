@@ -48,6 +48,75 @@ vi.mock("@vex-agent/db/repos/missions.js", () => ({
 vi.mock("@vex-agent/db/repos/messages.js", () => ({
   addMessage: (...a: unknown[]) => mockAddMessage(...a),
   addEngineMessage: (...a: unknown[]) => mockAddEngineMessage(...a),
+  addMessageReturningId: vi.fn().mockResolvedValue({
+    id: 1, role: "user", content: "", timestamp: new Date().toISOString(),
+  }),
+}));
+
+vi.mock("@vex-agent/engine/events/index.js", () => ({
+  appendMessage: (...a: unknown[]) => mockAddMessage(...a),
+  appendEngineMessage: (...a: unknown[]) => mockAddEngineMessage(...a),
+  emitTranscriptAppend: vi.fn(),
+}));
+
+vi.mock("@vex-agent/db/client.js", () => ({
+  execute: vi.fn(),
+  query: vi.fn().mockResolvedValue([]),
+  queryOne: vi.fn().mockResolvedValue(null),
+  getPool: vi.fn().mockReturnValue({
+    connect: vi.fn().mockResolvedValue({
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }),
+  }),
+  queryWith: vi.fn().mockResolvedValue([]),
+  queryOneWith: vi.fn().mockImplementation(async (_exec: unknown, sql: string) => {
+    if (typeof sql === "string" && sql.includes("INSERT INTO messages") && sql.includes("RETURNING id, created_at")) {
+      return { id: 1, created_at: new Date().toISOString() };
+    }
+    return null;
+  }),
+  executeWith: vi.fn().mockResolvedValue(1),
+  withTransaction: vi.fn().mockImplementation(async (fn: (client: unknown) => Promise<unknown>) => {
+    const stubClient = {
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    };
+    return await fn(stubClient);
+  }),
+}));
+
+const mockClaimRunLeaseAndFlipToRunning = vi.fn().mockResolvedValue({
+  outcome: "claimed",
+  previousStatus: "paused_wake",
+  lease: {
+    sessionId: "s1", missionRunId: "run-1", ownerId: "test-owner",
+    processKind: "electron_main",
+    acquiredAt: new Date(), heartbeatAt: new Date(), expiresAt: new Date(),
+  },
+  wakeCancelledCount: 0,
+});
+
+vi.mock("@vex-agent/engine/runtime/lease-and-status.js", () => ({
+  claimRunLeaseAndFlipToRunning: (...a: unknown[]) => mockClaimRunLeaseAndFlipToRunning(...a),
+  claimSessionLease: vi.fn().mockResolvedValue({
+    outcome: "claimed",
+    lease: { sessionId: "s1", missionRunId: null, ownerId: "test-owner", processKind: "electron_main", acquiredAt: new Date(), heartbeatAt: new Date(), expiresAt: new Date() },
+  }),
+  observeAndApplyControl: vi.fn().mockResolvedValue({ outcome: "no_request" }),
+}));
+
+vi.mock("@vex-agent/engine/runtime/lease-handle.js", () => ({
+  createLeaseHandle: vi.fn().mockReturnValue({
+    lease: { sessionId: "s1", missionRunId: null, ownerId: "test-owner", processKind: "electron_main", acquiredAt: new Date(), heartbeatAt: new Date(), expiresAt: new Date() },
+    ownerId: "test-owner",
+    release: vi.fn().mockResolvedValue(undefined),
+    onLeaseLost: vi.fn(),
+  }),
+}));
+
+vi.mock("@vex-agent/engine/runtime/release-and-emit.js", () => ({
+  releaseLeaseAndEmitControlState: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../../vex-agent/engine/core/runner.js", () => ({
@@ -96,7 +165,15 @@ describe("ingress.routeUserMessage", () => {
     const result = await routeUserMessage("s1", "can you pause?");
 
     expect(result).toBe(resumeResult);
-    expect(mockCasFlipToRunning).toHaveBeenCalledWith("run-1", ["paused_wake"]);
+    // Puzzle 3: production migrated from the non-atomic `casFlipToRunning`
+    // + appendMessage pattern to the atomic `claimRunLeaseAndFlipToRunning`
+    // helper. Assert the new helper was called with the paused_wake source.
+    expect(mockClaimRunLeaseAndFlipToRunning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        missionRunId: "run-1",
+        fromStatuses: ["paused_wake"],
+      }),
+    );
     expect(mockAddOperatorInstruction).toHaveBeenCalledWith(
       "s1",
       "can you pause?",
