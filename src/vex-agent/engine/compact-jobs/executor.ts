@@ -32,24 +32,22 @@ import {
   recoverStaleRunning,
   type CompactJob,
 } from "@vex-agent/db/repos/compact-jobs/index.js";
-import { query } from "@vex-agent/db/client.js";
-import { embedDocument } from "@vex-agent/embeddings/client.js";
-import {
-  insertPreparedMemory,
-  prepareMemoryRender,
-} from "@vex-agent/db/repos/session-memories/index.js";
-import { redact, type RedactionResult } from "@vex-agent/memory/redaction.js";
-import { scanLiveState } from "@vex-agent/memory/exclusion-rules.js";
-import { validateTheme, buildFallbackTheme } from "@vex-agent/memory/theme-validation.js";
+// Pure helpers extracted for scalability:
+//   `archived-prefix.ts`  — loadArchivedPrefix + renderRedactedArchivedTranscript + redactStringArray.
+//   `chunker-call.ts`     — callChunkerLLM + ChunkerOutputSchema + types.
+//   `bug-emit.ts`         — Phase 2 BUG-REPORTING terminal-failure emit.
+//   `chunk-processing.ts` — per-chunk redact + validate + render + embed + insert,
+//                           with claim-loss discriminated-union outcome.
+import { loadArchivedPrefix } from "./archived-prefix.js";
+import { callChunkerLLM } from "./chunker-call.js";
+import { emitCompactWorkerPermanentlyFailedBug } from "./bug-emit.js";
+import { processChunkerOutput } from "./chunk-processing.js";
 import { shouldEmitHeartbeatFailure } from "./heartbeat-rate-limit.js";
 import {
-  MAX_OUTSTANDING_ITEMS_PER_CHUNK,
   TRACK2_RETRY_BACKOFF_BASE_MS,
-  TRACK2_TIMEOUT_MS,
   WORKER_HEARTBEAT_INTERVAL_MS,
   WORKER_STALE_THRESHOLD_MS,
 } from "@vex-agent/memory/policy.js";
-import { z } from "zod";
 import logger from "@utils/logger.js";
 
 export interface CompactJobsExecutorHandle {
@@ -217,136 +215,24 @@ async function processJob(job: CompactJob, workerId: string): Promise<void> {
     const chunkerOutput = chunkerCall.chunks;
     if (claimLost) return;
 
-    let inserted = 0;
-    let rejectedExclusion = 0;
-
-    for (const raw of chunkerOutput) {
-      // Redaction across ALL generated string fields the chunker emitted —
-      // narrative + outstanding items + entities/protocols/error_classes/
-      // chains/tasks/theme. Anything that lands in the row's structured
-      // columns (or in the body_md / embedded text) must be redacted before
-      // DB write so secrets and address/tx identifiers never reach storage.
-      const themeR = redact(raw.theme ?? "");
-      const r1 = redact(raw.happened_md ?? "");
-      const r2 = redact(raw.did_md ?? "");
-      const r3 = redact(raw.tried_md ?? "");
-      const rOuts = (raw.outstanding_items ?? []).slice(0, MAX_OUTSTANDING_ITEMS_PER_CHUNK).map(
-        (t) => redact(t),
-      );
-      const entitiesR = redactStringArray(raw.entities ?? []);
-      const protocolsR = redactStringArray(raw.protocols ?? []);
-      const errorClassesR = redactStringArray(raw.error_classes ?? []);
-      const chainsR = redactStringArray(raw.chains ?? []);
-      const tasksR = redactStringArray(raw.tasks ?? []);
-
-      const totalHard =
-        themeR.hardRedactCount
-        + r1.hardRedactCount + r2.hardRedactCount + r3.hardRedactCount
-        + rOuts.reduce((acc, r) => acc + r.hardRedactCount, 0)
-        + entitiesR.hardCount + protocolsR.hardCount + errorClassesR.hardCount
-        + chainsR.hardCount + tasksR.hardCount;
-
-      // Validate the REDACTED theme — hard-redact placeholders would fail
-      // slug validation anyway, but the build-fallback path still needs
-      // sanitized inputs so a leaked identifier doesn't survive via the
-      // fallback theme construction.
-      const themeResult = validateTheme(themeR.text);
-      const theme = themeResult.ok
-        ? themeResult.theme
-        : buildFallbackTheme({
-            entities: entitiesR.values,
-            protocols: protocolsR.values,
-            errorClasses: errorClassesR.values,
-            chains: chainsR.values,
-            tasks: tasksR.values,
-            generation: job.checkpointGeneration,
-          });
-      const themeSource = themeResult.ok ? "chunker" : "fallback";
-
-      // Exclusion check on the redacted body — if it's mostly live state,
-      // drop the chunk. Outstanding items ARE part of `body_md` (rendered
-      // by `renderBodyMd` + embedded into pgvector), so a chunk with bland
-      // narrative sections but live-state-only outstanding items would
-      // otherwise sneak past the rejection rule and pollute recall. Include
-      // the redacted outstanding text in the scan input. (codex P1 — round 2.)
-      const outstandingTextForExclusion = rOuts.map((r) => r.text).join("\n");
-      const bodyForExclusion =
-        `${r1.text}\n${r2.text}\n${r3.text}\n${outstandingTextForExclusion}`;
-      const exclusionScan = scanLiveState(bodyForExclusion);
-      if (exclusionScan.rejected) {
-        rejectedExclusion += 1;
-        logger.info("compact-worker.chunk_rejected_exclusion", {
-          jobId: job.id,
-          theme,
-          liveFraction: exclusionScan.liveFraction,
-        });
-        continue;
-      }
-      if (totalHard > 0) {
-        // We don't drop on hard-redaction count (the text is already
-        // sanitised) but we log it for telemetry. Heavy redaction may mean
-        // a junk chunk — codex's review can decide whether to tighten.
-        logger.info("compact-worker.chunk_redacted", {
-          jobId: job.id,
-          theme,
-          hardCount: totalHard,
-        });
-      }
-
-      // Exact-body embedding contract: pre-render outstanding items + body_md
-      // + content_hash ONCE via `prepareMemoryRender`, embed the rendered
-      // body, then persist via `insertPreparedMemory` so the bytes embedded
-      // are the bytes stored. Without this split the repo would regenerate
-      // fresh outstanding-item UUIDs/timestamps and the embedded body would
-      // describe a body the DB no longer contains.
-      if (claimLost) return;
-
-      const prep = prepareMemoryRender({
-        theme,
-        happenedMd: r1.text,
-        didMd: r2.text,
-        triedMd: r3.text,
-        outstandingTexts: rOuts.map((r) => r.text),
-      });
-      const embedded = await embedDocument(theme, prep.bodyMd);
-      if (claimLost) return;
-
-      const result = await insertPreparedMemory(
-        {
-          sessionId: job.sessionId,
-          checkpointGeneration: job.checkpointGeneration,
-          theme,
-          themeSource: themeSource as "chunker" | "fallback",
-          entities: entitiesR.values,
-          protocols: protocolsR.values,
-          errorClasses: errorClassesR.values,
-          chains: chainsR.values,
-          tasks: tasksR.values,
-          happenedMd: r1.text,
-          didMd: r2.text,
-          triedMd: r3.text,
-          outstandingTexts: rOuts.map((r) => r.text),
-          sourceStartMessageId: job.sourceStartMessageId,
-          sourceEndMessageId: job.sourceEndMessageId,
-          inferenceModel: process.env.AGENT_MODEL ?? null,
-          embedding: embedded.embedding,
-          embeddingModel: embedded.providerModel,
-          embeddingDim: embedded.embedding.length,
-        },
-        prep,
-      );
-      if (result.inserted) inserted += 1;
-    }
-
-    if (claimLost) {
+    // Per-chunk redact → validate → exclusion-scan → render → embed → insert.
+    // Helper owns the loop; caller pattern-matches the discriminated outcome.
+    const chunkOutcome = await processChunkerOutput({
+      job,
+      chunkerOutput,
+      claimGuard: { isLost: () => claimLost },
+    });
+    if (chunkOutcome.kind === "claim_lost_silent") return;
+    if (chunkOutcome.kind === "claim_lost_after_loop") {
       logger.warn("compact-worker.exit_after_claim_lost", {
         jobId: job.id,
-        sessionId: job.sessionId,
+        sessionId: chunkOutcome.sessionId,
         workerId,
-        chunksInserted: inserted,
+        chunksInserted: chunkOutcome.insertedSoFar,
       });
       return;
     }
+    const { inserted, rejectedExclusion } = chunkOutcome;
 
     const inferenceModel = process.env.AGENT_MODEL ?? "unknown";
     const completedOk = await markCompleted(job.id, workerId, {
@@ -395,205 +281,21 @@ async function processJob(job: CompactJob, workerId: string): Promise<void> {
       terminal: result.terminal,
       ok: result.ok,
     });
-    // Phase 2 BUG-REPORTING emit (puzzle 03): a TERMINAL compact-job
-    // failure (max retries hit) becomes a `compact_unable_at_critical`
-    // automatic bug report. Non-terminal failures are operational
-    // noise (the job will retry); we only surface the permanent one.
+    // Phase 2 BUG-REPORTING emit (puzzle 03) — extracted to
+    // `bug-emit.ts` for scaling. Only TERMINAL failures surface;
+    // non-terminal failures are operational noise (the job retries).
     if (result.terminal) {
-      const { getBugReportSink } = await import(
-        "../support/bug-report-registry.js"
-      );
-      const { emitBugReportSafe } = await import(
-        "../../../lib/diagnostics/bug-report-sink.js"
-      );
-      await emitBugReportSafe(
-        getBugReportSink(),
-        {
-          source: "worker",
-          category: "compact_unable_at_critical",
-          severity: "critical",
-          title: "compact-worker.permanently_failed",
-          description: errorMsg,
-          refs: {
-            sessionId: job.sessionId,
-            compactJobId: job.id,
-          },
-          agentContext: {
-            stopReason: "compact_unable_at_critical",
-          },
-        },
-        logger,
-      );
+      await emitCompactWorkerPermanentlyFailedBug({
+        jobId: job.id,
+        sessionId: job.sessionId,
+        errorMsg,
+      });
     }
   } finally {
     clearInterval(heartbeatTimer);
   }
 }
 
-// ── Archived prefix loading ──────────────────────────────────────
-
-/**
- * Apply `redact` to every element of a string array and aggregate the hard-
- * redact counts. Used for the structured columns the chunker emits
- * (entities / protocols / error_classes / chains / tasks). Anything that
- * tripped a hard-redact pattern (BIP39, private keys, JWT, API keys) is
- * replaced with a placeholder; mask patterns (addresses, tx hashes) are
- * masked. Both flavours are reflected in the returned counts.
- */
-function redactStringArray(values: readonly string[]): {
-  values: string[];
-  hardCount: number;
-  maskCount: number;
-} {
-  const out: string[] = [];
-  let hardCount = 0;
-  let maskCount = 0;
-  for (const v of values) {
-    const r: RedactionResult = redact(v);
-    out.push(r.text);
-    hardCount += r.hardRedactCount;
-    maskCount += r.maskCount;
-  }
-  return { values: out, hardCount, maskCount };
-}
-
-async function loadArchivedPrefix(
-  sessionId: string,
-  startId: number | null,
-  endId: number,
-): Promise<Array<{ role: string; content: string; tool_call_id: string | null }>> {
-  const startClause = startId === null ? "" : "AND id >= $3 ";
-  const params: unknown[] = startId === null ? [sessionId, endId] : [sessionId, endId, startId];
-  const rows = await query<{ role: string; content: string; tool_call_id: string | null }>(
-    `SELECT role, content, tool_call_id
-     FROM messages_archive
-     WHERE session_id = $1 AND id <= $2 ${startClause}
-     ORDER BY id ASC`,
-    params,
-  );
-  return rows;
-}
-
-// ── Chunker LLM call ─────────────────────────────────────────────
-
-const ChunkerOutputSchema = z.object({
-  chunks: z.array(
-    z.object({
-      theme: z.string(),
-      entities: z.array(z.string()).optional().default([]),
-      protocols: z.array(z.string()).optional().default([]),
-      error_classes: z.array(z.string()).optional().default([]),
-      chains: z.array(z.string()).optional().default([]),
-      tasks: z.array(z.string()).optional().default([]),
-      happened_md: z.string().optional().default(""),
-      did_md: z.string().optional().default(""),
-      tried_md: z.string().optional().default(""),
-      outstanding_items: z.array(z.string()).optional().default([]),
-    }),
-  ),
-});
-
-type ChunkerChunk = z.infer<typeof ChunkerOutputSchema>["chunks"][number];
-
-interface ChunkerCallResult {
-  chunks: ChunkerChunk[];
-  transcriptRedactionCounts: { hard: number; mask: number };
-}
-
-function renderRedactedArchivedTranscript(
-  archivedPrefix: ReadonlyArray<{ role: string; content: string; tool_call_id: string | null }>,
-): { transcript: string; redactionCounts: { hard: number; mask: number } } {
-  let hard = 0;
-  let mask = 0;
-  const transcript = archivedPrefix
-    .map((m) => {
-      const redacted = redact(m.content);
-      hard += redacted.hardRedactCount;
-      mask += redacted.maskCount;
-      return `[${m.role}${m.tool_call_id ? ` tool=${m.tool_call_id}` : ""}] ${redacted.text}`;
-    })
-    .join("\n");
-
-  return { transcript, redactionCounts: { hard, mask } };
-}
-
-async function callChunkerLLM(
-  job: CompactJob,
-  archivedPrefix: ReadonlyArray<{ role: string; content: string; tool_call_id: string | null }>,
-): Promise<ChunkerCallResult> {
-  // Use the same env-driven OpenRouter constructor the in-turn provider
-  // uses. Worker calls it on-demand so settings changes after restart
-  // pick up the new model. If env is missing or the loader can't produce a
-  // config, we THROW (not silently return []) so `processJob`'s catch leaves
-  // the outbox row in `pending` with a backoff for retry. Returning an
-  // empty array here would let `markCompleted(0 chunks)` silently lose
-  // the job — codex flagged this as a permanent-loss bug.
-  if (!process.env.OPENROUTER_API_KEY || !process.env.AGENT_MODEL) {
-    logger.warn("compact-worker.provider_config_missing", { jobId: job.id });
-    throw new Error("compact_worker_provider_config_missing");
-  }
-  const { OpenRouterProvider } = await import("@vex-agent/inference/openrouter.js");
-  const provider = new OpenRouterProvider();
-  const config = await provider.loadConfig();
-  if (!config) {
-    logger.warn("compact-worker.provider_config_load_failed", { jobId: job.id });
-    throw new Error("compact_worker_provider_config_load_failed");
-  }
-
-  // Transcript-side scrubber: archived live messages may contain wallet
-  // identifiers, tx hashes, API tokens, or key material that pre-date the
-  // memory layer's output-side redaction. Re-scrub before the remote chunker
-  // provider sees the prompt; output-side redaction below remains the DB and
-  // embedding guard.
-  const { transcript, redactionCounts } = renderRedactedArchivedTranscript(archivedPrefix);
-
-  const systemPrompt = [
-    "You are a chunker for per-session agent memory. You receive a conversation prefix that was just archived.",
-    "Produce as many narrative chunks as the prefix warrants — typically 1-3, but emit more when distinct themes are present. There is no enforced upper cap; quality beats quantity, so do NOT pad.",
-    "Write all narrative fields (theme, happened_md, did_md, tried_md, outstanding_items, entities, protocols, error_classes, chains, tasks) in ENGLISH regardless of the conversation's language. Memory recall queries against this content are English-by-contract.",
-    "EXCLUDE live state: balances, prices, gas, intent IDs, transaction hashes, position values. These are queryable live and would just become stale.",
-    "INCLUDE: decisions and rationale, observed patterns, lessons learned, user signals, mission state.",
-    "Output strict JSON: { chunks: [ { theme, entities[], protocols[], error_classes[], chains[], tasks[], happened_md, did_md, tried_md, outstanding_items[] } ] }",
-    "Theme: 3-8 lowercase underscore-separated tokens, specific (e.g. 'kyber_quote_timeout_pattern' NOT 'debug').",
-    "If nothing worth chunking, return { chunks: [] }.",
-  ].join(" ");
-  const userPrompt = [
-    `Agent's own summary of the conversation:\n${job.agentSummary}`,
-    job.preserveMd ? `Preserve hints:\n${job.preserveMd}` : "",
-    job.threadThemesHints.length > 0
-      ? `Theme hints (advisory, validate before using):\n${job.threadThemesHints.join("\n")}`
-      : "",
-    `Archived conversation prefix (session=${job.sessionId}, generation=${job.checkpointGeneration}):\n${transcript}`,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-
-  const response = await Promise.race([
-    provider.chatCompletionSimple(
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      config,
-    ),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("chunker_timeout")), TRACK2_TIMEOUT_MS),
-    ),
-  ]);
-
-  const text = response.content?.trim() ?? "";
-  const jsonStart = text.indexOf("{");
-  const jsonEnd = text.lastIndexOf("}");
-  if (jsonStart < 0 || jsonEnd < jsonStart) {
-    throw new Error(`chunker_malformed_json: missing braces in response (len=${text.length})`);
-  }
-  const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
-  const validated = ChunkerOutputSchema.safeParse(parsed);
-  if (!validated.success) {
-    throw new Error(`chunker_schema_invalid: ${validated.error.message}`);
-  }
-  return {
-    chunks: validated.data.chunks,
-    transcriptRedactionCounts: redactionCounts,
-  };
-}
+// Archived prefix loading + chunker LLM call live in
+// `archived-prefix.ts` and `chunker-call.ts`. Imported at the top
+// of this file.

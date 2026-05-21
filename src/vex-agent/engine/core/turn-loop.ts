@@ -1,47 +1,22 @@
 /**
  * Turn loop — main engine loop. Iterates inference turns.
  *
- * In mission run, text from model does NOT end the loop.
- * Ends only on: stop condition, approval pause, or iteration limit.
+ * The loop is intentionally thin: it threads mutable per-call state
+ * (live messages, token count, counters) and dispatches each iteration's
+ * work to dedicated sibling helpers (`turn-loop-*.ts`).
  *
- * Deferred save: executeTurn() does NOT save the assistant message.
- * This loop determines the canonical batch prefix (only dispatched calls),
- * then saves assistant + tool results in correct order.
+ * Invariants enforced by `turn-loop-tool-batch.ts`:
+ * - Every toolCall in the saved assistant message was actually dispatched,
+ *   except the `compact_committed` batch-abort path where skipped trailing
+ *   calls are persisted with synthetic `batch_aborted_by_compact` results.
+ * - Each toolCall has 0 or 1 tool_result in messages (0 = approval pending).
+ * - "awaiting approval" state lives in approval_queue, not in messages.
+ * - liveMessages always has assistant msg BEFORE tool results.
  *
- * Invariants:
- * - Every toolCall in the saved assistant message was actually dispatched
- *   (with the explicit exception of the `compact_committed` batch-abort
- *   path: skipped trailing calls are persisted so the assistant.tool_calls
- *   JSONB matches the LLM's emitted batch, but their tool results are
- *   synthesized `batch_aborted_by_compact` errors)
- * - Each toolCall has 0 or 1 tool_result in messages (0 = approval pending)
- * - "awaiting approval" state lives in approval_queue, not in messages
- * - liveMessages always has assistant msg BEFORE tool results
+ * Mission-run semantics: text from the model does NOT end the loop; it
+ * continues until a stop condition, approval pause, or iteration limit.
  *
- * Semantics per iteration:
- * 1. Check abort + runtime stop conditions
- * 2. Compute pressure band from currentTokenCount + contextLimit
- * 3. Critical-band forced fallback (PR2):
- *    - if band='critical' AND skipCriticalCheckNextIter is false:
- *      run `maybeRunForcedCompactFallback`; on committed → post-compact
- *      bookkeeping + skip-next-iter; on noop → counter++; ≥2 noops →
- *      stop with `compact_unable_at_critical`
- * 4. Build promptOptions: contextPressureBanner + (if bridge>0) resumePacket
- * 5. executeTurn() → model returns text and/or toolCalls (no save yet)
- * 6. If toolCalls → dispatch + deferred save:
- *    - dispatch returns pendingApproval → enqueue, trim batch, break
- *    - dispatch returns engineSignal=compact_committed → drain remaining
- *      tool calls in batch with synthetic batch_aborted_by_compact results;
- *      assistant message still carries the FULL emitted batch in tool_calls
- *    - dispatch returns engineSignal=stop_mission/etc → track result, break
- *    - dispatch OK → track result → next call
- *    - After batch: save assistant[canonical] + results (in original order)
- *    - If compact_committed observed → post-compact bookkeeping
- * 7. If text → deferred save text-only assistant message; in mission run
- *    inject [Engine: continue] marker; in chat/setup, end the loop
- *
- * Legacy `maybeRunCheckpoint` (auto-compact at threshold) was removed in the
- * PR2 cutover. The only paths into compaction are now:
+ * The only paths into compaction are:
  *   (a) the `compact_now` tool call producing a `compact_committed` engine
  *       signal (agent-driven), or
  *   (b) the runtime forced-fallback at `critical` band (deterministic safety
@@ -49,34 +24,32 @@
  *       a `paused_wake` flip when the wait window opens at critical pressure.
  */
 
-import type { EngineContext, StopReason, RuntimeStopReason } from "../types.js";
+import type { EngineContext, StopReason } from "../types.js";
 import type { InferenceProvider, InferenceConfig, ToolDefinition } from "@vex-agent/inference/types.js";
 import type { Message } from "@vex-agent/db/repos/messages.js";
 import type { PromptStackOptions } from "../prompts/index.js";
-import { executeTurn, saveAssistantMessage } from "./turn.js";
-import type { ParsedToolCall } from "@vex-agent/inference/types.js";
-import { evaluateRuntimeStopConditions } from "./stop-conditions.js";
-import { computeBand, createBandObserver, pressureFraction, type ContextUsageBand } from "./context-band.js";
-import { persistToolResultWithOverflow } from "./tool-output-overflow.js";
-import { dispatchTool } from "@vex-agent/tools/dispatcher.js";
-import type { InternalToolContext } from "@vex-agent/tools/internal/types.js";
-import * as messagesRepo from "@vex-agent/db/repos/messages.js";
-import { appendEngineMessage } from "@vex-agent/engine/events/index.js";
-import * as sessionsRepo from "@vex-agent/db/repos/sessions.js";
-import * as missionRunsRepo from "@vex-agent/db/repos/mission-runs.js";
-import * as approvalsRepo from "@vex-agent/db/repos/approvals.js";
+import { executeTurn } from "./turn.js";
+import { type ContextUsageBand } from "./context-band.js";
 import {
   appendPendingOperatorInstructions,
   maxOperatorInstructionId,
 } from "./operator-instructions.js";
-import { maybeRunForcedCompactFallback } from "@vex-agent/engine/compact-jobs/forced-fallback.js";
-import { buildContextPressureBanner } from "../prompts/context-pressure.js";
-import { buildResumePacket } from "../prompts/resume-packet.js";
 import { buildMemoryRoutingRule } from "../prompts/memory-routing.js";
-import { buildToolCatalogPrompt } from "../prompts/tool-catalog.js";
-import type { ToolVisibilityContext } from "@vex-agent/tools/registry.js";
-import { POST_COMPACT_BRIDGE_CYCLES } from "@vex-agent/memory/policy.js";
-import logger from "@utils/logger.js";
+import * as missionRunsRepo from "@vex-agent/db/repos/mission-runs.js";
+
+// Per-iteration helpers (pure async; thread state explicitly through args/returns):
+import { tryCriticalBandFallback } from "./turn-loop-critical-fallback.js";
+import { buildTurnPromptStack } from "./turn-loop-prompt-stack.js";
+import { applyPostCompactBookkeeping } from "./turn-loop-post-compact.js";
+import { processTurnToolBatch } from "./turn-loop-tool-batch.js";
+import { emitTurnLoopControlState } from "./turn-loop-control-emit.js";
+import { runIterationEntryGuards } from "./turn-loop-iteration-entry.js";
+import { applyWaitingForWakePostBatch } from "./turn-loop-waiting-for-wake.js";
+import { handleTextResponse } from "./turn-loop-text-response.js";
+import {
+  armPostCompactBridge,
+  createBandObserverWithLog,
+} from "./turn-loop-state-init.js";
 
 const MEMORY_ROUTING_PROMPT = buildMemoryRoutingRule();
 
@@ -94,57 +67,6 @@ export interface TurnLoopResult {
   stopReason: StopReason | null;
   /** Structured stop payload — summary/evidence from mission_stop or complete_subagent. */
   stopPayload?: { summary?: string; evidence?: Record<string, unknown> };
-}
-
-/** Synthetic tool-result emitted for batch tool calls skipped after a `compact_committed` signal. */
-const BATCH_ABORTED_BY_COMPACT_OUTPUT =
-  "batch_aborted_by_compact: this tool call was emitted in the same batch as compact_now and was not dispatched. "
-  + "The conversation has been compacted; re-emit this call on the next turn if it is still relevant.";
-
-const COMPACT_MAX_CONSECUTIVE_NOOPS = 2;
-
-/**
- * Helper — broadcast the engine.control.state event after a runner-
- * checkpoint observe applied a pause/stop. Lazy imports keep the
- * turn-loop module graph cheap; the bus singleton is the same one
- * subscribed by the vex-app main bridge.
- *
- * The runner still owns the lease at this point — `leaseActive: true`,
- * `leaseExpiresAt` from the lease row. After the outer runner releases
- * (in `mission-finalize.ts`) a SECOND event fires with the final state
- * (terminal vs paused_*, lease cleared). Two emits = two refresh
- * signals; renderer sees the final transition.
- */
-async function emitTurnLoopControlState(
-  sessionId: string,
-  missionRunId: string,
-  runStatus: "paused_user" | "stopped",
-  stopReason: "user_paused" | "user_stopped",
-  correlationId: string | null,
-): Promise<void> {
-  try {
-    const { controlStateBus, CONTROL_STATE_EVENT_TYPE } = await import(
-      "../runtime/control-bus.js"
-    );
-    const { getLease } = await import("../../db/repos/runner-leases.js");
-    const lease = await getLease(sessionId);
-    controlStateBus.emit({
-      type: CONTROL_STATE_EVENT_TYPE,
-      sessionId,
-      missionRunId,
-      runStatus,
-      stopReason,
-      pendingControlKind: null,
-      leaseActive: lease !== null && lease.expiresAt >= new Date(),
-      leaseExpiresAt:
-        lease !== null && lease.expiresAt >= new Date()
-          ? lease.expiresAt.toISOString()
-          : null,
-      correlationId,
-    });
-  } catch {
-    // intentionally swallowed — runtime path must not break on bus errors
-  }
 }
 
 /**
@@ -168,78 +90,26 @@ export async function runTurnLoop(
   let totalToolCalls = 0;
   const pendingApprovals: string[] = [];
   let stopReason: StopReason | null = null;
-  // Tracks whether the for-loop exited via natural text-break (chat / mission-setup).
-  // Used to distinguish "model finished cleanly" (break on text → stopReason stays
-  // null) from "loop exhausted without resolution" (for exits via `iteration <
-  // maxIterations` becoming false → iteration_limit fallback below).
+  // `stoppedOnText` distinguishes "model finished cleanly" (break on text →
+  // stopReason stays null) from "loop exhausted without resolution" (for
+  // exits via `iteration < maxIterations` becoming false → iteration_limit).
   let stoppedOnText = false;
   const startTime = Date.now();
   let currentTokenCount = tokenCount;
   let currentSummary = summary;
 
-  // Mutable copy of messages for turn history
   const liveMessages = [...messages];
   let lastSeenOperatorMessageId = maxOperatorInstructionId(messages);
 
-  // PR2: post-compact bridge counter — drives resume packet injection for the
-  // first `POST_COMPACT_BRIDGE_CYCLES` turns after any compact (agent-driven
-  // or forced fallback). Set to N at compact time; decremented each turn the
-  // packet is built. In-memory only; armed once at loop entry whenever the
-  // session has ever been compacted (`sessions.checkpoint_generation > 0`)
-  // so a wake-resume or app-restart that lost the in-memory counter still
-  // shows the post-compact bridge for the first two turns — without that
-  // arm, the agent resumes blind after every `waiting_for_wake` pause whose
-  // forced-compact-before-wait fired (codex P2 round 3).
-  let postCompactBridgeRemaining = 0;
-  try {
-    const initialSession = await sessionsRepo.getSession(context.sessionId);
-    if (initialSession && initialSession.checkpointGeneration > 0) {
-      postCompactBridgeRemaining = POST_COMPACT_BRIDGE_CYCLES;
-    }
-  } catch (err) {
-    logger.warn("turn-loop.bridge_arm_failed", {
-      sessionId: context.sessionId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-
-  // PR2: critical-band noop counter — increments each time forced fallback
-  // returns `noop` at critical band. Reset to 0 on any committed compact OR
-  // when band drops below critical. Escalates to `compact_unable_at_critical`
-  // when it reaches `COMPACT_MAX_CONSECUTIVE_NOOPS`.
+  let postCompactBridgeRemaining = await armPostCompactBridge({
+    sessionId: context.sessionId,
+  });
   let criticalNoopCounter = 0;
-
-  // PR2: one-shot skip — after a committed compact, the next iteration's
-  // band check still reads the stale `currentTokenCount` (updated only after
-  // the next executeTurn). Without this guard, the iteration immediately
-  // following a successful compact would see "critical" band and fire a
-  // redundant forced fallback that almost certainly returns `noop` (nothing
-  // left to compact), inflating the counter falsely.
   let skipCriticalCheckNextIter = false;
-
-  // PR3-telemetry: per-loop band-transition observer. Emits
-  // `compact.band_observed` on upward transitions and on initial elevated
-  // state. The pure observer factory tracks `previousBand` internally; the
-  // wrapper below adds the structured log when the observer says emit.
-  const bandObserver = createBandObserver(loopConfig.contextLimit);
-  const observeBand = (
-    tokenCount: number,
-    source: "iteration_start" | "post_forced_fallback" | "post_turn_text",
-  ): ContextUsageBand => {
-    const obs = bandObserver(tokenCount);
-    if (obs.emit) {
-      logger.info("compact.band_observed", {
-        sessionId: context.sessionId,
-        fromBand: obs.fromBand,
-        toBand: obs.band,
-        fraction: pressureFraction(tokenCount, loopConfig.contextLimit),
-        tokenCount,
-        contextLimit: loopConfig.contextLimit,
-        source,
-      });
-    }
-    return obs.band;
-  };
+  const observeBand = createBandObserverWithLog({
+    sessionId: context.sessionId,
+    contextLimit: loopConfig.contextLimit,
+  });
 
   async function mergeOperatorInstructions(): Promise<void> {
     lastSeenOperatorMessageId = await appendPendingOperatorInstructions({
@@ -250,264 +120,132 @@ export async function runTurnLoop(
   }
 
   /**
-   * Post-compact bookkeeping — applied after ANY committed compact (agent-driven
-   * via `compact_committed` engine signal OR runtime-driven via forced fallback).
-   * Order matches codex contract:
-   *   1. Reload live messages from DB (archive prefix is now committed).
-   *   2. Merge any operator-interrupt messages that landed during compact.
-   *   3. Update `mission_runs.last_checkpoint_at` (active runs only).
-   *   4. Refresh rolling summary from `sessions.summary` (set by compact).
-   *   5. Reset `currentTokenCount` so the NEXT iteration's tool-projection /
-   *      pressure-banner / forced-fallback check uses a normal-band view —
-   *      stale token-count would otherwise keep tools restricted and the
-   *      banner stuck on the pressure copy until the next provider response
-   *      arrives. The freshly-compacted prompt is almost always far below the
-   *      pressure thresholds, so a `0` baseline is the safe interim; the next
-   *      executeTurn() overwrites it with the actual post-compact prompt size.
-   *   6. Arm bridge counter; reset critical-band noop counter; arm skip flag.
+   * Post-compact bookkeeping — applied after ANY committed compact (agent-
+   * driven via `compact_committed` engine signal OR runtime-driven via forced
+   * fallback). Bridges `applyPostCompactBookkeeping`'s pure return contract
+   * with the loop's mutable closure state.
    */
   async function handlePostCompactBookkeeping(): Promise<void> {
-    liveMessages.length = 0;
-    const freshMessages = await messagesRepo.getLiveMessages(context.sessionId);
-    liveMessages.push(...freshMessages);
-    await mergeOperatorInstructions();
-    if (context.missionRunId) {
-      await missionRunsRepo.setLastCheckpoint(context.missionRunId);
-    }
-    const freshSession = await sessionsRepo.getSession(context.sessionId);
-    currentSummary = freshSession?.summary ?? null;
-    currentTokenCount = 0;
-    postCompactBridgeRemaining = POST_COMPACT_BRIDGE_CYCLES;
-    criticalNoopCounter = 0;
-    skipCriticalCheckNextIter = true;
+    const updates = await applyPostCompactBookkeeping({
+      sessionId: context.sessionId,
+      missionRunId: context.missionRunId ?? null,
+      liveMessages,
+      lastSeenOperatorMessageId,
+    });
+    lastSeenOperatorMessageId = updates.nextLastSeenOperatorMessageId;
+    currentSummary = updates.nextCurrentSummary;
+    currentTokenCount = updates.nextCurrentTokenCount;
+    postCompactBridgeRemaining = updates.nextPostCompactBridgeRemaining;
+    criticalNoopCounter = updates.nextCriticalNoopCounter;
+    skipCriticalCheckNextIter = updates.nextSkipCriticalCheckNextIter;
   }
 
   for (let iteration = 0; iteration < loopConfig.maxIterations; iteration++) {
-    // Check abort signal
-    if (abortSignal?.aborted) {
-      stopReason = "user_stopped";
-      break;
-    }
-
-    // Puzzle 03 — observe pending pause / stop control requests at
-    // the safest checkpoint we have today (iteration boundary). When
-    // an IPC `requestPause` / `requestStop` writes a `pending` row,
-    // the next iteration here picks it up via `observeAndApplyControl`
-    // and exits the loop cleanly — no half-iteration leaks. Wake
-    // cancellation already happens inside the helper for `paused_wake`
-    // transitions (atomic with the status flip).
-    //
-    // After commit, broadcast through `controlStateBus` so the
-    // renderer's `runtime.getState` cache invalidates and the UI
-    // observes the transition (codex review blocker #3).
-    if (context.missionRunId) {
-      try {
-        const { observeAndApplyControl } = await import(
-          "../runtime/lease-and-status.js"
-        );
-        const outcome = await observeAndApplyControl({
-          sessionId: context.sessionId,
-          kinds: ["pause_after_step", "stop_terminal"],
-        });
-        if (outcome.outcome === "paused_user_applied") {
-          await emitTurnLoopControlState(
-            context.sessionId,
-            context.missionRunId,
-            "paused_user",
-            "user_paused",
-            outcome.request.correlationId,
-          );
-          stopReason = "user_paused";
-          break;
-        }
-        if (outcome.outcome === "stop_applied") {
-          await emitTurnLoopControlState(
-            context.sessionId,
-            context.missionRunId,
-            "stopped",
-            "user_stopped",
-            outcome.request.correlationId,
-          );
-          stopReason = "user_stopped";
-          break;
-        }
-      } catch (err) {
-        // Best-effort observe — a DB issue here must not break the
-        // turn loop. Log + continue; the next iteration will retry.
-        logger.warn("turn-loop.observe_control_failed", {
-          sessionId: context.sessionId,
-          missionRunId: context.missionRunId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-
-    // Check runtime stop conditions
-    const runtimeStop = evaluateRuntimeStopConditions({
-      iterationCount: iteration,
+    // Iteration entry: abort → observe-control → runtime-stop, in that order.
+    // Helper returns the outcome; caller emits + sets stopReason + breaks.
+    const entry = await runIterationEntryGuards({
+      sessionId: context.sessionId,
+      missionRunId: context.missionRunId ?? null,
+      abortSignal,
+      iteration,
       maxIterations: loopConfig.maxIterations,
       elapsedMs: Date.now() - startTime,
       timeoutMs: loopConfig.timeoutMs,
     });
-
-    if (runtimeStop) {
-      stopReason = runtimeStop;
+    if (entry.kind === "abort_user_stopped") {
+      stopReason = "user_stopped";
+      break;
+    }
+    if (entry.kind === "control_paused_user") {
+      await emitTurnLoopControlState(
+        context.sessionId,
+        context.missionRunId!,
+        "paused_user",
+        "user_paused",
+        entry.correlationId,
+      );
+      stopReason = "user_paused";
+      break;
+    }
+    if (entry.kind === "control_stopped") {
+      await emitTurnLoopControlState(
+        context.sessionId,
+        context.missionRunId!,
+        "stopped",
+        "user_stopped",
+        entry.correlationId,
+      );
+      stopReason = "user_stopped";
+      break;
+    }
+    if (entry.kind === "runtime_stop") {
+      stopReason = entry.stopReason;
       break;
     }
 
-    // Increment iteration counter for mission runs
+    // Increment iteration counter for mission runs AFTER entry guards pass.
     if (context.missionRunId) {
       await missionRunsRepo.incrementIterations(context.missionRunId);
     }
 
-    // ── Critical-band forced fallback (proactive) ─────────────
-    // Compute on entry; may be re-evaluated after a committed fallback so the
-    // banner + tool projection below see the post-compact state on the very
-    // first provider call after the runtime intervenes.
+    // Critical-band forced fallback. Helper owns updateStatus → logger.error →
+    // bug-emit on escalation (bit-for-bit preserved). Caller threads new
+    // counter/skip-flag values and runs `handlePostCompactBookkeeping`
+    // (closure-bound) on `committed`.
     let turnBand = observeBand(currentTokenCount, "iteration_start");
 
-    if (turnBand !== "critical") {
-      // Counter resets the moment the band drops out of critical — even if the
-      // drop is caused by something other than a compact (e.g. a long tool
-      // output being archived elsewhere). Codex contract.
-      criticalNoopCounter = 0;
-    }
-
-    if (turnBand === "critical" && skipCriticalCheckNextIter) {
-      // One-shot skip: token count is still pre-compact stale; let executeTurn
-      // refresh it via the next provider response before re-evaluating.
-      skipCriticalCheckNextIter = false;
-    } else if (turnBand === "critical") {
-      const fallback = await maybeRunForcedCompactFallback(context.sessionId);
-      if (fallback.kind === "committed") {
-        logger.info("compact.forced_fallback.committed", {
-          sessionId: context.sessionId,
-          generation: fallback.generation,
-          jobId: fallback.jobId,
-          planMode: fallback.planMode,
-        });
+    const criticalOutcome = await tryCriticalBandFallback({
+      sessionId: context.sessionId,
+      missionRunId: context.missionRunId ?? null,
+      turnBand,
+      skipCriticalCheckNextIter,
+      criticalNoopCounter,
+      currentTokenCount,
+      contextLimit: loopConfig.contextLimit,
+    });
+    switch (criticalOutcome.kind) {
+      case "below_critical":
+        criticalNoopCounter = criticalOutcome.nextCriticalNoopCounter;
+        break;
+      case "skip_one_shot":
+        skipCriticalCheckNextIter = criticalOutcome.nextSkipCriticalCheckNextIter;
+        criticalNoopCounter = criticalOutcome.nextCriticalNoopCounter;
+        break;
+      case "committed":
         await handlePostCompactBookkeeping();
-        // `handlePostCompactBookkeeping` reset `currentTokenCount = 0` so the
-        // recomputed band drops from critical → normal for this very turn.
-        // Without this re-read, the pressure banner + tool projection below
-        // would still see the stale critical band and either hide every
-        // mutating tool the agent now needs OR keep the directive
-        // "compact_now is your only option" copy in the prompt — wasting the
-        // first post-compact turn. Codex flagged this as P1 #2.
+        // Bookkeeping reset `currentTokenCount = 0`, so re-observe to drop
+        // turnBand from critical → normal for this turn (P1 #2).
         turnBand = observeBand(currentTokenCount, "post_forced_fallback");
-      } else {
-        criticalNoopCounter++;
-        logger.warn("compact.forced_fallback.noop", {
-          sessionId: context.sessionId,
-          reason: fallback.reason,
-          consecutiveCount: criticalNoopCounter,
-        });
-        if (criticalNoopCounter >= COMPACT_MAX_CONSECUTIVE_NOOPS) {
-          const runtimeReason: RuntimeStopReason = "compact_unable_at_critical";
-          stopReason = runtimeReason;
-          if (context.missionRunId) {
-            await missionRunsRepo.updateStatus(
-              context.missionRunId,
-              "paused_error",
-              runtimeReason,
-            );
-          }
-          logger.error("compact.unable_at_critical", {
-            sessionId: context.sessionId,
-            consecutiveNoops: criticalNoopCounter,
-          });
-          // Phase 2 BUG-REPORTING emit (puzzle 03): the compact loop
-          // gave up at critical pressure. Stamp `runtime_status`,
-          // `stop_reason`, and the pressure band so support records
-          // distinguish this from regular failures.
-          {
-            const { getBugReportSink } = await import(
-              "../support/bug-report-registry.js"
-            );
-            const { emitBugReportSafe } = await import(
-              "../../../lib/diagnostics/bug-report-sink.js"
-            );
-            await emitBugReportSafe(
-              getBugReportSink(),
-              {
-                source: "agent",
-                category: "compact_unable_at_critical",
-                severity: "critical",
-                title: "turn-loop.compact_unable_at_critical",
-                description: `consecutive_noops=${criticalNoopCounter}`,
-                refs: {
-                  sessionId: context.sessionId,
-                  missionRunId: context.missionRunId ?? undefined,
-                },
-                agentContext: {
-                  stopReason: runtimeReason,
-                  runtimeStatus: "paused_error",
-                  contextPressureBand: "critical",
-                  contextPressureFraction: pressureFraction(
-                    currentTokenCount,
-                    loopConfig.contextLimit,
-                  ),
-                },
-              },
-              logger,
-            );
-          }
-          break;
-        }
-      }
+        criticalNoopCounter = criticalOutcome.nextCriticalNoopCounter;
+        break;
+      case "noop":
+        criticalNoopCounter = criticalOutcome.nextCriticalNoopCounter;
+        break;
+      case "escalated":
+        stopReason = criticalOutcome.stopReason;
+        break;
+    }
+    if (criticalOutcome.kind === "escalated") {
+      break;
     }
 
-    // ── Per-turn prompt-stack banner inputs ───────────────────
-    // `turnBand` reflects the post-fallback state when a committed compact
-    // just landed (currentTokenCount was reset to 0). Fraction is recomputed
-    // from the same source so banner + tool catalog + dispatch share one
-    // pressure reading per turn.
-    const turnFraction = pressureFraction(currentTokenCount, loopConfig.contextLimit);
-    const turnPromptOptions: PromptStackOptions = { ...promptOptions };
-    turnPromptOptions.contextPressureBanner = buildContextPressureBanner(turnBand, turnFraction);
+    // Per-turn prompt stack (banner + resume packet + tools).
+    const stack = await buildTurnPromptStack({
+      context,
+      turnBand,
+      currentTokenCount,
+      contextLimit: loopConfig.contextLimit,
+      postCompactBridgeRemaining,
+      basePromptOptions: promptOptions,
+      memoryRoutingPrompt: MEMORY_ROUTING_PROMPT,
+      defaultTools: tools,
+      buildToolsForBand: loopConfig.buildToolsForBand,
+    });
+    postCompactBridgeRemaining = stack.nextPostCompactBridgeRemaining;
 
-    if (postCompactBridgeRemaining > 0) {
-      try {
-        const freshSession = await sessionsRepo.getSession(context.sessionId);
-        const generation = freshSession?.checkpointGeneration ?? 0;
-        const packet = await buildResumePacket(context.sessionId, generation);
-        if (packet.length > 0) {
-          logger.info("compact.resume_packet.rendered", {
-            sessionId: context.sessionId,
-            generation,
-            packetLengthChars: packet.length,
-            bridgeRemainingBeforeDecrement: postCompactBridgeRemaining,
-          });
-          turnPromptOptions.resumePacket = packet;
-        }
-      } catch (err) {
-        logger.warn("turn.resume_packet.fetch_failed", {
-          sessionId: context.sessionId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      postCompactBridgeRemaining--;
-    }
-
-    // ── Tool projection per band ──────────────────────────────
-    // Shared visibility context for BOTH `buildToolsForBand` (the OpenAI
-    // tools array) AND `buildToolCatalogPrompt` (the system-prompt Tool
-    // Map). Constructing it once here is the single-source-of-truth
-    // guarantee — catalog and map cannot drift.
-    const turnVisibilityCtx: ToolVisibilityContext = {
-      permission: context.sessionPermission,
-      role: context.isSubagent ? "subagent" : "parent",
-      sessionKind: context.sessionKind,
-      missionRunActive: context.missionRunId !== null,
-      contextUsageBand: turnBand,
-    };
-    const turnTools = loopConfig.buildToolsForBand?.(turnBand) ?? tools;
-    turnPromptOptions.toolCatalogPrompt = buildToolCatalogPrompt(turnVisibilityCtx);
-    turnPromptOptions.memoryRoutingPrompt = MEMORY_ROUTING_PROMPT;
-
-    // Execute turn
+    // Execute turn (no save yet — deferred save lives in tool-batch helper).
     const turnResult = await executeTurn(
-      context, liveMessages, currentSummary, provider, config, turnTools, turnPromptOptions,
+      context, liveMessages, currentSummary, provider, config, stack.tools, stack.promptOptions,
     );
     currentTokenCount = turnResult.promptTokens;
     observeBand(currentTokenCount, "post_turn_text");
@@ -517,189 +255,55 @@ export async function runTurnLoop(
       break;
     }
 
-    // ── Handle tool calls ─────────────────────────────────────
-    // Deferred save: collect dispatched calls + results, then save the
-    // canonical batch prefix (only calls that actually entered dispatch).
     if (turnResult.toolCalls && turnResult.toolCalls.length > 0) {
-      const executedCalls: ParsedToolCall[] = [];
-      const executedResults: Array<{ toolCallId: string; toolName: string; output: string; success: boolean }> = [];
-      let batchStopReason: StopReason | null = null;
-      let batchStopOutput: string | null = null;
-      let batchStopPayload: { summary?: string; evidence?: Record<string, unknown> } | undefined;
-      let compactCommittedThisBatch = false;
-      const dispatchBand = computeBand(currentTokenCount, loopConfig.contextLimit);
-
-      for (let i = 0; i < turnResult.toolCalls.length; i++) {
-        const toolCall = turnResult.toolCalls[i];
-        totalToolCalls++;
-
-        const toolContext: InternalToolContext = {
-          sessionId: context.sessionId,
-          loadedDocuments: context.loadedDocuments,
-          sessionPermission: context.sessionPermission,
-          approved: false,
-          role: context.isSubagent ? "subagent" : "parent",
-          missionRunId: context.missionRunId,
-          missionId: context.missionId,
-          sessionKind: context.sessionKind,
-          contextUsageBand: dispatchBand,
-          sourceSurface: "vex_agent",
-          sourceSession: context.sessionId,
-        };
-
-        const result = await dispatchTool(
-          { name: toolCall.name, args: toolCall.arguments, toolCallId: toolCall.id },
-          toolContext,
-        );
-
-        // ── Approval break: call was dispatched but has no result in messages ──
-        // "awaiting approval" state lives in approval_queue, not in transcript.
-        if (result.pendingApproval) {
-          executedCalls.push(toolCall);
-
-          const approvalId = `approval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-          await approvalsRepo.enqueue(
-            approvalId,
-            { command: toolCall.name, args: toolCall.arguments },
-            result.output,
-            context.sessionId,
-            toolCall.id,
-            context.sessionPermission,
-          );
-          pendingApprovals.push(approvalId);
-          batchStopReason = "approval_required";
-
-          if (context.missionRunId) {
-            await missionRunsRepo.updateStatus(context.missionRunId, "paused_approval", "approval_required");
-          }
-          break; // remaining calls are NOT dispatched
-        }
-
-        // Track executed call + result
-        executedCalls.push(toolCall);
-        executedResults.push({ toolCallId: toolCall.id, toolName: toolCall.name, output: result.output, success: result.success });
-
-        // ── Engine signals: result tracked, then stop ──
-        if (result.engineSignal) {
-          const sig = result.engineSignal;
-          if (sig.type === "stop_mission" || sig.type === "complete_subagent") {
-            batchStopReason = sig.reason as StopReason;
-            batchStopOutput = result.output;
-            batchStopPayload = { summary: sig.summary, evidence: sig.evidence };
-            break; // remaining calls are NOT dispatched
-          }
-          if (sig.type === "wait_for_parent") {
-            batchStopReason = "waiting_for_parent";
-            batchStopOutput = result.output;
-            break; // remaining calls are NOT dispatched
-          }
-          if (sig.type === "defer_until") {
-            // `loop_defer` handler already persisted the pending wake row.
-            // Turn-loop parks the mission run in `paused_wake` and exits.
-            // Evidence carries dueAt + reason so PR-7 executor / PR-10 ingress
-            // have the hints they need without re-reading the wake row.
-            batchStopReason = "waiting_for_wake";
-            batchStopOutput = result.output;
-            batchStopPayload = {
-              summary: sig.summary,
-              evidence: {
-                dueAt: sig.dueAt ?? null,
-                reason: sig.reason,
-              },
-            };
-            break; // remaining calls are NOT dispatched
-          }
-          if (sig.type === "compact_committed") {
-            // Drain remaining tool calls in this batch with synthetic
-            // batch_aborted_by_compact results. The assistant message that
-            // gets persisted still carries the FULL emitted batch in its
-            // tool_calls JSONB so the provider's tool_call/tool_result
-            // pairing stays balanced after reload.
-            compactCommittedThisBatch = true;
-            for (let j = i + 1; j < turnResult.toolCalls.length; j++) {
-              const skipped = turnResult.toolCalls[j];
-              executedCalls.push(skipped);
-              executedResults.push({
-                toolCallId: skipped.id,
-                toolName: skipped.name,
-                output: BATCH_ABORTED_BY_COMPACT_OUTPUT,
-                success: false,
-              });
-            }
-            break; // remaining calls are NOT dispatched
-          }
-        }
-      }
-
-      // ── DEFERRED SAVE: assistant message with canonical calls only ──
-      await saveAssistantMessage(context.sessionId, turnResult.content, executedCalls);
-
-      liveMessages.push({
-        role: "assistant",
-        content: turnResult.content ?? "",
-        toolCalls: executedCalls.map(tc => ({ id: tc.id, command: tc.name, args: tc.arguments })),
-        timestamp: new Date().toISOString(),
+      const batchOutcome = await processTurnToolBatch({
+        context,
+        turnResult: { content: turnResult.content, toolCalls: turnResult.toolCalls },
+        liveMessages,
+        currentTokenCount,
+        contextLimit: loopConfig.contextLimit,
+        lastTextSoFar: lastText,
       });
+      totalToolCalls += batchOutcome.toolCallsExecuted;
+      lastText = batchOutcome.lastText;
 
-      // Save tool results (only for fully-executed, non-approval calls).
-      // Oversized outputs are externalised into tool_output_blobs (PR-11) —
-      // transcript gets a short stub with `metadata.payload.blob_key` so
-      // archive-aware checkpoint and resume paths can keep the pointer alive.
-      for (const { toolCallId, toolName, output, success } of executedResults) {
-        const persisted = await persistToolResultWithOverflow(
-          context.sessionId,
-          toolCallId,
-          toolName,
-          output,
-          success,
-        );
-
-        liveMessages.push({
-          role: "tool",
-          content: persisted.content,
-          toolCallId,
-          timestamp: new Date().toISOString(),
-          metadata: persisted.metadata,
+      if (batchOutcome.kind === "approval_break") {
+        pendingApprovals.push(batchOutcome.pendingApprovalId);
+        return {
+          text: lastText,
+          toolCallsMade: totalToolCalls,
+          pendingApprovals,
+          stopReason: "approval_required",
+        };
+      }
+      if (batchOutcome.kind === "waiting_for_wake") {
+        await applyWaitingForWakePostBatch({
+          sessionId: context.sessionId,
+          missionRunId: context.missionRunId ?? null,
+          currentTokenCount,
+          contextLimit: loopConfig.contextLimit,
+          handlePostCompactBookkeeping,
         });
+        stopReason = "waiting_for_wake";
+        return {
+          text: batchOutcome.text,
+          toolCallsMade: totalToolCalls,
+          pendingApprovals,
+          stopReason,
+          stopPayload: batchOutcome.stopPayload,
+        };
       }
-
-      // Update lastText from current turn (assistant may have content alongside toolCalls)
-      if (turnResult.content) {
-        lastText = turnResult.content;
+      if (batchOutcome.kind === "engine_stop") {
+        stopReason = batchOutcome.stopReason;
+        return {
+          text: batchOutcome.text,
+          toolCallsMade: totalToolCalls,
+          pendingApprovals,
+          stopReason,
+          stopPayload: batchOutcome.stopPayload,
+        };
       }
-
-      // Handle batch exit
-      if (batchStopReason === "approval_required") {
-        return { text: lastText, toolCallsMade: totalToolCalls, pendingApprovals, stopReason: batchStopReason };
-      }
-      if (batchStopReason === "waiting_for_wake") {
-        // Forced-compact-before-wait: ordering matters. The mission run stays
-        // in `running` until the fallback finishes — keeps a concurrent wake
-        // claim (status='paused_wake' lookup) or user preempt from racing the
-        // compact rewrite of the transcript. Best-effort: if the fallback
-        // commits we apply post-compact bookkeeping; if it noops we proceed
-        // to the wake flip with stale state (next resume will see critical
-        // and the loop will reevaluate).
-        const freshSession = await sessionsRepo.getSession(context.sessionId);
-        const tokenCountAtWait = freshSession?.tokenCount ?? currentTokenCount;
-        if (computeBand(tokenCountAtWait, loopConfig.contextLimit) === "critical") {
-          const fallback = await maybeRunForcedCompactFallback(context.sessionId);
-          if (fallback.kind === "committed") {
-            await handlePostCompactBookkeeping();
-          }
-        }
-        if (context.missionRunId) {
-          await missionRunsRepo.updateStatus(context.missionRunId, "paused_wake", "waiting_for_wake");
-        }
-        stopReason = batchStopReason;
-        return { text: batchStopOutput ?? lastText, toolCallsMade: totalToolCalls, pendingApprovals, stopReason, stopPayload: batchStopPayload };
-      }
-      if (batchStopReason) {
-        stopReason = batchStopReason;
-        return { text: batchStopOutput ?? lastText, toolCallsMade: totalToolCalls, pendingApprovals, stopReason, stopPayload: batchStopPayload };
-      }
-
-      if (compactCommittedThisBatch) {
+      if (batchOutcome.kind === "compact_committed") {
         await handlePostCompactBookkeeping();
         continue;
       }
@@ -709,41 +313,17 @@ export async function runTurnLoop(
       continue;
     }
 
-    // ── Handle text response ──────────────────────────────────
     if (turnResult.content) {
       lastText = turnResult.content;
-
-      // Deferred save: text-only assistant message
-      await saveAssistantMessage(context.sessionId, turnResult.content, null);
-
-      liveMessages.push({
-        role: "assistant",
+      const textOutcome = await handleTextResponse({
+        context,
+        liveMessages,
         content: turnResult.content,
-        timestamp: new Date().toISOString(),
+        mergeOperatorInstructions,
       });
-
-      // Active mission RUN: text does NOT end the loop — inject a continue
-      // marker so the next iteration has the protocol cue. Mission SETUP
-      // (`sessionKind=mission` but no missionRunId) ends on text like agent.
-      if (context.missionRunId) {
-        await mergeOperatorInstructions();
-
-        await appendEngineMessage(
-          context.sessionId,
-          "[Engine: continue — no stop condition met. Proceed with next action.]",
-          { source: "engine", messageType: "continue", visibility: "internal" },
-        );
-
-        liveMessages.push({
-          role: "system",
-          content: "[Engine: continue — no stop condition met. Proceed with next action.]",
-          timestamp: new Date().toISOString(),
-        });
-
+      if (textOutcome.kind === "mission_run_continue") {
         continue;
       }
-
-      // Chat and mission setup: text ends the loop cleanly.
       stoppedOnText = true;
       break;
     }
@@ -751,9 +331,7 @@ export async function runTurnLoop(
 
   // If the for-loop exhausted maxIterations without either an explicit stop OR
   // a natural text-break (agent/setup), surface it as `iteration_limit` so every
-  // transport can see why. Agent/setup that ended on text keep stopReason=null
-  // (that's the "model replied, we're done" signal). Mission-run never breaks
-  // on text; its runner treats this as a per-slice yield, not a business stop.
+  // transport can see why.
   if (!stopReason && !stoppedOnText) {
     stopReason = "iteration_limit";
   }

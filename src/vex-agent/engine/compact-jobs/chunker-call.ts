@@ -1,0 +1,130 @@
+/**
+ * Compact chunker LLM call (Track 2). Extracted from `executor.ts`
+ * for scaling — `callChunkerLLM` is a pure async function that owns
+ * its OpenRouter invocation + JSON parse + Zod validate. No
+ * dependency on the worker lifecycle or `claimLost` flag.
+ *
+ * The schema validation MUST happen here — returning `[]` on schema
+ * failure would let `markCompleted(0 chunks)` silently lose the job
+ * (codex flagged that as a permanent-loss bug). Throw instead so
+ * `processJob`'s catch leaves the outbox row in `pending` with a
+ * backoff for retry.
+ */
+
+import { z } from "zod";
+import type { CompactJob } from "../../db/repos/compact-jobs/index.js";
+import { TRACK2_TIMEOUT_MS } from "../../memory/policy.js";
+import logger from "@utils/logger.js";
+import {
+  renderRedactedArchivedTranscript,
+  type ArchivedPrefixRow,
+} from "./archived-prefix.js";
+
+export const ChunkerOutputSchema = z.object({
+  chunks: z.array(
+    z.object({
+      theme: z.string(),
+      entities: z.array(z.string()).optional().default([]),
+      protocols: z.array(z.string()).optional().default([]),
+      error_classes: z.array(z.string()).optional().default([]),
+      chains: z.array(z.string()).optional().default([]),
+      tasks: z.array(z.string()).optional().default([]),
+      happened_md: z.string().optional().default(""),
+      did_md: z.string().optional().default(""),
+      tried_md: z.string().optional().default(""),
+      outstanding_items: z.array(z.string()).optional().default([]),
+    }),
+  ),
+});
+
+export type ChunkerChunk = z.infer<typeof ChunkerOutputSchema>["chunks"][number];
+
+export interface ChunkerCallResult {
+  chunks: ChunkerChunk[];
+  transcriptRedactionCounts: { hard: number; mask: number };
+}
+
+export async function callChunkerLLM(
+  job: CompactJob,
+  archivedPrefix: ReadonlyArray<ArchivedPrefixRow>,
+): Promise<ChunkerCallResult> {
+  // Use the same env-driven OpenRouter constructor the in-turn
+  // provider uses. Worker calls it on-demand so settings changes
+  // after restart pick up the new model. If env is missing or the
+  // loader can't produce a config, we THROW (not silently return [])
+  // so `processJob`'s catch leaves the outbox row in `pending` with a
+  // backoff for retry. Returning an empty array here would let
+  // `markCompleted(0 chunks)` silently lose the job — codex flagged
+  // this as a permanent-loss bug.
+  if (!process.env.OPENROUTER_API_KEY || !process.env.AGENT_MODEL) {
+    logger.warn("compact-worker.provider_config_missing", { jobId: job.id });
+    throw new Error("compact_worker_provider_config_missing");
+  }
+  const { OpenRouterProvider } = await import("@vex-agent/inference/openrouter.js");
+  const provider = new OpenRouterProvider();
+  const config = await provider.loadConfig();
+  if (!config) {
+    logger.warn("compact-worker.provider_config_load_failed", { jobId: job.id });
+    throw new Error("compact_worker_provider_config_load_failed");
+  }
+
+  // Transcript-side scrubber: archived live messages may contain
+  // wallet identifiers, tx hashes, API tokens, or key material that
+  // pre-date the memory layer's output-side redaction. Re-scrub
+  // before the remote chunker provider sees the prompt; output-side
+  // redaction in `executor.ts` remains the DB + embedding guard.
+  const { transcript, redactionCounts } =
+    renderRedactedArchivedTranscript(archivedPrefix);
+
+  const systemPrompt = [
+    "You are a chunker for per-session agent memory. You receive a conversation prefix that was just archived.",
+    "Produce as many narrative chunks as the prefix warrants — typically 1-3, but emit more when distinct themes are present. There is no enforced upper cap; quality beats quantity, so do NOT pad.",
+    "Write all narrative fields (theme, happened_md, did_md, tried_md, outstanding_items, entities, protocols, error_classes, chains, tasks) in ENGLISH regardless of the conversation's language. Memory recall queries against this content are English-by-contract.",
+    "EXCLUDE live state: balances, prices, gas, intent IDs, transaction hashes, position values. These are queryable live and would just become stale.",
+    "INCLUDE: decisions and rationale, observed patterns, lessons learned, user signals, mission state.",
+    "Output strict JSON: { chunks: [ { theme, entities[], protocols[], error_classes[], chains[], tasks[], happened_md, did_md, tried_md, outstanding_items[] } ] }",
+    "Theme: 3-8 lowercase underscore-separated tokens, specific (e.g. 'kyber_quote_timeout_pattern' NOT 'debug').",
+    "If nothing worth chunking, return { chunks: [] }.",
+  ].join(" ");
+  const userPrompt = [
+    `Agent's own summary of the conversation:\n${job.agentSummary}`,
+    job.preserveMd ? `Preserve hints:\n${job.preserveMd}` : "",
+    job.threadThemesHints.length > 0
+      ? `Theme hints (advisory, validate before using):\n${job.threadThemesHints.join("\n")}`
+      : "",
+    `Archived conversation prefix (session=${job.sessionId}, generation=${job.checkpointGeneration}):\n${transcript}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const response = await Promise.race([
+    provider.chatCompletionSimple(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      config,
+    ),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("chunker_timeout")), TRACK2_TIMEOUT_MS),
+    ),
+  ]);
+
+  const text = response.content?.trim() ?? "";
+  const jsonStart = text.indexOf("{");
+  const jsonEnd = text.lastIndexOf("}");
+  if (jsonStart < 0 || jsonEnd < jsonStart) {
+    throw new Error(
+      `chunker_malformed_json: missing braces in response (len=${text.length})`,
+    );
+  }
+  const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+  const validated = ChunkerOutputSchema.safeParse(parsed);
+  if (!validated.success) {
+    throw new Error(`chunker_schema_invalid: ${validated.error.message}`);
+  }
+  return {
+    chunks: validated.data.chunks,
+    transcriptRedactionCounts: redactionCounts,
+  };
+}
