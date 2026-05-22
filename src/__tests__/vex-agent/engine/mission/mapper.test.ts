@@ -10,7 +10,7 @@ function makeMission(overrides: Partial<Mission> = {}): Mission {
     status: "ready",
     title: "SOL DCA",
     goal: "Accumulate 10 SOL over 7 days",
-    constraintsJson: { deadline: "2026-04-04", stopConditionsAccepted: true },
+    constraintsJson: { deadline: "2026-04-04" },
     successCriteriaJson: ["Accumulated 10 SOL"],
     stopConditionsJson: ["capital_depleted", "deadline_reached"],
     riskProfile: "conservative",
@@ -21,6 +21,13 @@ function makeMission(overrides: Partial<Mission> = {}): Mission {
     createdAt: "2026-03-28T10:00:00Z",
     updatedAt: "2026-03-28T10:00:00Z",
     approvedAt: "2026-03-28T10:05:00Z",
+    // Puzzle 04 acceptance + lineage columns (mig 023). Defaults to
+    // unaccepted; tests opt in by overriding when needed.
+    acceptedContractHash: null,
+    acceptedContractAt: null,
+    acceptedContractBy: null,
+    contractHashVersion: null,
+    renewedFromMissionId: null,
     ...overrides,
   };
 }
@@ -39,7 +46,6 @@ describe("mission mapper", () => {
       expect(draft.riskProfile).toBe("conservative");
       expect(draft.successCriteria).toEqual(["Accumulated 10 SOL"]);
       expect(draft.stopConditions).toEqual(["capital_depleted", "deadline_reached"]);
-      expect(draft.stopConditionsAccepted).toBe(true);
       expect(draft.deadline).toBe("2026-04-04");
     });
 
@@ -55,8 +61,20 @@ describe("mission mapper", () => {
       expect(draft.capitalSource).toBeNull();
       expect(draft.startingCapital).toBeNull();
       expect(draft.allowedChains).toBeNull();
-      expect(draft.stopConditionsAccepted).toBeNull();
       expect(draft.deadline).toBeNull();
+    });
+
+    it("ignores legacy constraints_json.stopConditionsAccepted on old rows (puzzle 04)", () => {
+      // Mission rows written before puzzle 04 may carry a leftover
+      // `stopConditionsAccepted: true` inside constraints_json. The
+      // mapper must NOT surface it onto MissionDraft anymore — the
+      // field is gone and acceptance reads come from
+      // `missions.accepted_contract_hash`.
+      const draft = missionToDraft(makeMission({
+        constraintsJson: { stopConditionsAccepted: true, deadline: "2026-04-04" },
+      }));
+      expect(draft.deadline).toBe("2026-04-04");
+      expect("stopConditionsAccepted" in draft).toBe(false);
     });
   });
 
@@ -89,9 +107,19 @@ describe("mission mapper", () => {
       expect(row.constraints_json).toEqual({ deadline: "2026-04-04" });
     });
 
-    it("converts stop condition acceptance to constraints_json", () => {
-      const row = domainToRow({ stopConditionsAccepted: true });
-      expect(row.constraints_json).toEqual({ stopConditionsAccepted: true });
+    it("does NOT write a stopConditionsAccepted key (puzzle 04 security regression)", () => {
+      // Even if a stray boolean reaches domainToRow via legacy code,
+      // the row mapper must never emit a `stopConditionsAccepted` JSONB
+      // field — acceptance lives on `missions.accepted_contract_hash`,
+      // not in constraints_json. This pins the boundary against drift.
+      const row = domainToRow({
+        deadline: "2026-04-04",
+        // @ts-expect-error — the field no longer exists on MissionDraft.
+        stopConditionsAccepted: true,
+      });
+      expect(row.constraints_json).toEqual({ deadline: "2026-04-04" });
+      const constraints = row.constraints_json as Record<string, unknown>;
+      expect("stopConditionsAccepted" in constraints).toBe(false);
     });
 
     it("converts null arrays to empty arrays", () => {

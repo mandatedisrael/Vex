@@ -21,6 +21,14 @@ function makeMission(overrides: Partial<Mission> = {}): Mission {
     createdAt: "2026-03-28T10:00:00Z",
     updatedAt: "2026-03-28T10:00:00Z",
     approvedAt: null,
+    // Puzzle 04: acceptance/lineage columns default to NULL. The
+    // validator must NOT read these — completeness is decoupled from
+    // acceptance.
+    acceptedContractHash: null,
+    acceptedContractAt: null,
+    acceptedContractBy: null,
+    contractHashVersion: null,
+    renewedFromMissionId: null,
     ...overrides,
   };
 }
@@ -36,7 +44,6 @@ function makeCompleteMission(): Mission {
     riskProfile: "conservative",
     successCriteriaJson: ["Accumulated 10 SOL"],
     stopConditionsJson: ["capital_depleted", "deadline_reached"],
-    constraintsJson: { stopConditionsAccepted: true },
   });
 }
 
@@ -104,21 +111,30 @@ describe("mission validator", () => {
       expect(missing).toContain("stopConditions");
     });
 
-    it("requires user-accepted stop conditions for draft readiness", () => {
+    it("treats stopConditions as present when the list is non-empty, regardless of acceptance (puzzle 04)", () => {
+      // Puzzle 04 decouples draft completeness from acceptance. As long
+      // as the user-provided stop conditions list is non-empty, the
+      // draft considers `stopConditions` present. Acceptance is a
+      // separate gate enforced by `startMission` (phase 4), not by the
+      // validator. The mission's `acceptedContractHash` stays NULL here
+      // and the field is still classified as not-missing.
       const missing = getMissingFields(makeMission({
         ...makeCompleteMission(),
-        constraintsJson: {},
+        acceptedContractHash: null,
       }));
-      expect(missing).toContain("stopConditions");
+      expect(missing).not.toContain("stopConditions");
     });
 
-    it("requires explicit stop condition acceptance even after a status transition", () => {
+    it("ignores legacy constraints_json.stopConditionsAccepted on old rows (puzzle 04)", () => {
+      // A pre-puzzle-04 mission row may still carry
+      // `stopConditionsAccepted: true` inside constraints_json. The
+      // validator must NOT consult that legacy boolean — the field's
+      // value cannot toggle draft readiness.
       const missing = getMissingFields(makeMission({
         ...makeCompleteMission(),
-        status: "ready",
-        constraintsJson: {},
+        constraintsJson: { stopConditionsAccepted: true },
       }));
-      expect(missing).toContain("stopConditions");
+      expect(missing).toHaveLength(0);
     });
 
     it("treats empty capitalSourceJson as missing capitalSource", () => {

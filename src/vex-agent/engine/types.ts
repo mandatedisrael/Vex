@@ -189,8 +189,6 @@ export interface MissionDraft {
   riskProfile: string | null;
   successCriteria: string[] | null;
   stopConditions: string[] | null;
-  /** True only after the user directly provides or accepts stop conditions. */
-  stopConditionsAccepted?: boolean | null;
   /** Optional — mission may have no deadline. */
   deadline: string | null;
 }

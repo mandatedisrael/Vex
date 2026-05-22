@@ -194,6 +194,13 @@ function makeMission(overrides = {}) {
     createdAt: "2026-03-29",
     updatedAt: "2026-03-29",
     approvedAt: null,
+    // Puzzle 04: acceptance + lineage columns (mig 023). Default to
+    // unaccepted — `makeReadyMission` opts in by writing the hash.
+    acceptedContractHash: null,
+    acceptedContractAt: null,
+    acceptedContractBy: null,
+    contractHashVersion: null,
+    renewedFromMissionId: null,
     ...overrides,
   };
 }
@@ -210,7 +217,13 @@ function makeReadyMission(overrides = {}) {
     riskProfile: "conservative",
     successCriteriaJson: ["Accumulated 10 SOL"],
     stopConditionsJson: ["capital_depleted"],
-    constraintsJson: { stopConditionsAccepted: true },
+    constraintsJson: {},
+    // Host-only acceptance via `mission.acceptContract` (mig 023) —
+    // a non-null hash signals the user committed to the contract.
+    acceptedContractHash: "0".repeat(64),
+    acceptedContractAt: "2026-03-29T00:00:00.000Z",
+    acceptedContractBy: "host",
+    contractHashVersion: 1,
     ...overrides,
   });
 }

@@ -29,7 +29,7 @@ export function buildMissionSetupPrompt(
   lines.push("## Rules");
   lines.push("- Do not do broad market research during setup; research belongs after mission start unless the user explicitly asks for preflight research");
   lines.push("- Use read-only tools only when they directly help fill, verify, or explain a draft field, or when a quick tool-orientation check is needed");
-  lines.push("- If the user gives a concrete mission idea such as \"hunt Solana meme tokens with $6\", treat it as draft input: save explicit fields, then ask for missing required fields or user acceptance of proposed stop conditions");
+  lines.push("- If the user gives a concrete mission idea such as \"hunt Solana meme tokens with $6\", treat it as draft input: save explicit fields, then ask for missing required fields or ask the user to confirm/refine the proposed stop-condition list");
   lines.push("- Do not turn a partial mission idea into a token/market research session before the draft is ready");
   lines.push("- Do NOT execute any mutating tools (swaps, bridges, transfers) during setup");
   lines.push("- When the user provides mission information, call `mission_draft_update` to save it into the mission draft");
@@ -40,9 +40,8 @@ export function buildMissionSetupPrompt(
   lines.push("- Only tell the user to run `/mission start` or `/mission continue` when the most recent `mission_draft_update` result returned ready=true");
   lines.push("- If `mission_draft_update` returns ready=false, show its missingFields and ask for exactly those fields; do not say the mission is ready");
   lines.push("- Never use `undefined` as a mission field value. Omit fields that are unchanged; for required fields that are not applicable, save an explicit `not applicable: ...` reason");
-  lines.push("- Stop conditions are user-owned contract terms: they are permissions to end the mission without success. You may propose them, but they are not final until the user directly provides or explicitly accepts the exact list");
-  lines.push("- Do not save stopConditionsAccepted=true unless the user provided the stop conditions or accepted your proposed list (for example: yes, looks good, use your defaults, everything is up to you)");
-  lines.push("- If you update stopConditions without stopConditionsAccepted=true, the draft remains not ready. Ask the user to confirm or revise the stop conditions");
+  lines.push("- Stop conditions are user-owned contract terms: they are permissions to end the mission without success. You may propose them, and the user may provide or refine the list in chat, but final acceptance happens only via the host Accept contract step");
+  lines.push("- You cannot accept stop conditions on the user's behalf. Acceptance is a separate host-only step: after the draft is ready, the app surfaces the contract and the user clicks `Accept contract` to commit. The draft can be ready without acceptance — never claim a mission is accepted, only that the draft is ready");
   lines.push("");
 
   lines.push("## Required Fields");
@@ -55,16 +54,16 @@ export function buildMissionSetupPrompt(
   lines.push("- **allowedProtocols** — which protocols to use");
   lines.push("- **riskProfile** — conservative, moderate, or aggressive");
   lines.push("- **successCriteria** — how to know the mission succeeded");
-  lines.push("- **stopConditions** — user-approved non-success stops. Prefer canonical reasons: deadline_reached, capital_depleted, max_loss_hit, no_viable_opportunity");
+  lines.push("- **stopConditions** — proposed/user-owned non-success stop conditions. Final acceptance happens via the host Accept contract step (mission.acceptContract), not by chat agreement. Prefer canonical reasons: deadline_reached, capital_depleted, max_loss_hit, no_viable_opportunity");
   lines.push("- **deadline** (optional) — time limit for the mission");
   lines.push("");
   lines.push("## Stop Condition Semantics");
   lines.push("- goal_reached is not a stopCondition; it is success and is covered by successCriteria");
-  lines.push("- stopConditions are non-success terminal permissions. If a condition is not accepted here, the mission runner must not stop for that reason later");
-  lines.push("- deadline_reached means the user agreed the mission may stop when the time limit is hit");
+  lines.push("- stopConditions are non-success terminal permissions. The runner only allows them after the user clicks Accept contract on the host. Until then, the list is a proposal");
+  lines.push("- deadline_reached means the mission may stop when the time limit is hit (subject to host contract acceptance)");
   lines.push("- capital_depleted means usable mission capital is exhausted");
   lines.push("- max_loss_hit means a user-defined loss/drawdown boundary is hit");
-  lines.push("- no_viable_opportunity means the mission may stop without reaching the goal because the agreed opportunity criteria are absent; explain this risk before asking for acceptance");
+  lines.push("- no_viable_opportunity means the mission may stop without reaching the goal because the agreed opportunity criteria are absent; explain this risk in chat so the user understands what they're committing to when they accept the contract");
   lines.push("- emergency_stop is runtime-only and must not be added to stopConditions");
   lines.push("");
 

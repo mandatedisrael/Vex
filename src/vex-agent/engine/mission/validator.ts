@@ -3,11 +3,18 @@
  *
  * Repo is pure CRUD. This module decides if a draft has all required
  * fields to transition from draft → ready. No DB access.
+ *
+ * Puzzle 04: completeness is now decoupled from acceptance. A draft is
+ * `ready` once every required field has a non-empty value. Acceptance
+ * (host-only `mission.acceptContract` → `missions.accepted_contract_hash`,
+ * mig 023) is enforced by `startMission` as a separate gate, not by
+ * draft validation. This lets the UI show the contract diff +
+ * "Accept contract" button BEFORE acceptance is granted, instead of
+ * pretending the draft is still incomplete.
  */
 
 import type { Mission } from "@vex-agent/db/repos/missions.js";
 import { MISSION_DRAFT_REQUIRED_FIELDS } from "../types.js";
-import { areStopConditionsAcceptedByUser } from "./stop-contract.js";
 
 // ── Field mapping: domain field → DB column accessor ────────────
 
@@ -29,11 +36,7 @@ const FIELD_ACCESSORS: Record<string, FieldAccessor> = {
   allowedProtocols: m => m.allowedProtocols.length > 0 ? m.allowedProtocols : null,
   riskProfile: m => m.riskProfile,
   successCriteria: m => m.successCriteriaJson.length > 0 ? m.successCriteriaJson : null,
-  stopConditions: m => (
-    m.stopConditionsJson.length > 0 && areStopConditionsAcceptedByUser(m)
-      ? m.stopConditionsJson
-      : null
-  ),
+  stopConditions: m => m.stopConditionsJson.length > 0 ? m.stopConditionsJson : null,
 };
 
 // ── Public API ──────────────────────────────────────────────────

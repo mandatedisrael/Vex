@@ -78,13 +78,13 @@ export async function applyMissionPatch(
   const mission = await missionsRepo.getMission(missionId);
   if (!mission) throw new Error(`Mission ${missionId} not found`);
 
-  // Parse + sanitize (safe boundary)
+  // Parse + sanitize (safe boundary).
+  // Puzzle 04: model can no longer set `stopConditionsAccepted` — patch
+  // parser drops it. Acceptance is host-only via `mission.acceptContract`
+  // and lives on `missions.accepted_contract_hash` (mig 023).
   const extracted = extractMissionPatch(rawModelOutput);
   if (extracted) {
     const sanitized = sanitizePatch(extracted);
-    if (sanitized.stopConditions !== undefined && sanitized.stopConditionsAccepted !== true) {
-      sanitized.stopConditionsAccepted = false;
-    }
     if (Object.keys(sanitized).length > 0) {
       const rowPatch = domainToRow(sanitized);
 

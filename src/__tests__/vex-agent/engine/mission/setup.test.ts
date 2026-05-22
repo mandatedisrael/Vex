@@ -42,6 +42,13 @@ function makeMission(overrides = {}) {
     createdAt: "2026-03-29T10:00:00Z",
     updatedAt: "2026-03-29T10:00:00Z",
     approvedAt: null,
+    // Puzzle 04 acceptance + lineage columns (mig 023) default to NULL —
+    // i.e. unaccepted. Draft completeness is decoupled from acceptance.
+    acceptedContractHash: null,
+    acceptedContractAt: null,
+    acceptedContractBy: null,
+    contractHashVersion: null,
+    renewedFromMissionId: null,
     ...overrides,
   };
 }
@@ -108,7 +115,12 @@ describe("mission setup", () => {
       expect(result.ready).toBe(false);
     });
 
-    it("transitions to ready when all fields populated", async () => {
+    it("transitions to ready when all fields populated (puzzle 04: no acceptance needed)", async () => {
+      // Puzzle 04: draft readiness is independent of host acceptance.
+      // The mission row carries `acceptedContractHash: null` (unaccepted)
+      // but the draft still transitions to `ready` once every required
+      // field is non-empty. The acceptance gate is enforced separately
+      // by `startMission` (phase 4).
       const completeMission = makeMission({
         title: "SOL DCA",
         goal: "Accumulate 10 SOL",
@@ -119,7 +131,6 @@ describe("mission setup", () => {
         riskProfile: "conservative",
         successCriteriaJson: ["Accumulated 10 SOL"],
         stopConditionsJson: ["capital_depleted"],
-        constraintsJson: { stopConditionsAccepted: true },
       });
 
       mockGetMission.mockResolvedValueOnce(makeMission({
@@ -133,7 +144,6 @@ describe("mission setup", () => {
 
       const result = await applyMissionPatch("mission-1", {
         stopConditions: ["capital_depleted"],
-        stopConditionsAccepted: true,
       });
 
       expect(result.ready).toBe(true);
@@ -142,8 +152,13 @@ describe("mission setup", () => {
       expect(mockSetStatus).toHaveBeenCalledWith("mission-1", "ready");
     });
 
-    it("does not transition to ready when stop conditions are not user accepted", async () => {
-      const completeButUnacceptedMission = makeMission({
+    it("drops model-supplied stopConditionsAccepted (puzzle 04 security regression)", async () => {
+      // Even if a hostile model emits `stopConditionsAccepted: true` in
+      // its tool args, the patch parser must drop the key, and the row
+      // mapper must never propagate it into `constraints_json`. The
+      // mission row stays unaccepted; draft readiness is unaffected
+      // (decoupled from acceptance per puzzle 04).
+      const populatedMission = makeMission({
         title: "SOL DCA",
         goal: "Accumulate 10 SOL",
         capitalSourceJson: { type: "wallet", amount: "500 USDC" },
@@ -153,28 +168,22 @@ describe("mission setup", () => {
         riskProfile: "conservative",
         successCriteriaJson: ["Accumulated 10 SOL"],
         stopConditionsJson: ["capital_depleted"],
-        constraintsJson: { stopConditionsAccepted: false },
+        constraintsJson: { deadline: null },
       });
+      mockGetMission.mockResolvedValueOnce(populatedMission);
+      mockGetMission.mockResolvedValueOnce(populatedMission);
 
-      mockGetMission.mockResolvedValueOnce(makeMission({
-        ...completeButUnacceptedMission,
-        stopConditionsJson: [],
-        constraintsJson: {},
-      }));
-      mockGetMission.mockResolvedValueOnce(completeButUnacceptedMission);
-
-      const result = await applyMissionPatch("mission-1", {
+      await applyMissionPatch("mission-1", {
         stopConditions: ["capital_depleted"],
+        stopConditionsAccepted: true,
       });
 
-      expect(result.ready).toBe(false);
-      expect(result.status).toBe("draft");
-      expect(result.missingFields).toContain("stopConditions");
-      expect(mockUpdateDraft).toHaveBeenCalledWith("mission-1", expect.objectContaining({
-        stop_conditions_json: ["capital_depleted"],
-        constraints_json: { stopConditionsAccepted: false },
-      }));
-      expect(mockSetStatus).not.toHaveBeenCalledWith("mission-1", "ready");
+      // Only stop_conditions_json should be set — no acceptance write.
+      const updateCalls = mockUpdateDraft.mock.calls;
+      expect(updateCalls.length).toBeGreaterThan(0);
+      const lastPatch = updateCalls[updateCalls.length - 1]![1] as Record<string, unknown>;
+      const constraints = (lastPatch.constraints_json ?? {}) as Record<string, unknown>;
+      expect("stopConditionsAccepted" in constraints).toBe(false);
     });
 
     it("does not re-transition if already ready", async () => {
@@ -189,7 +198,6 @@ describe("mission setup", () => {
         riskProfile: "conservative",
         successCriteriaJson: ["Accumulated 10 SOL"],
         stopConditionsJson: ["capital_depleted"],
-        constraintsJson: { stopConditionsAccepted: true },
       });
 
       mockGetMission.mockResolvedValueOnce(readyMission);
@@ -211,7 +219,6 @@ describe("mission setup", () => {
         riskProfile: "conservative",
         successCriteriaJson: ["Accumulated 10 SOL"],
         stopConditionsJson: ["capital_depleted"],
-        constraintsJson: { stopConditionsAccepted: true },
       });
       mockGetMission.mockResolvedValueOnce(readyMission);
       mockGetMission.mockResolvedValueOnce(makeMission({

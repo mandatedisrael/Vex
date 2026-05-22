@@ -151,10 +151,18 @@ function makeReadyMission() {
     riskProfile: "aggressive",
     successCriteriaJson: ["Portfolio reaches 16 USD"],
     stopConditionsJson: ["deadline_reached"],
-    constraintsJson: { stopConditionsAccepted: true },
+    constraintsJson: {},
     createdAt: "2026-05-04T00:00:00.000Z",
     updatedAt: "2026-05-04T00:00:00.000Z",
     approvedAt: null,
+    // Puzzle 04: host-only acceptance. The mission has been accepted
+    // via `mission.acceptContract` (mig 023) — non-null hash is the
+    // sole signal `areStopConditionsAcceptedByUser` reads now.
+    acceptedContractHash: "0".repeat(64),
+    acceptedContractAt: "2026-05-04T00:00:00.000Z",
+    acceptedContractBy: "host",
+    contractHashVersion: 1,
+    renewedFromMissionId: null,
   };
 }
 

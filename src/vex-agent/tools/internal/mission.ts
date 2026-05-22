@@ -37,7 +37,6 @@ const MissionDraftUpdateArgs = z
     riskProfile: z.string().trim().min(1).max(MAX_STRING_LENGTH).nullable().optional(),
     successCriteria: z.array(z.string().trim().min(1).max(MAX_ARRAY_ITEM_LENGTH)).max(MAX_ARRAY_ITEMS).nullable().optional(),
     stopConditions: z.array(z.string().trim().min(1).max(MAX_ARRAY_ITEM_LENGTH)).max(MAX_ARRAY_ITEMS).nullable().optional(),
-    stopConditionsAccepted: z.boolean().nullable().optional(),
     deadline: z.string().trim().min(1).max(MAX_STRING_LENGTH).nullable().optional(),
   })
   .strict()

@@ -45,7 +45,9 @@ beforeEach(() => {
       "max_loss_hit",
       "no_viable_opportunity",
     ],
-    constraintsJson: { stopConditionsAccepted: true },
+    // Puzzle 04: acceptance reads `acceptedContractHash !== null`.
+    // Hash content is opaque to the authorizer.
+    acceptedContractHash: "0".repeat(64),
   });
 });
 
@@ -76,12 +78,16 @@ describe("mission_draft_update tool", () => {
   });
 
   it("passes stop condition updates through the setup boundary", async () => {
+    // Puzzle 04: draft can be `ready` once the list is non-empty —
+    // acceptance is a separate host gate (mission.acceptContract → mig
+    // 023 `accepted_contract_hash`). The setup boundary surfaces the
+    // current draft as-is; no model-facing acceptance flag is exposed.
     mockApplyMissionPatch.mockResolvedValueOnce({
       missionId: "mission-1",
-      status: "draft",
-      currentDraft: { stopConditions: ["capital_depleted"], stopConditionsAccepted: false },
-      missingFields: ["stopConditions"],
-      ready: false,
+      status: "ready",
+      currentDraft: { stopConditions: ["capital_depleted"] },
+      missingFields: [],
+      ready: true,
     });
 
     const result = await handleMissionDraftUpdate(
@@ -191,7 +197,7 @@ describe("mission_stop tool", () => {
       id: "mission-1",
       status: "running",
       stopConditionsJson: ["deadline_reached"],
-      constraintsJson: { stopConditionsAccepted: true },
+      acceptedContractHash: "0".repeat(64),
     });
 
     const result = await handleMissionStop(

@@ -146,7 +146,6 @@ describe("patch-parser", () => {
         allowedProtocols: ["solana"],
         successCriteria: ["Accumulated 10 SOL"],
         stopConditions: ["capital_depleted", "deadline_reached"],
-        stopConditionsAccepted: true,
         deadline: "2026-04-04",
       });
 
@@ -160,8 +159,29 @@ describe("patch-parser", () => {
       expect(result.allowedProtocols).toEqual(["solana"]);
       expect(result.successCriteria).toEqual(["Accumulated 10 SOL"]);
       expect(result.stopConditions).toEqual(["capital_depleted", "deadline_reached"]);
-      expect(result.stopConditionsAccepted).toBe(true);
       expect(result.deadline).toBe("2026-04-04");
+    });
+
+    it("drops stopConditionsAccepted from model output (puzzle 04 security regression)", () => {
+      // The model surface no longer exposes `stopConditionsAccepted`.
+      // Even if the model emits the key in its JSON output (prose or
+      // tool args), the parser must drop it at the boundary. Acceptance
+      // is host-only via `mission.acceptContract` IPC → mig 023.
+      const extracted = extractMissionPatch({
+        title: "SOL DCA",
+        stopConditions: ["capital_depleted"],
+        stopConditionsAccepted: true,
+      });
+      expect(extracted).not.toBeNull();
+      expect("stopConditionsAccepted" in (extracted ?? {})).toBe(false);
+
+      const sanitized = sanitizePatch({
+        title: "SOL DCA",
+        stopConditions: ["capital_depleted"],
+        // @ts-expect-error — field no longer exists on MissionPatch.
+        stopConditionsAccepted: true,
+      });
+      expect("stopConditionsAccepted" in sanitized).toBe(false);
     });
   });
 

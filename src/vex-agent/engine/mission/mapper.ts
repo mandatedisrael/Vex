@@ -25,9 +25,6 @@ export function missionToDraft(m: Mission): MissionDraft {
     riskProfile: m.riskProfile,
     successCriteria: m.successCriteriaJson.length > 0 ? m.successCriteriaJson : null,
     stopConditions: m.stopConditionsJson.length > 0 ? m.stopConditionsJson : null,
-    stopConditionsAccepted: typeof constraints.stopConditionsAccepted === "boolean"
-      ? constraints.stopConditionsAccepted
-      : null,
     deadline: constraints?.deadline as string ?? null,
   };
 }
@@ -53,14 +50,12 @@ export function domainToRow(draft: Partial<MissionDraft>): MissionDraftRow {
     };
   }
 
-  // setup metadata → constraints_json
-  if (draft.deadline !== undefined || draft.stopConditionsAccepted !== undefined) {
-    row.constraints_json = {
-      ...(draft.deadline !== undefined ? { deadline: draft.deadline } : {}),
-      ...(draft.stopConditionsAccepted !== undefined
-        ? { stopConditionsAccepted: draft.stopConditionsAccepted === true }
-        : {}),
-    };
+  // setup metadata → constraints_json. Puzzle 04 dropped
+  // `stopConditionsAccepted` — acceptance lives on
+  // `missions.accepted_contract_hash` (mig 023) and is written by the
+  // host-only acceptance path, never by the model/draft update flow.
+  if (draft.deadline !== undefined) {
+    row.constraints_json = { deadline: draft.deadline };
   }
 
   return row;

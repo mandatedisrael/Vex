@@ -125,10 +125,11 @@ describe("engine types", () => {
         riskProfile: null,
         successCriteria: null,
         stopConditions: null,
-        stopConditionsAccepted: null,
         deadline: null,
       };
-      expect(Object.keys(draft)).toHaveLength(12);
+      // Puzzle 04 removed `stopConditionsAccepted` from MissionDraft —
+      // acceptance is host-only via `missions.accepted_contract_hash`.
+      expect(Object.keys(draft)).toHaveLength(11);
     });
 
     it("accepts populated values", () => {
@@ -143,7 +144,6 @@ describe("engine types", () => {
         riskProfile: "conservative",
         successCriteria: ["Accumulated 10 SOL"],
         stopConditions: ["capital_depleted", "deadline_reached"],
-        stopConditionsAccepted: true,
         deadline: "2026-04-04",
       };
       expect(draft.title).toBe("SOL DCA Strategy");

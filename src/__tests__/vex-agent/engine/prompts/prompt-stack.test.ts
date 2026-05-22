@@ -240,7 +240,11 @@ describe("prompt-stack", () => {
       expect(joined).toContain("Still Missing");
       expect(joined).toContain("capitalSource");
       expect(joined).toContain("Stop conditions are user-owned contract terms");
-      expect(joined).toContain("stopConditionsAccepted=true");
+      // Puzzle 04: prompt no longer instructs the model about
+      // `stopConditionsAccepted=true` — acceptance is host-only. The
+      // mission-setup prompt instead points the model at the host
+      // `Accept contract` step.
+      expect(joined).toContain("Acceptance is a separate host-only step");
     });
 
     it("mission run with context shows mission contract", () => {

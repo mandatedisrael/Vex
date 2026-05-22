@@ -26,9 +26,21 @@ function makeMission(overrides: Partial<Mission> = {}): Mission {
     createdAt: "2026-05-02T00:00:00Z",
     updatedAt: "2026-05-02T00:00:00Z",
     approvedAt: null,
+    // Puzzle 04: acceptance authority moved to dedicated columns.
+    acceptedContractHash: null,
+    acceptedContractAt: null,
+    acceptedContractBy: null,
+    contractHashVersion: null,
+    renewedFromMissionId: null,
     ...overrides,
   };
 }
+
+// Puzzle 04: `areStopConditionsAcceptedByUser` now reads
+// `mission.acceptedContractHash !== null` instead of the legacy
+// `constraints_json.stopConditionsAccepted` boolean. Hash content does
+// not matter for the test — only its non-nullness signals acceptance.
+const ACCEPTED_HASH = "0".repeat(64);
 
 describe("mission stop contract", () => {
   it("normalizes canonical and natural-language stop conditions", () => {
@@ -39,7 +51,7 @@ describe("mission stop contract", () => {
     expect(normalizeStopConditionReason("no pumps after 24h inactivity")).toBe("no_viable_opportunity");
   });
 
-  it("requires explicit acceptance for draft stop conditions", () => {
+  it("requires explicit host acceptance (acceptedContractHash) for stop conditions", () => {
     const mission = makeMission({
       stopConditionsJson: ["capital_depleted"],
     });
@@ -48,9 +60,9 @@ describe("mission stop contract", () => {
     expect(acceptedStopReasonsForMission(mission)).toEqual([]);
   });
 
-  it("returns accepted canonical reasons after user acceptance", () => {
+  it("returns accepted canonical reasons after host acceptance writes the hash", () => {
     const mission = makeMission({
-      constraintsJson: { stopConditionsAccepted: true },
+      acceptedContractHash: ACCEPTED_HASH,
       stopConditionsJson: ["capital_depleted", "no pumps after 24h inactivity"],
     });
 
@@ -60,9 +72,12 @@ describe("mission stop contract", () => {
     ]);
   });
 
-  it("does not infer acceptance from non-draft status", () => {
+  it("ignores legacy constraints_json.stopConditionsAccepted boolean (puzzle 04)", () => {
+    // A pre-puzzle-04 mission row carrying `stopConditionsAccepted=true`
+    // inside constraints_json must NOT be treated as accepted. Only the
+    // `acceptedContractHash` column counts.
     const mission = makeMission({
-      status: "ready",
+      constraintsJson: { stopConditionsAccepted: true },
       stopConditionsJson: ["max_loss_hit"],
     });
 
@@ -79,7 +94,7 @@ describe("mission stop contract", () => {
 
   it("rejects unaccepted stop reasons", () => {
     const mission = makeMission({
-      constraintsJson: { stopConditionsAccepted: true },
+      acceptedContractHash: ACCEPTED_HASH,
       stopConditionsJson: ["deadline_reached"],
     });
 

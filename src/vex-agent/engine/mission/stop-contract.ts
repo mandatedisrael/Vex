@@ -42,14 +42,22 @@ export function isUserConfigurableStopReason(reason: string): reason is UserConf
   return (USER_CONFIGURABLE_STOP_REASONS as readonly string[]).includes(reason);
 }
 
+/**
+ * Acceptance authority moved to `missions.accepted_contract_hash` in
+ * puzzle 04 (mig 023). A non-null hash means the host (renderer
+ * `Accept contract` button → `mission.acceptContract` IPC) committed
+ * acceptance of the current contract; the model can never write this
+ * column. The legacy `constraints_json.stopConditionsAccepted` boolean
+ * is no longer read, even if it lingers on older mission rows.
+ */
 export function areStopConditionsAcceptedByUser(
-  mission: Pick<Mission, "status" | "constraintsJson" | "stopConditionsJson">,
+  mission: Pick<Mission, "acceptedContractHash" | "stopConditionsJson">,
 ): boolean {
-  return mission.constraintsJson.stopConditionsAccepted === true;
+  return mission.acceptedContractHash !== null;
 }
 
 export function acceptedStopReasonsForMission(
-  mission: Pick<Mission, "status" | "constraintsJson" | "stopConditionsJson">,
+  mission: Pick<Mission, "acceptedContractHash" | "stopConditionsJson">,
 ): UserConfigurableStopReason[] {
   if (!areStopConditionsAcceptedByUser(mission)) return [];
 
@@ -62,7 +70,7 @@ export function acceptedStopReasonsForMission(
 }
 
 export function authorizeMissionStopReason(
-  mission: Pick<Mission, "status" | "constraintsJson" | "stopConditionsJson">,
+  mission: Pick<Mission, "acceptedContractHash" | "stopConditionsJson">,
   reason: BusinessStopReason,
 ): StopReasonAuthorization {
   if (reason === "goal_reached") return { allowed: true };
