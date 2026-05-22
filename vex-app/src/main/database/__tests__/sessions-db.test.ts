@@ -190,3 +190,50 @@ describe("setSessionPinnedWithClient — soft-delete invariant", () => {
     }
   });
 });
+
+// Drift guard for the puzzle 03 follow-up: every helper that uses the
+// `ACTIVE_OR_PAUSED_MISSION_RUN_STATUSES` whitelist must include
+// `paused_user`. Otherwise the sidebar's active-run buckets, the
+// delete guard, and pinned-row lookups will silently miss any session
+// that the user has paused via `runtime.requestPause`. The constant is
+// not exported; we assert it via the SQL parameters the helpers send.
+describe("ACTIVE_OR_PAUSED_MISSION_RUN_STATUSES — paused_user parity", () => {
+  it("loadMissionStatus (used by setSessionPinned) passes paused_user in $2", async () => {
+    const mod = await import("../sessions-db.js");
+    const { client, queryMock } = scriptedClient([
+      // setSessionPinnedWithClient first runs the guarded UPDATE on sessions.
+      // `mode: 'mission'` triggers the follow-up `loadMissionStatus` probe
+      // which is the actual query carrying the whitelist param.
+      {
+        rows: [
+          {
+            id: TEST_ID,
+            mode: "mission",
+            permission: "restricted",
+            initial_goal: null,
+            started_at: new Date(),
+            ended_at: null,
+            title: "Test",
+            pinned_at: new Date(),
+          },
+        ],
+        rowCount: 1,
+      },
+      // ...followed by loadMissionStatus on mission_runs.
+      { rows: [], rowCount: 0 },
+    ]);
+    await mod.setSessionPinnedWithClient(client, TEST_ID, true);
+    // Second call is the mission_run status probe.
+    const missionRunCall = queryMock.mock.calls[1];
+    expect(missionRunCall).toBeDefined();
+    const sql = missionRunCall![0] as string;
+    const params = missionRunCall![1] as readonly unknown[];
+    expect(sql).toMatch(/FROM mission_runs/);
+    expect(sql).toMatch(/status\s*=\s*ANY\(\$2::text\[\]\)/);
+    expect(params[1]).toContain("paused_user");
+    expect(params[1]).toContain("running");
+    expect(params[1]).toContain("paused_approval");
+    expect(params[1]).toContain("paused_wake");
+    expect(params[1]).toContain("paused_error");
+  });
+});

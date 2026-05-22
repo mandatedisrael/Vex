@@ -43,10 +43,15 @@ import { log } from "../logger/index.js";
 
 const CONNECT_TIMEOUT_MS = 2_000;
 const QUERY_TIMEOUT_MS = 5_000;
+// Mirror of engine `ACTIVE_OR_PAUSED_RUN_STATUSES` (engine/types.ts).
+// Drift between these two breaks sidebar bucketing, delete guards, and
+// active-run lookups — puzzle 03 introduced `paused_user` engine-side
+// but the app whitelist missed it; puzzle 04 closes that gap.
 const ACTIVE_OR_PAUSED_MISSION_RUN_STATUSES: readonly MissionRunStatus[] = [
   "running",
   "paused_approval",
   "paused_wake",
+  "paused_user",
   "paused_error",
 ];
 
