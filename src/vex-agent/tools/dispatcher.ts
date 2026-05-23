@@ -14,13 +14,31 @@
 
 import type { ToolCallRequest, ToolResult } from "./types.js";
 import type { InternalToolContext } from "./internal/types.js";
-import { getPressureSafety, isInternalTool, isMutatingTool, isToolBlockedForRole } from "./registry.js";
+import { getActionKind, getPressureSafety, isInternalTool, isMutatingTool, isToolBlockedForRole } from "./registry.js";
 import { discoverProtocolCapabilities } from "./protocols/runtime.js";
 import { executeProtocolTool } from "./protocols/runtime.js";
 import { logDiscoveryTelemetry, newDiscoveryRunId } from "./protocols/discovery.telemetry.js";
 import { toResultData } from "./protocols/handler-helpers.js";
 import type { ContextUsageBand } from "@vex-agent/engine/core/context-band.js";
 import logger from "@utils/logger.js";
+
+/**
+ * Stamp `result.actionKind` from the registry fallback when the handler did
+ * not set it. Preserves a handler-set value (e.g. `executeProtocolTool` which
+ * derives from the TARGET protocol manifest, not from the `execute_tool`
+ * wrapper's own classification). Leaves `actionKind` undefined when the tool
+ * name is not registered — the routing layer already returns an "unknown
+ * tool" error in that case and policy consumers can treat absent `actionKind`
+ * as the conservative "unknown" signal.
+ *
+ * Plan: agents_dm/plan-integration/05-approvals-wallet-policy.md §"Action taxonomy".
+ */
+function withActionKindFallback(result: ToolResult, toolName: string): ToolResult {
+  if (result.actionKind !== undefined) return result;
+  const kind = getActionKind(toolName);
+  if (kind === undefined) return result;
+  return { ...result, actionKind: kind };
+}
 
 /**
  * Pressure-band hard-deny check. Returns a synthetic error result when the
@@ -81,7 +99,7 @@ export async function dispatchTool(
         tool: call.name,
         band: context.contextUsageBand,
       });
-      return denied;
+      return withActionKindFallback(denied, call.name);
     }
   }
 
@@ -95,7 +113,7 @@ export async function dispatchTool(
       durationMs,
     });
 
-    return result;
+    return withActionKindFallback(result, call.name);
   } catch (err) {
     const durationMs = Date.now() - startTime;
     const message = err instanceof Error ? err.message : String(err);
@@ -106,7 +124,10 @@ export async function dispatchTool(
       durationMs,
     });
 
-    return { success: false, output: `Tool ${call.name} failed: ${message}` };
+    return withActionKindFallback(
+      { success: false, output: `Tool ${call.name} failed: ${message}` },
+      call.name,
+    );
   }
 }
 

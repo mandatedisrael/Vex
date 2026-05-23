@@ -12,7 +12,7 @@ import type { ToolDef } from "../types.js";
 
 export const KNOWLEDGE_TOOLS: readonly ToolDef[] = [
   {
-    name: "knowledge_write", kind: "internal", mutating: false, pressureSafety: "mutating",
+    name: "knowledge_write", kind: "internal", mutating: false, pressureSafety: "mutating", actionKind: "local_write",
     description:
       "Write a NEW entry to curated cross-session knowledge: a distilled rule, observation, lesson from failure, observed user preference, or mastered protocol fact that the next session should be able to recall. "
       + "Use ONLY for net-new content — replacing or updating an existing entry uses knowledge_supersede(previous_id). "
@@ -43,7 +43,7 @@ export const KNOWLEDGE_TOOLS: readonly ToolDef[] = [
     }, required: ["kind", "title", "summary"] },
   },
   {
-    name: "knowledge_supersede", kind: "internal", mutating: false, pressureSafety: "mutating",
+    name: "knowledge_supersede", kind: "internal", mutating: false, pressureSafety: "mutating", actionKind: "local_write",
     description:
       "Atomically replace an existing active knowledge entry with a new version. Use this whenever you are updating a rule, observation, or fact you previously wrote — a meaningful change in text, thresholds, or assessment means a new version, not an in-place edit. " +
       "The old entry is flipped to status='superseded' (hidden from recall and Active Knowledge) with its explicit successor link; the new entry becomes the active one. " +
@@ -74,7 +74,7 @@ export const KNOWLEDGE_TOOLS: readonly ToolDef[] = [
     }, required: ["previous_id", "kind", "title", "summary", "reason"] },
   },
   {
-    name: "knowledge_recall", kind: "internal", mutating: false, pressureSafety: "read_only",
+    name: "knowledge_recall", kind: "internal", mutating: false, pressureSafety: "read_only", actionKind: "read",
     description:
       "Semantic recall over curated cross-session knowledge. Returns the top-K entries inline (with content_md); overflow lands in a 15-minute tmp cache readable via knowledge_recall_overflow. "
       + ""
@@ -96,21 +96,21 @@ export const KNOWLEDGE_TOOLS: readonly ToolDef[] = [
     }, required: ["query"] },
   },
   {
-    name: "knowledge_recall_overflow", kind: "internal", mutating: false, pressureSafety: "read_only",
+    name: "knowledge_recall_overflow", kind: "internal", mutating: false, pressureSafety: "read_only", actionKind: "read",
     description: "Read overflow results from a previous knowledge_recall by cacheKey. Cache lives ~15 minutes after the originating recall. Does not require the embeddings service.",
     parameters: { type: "object", properties: {
       cacheKey: { type: "string", description: "Overflow cacheKey returned by a previous knowledge_recall response." },
     }, required: ["cacheKey"] },
   },
   {
-    name: "knowledge_get", kind: "internal", mutating: false, pressureSafety: "read_only",
+    name: "knowledge_get", kind: "internal", mutating: false, pressureSafety: "read_only", actionKind: "read",
     description: "Fetch a canonical knowledge entry by id. Loads content_md into the engine context. Does not require the embeddings service.",
     parameters: { type: "object", properties: {
       id: { type: "number", description: "Knowledge entry id." },
     }, required: ["id"] },
   },
   {
-    name: "knowledge_update_status", kind: "internal", mutating: false, pressureSafety: "mutating",
+    name: "knowledge_update_status", kind: "internal", mutating: false, pressureSafety: "mutating", actionKind: "local_write",
     description:
       "Mark a knowledge entry as invalidated or archived. Both remove the entry from recall and Active Knowledge. " +
       "Use this for terminal lifecycle (this fact is just wrong / no longer relevant), NOT for replacing a fact with a new version — for replacement use knowledge_supersede(previous_id). " +
@@ -122,7 +122,7 @@ export const KNOWLEDGE_TOOLS: readonly ToolDef[] = [
     }, required: ["id", "status"] },
   },
   {
-    name: "knowledge_lineage", kind: "internal", mutating: false, pressureSafety: "read_only",
+    name: "knowledge_lineage", kind: "internal", mutating: false, pressureSafety: "read_only", actionKind: "read",
     description:
       "Trace the full version chain (root → head) of a knowledge entry from any id in the chain. " +
       "Returns ordered metadata (no content_md) plus headId and headStatus, so you can immediately tell whether the chain is still active or terminated (invalidated/archived). " +
@@ -133,7 +133,7 @@ export const KNOWLEDGE_TOOLS: readonly ToolDef[] = [
     }, required: ["id"] },
   },
   {
-    name: "knowledge_history", kind: "internal", mutating: false, pressureSafety: "read_only",
+    name: "knowledge_history", kind: "internal", mutating: false, pressureSafety: "read_only", actionKind: "read",
     description:
       "Browse historical knowledge entries by explicit filters (kind / status / limit). " +
       "By default returns ONLY non-active entries (superseded, invalidated, archived) — pass status='active' to query active entries instead. " +

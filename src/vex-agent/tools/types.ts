@@ -6,6 +6,8 @@
  * and what a tool returns (ToolResult).
  */
 
+import type { ActionKind } from "./taxonomy.js";
+
 // ── Tool definition (what LLM sees) ─────────────────────────────
 
 /**
@@ -78,6 +80,15 @@ export interface ToolDef {
    * classified so the dispatcher knows whether to block at barrier/critical.
    */
   pressureSafety: PressureSafety;
+  /**
+   * Action taxonomy — explicit side-effect classification (see `./taxonomy.ts`).
+   * REQUIRED — every tool MUST be deliberately classified so puzzle 5 phase 2+
+   * (approval intents, wallet intents, audit) can make policy decisions
+   * without re-deriving from the loose `mutating` boolean. Mirrors the
+   * `pressureSafety` invariant: the compiler enforces classification at
+   * registration time.
+   */
+  actionKind: ActionKind;
   /** If true, tool is only available in restricted/full modes */
   proactive?: boolean;
   /** ENV var required for this tool. If set and ENV is empty, tool is hidden. */
@@ -168,6 +179,23 @@ export interface ToolResult {
   pendingApproval?: boolean;
   /** Engine signal — structured command from tool to engine (e.g. stop_mission) */
   engineSignal?: EngineSignal;
+  /**
+   * Action taxonomy stamp — what kind of action this dispatch actually performed
+   * (see `./taxonomy.ts`). Stamped by:
+   *  - `dispatchTool` as a fallback from `getActionKind(toolName)` for internal
+   *    tools when the handler did not set it,
+   *  - `executeProtocolTool` from the TARGET protocol manifest (NOT from the
+   *    `execute_tool` wrapper's own classification), on every known-manifest
+   *    return path (approval-pending, pressure-denied, param-invalid, success,
+   *    handler-thrown failure). Unknown protocol tool returns omit the field.
+   *
+   * Policy / approval / audit layers (puzzle 5 phase 2+) consume this field
+   * to classify what actually happened, regardless of which wrapper was called.
+   * Kept top-level rather than nested under `data` because `data` is handler
+   * payload (trade capture, UI enrichment) and should not be polluted with
+   * policy metadata (Codex review, puzzle 5/1A, 2026-05-23).
+   */
+  actionKind?: ActionKind;
 }
 
 /**

@@ -31,6 +31,7 @@ export const AUTONOMY_TOOLS: readonly ToolDef[] = [
     kind: "internal",
     mutating: false,
     pressureSafety: "read_only",
+    actionKind: "read",
     surface: "agent",
     visibility: { hiddenInMissionSetup: true },
     description:
@@ -65,6 +66,7 @@ export const AUTONOMY_TOOLS: readonly ToolDef[] = [
     kind: "internal",
     mutating: false,
     pressureSafety: "mutating",
+    actionKind: "schedule",
     excludeRoles: ["subagent"],
     surface: "agent",
     visibility: { requiresMissionActiveRun: true },

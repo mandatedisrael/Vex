@@ -9,7 +9,7 @@ import type { ToolDef } from "../types.js";
 
 export const WALLET_TOOLS: readonly ToolDef[] = [
   {
-    name: "wallet_read", kind: "internal", mutating: false, pressureSafety: "read_only",
+    name: "wallet_read", kind: "internal", mutating: false, pressureSafety: "read_only", actionKind: "read",
     description: "Read your token balances on each chain via Khalani. Defaults to your personal wallets — both EVM (`eip155`) and Solana — aggregated in one call. Pass `wallet` or `chainIds` only when you want to narrow the scan.",
     parameters: { type: "object", properties: {
       wallet: { type: "string", enum: ["eip155", "solana", "all"], description: "Which wallet family to read. Default 'all' aggregates your EVM + Solana wallets." },
@@ -17,7 +17,7 @@ export const WALLET_TOOLS: readonly ToolDef[] = [
     } },
   },
   {
-    name: "wallet_send_prepare", kind: "internal", mutating: false, pressureSafety: "mutating",
+    name: "wallet_send_prepare", kind: "internal", mutating: false, pressureSafety: "mutating", actionKind: "approval_prepare",
     description: "Prepare a transfer intent (no broadcast). Returns intent ID for confirmation. Supports native tokens, ERC-20, and ERC-721 on any EVM chain. Solana: SOL + SPL tokens only (no pNFT/cNFT).",
     parameters: { type: "object", properties: {
       network: { type: "string", enum: ["eip155", "solana"], description: "Network family" },
@@ -28,7 +28,7 @@ export const WALLET_TOOLS: readonly ToolDef[] = [
     }, required: ["network", "to", "amount"] },
   },
   {
-    name: "wallet_send_confirm", kind: "internal", mutating: true, pressureSafety: "mutating",
+    name: "wallet_send_confirm", kind: "internal", mutating: true, pressureSafety: "mutating", actionKind: "user_wallet_broadcast",
     description: "Confirm and broadcast a prepared transfer. Requires approval in restricted/off mode.",
     parameters: { type: "object", properties: {
       network: { type: "string", enum: ["eip155", "solana"], description: "Network family" },

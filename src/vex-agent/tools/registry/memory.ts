@@ -24,6 +24,7 @@ export const MEMORY_TOOLS: readonly ToolDef[] = [
     kind: "internal",
     mutating: false,
     pressureSafety: "read_only",
+    actionKind: "read",
     surface: "agent",
     description: [
       "Semantic recall over THIS SESSION's narrative memory chunks. Each chunk is a 4-section markdown body (what happened / what I did / what I tried / outstanding items) produced when the conversation was compacted by `compact_now`.",
@@ -59,6 +60,7 @@ export const MEMORY_TOOLS: readonly ToolDef[] = [
     kind: "internal",
     mutating: false,
     pressureSafety: "read_only",
+    actionKind: "local_write",
     surface: "agent",
     description: [
       "Close a single outstanding item on a session memory chunk. Use when a previously-open follow-up (pending tx, awaiting decision, lookup needed) is now done — keeps the resume packet's Outstanding section honest across compacts.",

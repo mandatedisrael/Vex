@@ -12,6 +12,7 @@ export const TWITTER_ACCOUNT_TOOLS: readonly ToolDef[] = [
     kind: "internal",
     mutating: false,
     pressureSafety: "read_only",
+    actionKind: "read",
     requiresEnv: "RETTIWT_API_KEY",
     description: [
       "Use the configured secondary Twitter/X account via Rettiwt for read-only research.",

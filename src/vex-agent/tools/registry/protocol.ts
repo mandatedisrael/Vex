@@ -28,7 +28,7 @@ const EXECUTE_TOOL_DESCRIPTION = [
 
 export const PROTOCOL_TOOLS: readonly ToolDef[] = [
   {
-    name: "discover_tools", kind: "internal", mutating: false, pressureSafety: "read_only",
+    name: "discover_tools", kind: "internal", mutating: false, pressureSafety: "read_only", actionKind: "read",
     description: [
       "Search advertised protocol tools by short English intent. Write what the user wants to do, including assets, chains, venue, or product hints when useful.",
       "Protocol/product names are allowed in the query as hints: Khalani, KyberSwap, Jupiter, Polymarket, DexScreener. Do not invent dotted toolIds or internal implementation names; use only toolIds returned by this response.",
@@ -44,7 +44,11 @@ export const PROTOCOL_TOOLS: readonly ToolDef[] = [
     } },
   },
   {
-    name: "execute_tool", kind: "internal", mutating: false, pressureSafety: "read_only",
+    // Wrapper itself is read-only; runtime stamps the TARGET protocol tool's
+    // derived actionKind via `executeProtocolTool::deriveProtocolActionKind`,
+    // so consumers of `ToolResult.actionKind` see the target classification.
+    // See `protocols/runtime.ts` + `taxonomy.ts`.
+    name: "execute_tool", kind: "internal", mutating: false, pressureSafety: "read_only", actionKind: "read",
     description: EXECUTE_TOOL_DESCRIPTION,
     parameters: EXECUTE_TOOL_PARAMS,
   },

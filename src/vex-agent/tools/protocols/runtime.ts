@@ -6,8 +6,9 @@
  * Execution validates params, finds the handler, and calls it.
  */
 
-import type { ProtocolExecuteRequest, ProtocolExecutionContext } from "./types.js";
+import type { ProtocolExecuteRequest, ProtocolExecutionContext, ProtocolToolManifest } from "./types.js";
 import type { ToolResult } from "../types.js";
+import type { ActionKind } from "../taxonomy.js";
 import { getProtocolHandler, getProtocolManifest } from "./catalog.js";
 import { isPreviewExecution, validateCaptureContract } from "./capture-validator.js";
 import { extractExternalRefs, populateCaptureItems } from "./capture-pipeline.js";
@@ -19,6 +20,56 @@ import logger from "@utils/logger.js";
 
 export { discoverProtocolCapabilities } from "./discovery.js";
 
+// ── Action taxonomy derivation (puzzle 5 phase 1A heuristic) ────
+//
+// `ProtocolToolManifest` does not yet carry `actionKind` — phase 1B will add
+// it per protocol tool. Until then, this helper derives a best-effort kind
+// from existing manifest fields (`mutating` + optional `discovery.sideEffectLevel`)
+// so the central dispatcher can still surface a `ToolResult.actionKind` to
+// the policy / approval / audit layers introduced in puzzle 5 phase 2+.
+//
+// Heuristic rules (Codex GREEN LIGHT 2026-05-23, puzzle 5/1A):
+//   1. `isPreviewExecution(...)` → `read` — preview/dryRun is read-only
+//      simulation regardless of `mutating` flag (also bypasses the
+//      approval gate below).
+//   2. `!manifest.mutating` → `read`.
+//   3. `mutating` + `sideEffectLevel === "high"` → `user_wallet_broadcast`
+//      (chain-binding tools). Phase 1B will distinguish
+//      `user_wallet_broadcast` vs `provider_action_request` per protocol.
+//   4. `mutating` + `sideEffectLevel === "low"` → `external_post`
+//      (off-chain order submit, social post).
+//   5. `mutating` + (`sideEffectLevel === "none"` or undefined) →
+//      `external_post` CONSERVATIVELY — we'd rather over-tag than miss a
+//      mutation. Phase 1B replaces the heuristic with per-manifest `actionKind`.
+//
+// `provider_action_request` is intentionally NEVER returned in 1A — backend
+// signer infrastructure does not exist in repo yet; puzzle 5 phase 6 will
+// route provider-funded calls through that path explicitly.
+//
+// Tested in `src/__tests__/vex-agent/tools/execute-tool-taxonomy.test.ts`.
+export function deriveProtocolActionKind(
+  manifest: ProtocolToolManifest,
+  params: Record<string, unknown>,
+): ActionKind {
+  if (isPreviewExecution(manifest.toolId, params)) return "read";
+  if (!manifest.mutating) return "read";
+  if (manifest.discovery?.sideEffectLevel === "high") return "user_wallet_broadcast";
+  return "external_post";
+}
+
+/**
+ * Local helper — stamp the derived `actionKind` on a `ToolResult`. ALWAYS
+ * overwrites any handler-set value: for protocol tools the manifest-driven
+ * classifier is authoritative, not handler payload. A handler trying to
+ * downgrade a `user_wallet_broadcast` mutation to `read` cannot bypass the
+ * policy classifier (Codex final review, puzzle 5/1A — 2026-05-23). Tested
+ * in `execute-tool-taxonomy.test.ts` ("handler-set actionKind cannot
+ * override the derived classifier").
+ */
+function withActionKind(result: ToolResult, actionKind: ActionKind): ToolResult {
+  return { ...result, actionKind };
+}
+
 // ── Execution ────────────────────────────────────────────────────
 
 export async function executeProtocolTool(
@@ -27,11 +78,20 @@ export async function executeProtocolTool(
 ): Promise<ToolResult> {
   const manifest = getProtocolManifest(request.toolId);
   if (!manifest) {
+    // Unknown manifest — leave `actionKind` undefined per Codex review
+    // (puzzle 5/1A): policy layer treats missing `actionKind` as the
+    // conservative "unknown action" signal.
     return {
       success: false,
       output: `Unknown protocol tool: ${request.toolId}. Use discover_tools to find available tools.`,
     };
   }
+
+  // Derive target action kind ONCE — every subsequent return path stamps it
+  // on the `ToolResult` so the dispatcher / policy / audit layers see the
+  // target classification, NOT the `execute_tool` wrapper's `read`.
+  const params = request.params ?? {};
+  const derivedActionKind = deriveProtocolActionKind(manifest, params);
 
   // Note: `manifest.lifecycle` is always "active" after PR1 narrowed the
   // ToolLifecycle union; no runtime lifecycle gate at the per-tool level.
@@ -50,20 +110,18 @@ export async function executeProtocolTool(
       namespace: manifest.namespace,
       lifecycle: status,
     });
-    return {
+    return withActionKind({
       success: false,
       output: `Namespace "${manifest.namespace}" is ${status} and not executable. ${hint}`,
-    };
+    }, derivedActionKind);
   }
 
   if (manifest.requiresEnv && !process.env[manifest.requiresEnv]?.trim()) {
-    return {
+    return withActionKind({
       success: false,
       output: `${request.toolId} requires ${manifest.requiresEnv} to be set in .env`,
-    };
+    }, derivedActionKind);
   }
-
-  const params = request.params ?? {};
 
   // Pressure-barrier guard for protocol tools — at band ≥ barrier, mutating
   // protocol calls are blocked unless they are preview/dryRun. The agent must
@@ -80,12 +138,12 @@ export async function executeProtocolTool(
         toolId: request.toolId,
         band,
       });
-      return {
+      return withActionKind({
         success: false,
         output:
           `${request.toolId} is blocked at context pressure ${band}. `
           + `Call compact_now first to compact the conversation; the next turn after compaction restores the full tool set.`,
-      };
+      }, derivedActionKind);
     }
   }
 
@@ -98,10 +156,10 @@ export async function executeProtocolTool(
     const value = params[param.key];
     const missing = value === undefined || value === null || value === "";
     if (param.required && missing) {
-      return {
+      return withActionKind({
         success: false,
         output: `Missing required parameter "${param.key}" for ${request.toolId}`,
-      };
+      }, derivedActionKind);
     }
     if (!missing) {
       const actualType = typeof value;
@@ -109,10 +167,10 @@ export async function executeProtocolTool(
       // primitives observable via `typeof`. If we later add "object" /
       // "array" variants, widen the check (or move to a JsonSchema walker).
       if (actualType !== param.type) {
-        return {
+        return withActionKind({
           success: false,
           output: `Parameter "${param.key}" for ${request.toolId} has invalid type: expected ${param.type}, got ${actualType}`,
-        };
+        }, derivedActionKind);
       }
     }
   }
@@ -120,21 +178,21 @@ export async function executeProtocolTool(
   // Find handler
   const handler = getProtocolHandler(request.toolId);
   if (!handler) {
-    return {
+    return withActionKind({
       success: false,
       output: `No handler registered for ${request.toolId}. This is a bug — manifest exists but handler is missing.`,
-    };
+    }, derivedActionKind);
   }
 
   // Approval gate — mutating tools require approval under restricted permission.
   // Preview (dryRun) is read-only simulation — skip approval.
   if (manifest.mutating && !context.approved && context.sessionPermission === "restricted" && !isPreviewExecution(request.toolId, params)) {
     logger.info("protocol.execute.approval_required", { toolId: request.toolId, permission: context.sessionPermission });
-    return {
+    return withActionKind({
       success: false,
       output: `${request.toolId} requires approval — mutating tool in restricted permission mode.`,
       pendingApproval: true,
-    };
+    }, derivedActionKind);
   }
 
   // Determine preview BEFORE handler call — flag survives thrown exceptions
@@ -168,7 +226,7 @@ export async function executeProtocolTool(
       }
     }
 
-    return result;
+    return withActionKind(result, derivedActionKind);
   } catch (err) {
     const durationMs = Date.now() - startTime;
     const message = err instanceof Error ? err.message : String(err);
@@ -181,7 +239,10 @@ export async function executeProtocolTool(
 
     // Capture thrown mutations to audit trail only (no projections for failures)
     // Preview: skip capture even for thrown exceptions
-    const failedResult: ToolResult = { success: false, output: `${request.toolId} failed: ${message}` };
+    const failedResult: ToolResult = withActionKind(
+      { success: false, output: `${request.toolId} failed: ${message}` },
+      derivedActionKind,
+    );
     if (shouldCapture) {
       try {
         await captureExecution(request.toolId, manifest.namespace, context.sessionId ?? null, params, failedResult, durationMs);

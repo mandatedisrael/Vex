@@ -18,6 +18,7 @@ export const COMPACT_TOOLS: readonly ToolDef[] = [
     kind: "internal",
     mutating: false,
     pressureSafety: "compact_only",
+    actionKind: "local_write",
     surface: "agent",
     excludeRoles: ["subagent"],
     visibility: { band: "barrier" },

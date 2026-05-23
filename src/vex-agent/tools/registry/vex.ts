@@ -26,6 +26,7 @@ export const VEX_TOOLS: readonly ToolDef[] = [
     kind: "internal",
     mutating: false,
     pressureSafety: "read_only",
+    actionKind: "read",
     surface: "mcp",
     description:
       "Top-level orientation for Vex. Call with no args to get the priority brief — the five active protocol namespaces (polymarket, solana, khalani, kyberswap, dexscreener) and what each is for. Pass `topic` to focus on a single area: `overview` (architecture / dual product), `querying` (how to drive discover_tools), `knowledge` (long-term memory layer), or `namespaces` (full active-namespace list).",
@@ -47,6 +48,7 @@ export const VEX_TOOLS: readonly ToolDef[] = [
     kind: "internal",
     mutating: false,
     pressureSafety: "read_only",
+    actionKind: "read",
     surface: "mcp",
     description:
       "Deep dive into a protocol namespace: list every tool with its description and mutation flag. Pass `namespace` to focus on one (e.g. `polymarket`, `kyberswap`); omit to get a brief table of all active namespaces with tool counts. Deprecated namespaces refuse with a clear hint and a pointer at the env override.",

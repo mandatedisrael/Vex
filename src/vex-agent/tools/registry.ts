@@ -15,6 +15,7 @@
 
 import type { ToolDef, ToolVisibility, OpenAITool } from "./types.js";
 import { toOpenAITools } from "./types.js";
+import type { ActionKind } from "./taxonomy.js";
 import type { Permission, SessionKind } from "@vex-agent/engine/types.js";
 import type { ContextUsageBand } from "@vex-agent/engine/core/context-band.js";
 
@@ -123,6 +124,16 @@ export function isMutatingTool(name: string): boolean {
  */
 export function getPressureSafety(name: string): ToolDef["pressureSafety"] | undefined {
   return byName.get(name)?.pressureSafety;
+}
+
+/**
+ * Look up the action taxonomy (`actionKind`) for an internal tool. Returns
+ * `undefined` only for unregistered names — the field is REQUIRED on `ToolDef`.
+ * Used by `dispatchTool` as the fallback stamp for `ToolResult.actionKind`;
+ * `executeProtocolTool` overrides with the derived target classification.
+ */
+export function getActionKind(name: string): ActionKind | undefined {
+  return byName.get(name)?.actionKind;
 }
 
 export function getAllTools(): readonly ToolDef[] {

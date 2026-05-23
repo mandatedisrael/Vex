@@ -7,7 +7,7 @@ import type { ToolDef } from "../types.js";
 
 export const PORTFOLIO_TOOLS: readonly ToolDef[] = [
   {
-    name: "portfolio_inspect", kind: "internal", mutating: false, pressureSafety: "read_only",
+    name: "portfolio_inspect", kind: "internal", mutating: false, pressureSafety: "read_only", actionKind: "read",
     description: [
       "Read-only view over your own portfolio state, materialized from DB projections — NOT live RPC. The agent owns this surface; do not query third parties for the same data.",
       "View groups (pick one via `view`; see parameters.view.enum for the full set):",
