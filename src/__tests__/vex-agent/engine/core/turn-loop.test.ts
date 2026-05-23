@@ -83,6 +83,11 @@ vi.mock("@vex-agent/engine/compact-jobs/forced-fallback.js", () => ({
 
 vi.mock("@vex-agent/db/repos/approvals.js", () => ({
   enqueue: vi.fn(),
+  enqueueWith: vi.fn(),
+}));
+
+vi.mock("@vex-agent/db/repos/approval-intents.js", () => ({
+  createWith: vi.fn(),
 }));
 
 vi.mock("@vex-agent/db/repos/usage.js", () => ({
@@ -397,6 +402,96 @@ describe("turn-loop", () => {
   // ── Approval pause ──────────────────────────────────────────
 
   describe("approval pause", () => {
+    it("throws when pendingApproval=true but dispatch result lacks actionKind (phase 2 fail-closed)", async () => {
+      // Codex 2 phase-2 invariant: `approval_intents.action_kind` is NOT
+      // NULL. The dispatcher's `withActionKindFallback` MUST stamp a kind
+      // before `pendingApproval` returns; a missing stamp means the tool
+      // is unregistered or the dispatcher fallback was bypassed. Fail
+      // fast at the enqueue site instead of silently inserting a
+      // pseudo-kind that masks the bug.
+      const provider = makeProvider([
+        { toolCalls: [{ id: "call-1", name: "execute_tool", arguments: { toolId: "solana.swap" } }] },
+      ]);
+      mockDispatchTool.mockResolvedValue({
+        success: false,
+        output: "Approval required",
+        pendingApproval: true,
+        // actionKind: intentionally omitted to exercise the throw path
+      });
+
+      await expect(
+        runTurnLoop(
+          makeContext({ sessionKind: "mission", missionRunId: "run-1", sessionPermission: "restricted" }),
+          [], null, 0, provider as any, makeConfig() as any, [],
+          defaultLoopConfig,
+        ),
+      ).rejects.toThrow(/Approval intent requires result\.actionKind/);
+
+      // Neither approval row nor intent row was written (the throw fires
+      // BEFORE the transaction body — withTransaction body never runs).
+      expect(mockUpdateStatus).not.toHaveBeenCalledWith(
+        "run-1",
+        "paused_approval",
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it("enqueues queue + intent + mission status flip in a single transaction (phase 2 invariant)", async () => {
+      // Codex final review puzzle 5/2 — pin the transactional contract:
+      // `withTransaction(fn)` calls `enqueueWith`, `createWith`, and
+      // `updateStatus(..., client)` with the SAME PoolClient. A partial
+      // state (queue without intent, or queue+intent without paused_approval)
+      // is unrepresentable.
+      const provider = makeProvider([
+        { toolCalls: [{ id: "call-1", name: "execute_tool", arguments: { toolId: "kyberswap.swap.sell", params: { chain: "base" } } }] },
+      ]);
+      mockDispatchTool.mockResolvedValue({
+        success: false,
+        output: "Approval required",
+        pendingApproval: true,
+        actionKind: "user_wallet_broadcast",
+      });
+
+      // Re-import the mocked modules so we can spy on the per-call PoolClient.
+      const dbClient = await import("@vex-agent/db/client.js");
+      const approvalsMod = await import("@vex-agent/db/repos/approvals.js");
+      const intentsMod = await import("@vex-agent/db/repos/approval-intents.js");
+      const enqueueWithSpy = approvalsMod.enqueueWith as unknown as ReturnType<typeof vi.fn>;
+      const createWithSpy = intentsMod.createWith as unknown as ReturnType<typeof vi.fn>;
+      const withTransactionSpy = dbClient.withTransaction as unknown as ReturnType<typeof vi.fn>;
+
+      await runTurnLoop(
+        makeContext({ sessionKind: "mission", missionRunId: "run-1", sessionPermission: "restricted" }),
+        [], null, 0, provider as any, makeConfig() as any, [],
+        defaultLoopConfig,
+      );
+
+      expect(withTransactionSpy).toHaveBeenCalled();
+      expect(enqueueWithSpy).toHaveBeenCalledTimes(1);
+      expect(createWithSpy).toHaveBeenCalledTimes(1);
+      expect(mockUpdateStatus).toHaveBeenCalledWith(
+        "run-1",
+        "paused_approval",
+        "approval_required",
+        undefined,
+        expect.anything(),
+      );
+
+      // Each of the three writes received the SAME PoolClient — the tx
+      // body cannot half-execute. enqueueWith(client, ...), createWith(client, ...),
+      // updateStatus(..., client).
+      const enqueueClient = enqueueWithSpy.mock.calls[0]?.[0];
+      const createClient = createWithSpy.mock.calls[0]?.[0];
+      const updateClient = mockUpdateStatus.mock.calls.find(
+        (c: unknown[]) => c[1] === "paused_approval",
+      )?.[4];
+      expect(enqueueClient).toBeDefined();
+      expect(createClient).toBe(enqueueClient);
+      expect(updateClient).toBe(enqueueClient);
+    });
+
     it("pauses on pendingApproval from dispatch", async () => {
       const provider = makeProvider([
         { toolCalls: [{ id: "call-1", name: "execute_tool", arguments: { toolId: "solana.swap" } }] },
@@ -405,6 +500,11 @@ describe("turn-loop", () => {
         success: false,
         output: "Approval required for swap",
         pendingApproval: true,
+        // Puzzle 5 phase 2: enqueue site requires actionKind on
+        // pendingApproval results — real dispatcher stamps via
+        // `withActionKindFallback` / protocol runtime derive. Mocks
+        // must include it explicitly or the throw fires.
+        actionKind: "user_wallet_broadcast",
       });
 
       const result = await runTurnLoop(
@@ -416,7 +516,15 @@ describe("turn-loop", () => {
       expect(result.stopReason).toBe("approval_required");
       expect(result.pendingApprovals).toHaveLength(1);
       expect(result.pendingApprovals[0]).toMatch(/^approval-/);
-      expect(mockUpdateStatus).toHaveBeenCalledWith("run-1", "paused_approval", "approval_required");
+      // Puzzle 5 phase 2 changed updateStatus signature to accept an
+      // optional PoolClient as the 5th arg (transactional enqueue).
+      expect(mockUpdateStatus).toHaveBeenCalledWith(
+        "run-1",
+        "paused_approval",
+        "approval_required",
+        undefined,
+        expect.anything(),
+      );
     });
   });
 
@@ -516,7 +624,12 @@ describe("turn-loop", () => {
       mockDispatchTool.mockImplementation(() => {
         callIndex++;
         if (callIndex === 2) {
-          return Promise.resolve({ success: false, output: "Approval required", pendingApproval: true });
+          return Promise.resolve({
+            success: false,
+            output: "Approval required",
+            pendingApproval: true,
+            actionKind: "user_wallet_broadcast", // phase 2: required for approval enqueue
+          });
         }
         return Promise.resolve({ success: true, output: `result-${callIndex}` });
       });
@@ -554,7 +667,12 @@ describe("turn-loop", () => {
       mockDispatchTool.mockImplementation(() => {
         callIndex++;
         if (callIndex === 2) {
-          return Promise.resolve({ success: false, output: "Approval required", pendingApproval: true });
+          return Promise.resolve({
+            success: false,
+            output: "Approval required",
+            pendingApproval: true,
+            actionKind: "user_wallet_broadcast", // phase 2: required for approval enqueue
+          });
         }
         return Promise.resolve({ success: true, output: "search-result" });
       });
@@ -583,7 +701,12 @@ describe("turn-loop", () => {
         },
       ]);
 
-      mockDispatchTool.mockResolvedValue({ success: false, output: "Approval required", pendingApproval: true });
+      mockDispatchTool.mockResolvedValue({
+        success: false,
+        output: "Approval required",
+        pendingApproval: true,
+        actionKind: "user_wallet_broadcast",
+      });
 
       const result = await runTurnLoop(
         makeContext({ sessionKind: "mission", missionRunId: "run-1", sessionPermission: "restricted" }),

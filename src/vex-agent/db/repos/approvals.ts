@@ -8,6 +8,7 @@
  * standard `approved: true` context flag).
  */
 
+import type { PoolClient } from "pg";
 import type { Permission } from "../../engine/types.js";
 import { query, queryOne, execute } from "../client.js";
 import { jsonb, nullableJsonb } from "../params.js";
@@ -41,6 +42,31 @@ function mapRow(r: Record<string, unknown>): ApprovalItem {
   };
 }
 
+const INSERT_APPROVAL_SQL = `INSERT INTO approval_queue (
+  id, tool_call, reasoning, status, session_id, tool_call_id,
+  permission_at_enqueue, pending_context
+) VALUES ($1, $2::jsonb, $3, 'pending', $4, $5, $6, $7::jsonb)`;
+
+function enqueueParams(
+  id: string,
+  toolCall: Record<string, unknown>,
+  reasoning: string,
+  sessionId: string,
+  toolCallId: string | undefined,
+  permission: Permission | undefined,
+): unknown[] {
+  const pendingContext = nullableJsonb(toolCallId ? { toolCallId } : null);
+  return [
+    id,
+    jsonb(toolCall),
+    reasoning,
+    sessionId,
+    toolCallId ?? null,
+    permission ?? "restricted",
+    pendingContext,
+  ];
+}
+
 export async function enqueue(
   id: string,
   toolCall: Record<string, unknown>,
@@ -49,12 +75,26 @@ export async function enqueue(
   toolCallId?: string,
   permission?: Permission,
 ): Promise<void> {
-  const pendingContext = nullableJsonb(toolCallId ? { toolCallId } : null);
-  await execute(
-    `INSERT INTO approval_queue (id, tool_call, reasoning, status, session_id, tool_call_id, permission_at_enqueue, pending_context)
-     VALUES ($1, $2::jsonb, $3, 'pending', $4, $5, $6, $7::jsonb)`,
-    [id, jsonb(toolCall), reasoning, sessionId, toolCallId ?? null, permission ?? "restricted", pendingContext],
-  );
+  await execute(INSERT_APPROVAL_SQL, enqueueParams(id, toolCall, reasoning, sessionId, toolCallId, permission));
+}
+
+/**
+ * Transactional INSERT variant — required for the puzzle-5 phase-2 enqueue
+ * site. The caller wraps `enqueueWith` + `approvalIntentsRepo.createWith` +
+ * `missionRunsRepo.updateStatus(..., client)` in one `withTransaction(fn)`
+ * so a partial state (queue without intent, or queue+intent without
+ * `paused_approval`) is unrepresentable.
+ */
+export async function enqueueWith(
+  client: PoolClient,
+  id: string,
+  toolCall: Record<string, unknown>,
+  reasoning: string,
+  sessionId: string,
+  toolCallId?: string,
+  permission?: Permission,
+): Promise<void> {
+  await client.query(INSERT_APPROVAL_SQL, enqueueParams(id, toolCall, reasoning, sessionId, toolCallId, permission));
 }
 
 /** Atomically approve — returns null if already resolved. */

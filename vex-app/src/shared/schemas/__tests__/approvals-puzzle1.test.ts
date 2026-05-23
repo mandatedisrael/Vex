@@ -29,6 +29,10 @@ describe("approvals schemas", () => {
   });
 
   it("approvalSummaryDtoSchema parses a fully-populated row", () => {
+    // Puzzle 5 phase 2 added the `approval_intents` companion fields
+    // (actionKind, riskLevel, preview, expiresAt, decision, decisionReason,
+    // executionStatus). All nullable for back-compat with rows predating
+    // migration 024 — null here is the "no companion intent" case.
     const parsed = approvalSummaryDtoSchema.safeParse({
       id: "approval-1",
       sessionId: SESSION,
@@ -39,6 +43,13 @@ describe("approvals schemas", () => {
       createdAt: ISO,
       resolvedAt: null,
       reasoningPreview: "needs auth",
+      actionKind: null,
+      riskLevel: null,
+      preview: null,
+      expiresAt: null,
+      decision: null,
+      decisionReason: null,
+      executionStatus: null,
     });
     expect(parsed.success).toBe(true);
   });
@@ -54,6 +65,13 @@ describe("approvals schemas", () => {
       createdAt: ISO,
       resolvedAt: null,
       reasoningPreview: "ok",
+      actionKind: null,
+      riskLevel: null,
+      preview: null,
+      expiresAt: null,
+      decision: null,
+      decisionReason: null,
+      executionStatus: null,
       toolCall: { command: "send", value: "secret-leak" }, // raw JSONB leak attempt
     });
     expect(parsed.success).toBe(false);
@@ -70,6 +88,13 @@ describe("approvals schemas", () => {
       createdAt: ISO,
       resolvedAt: null,
       reasoningPreview: "x".repeat(APPROVAL_REASONING_PREVIEW_MAX + 1),
+      actionKind: null,
+      riskLevel: null,
+      preview: null,
+      expiresAt: null,
+      decision: null,
+      decisionReason: null,
+      executionStatus: null,
     });
     expect(parsed.success).toBe(false);
   });

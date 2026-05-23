@@ -37,6 +37,79 @@ export type ApprovalStatus = z.infer<typeof approvalStatusSchema>;
 export const approvalPermissionSchema = z.enum(["restricted", "full"]);
 export type ApprovalPermission = z.infer<typeof approvalPermissionSchema>;
 
+/**
+ * Mirrors the `approval_intents.action_kind` CHECK from migration 024.
+ * Same 8 variants as `src/vex-agent/tools/taxonomy.ts::ACTION_KINDS`; kept
+ * as a separate Zod schema here so the renderer schema layer does not
+ * depend on the agent runtime. Adding a variant requires updating both
+ * sides — `protocol-taxonomy.test.ts` + `registry-taxonomy.test.ts` pin
+ * the agent side; consumers of this Zod schema pin the renderer side.
+ */
+export const approvalActionKindSchema = z.enum([
+  "read",
+  "local_write",
+  "schedule",
+  "approval_prepare",
+  "user_wallet_broadcast",
+  "provider_action_request",
+  "external_post",
+  "destructive",
+]);
+export type ApprovalActionKind = z.infer<typeof approvalActionKindSchema>;
+
+/** Mirrors `approval_intents.risk_level` CHECK from migration 024. */
+export const approvalRiskLevelSchema = z.enum([
+  "info",
+  "low",
+  "medium",
+  "high",
+  "critical",
+]);
+export type ApprovalRiskLevel = z.infer<typeof approvalRiskLevelSchema>;
+
+/**
+ * Mirrors `approval_intents.decision` CHECK from migration 024. Phase 2 only
+ * writes the intent row at enqueue (decision is NULL until phase 3 runtime
+ * lands); `rejected_stop` is included now because phase 3 reject-and-stop UI
+ * will gate against the same CHECK.
+ */
+export const approvalDecisionSchema = z.enum([
+  "approved",
+  "rejected",
+  "rejected_stop",
+]);
+export type ApprovalDecision = z.infer<typeof approvalDecisionSchema>;
+
+/** Mirrors `approval_intents.execution_status` CHECK from migration 024. */
+export const approvalExecutionStatusSchema = z.enum([
+  "not_started",
+  "dispatching",
+  "succeeded",
+  "failed",
+]);
+export type ApprovalExecutionStatus = z.infer<
+  typeof approvalExecutionStatusSchema
+>;
+
+/**
+ * Renderer-safe preview projection from `approval_intents.preview_json`.
+ * The main-side mapper allow-lists keys via the same defensive style as
+ * `extractToolName`: never recurses, never returns raw blobs. Values are
+ * coerced to JSON-safe scalars (strings ≤200 chars, numbers, booleans, null).
+ * Strict schema means an unexpected shape at the boundary is rejected.
+ */
+export const approvalPreviewSchema = z
+  .object({
+    toolName: z.string(),
+    namespace: z.string().optional(),
+    criticalArgs: z.record(
+      z.string(),
+      z.union([z.string(), z.number(), z.boolean(), z.null()]),
+    ),
+  })
+  .strict();
+export type ApprovalPreview = z.infer<typeof approvalPreviewSchema>;
+
 export const approvalSummaryDtoSchema = z
   .object({
     id: z.string().min(1),
@@ -60,6 +133,20 @@ export const approvalSummaryDtoSchema = z
     resolvedAt: z.string().datetime({ offset: true }).nullable(),
     /** First 200 chars of `approval_queue.reasoning`, no JSONB leakage. */
     reasoningPreview: z.string().max(APPROVAL_REASONING_PREVIEW_MAX),
+    /**
+     * Puzzle 5 phase 2 — `approval_intents` companion fields. Populated only
+     * when an intent row exists for this approval (back-compat with rows
+     * predating migration 024); the mapper LEFT JOIN tolerates the absence.
+     * Phase 3 wires the `decision` / `decisionReason` / `executionStatus`
+     * lifecycle; phase 2 always exposes those as null.
+     */
+    actionKind: approvalActionKindSchema.nullable(),
+    riskLevel: approvalRiskLevelSchema.nullable(),
+    preview: approvalPreviewSchema.nullable(),
+    expiresAt: z.string().datetime({ offset: true }).nullable(),
+    decision: approvalDecisionSchema.nullable(),
+    decisionReason: z.string().nullable(),
+    executionStatus: approvalExecutionStatusSchema.nullable(),
   })
   .strict();
 export type ApprovalSummaryDto = z.infer<typeof approvalSummaryDtoSchema>;

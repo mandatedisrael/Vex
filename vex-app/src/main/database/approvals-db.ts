@@ -19,9 +19,19 @@ import { Client, type ClientConfig } from "pg";
 import { err, ok, type Result, type VexError } from "@shared/ipc/result.js";
 import {
   APPROVAL_REASONING_PREVIEW_MAX,
+  approvalActionKindSchema,
+  approvalDecisionSchema,
+  approvalExecutionStatusSchema,
   approvalPermissionSchema,
+  approvalPreviewSchema,
+  approvalRiskLevelSchema,
   approvalStatusSchema,
+  type ApprovalActionKind,
+  type ApprovalDecision,
+  type ApprovalExecutionStatus,
   type ApprovalPermission,
+  type ApprovalPreview,
+  type ApprovalRiskLevel,
   type ApprovalStatus,
   type ApprovalSummaryDto,
 } from "@shared/schemas/approvals.js";
@@ -105,10 +115,46 @@ interface ApprovalRow {
   readonly permission_at_enqueue: string;
   readonly created_at: string | Date;
   readonly resolved_at: string | Date | null;
+  /**
+   * Puzzle 5 phase 2 — `approval_intents` companion columns via LEFT JOIN.
+   * Null when no companion intent row exists (back-compat with approvals
+   * created before migration 024).
+   */
+  readonly intent_action_kind: string | null;
+  readonly intent_risk_level: string | null;
+  readonly intent_preview_json: unknown;
+  readonly intent_expires_at: string | Date | null;
+  readonly intent_decision: string | null;
+  readonly intent_decision_reason: string | null;
+  readonly intent_execution_status: string | null;
 }
 
-const APPROVAL_ROW_COLUMNS =
-  "id, status, session_id, tool_call_id, tool_call, reasoning, permission_at_enqueue, created_at, resolved_at";
+/**
+ * SELECT projection — `approval_queue` left-joined on `approval_intents`.
+ * Companion columns aliased with `intent_` prefix so the row mapper can
+ * keep raw approval columns and intent columns visually separate.
+ */
+const APPROVAL_ROW_COLUMNS = [
+  "q.id",
+  "q.status",
+  "q.session_id",
+  "q.tool_call_id",
+  "q.tool_call",
+  "q.reasoning",
+  "q.permission_at_enqueue",
+  "q.created_at",
+  "q.resolved_at",
+  "i.action_kind AS intent_action_kind",
+  "i.risk_level AS intent_risk_level",
+  "i.preview_json AS intent_preview_json",
+  "i.expires_at AS intent_expires_at",
+  "i.decision AS intent_decision",
+  "i.decision_reason AS intent_decision_reason",
+  "i.execution_status AS intent_execution_status",
+].join(", ");
+
+const APPROVAL_FROM_CLAUSE =
+  "FROM approval_queue q LEFT JOIN approval_intents i ON i.approval_id = q.id";
 
 function toIso(value: string | Date): string {
   return value instanceof Date ? value.toISOString() : value;
@@ -154,17 +200,76 @@ function reasoningPreview(raw: string | null): string {
   return raw.slice(0, APPROVAL_REASONING_PREVIEW_MAX);
 }
 
+/**
+ * Companion-column normalisers — return null when the LEFT JOIN found no
+ * intent row OR when the value drifts outside the documented CHECK enum
+ * (defense-in-depth against schema drift between agent migrations and the
+ * mirrored copy in `vex-app/resources/migrations`).
+ */
+function normaliseIntentActionKind(raw: string | null): ApprovalActionKind | null {
+  if (raw === null) return null;
+  const parsed = approvalActionKindSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+function normaliseIntentRiskLevel(raw: string | null): ApprovalRiskLevel | null {
+  if (raw === null) return null;
+  const parsed = approvalRiskLevelSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+function normaliseIntentDecision(raw: string | null): ApprovalDecision | null {
+  if (raw === null) return null;
+  const parsed = approvalDecisionSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+function normaliseIntentExecutionStatus(
+  raw: string | null,
+): ApprovalExecutionStatus | null {
+  if (raw === null) return null;
+  const parsed = approvalExecutionStatusSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Project the JSONB preview to the renderer-safe shape. Strict Zod parse
+ * means a renderer never sees a preview that doesn't match
+ * `approvalPreviewSchema` (Codex 2 phase-2 invariant: raw args / nested
+ * blobs / bigint cannot leak via the preview path even if the engine writes
+ * a malformed row).
+ */
+function normaliseIntentPreview(raw: unknown): ApprovalPreview | null {
+  if (raw === null || raw === undefined) return null;
+  const parsed = approvalPreviewSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
 function toDto(row: ApprovalRow): ApprovalSummaryDto {
+  const preview = normaliseIntentPreview(row.intent_preview_json);
+  // Prefer the preview-resolved toolName over the legacy `tool_call` JSONB
+  // extraction — for `execute_tool` wrappers the preview correctly carries
+  // the TARGET toolId (e.g. `kyberswap.swap.sell`), whereas `tool_call.command`
+  // is still `execute_tool` (Codex final review puzzle 5/2). Legacy rows
+  // without a companion intent fall back to the JSONB extraction unchanged.
+  const toolName = preview?.toolName ?? extractToolName(row.tool_call);
   return {
     id: row.id,
     sessionId: row.session_id,
     toolCallId: row.tool_call_id,
-    toolName: extractToolName(row.tool_call),
+    toolName,
     status: normaliseStatus(row.status),
     permissionAtEnqueue: normalisePermission(row.permission_at_enqueue),
     createdAt: toIso(row.created_at),
     resolvedAt: toIsoOrNull(row.resolved_at),
     reasoningPreview: reasoningPreview(row.reasoning),
+    actionKind: normaliseIntentActionKind(row.intent_action_kind),
+    riskLevel: normaliseIntentRiskLevel(row.intent_risk_level),
+    preview,
+    expiresAt: toIsoOrNull(row.intent_expires_at),
+    decision: normaliseIntentDecision(row.intent_decision),
+    decisionReason: row.intent_decision_reason,
+    executionStatus: normaliseIntentExecutionStatus(row.intent_execution_status),
   };
 }
 
@@ -175,9 +280,9 @@ export async function listPendingForSession(
     try {
       const result = await client.query<ApprovalRow>(
         `SELECT ${APPROVAL_ROW_COLUMNS}
-           FROM approval_queue
-          WHERE session_id = $1 AND status = 'pending'
-          ORDER BY created_at ASC`,
+           ${APPROVAL_FROM_CLAUSE}
+          WHERE q.session_id = $1 AND q.status = 'pending'
+          ORDER BY q.created_at ASC`,
         [sessionId],
       );
       return ok(result.rows.map(toDto));
@@ -194,8 +299,8 @@ export async function getApprovalById(
     try {
       const result = await client.query<ApprovalRow>(
         `SELECT ${APPROVAL_ROW_COLUMNS}
-           FROM approval_queue
-          WHERE id = $1
+           ${APPROVAL_FROM_CLAUSE}
+          WHERE q.id = $1
           LIMIT 1`,
         [id],
       );
@@ -215,9 +320,9 @@ export async function getHistoryForSession(
     try {
       const result = await client.query<ApprovalRow>(
         `SELECT ${APPROVAL_ROW_COLUMNS}
-           FROM approval_queue
-          WHERE session_id = $1
-          ORDER BY created_at DESC
+           ${APPROVAL_FROM_CLAUSE}
+          WHERE q.session_id = $1
+          ORDER BY q.created_at DESC
           LIMIT $2`,
         [sessionId, limit],
       );

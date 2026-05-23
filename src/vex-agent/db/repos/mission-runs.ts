@@ -113,6 +113,7 @@ export async function updateStatus(
   status: MissionRunStatus,
   stopReason?: string,
   stopPayload?: { summary?: string; evidence?: Record<string, unknown> },
+  client?: PoolClient,
 ): Promise<void> {
   // Two SQL paths (not one with conditional string-injection) so the
   // placeholder count always matches the params array. A single template
@@ -121,34 +122,39 @@ export async function updateStatus(
   // placeholders ("could not determine data type of parameter $2").
   if (status === "running") {
     // Live state: clear stale stop evidence from paused_wake / paused_error.
-    await execute(
-      `UPDATE mission_runs SET status = 'running',
+    const runningSql = `UPDATE mission_runs SET status = 'running',
        stop_reason = NULL, stop_summary = NULL,
        stop_evidence_json = NULL, ended_at = NULL
-       WHERE id = $1`,
-      [id],
-    );
+       WHERE id = $1`;
+    if (client) {
+      await client.query(runningSql, [id]);
+    } else {
+      await execute(runningSql, [id]);
+    }
     return;
   }
 
   // Paused statuses keep prior evidence (COALESCE merge); terminal statuses
   // additionally stamp ended_at to NOW().
   const ended = TERMINAL_RUN_STATUSES.has(status) ? "NOW()" : "ended_at";
-  await execute(
-    `UPDATE mission_runs SET status = $1,
+  const pausedSql = `UPDATE mission_runs SET status = $1,
      stop_reason = COALESCE($2, stop_reason),
      stop_summary = COALESCE($3, stop_summary),
      stop_evidence_json = COALESCE($4::jsonb, stop_evidence_json),
      ended_at = ${ended}
-     WHERE id = $5`,
-    [
-      status,
-      stopReason ?? null,
-      stopPayload?.summary ?? null,
-      nullableJsonb(stopPayload?.evidence ?? null),
-      id,
-    ],
-  );
+     WHERE id = $5`;
+  const pausedParams = [
+    status,
+    stopReason ?? null,
+    stopPayload?.summary ?? null,
+    nullableJsonb(stopPayload?.evidence ?? null),
+    id,
+  ];
+  if (client) {
+    await client.query(pausedSql, pausedParams);
+  } else {
+    await execute(pausedSql, pausedParams);
+  }
 }
 
 export async function setLastCheckpoint(id: string): Promise<void> {

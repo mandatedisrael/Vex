@@ -84,6 +84,11 @@ vi.mock("@vex-agent/engine/compact-jobs/forced-fallback.js", () => ({
 
 vi.mock("@vex-agent/db/repos/approvals.js", () => ({
   enqueue: (...a: unknown[]) => mockEnqueueApproval(...a),
+  enqueueWith: (...a: unknown[]) => mockEnqueueApproval(...a.slice(1)),
+}));
+
+vi.mock("@vex-agent/db/repos/approval-intents.js", () => ({
+  createWith: vi.fn(),
 }));
 
 vi.mock("@vex-agent/db/repos/usage.js", () => ({
@@ -314,6 +319,10 @@ describe("turn-loop — state exclusivity", () => {
       success: false,
       output: "approval needed",
       pendingApproval: true,
+      // Puzzle 5 phase 2: enqueue site throws if pendingApproval lacks
+      // actionKind (production dispatcher stamps it via fallback; mock
+      // must include it explicitly).
+      actionKind: "approval_prepare",
     });
 
     const provider = makeProvider([

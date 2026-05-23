@@ -44,7 +44,11 @@ import { dispatchTool } from "@vex-agent/tools/dispatcher.js";
 import { computeBand } from "./context-band.js";
 import { persistToolResultWithOverflow } from "./tool-output-overflow.js";
 import * as approvalsRepo from "@vex-agent/db/repos/approvals.js";
+import * as approvalIntentsRepo from "@vex-agent/db/repos/approval-intents.js";
 import * as missionRunsRepo from "@vex-agent/db/repos/mission-runs.js";
+import { withTransaction } from "@vex-agent/db/client.js";
+import { riskLevelFromActionKind } from "@vex-agent/tools/risk-level.js";
+import { buildIntentPreview, buildPolicySnapshot } from "./approval-intent-preview.js";
 
 /** Synthetic tool-result emitted for batch tool calls skipped after a `compact_committed` signal. */
 const BATCH_ABORTED_BY_COMPACT_OUTPUT =
@@ -147,26 +151,66 @@ export async function processTurnToolBatch(args: {
     // ── Approval break: call was dispatched but has no result in messages ──
     // "awaiting approval" state lives in approval_queue, not in transcript.
     if (result.pendingApproval) {
+      // Puzzle 5 phase 2: approval_intents.action_kind is NOT NULL with a
+      // CHECK constraint over the 8 canonical ActionKind variants. The
+      // dispatcher's `withActionKindFallback` MUST have stamped a kind
+      // before this branch — a missing stamp here is a bug in tool
+      // registration or in the dispatcher fallback. Fail fast (Codex
+      // 2/1B ruling) instead of silently inserting a pseudo-kind or
+      // downgrading to a default — neither preserves the policy invariant.
+      if (result.actionKind === undefined) {
+        throw new Error(
+          `Approval intent requires result.actionKind for tool "${toolCall.name}" — ` +
+          `dispatcher fallback should have stamped it. ` +
+          `Check the tool's actionKind classification in tools/registry/ or protocols/.`,
+        );
+      }
+
       executedCalls.push(toolCall);
 
       approvalId = `approval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      await approvalsRepo.enqueue(
-        approvalId,
-        { command: toolCall.name, args: toolCall.arguments },
-        result.output,
-        context.sessionId,
-        toolCall.id,
-        context.sessionPermission,
-      );
-      batchStopReason = "approval_required";
+      const intentActionKind = result.actionKind;
+      const intentRiskLevel = riskLevelFromActionKind(intentActionKind);
+      const intentPreview = buildIntentPreview(toolCall.name, toolCall.arguments);
+      const intentPolicy = buildPolicySnapshot(toolContext);
 
-      if (context.missionRunId) {
-        await missionRunsRepo.updateStatus(
-          context.missionRunId,
-          "paused_approval",
-          "approval_required",
+      // Single transaction: queue + intent + mission-status flip. A
+      // partial state (queue without intent, or queue+intent without
+      // `paused_approval`) is unrepresentable. Codex 2 phase-2 ruling:
+      // the existing pattern of "queue insert, then updateStatus outside
+      // tx" could leave a pending approval without the run actually
+      // paused if the status update fails.
+      await withTransaction(async (client) => {
+        await approvalsRepo.enqueueWith(
+          client,
+          approvalId!,
+          { command: toolCall.name, args: toolCall.arguments },
+          result.output,
+          context.sessionId,
+          toolCall.id,
+          context.sessionPermission,
         );
-      }
+        await approvalIntentsRepo.createWith(client, {
+          approvalId: approvalId!,
+          sessionId: context.sessionId,
+          missionRunId: context.missionRunId,
+          toolCallId: toolCall.id ?? null,
+          actionKind: intentActionKind,
+          riskLevel: intentRiskLevel,
+          previewJson: intentPreview as unknown as Record<string, unknown>,
+          policyJson: intentPolicy as unknown as Record<string, unknown>,
+        });
+        if (context.missionRunId) {
+          await missionRunsRepo.updateStatus(
+            context.missionRunId,
+            "paused_approval",
+            "approval_required",
+            undefined,
+            client,
+          );
+        }
+      });
+      batchStopReason = "approval_required";
       break; // remaining calls are NOT dispatched
     }
 
