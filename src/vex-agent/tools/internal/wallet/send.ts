@@ -1,42 +1,56 @@
 /**
  * Wallet send handlers — prepare + confirm transfers (Solana + EVM multi-chain).
+ *
+ * Puzzle 5 phase 4: process-local `pendingIntents = new Map<...>` replaced
+ * by DB-backed `wallet_intents` (migration 025). Confirm gates on
+ * expiry + status + session ownership via the repo CAS, persists tx hash
+ * on success, and surfaces structurally redacted failures so raw RPC /
+ * wallet messages never leak into the transcript.
+ *
+ * File-level structure (Codex puzzle-5 phase-4 review v3 LOC discipline):
+ *   - this file              — public handlers + outcome finalisation
+ *   - send-types.ts          — ExecuteOutcome union, summarizeWalletError,
+ *                              buildWalletIntentPreview, TTL constant
+ *   - send-execute-solana.ts — Solana validation + staged broadcast
+ *   - send-execute-evm.ts    — EVM setup + sendTx + receipt wait
  */
 
+import { randomUUID } from "node:crypto";
+
 import { requireEvmWallet, requireSolanaWallet } from "@tools/wallet/multi-auth.js";
-import type { Address } from "viem";
+import * as walletIntentsRepo from "@vex-agent/db/repos/wallet-intents.js";
+import logger from "@utils/logger.js";
 
 import type { ToolResult } from "../../types.js";
 import type { InternalToolContext } from "../types.js";
 import { str } from "../types.js";
 
+import { executeEvmTransfer } from "./send-execute-evm.js";
+import { executeSolanaTransfer } from "./send-execute-solana.js";
+import {
+  WALLET_INTENT_TTL_MS,
+  buildWalletIntentPreview,
+  summarizeWalletError,
+  type ExecuteOutcome,
+} from "./send-types.js";
+
 function ok(data: unknown): ToolResult {
-  return { success: true, output: JSON.stringify(data, null, 2), data: data as Record<string, unknown> };
+  return {
+    success: true,
+    output: JSON.stringify(data, null, 2),
+    data: data as Record<string, unknown>,
+  };
 }
 
 function fail(msg: string): ToolResult {
   return { success: false, output: msg };
 }
 
-// ── In-memory intent store (per-process, cleared on restart) ─────
-
-interface TransferIntent {
-  id: string;
-  network: "eip155" | "solana";
-  chain?: string;  // EVM chain alias. Required for eip155; ignored for solana.
-  to: string;
-  amount: string;
-  token: string | null;
-  createdAt: number;
-}
-
-const pendingIntents = new Map<string, TransferIntent>();
-let intentCounter = 0;
-
-// ── wallet_send_prepare ──────────────────────────────────────────
+// ── wallet_send_prepare ─────────────────────────────────────────────────
 
 export async function handleWalletSendPrepare(
   params: Record<string, unknown>,
-  _context: InternalToolContext,
+  context: InternalToolContext,
 ): Promise<ToolResult> {
   const network = str(params, "network") as "eip155" | "solana";
   const to = str(params, "to");
@@ -51,57 +65,62 @@ export async function handleWalletSendPrepare(
     return fail("network must be eip155 or solana");
   }
 
-  const chain = str(params, "chain") || undefined;
-  if (network === "eip155" && !chain) {
+  const chain = str(params, "chain") || null;
+  if (network === "eip155" && chain === null) {
     return fail("Missing required: chain for eip155 transfers");
   }
 
-  // Validate amount is numeric
   const numAmount = Number(amount);
   if (!Number.isFinite(numAmount) || numAmount <= 0) {
     return fail(`Invalid amount: ${amount}`);
   }
 
-  // Validate sender has wallet configured
+  // Single-wallet-per-network model (phase 5 will add per-session scope).
+  let walletAddress: string;
   if (network === "solana") {
-    requireSolanaWallet(); // throws if not configured
+    walletAddress = requireSolanaWallet().address;
   } else {
-    requireEvmWallet(); // throws if not configured
+    walletAddress = requireEvmWallet().address;
   }
 
-  // Create intent
-  intentCounter++;
-  const intentId = `intent-${Date.now()}-${intentCounter}`;
-  const intent: TransferIntent = {
-    id: intentId,
+  const intentId = `intent-${randomUUID()}`;
+  const expiresAt = new Date(Date.now() + WALLET_INTENT_TTL_MS).toISOString();
+  const previewJson = buildWalletIntentPreview({
     network,
     chain,
     to,
     amount,
     token,
-    createdAt: Date.now(),
-  };
-  pendingIntents.set(intentId, intent);
+  });
 
-  // Clean old intents (>10 min)
-  const cutoff = Date.now() - 10 * 60 * 1000;
-  for (const [id, i] of pendingIntents) {
-    if (i.createdAt < cutoff) pendingIntents.delete(id);
-  }
+  await walletIntentsRepo.create({
+    intentId,
+    sessionId: context.sessionId,
+    walletAddress,
+    network,
+    chainAlias: chain,
+    toAddress: to,
+    amount,
+    token,
+    previewJson,
+    expiresAt,
+    idempotencyKey: intentId,
+  });
 
   return ok({
     intentId,
     network,
-    chain,
+    chain: chain ?? undefined,
     to,
     amount,
     token: token ?? "native",
     status: "prepared",
+    expiresAt,
     message: "Use wallet_send_confirm to broadcast this transfer.",
   });
 }
 
-// ── wallet_send_confirm ──────────────────────────────────────────
+// ── wallet_send_confirm ─────────────────────────────────────────────────
 
 export async function handleWalletSendConfirm(
   params: Record<string, unknown>,
@@ -114,205 +133,222 @@ export async function handleWalletSendConfirm(
     return fail("Missing required: network, intentId");
   }
 
-  const intent = pendingIntents.get(intentId);
+  // Session-scoped lookup — cross-session intentId yields null (Codex
+  // puzzle-5 phase-4 review point 3).
+  const intent = await walletIntentsRepo.getById(intentId, context.sessionId);
   if (!intent) {
-    return fail(`Intent not found: ${intentId}. It may have expired (10 min TTL) or was already used.`);
+    return fail(`Intent not found: ${intentId}.`);
   }
 
   if (intent.network !== network) {
-    return fail(`Network mismatch: intent is ${intent.network}, got ${network}`);
+    return fail(
+      `Network mismatch: intent is ${intent.network}, got ${network}`,
+    );
   }
 
-  // Approval gate — mutating tool, requires approval under restricted permission.
-  // (Codex review round 1 RED 1 — this gate is parallel to runtime.ts:105
-  // and must use the same permission axis as the central gate.)
+  if (intent.status !== "pending") {
+    return fail(`Intent ${intentId} is ${intent.status} — cannot consume.`);
+  }
+
+  if (new Date(intent.expiresAt) <= new Date()) {
+    return fail(`Intent expired at ${intent.expiresAt}.`);
+  }
+
+  // Approval gate — UNCHANGED from pre-phase-4. Intent stays `pending`
+  // for the approval-then-retry cycle; the same row is consumed on the
+  // second dispatch after the operator approves.
   if (!context.approved && context.sessionPermission === "restricted") {
-    // DON'T delete intent — must survive until approval retry
     return {
       success: false,
-      output: `Transfer requires approval under restricted permission. Use the approval flow to confirm.`,
+      output:
+        "Transfer requires approval under restricted permission. Use the approval flow to confirm.",
       pendingApproval: true,
     };
   }
 
-  // Remove intent (one-time use) — only after approval check passes
-  pendingIntents.delete(intentId);
-
-  if (network === "solana") {
-    return executeSolanaTransfer(intent);
+  // CAS-consume atomically; race losers get null.
+  const claimed = await walletIntentsRepo.consumeIfPending(
+    intentId,
+    context.sessionId,
+  );
+  if (!claimed) {
+    const cur = await walletIntentsRepo.getById(intentId, context.sessionId);
+    return fail(
+      `Cannot consume intent ${intentId}: status=${cur?.status ?? "unknown"}.`,
+    );
   }
 
-  return executeEvmTransfer(intent);
+  const outcome: ExecuteOutcome =
+    network === "solana"
+      ? await executeSolanaTransfer(claimed)
+      : await executeEvmTransfer(claimed);
+
+  return finalizeOutcome(intentId, context.sessionId, outcome);
 }
 
-// ── Solana transfer execution ────────────────────────────────────
+// ── Outcome finalisation (audit writes + ToolResult shape) ──────────────
 
-async function executeSolanaTransfer(intent: TransferIntent): Promise<ToolResult> {
-  const [{ Keypair }, { sendSol, sendSplToken }, { resolveJupiterToken }] = await Promise.all([
-    import("@solana/web3.js"),
-    import("@tools/solana-ecosystem/shared/solana-transfer.js"),
-    import("@tools/solana-ecosystem/jupiter/jupiter-tokens/service.js"),
-  ]);
-  const wallet = requireSolanaWallet();
-  const keypair = Keypair.fromSecretKey(wallet.secretKey);
-
-  if (!intent.token || intent.token === "native" || intent.token.toUpperCase() === "SOL") {
-    // Native SOL transfer
-    const lamports = BigInt(Math.round(Number(intent.amount) * 1e9));
-    const result = await sendSol({ from: keypair, to: intent.to, lamports });
-    return {
-      success: true,
-      output: JSON.stringify(result, null, 2),
-      data: {
-        ...result,
-        _tradeCapture: {
-          type: "transfer",
-          chain: "solana",
-          status: "executed",
-          inputToken: "SOL",
-          inputAmount: intent.amount,
-          outputToken: "SOL",
-          outputAmount: intent.amount,
-          signature: result.signature,
-        },
-      },
-    };
+async function finalizeOutcome(
+  intentId: string,
+  sessionId: string,
+  outcome: ExecuteOutcome,
+): Promise<ToolResult> {
+  switch (outcome.kind) {
+    case "confirmed":
+      return finalizeConfirmed(intentId, sessionId, outcome);
+    case "chain_failed":
+      await markFailedChecked(intentId, sessionId, outcome, outcome.txHash);
+      return fail(
+        `Wallet transfer reverted on-chain. Error hash: ${outcome.errorHash}. Tx hash: ${outcome.txHash}.`,
+      );
+    case "confirmation_unknown":
+      await markFailedChecked(
+        intentId,
+        sessionId,
+        { errorKind: "ConfirmationUnknown", errorHash: outcome.errorHash },
+        outcome.txHash,
+      );
+      return fail(
+        `Wallet transfer broadcast but confirmation unknown. Error hash: ${outcome.errorHash}. Tx hash: ${outcome.txHash}.`,
+      );
+    case "pre_broadcast_failed":
+      await markFailedChecked(intentId, sessionId, outcome, null);
+      return fail(
+        `Wallet transfer failed before broadcast. Error hash: ${outcome.errorHash}.`,
+      );
   }
+}
 
-  // SPL token transfer
-  let tokenMeta;
+/**
+ * `markFailed` returns `null` on CAS miss (status was already
+ * non-`consuming` when this write ran). That is an audit/status drift —
+ * caller-side log it structurally so the operator notices. The original
+ * outcome (failed transfer) still surfaces to the agent via the
+ * `ToolResult` returned by `finalizeOutcome` — the audit log entry is
+ * the only place the inconsistency is visible.
+ *
+ * Codex puzzle-5 phase-4 final review point 1.
+ */
+async function markFailedChecked(
+  intentId: string,
+  sessionId: string,
+  cause: { errorKind: string; errorHash: string },
+  txHash: string | null,
+): Promise<void> {
+  const row = await walletIntentsRepo.markFailed(
+    intentId,
+    sessionId,
+    `${cause.errorKind}:${cause.errorHash}`,
+    txHash,
+  );
+  if (row === null) {
+    logger.warn("wallet.send.mark_failed_status_mismatch", {
+      intentId,
+      sessionId,
+      txHash,
+      errorKind: cause.errorKind,
+      errorHash: cause.errorHash,
+    });
+  }
+}
+
+async function finalizeConfirmed(
+  intentId: string,
+  sessionId: string,
+  outcome: Extract<ExecuteOutcome, { kind: "confirmed" }>,
+): Promise<ToolResult> {
+  let markedExecuted = false;
+  let auditReason: string | null = null;
   try {
-    tokenMeta = await resolveJupiterToken(intent.token);
-  } catch {
-    // resolveJupiterToken may throw if JUPITER_API_KEY is missing
-  }
-  if (!tokenMeta) {
-    return fail(`Token not found: ${intent.token}`);
+    const row = await walletIntentsRepo.markExecuted(
+      intentId,
+      sessionId,
+      outcome.txHash,
+    );
+    if (row === null) {
+      // CAS miss — status was not 'consuming' at write time. Possible
+      // operator-side mutation or process-restart inconsistency. Tx is
+      // still real on-chain; surface via structural audit log + flip the
+      // row to `audit_failed` so phase 7 reconcile tooling sees it.
+      logger.warn("wallet.send.mark_executed_status_mismatch", {
+        intentId,
+        sessionId,
+        txHash: outcome.txHash,
+      });
+      auditReason = "StatusMismatch:no_consuming_row";
+    } else {
+      markedExecuted = true;
+    }
+  } catch (auditErr) {
+    const sum = summarizeWalletError(auditErr);
+    logger.warn("wallet.send.audit_write_failed", {
+      intentId,
+      sessionId,
+      txHash: outcome.txHash,
+      errorKind: sum.errorKind,
+      errorHash: sum.errorHash,
+    });
+    // Preserve the underlying cause as the audit reason — the structural
+    // ErrorKind:hash label matches the failure_reason format used on
+    // pre/post-broadcast failure paths.
+    auditReason = `${sum.errorKind}:${sum.errorHash}`;
   }
 
-  const atomicAmount = BigInt(Math.round(Number(intent.amount) * 10 ** tokenMeta.decimals));
-  const result = await sendSplToken({
-    from: keypair,
-    to: intent.to,
-    mint: tokenMeta.address,
-    amount: atomicAmount,
-    decimals: tokenMeta.decimals,
-  });
+  if (!markedExecuted && auditReason !== null) {
+    await tryMarkAuditFailed(
+      intentId,
+      sessionId,
+      outcome.txHash,
+      auditReason,
+    );
+  }
 
   return {
     success: true,
-    output: JSON.stringify(result, null, 2),
-    data: {
-      ...result,
-      _tradeCapture: {
-        type: "transfer",
-        chain: "solana",
-        status: "executed",
-        inputToken: tokenMeta.symbol,
-        inputAmount: intent.amount,
-        outputToken: tokenMeta.symbol,
-        outputAmount: intent.amount,
-        signature: result.signature,
-      },
-    },
+    output: JSON.stringify(outcome.data, null, 2),
+    data: outcome.data,
   };
 }
 
-// ── EVM transfer execution (dynamic chain: native + ERC-20 + ERC-721) ──
-
-async function executeEvmTransfer(intent: TransferIntent): Promise<ToolResult> {
-  const { createDynamicPublicClient, createDynamicWalletClient } = await import("@tools/khalani/evm-client.js");
-  const { getKhalaniClient } = await import("@tools/khalani/client.js");
-  const { resolveChainId, getChain } = await import("@tools/khalani/chains.js");
-  const { parseUnits, getAddress } = await import("viem");
-
-  const wallet = requireEvmWallet();
-  const chains = await getKhalaniClient().getChains();
-  const chainAlias = intent.chain;
-  if (!chainAlias) {
-    return fail("Missing required: chain for eip155 transfers");
-  }
-  const chainId = resolveChainId(chainAlias, chains);
-  const chain = getChain(chainId, chains);
-  const publicClient = createDynamicPublicClient(chain, chains);
-  const walletClient = createDynamicWalletClient(chain, chains, wallet.privateKey as `0x${string}`);
-
-  const isNft = intent.token?.startsWith("nft:");
-  const isNative = !intent.token || intent.token === "native";
-  const chainName = chain.name || chainAlias;
-
-  let hash: `0x${string}`;
-  let tokenSymbol = chain.nativeCurrency.symbol;
-
-  if (isNative) {
-    const value = parseUnits(intent.amount, chain.nativeCurrency.decimals);
-    hash = await walletClient.sendTransaction({
-      to: getAddress(intent.to),
-      value,
-      chain: undefined,
-    });
-  } else if (isNft) {
-    const parts = intent.token!.split(":");
-    const nftContract = getAddress(parts[1]);
-    const nftTokenId = BigInt(parts[2]);
-    tokenSymbol = `NFT#${nftTokenId}`;
-
-    hash = await walletClient.writeContract({
-      address: nftContract,
-      abi: [{
-        inputs: [{ name: "from", type: "address" }, { name: "to", type: "address" }, { name: "tokenId", type: "uint256" }],
-        name: "safeTransferFrom", outputs: [], stateMutability: "nonpayable", type: "function",
-      }] as const,
-      functionName: "safeTransferFrom",
-      args: [wallet.address as `0x${string}`, getAddress(intent.to), nftTokenId],
-      chain: undefined,
-    });
-  } else {
-    const tokenAddress = getAddress(intent.token!);
-    tokenSymbol = intent.token!;
-
-    const decimals = await publicClient.readContract({
-      address: tokenAddress,
-      abi: [{ inputs: [], name: "decimals", outputs: [{ type: "uint8" }], stateMutability: "view", type: "function" }] as const,
-      functionName: "decimals",
-    });
-    const value = parseUnits(intent.amount, decimals);
-
-    hash = await walletClient.writeContract({
-      address: tokenAddress,
-      abi: [{
-        inputs: [{ name: "to", type: "address" }, { name: "amount", type: "uint256" }],
-        name: "transfer", outputs: [{ type: "bool" }], stateMutability: "nonpayable", type: "function",
-      }] as const,
-      functionName: "transfer",
-      args: [getAddress(intent.to), value],
-      chain: undefined,
+/**
+ * Best-effort `markAuditFailed` for the `consuming` row when markExecuted
+ * could not flip to `executed`. Returns silently — the tx is already
+ * on-chain; the audit row drift is logged but does not change the
+ * `ToolResult` (Codex puzzle-5 phase-4 final review point 1). The reason
+ * threads through from the original markExecuted outcome (throw cause OR
+ * `StatusMismatch:no_consuming_row` for the null CAS path).
+ */
+async function tryMarkAuditFailed(
+  intentId: string,
+  sessionId: string,
+  txHash: string,
+  reason: string,
+): Promise<void> {
+  try {
+    const row = await walletIntentsRepo.markAuditFailed(
+      intentId,
+      sessionId,
+      txHash,
+      reason,
+    );
+    if (row === null) {
+      // markAuditFailed also requires status='consuming'. If we missed
+      // here too, the intent is in a status the audit lifecycle does not
+      // cover (likely 'cancelled' or 'failed' from a concurrent path).
+      logger.warn("wallet.send.mark_audit_failed_status_mismatch", {
+        intentId,
+        sessionId,
+        txHash,
+      });
+    }
+  } catch (cascadingErr) {
+    const csum = summarizeWalletError(cascadingErr);
+    logger.warn("wallet.send.audit_cascade_failed", {
+      intentId,
+      sessionId,
+      txHash,
+      errorKind: csum.errorKind,
+      errorHash: csum.errorHash,
     });
   }
-
-  const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-  return {
-    success: true,
-    output: JSON.stringify({
-      txHash: hash,
-      chain: chainName,
-      status: receipt.status === "success" ? "confirmed" : "failed",
-      blockNumber: Number(receipt.blockNumber),
-    }, null, 2),
-    data: {
-      txHash: hash,
-      _tradeCapture: {
-        type: isNft ? "send" : "transfer",
-        chain: chainName,
-        status: "executed",
-        inputToken: tokenSymbol,
-        inputAmount: intent.amount,
-        outputToken: tokenSymbol,
-        outputAmount: intent.amount,
-        signature: hash,
-        walletAddress: wallet.address,
-      },
-    },
-  };
 }

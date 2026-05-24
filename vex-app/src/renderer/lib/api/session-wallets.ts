@@ -40,12 +40,13 @@ function sessionScopeOptions(sessionId: string) {
   });
 }
 
-function preparedIntentOptions(intentId: string) {
+function preparedIntentOptions(sessionId: string, intentId: string) {
   return queryOptions({
-    queryKey: walletsKeys.preparedIntent(intentId),
-    queryFn: () => window.vex.wallets.getPreparedIntent({ intentId }),
+    queryKey: walletsKeys.preparedIntent(sessionId, intentId),
+    queryFn: () =>
+      window.vex.wallets.getPreparedIntent({ sessionId, intentId }),
     staleTime: STALE_MS,
-    enabled: intentId.length > 0,
+    enabled: sessionId.length > 0 && intentId.length > 0,
   });
 }
 
@@ -55,10 +56,16 @@ export function useSessionWallets(
   return useQuery(sessionScopeOptions(sessionId ?? ""));
 }
 
+/**
+ * Puzzle 5 phase 4 — both `sessionId` and `intentId` are required by the
+ * IPC contract (cross-session lookup MUST miss). Pass `null` for either
+ * to disable the query.
+ */
 export function usePreparedIntent(
+  sessionId: string | null,
   intentId: string | null,
 ): UseQueryResult<Result<PreparedIntentDto | null>> {
-  return useQuery(preparedIntentOptions(intentId ?? ""));
+  return useQuery(preparedIntentOptions(sessionId ?? "", intentId ?? ""));
 }
 
 export function useSetSessionWalletScope(): UseMutationResult<

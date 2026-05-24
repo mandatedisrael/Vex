@@ -308,7 +308,7 @@ describe("wallets-session handlers", () => {
     });
   });
 
-  it("setSessionWalletScope / preparedIntent / cancelPreparedIntent fail closed", async () => {
+  it("setSessionWalletScope still fail-closed (phase 5)", async () => {
     const set = await call(CH.wallets.setSessionWalletScope, {
       sessionId: SESSION,
       allowedWalletIds: ["w1"],
@@ -316,16 +316,14 @@ describe("wallets-session handlers", () => {
     });
     expect(set.ok).toBe(false);
     expect(set.error?.code).toBe("wallets.feature_unavailable");
+  });
 
-    const get = await call(CH.wallets.getPreparedIntent, { intentId: "i1" });
-    expect(get.ok).toBe(false);
-    expect(get.error?.code).toBe("wallets.feature_unavailable");
-
-    const cancel = await call(CH.wallets.cancelPreparedIntent, {
-      intentId: "i1",
-    });
-    expect(cancel.ok).toBe(false);
-    expect(cancel.error?.code).toBe("wallets.feature_unavailable");
+  // Phase 4 wires getPreparedIntent / cancelPreparedIntent — the focused
+  // contract pinning lives in `wallets-phase4.test.ts`. Here we only check
+  // that the handlers exist after registration (smoke regression).
+  it("getPreparedIntent / cancelPreparedIntent registered (phase 4 wired)", () => {
+    expect(handlers.has(CH.wallets.getPreparedIntent)).toBe(true);
+    expect(handlers.has(CH.wallets.cancelPreparedIntent)).toBe(true);
   });
 });
 

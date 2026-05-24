@@ -103,8 +103,8 @@ export const walletsKeys = {
   all: ["wallets"] as const,
   sessionScope: (sessionId: string) =>
     ["wallets", "sessionScope", sessionId] as const,
-  preparedIntent: (intentId: string) =>
-    ["wallets", "preparedIntent", intentId] as const,
+  preparedIntent: (sessionId: string, intentId: string) =>
+    ["wallets", "preparedIntent", sessionId, intentId] as const,
 };
 
 export const modelsKeys = {

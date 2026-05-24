@@ -7,15 +7,22 @@
 import { describe, expect, it } from "vitest";
 import {
   chainSchema,
+  preparedIntentDtoSchema,
   walletGenerateInputSchema,
   walletGenerateEvmResultSchema,
   walletGenerateSolanaResultSchema,
   walletImportEvmInputSchema,
   walletImportSolanaInputSchema,
+  walletIntentNetworkSchema,
+  walletIntentPreviewSchema,
+  walletIntentStatusSchema,
   walletOpenBackupFolderInputSchema,
   walletOpenBackupFolderResultSchema,
   walletRestoreInputSchema,
   walletRestoreResultSchema,
+  walletsActionResultSchema,
+  walletsCancelPreparedIntentInputSchema,
+  walletsGetPreparedIntentInputSchema,
 } from "../wallets.js";
 
 describe("chainSchema", () => {
@@ -184,6 +191,209 @@ describe("walletOpenBackupFolder schemas", () => {
         ok: true,
         path: "/foo",
       }).success
+    ).toBe(false);
+  });
+});
+
+// ── Puzzle 5 phase 4 — wallet intents schemas ────────────────────────────
+
+const SESSION_UUID = "00000000-0000-4000-8000-000000000001";
+const ISO = "2026-05-24T20:00:00.000Z";
+
+describe("walletIntentNetworkSchema", () => {
+  it("accepts eip155 + solana, rejects other", () => {
+    expect(walletIntentNetworkSchema.safeParse("eip155").success).toBe(true);
+    expect(walletIntentNetworkSchema.safeParse("solana").success).toBe(true);
+    expect(walletIntentNetworkSchema.safeParse("bitcoin").success).toBe(false);
+  });
+});
+
+describe("walletIntentStatusSchema", () => {
+  it("accepts all 7 lifecycle values", () => {
+    for (const status of [
+      "pending",
+      "consuming",
+      "executed",
+      "failed",
+      "audit_failed",
+      "cancelled",
+      "expired",
+    ]) {
+      expect(walletIntentStatusSchema.safeParse(status).success).toBe(true);
+    }
+  });
+
+  it("rejects unknown status", () => {
+    expect(walletIntentStatusSchema.safeParse("unknown").success).toBe(false);
+  });
+});
+
+describe("walletIntentPreviewSchema", () => {
+  it("accepts well-formed preview with allow-listed scalar criticalArgs", () => {
+    expect(
+      walletIntentPreviewSchema.safeParse({
+        label: "Send 1.5 ETH to 0xfed…cba09 on base",
+        criticalArgs: {
+          network: "eip155",
+          chain: "base",
+          to: "0xfed",
+          amount: "1.5",
+          token: null,
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects nested object in criticalArgs (allow-list scalars only)", () => {
+    expect(
+      walletIntentPreviewSchema.safeParse({
+        label: "x",
+        criticalArgs: { nested: { evil: "blob" } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects oversized label (>200 chars)", () => {
+    expect(
+      walletIntentPreviewSchema.safeParse({
+        label: "x".repeat(201),
+        criticalArgs: {},
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("preparedIntentDtoSchema (phase 4 extended)", () => {
+  function validDto() {
+    return {
+      intentId: "intent-1",
+      sessionId: SESSION_UUID,
+      walletAddress: "0xabcdef1234567890abcdef1234567890abcdef12",
+      network: "eip155" as const,
+      chain: "base",
+      to: "0xfedcba0987654321fedcba0987654321fedcba09",
+      amount: "1.5",
+      token: null,
+      status: "pending" as const,
+      createdAt: ISO,
+      expiresAt: ISO,
+      consumedAt: null,
+      cancelledAt: null,
+      txHash: null,
+      preview: { label: "Test", criticalArgs: {} },
+    };
+  }
+
+  it("accepts a complete DTO", () => {
+    expect(preparedIntentDtoSchema.safeParse(validDto()).success).toBe(true);
+  });
+
+  it("accepts null preview (mapper drops malformed JSONB)", () => {
+    expect(
+      preparedIntentDtoSchema.safeParse({ ...validDto(), preview: null }).success,
+    ).toBe(true);
+  });
+
+  it("accepts txHash set with status='failed' (broadcasted failure)", () => {
+    expect(
+      preparedIntentDtoSchema.safeParse({
+        ...validDto(),
+        status: "failed",
+        txHash: "0xtx",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("REJECTS pre-phase-4 minimal payload (now needs walletAddress/network/etc.)", () => {
+    expect(
+      preparedIntentDtoSchema.safeParse({
+        intentId: "intent-1",
+        sessionId: SESSION_UUID,
+        expiresAt: ISO,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("REJECTS failureReason field (defense-in-depth — never crosses boundary)", () => {
+    expect(
+      preparedIntentDtoSchema.safeParse({
+        ...validDto(),
+        failureReason: "TypeError:abc",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("walletsGetPreparedIntentInputSchema (phase 4 — sessionId required)", () => {
+  it("requires both sessionId + intentId", () => {
+    expect(
+      walletsGetPreparedIntentInputSchema.safeParse({
+        sessionId: SESSION_UUID,
+        intentId: "intent-1",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("REJECTS pre-phase-4 input shape ({intentId} only)", () => {
+    expect(
+      walletsGetPreparedIntentInputSchema.safeParse({ intentId: "intent-1" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("REJECTS invalid sessionId UUID", () => {
+    expect(
+      walletsGetPreparedIntentInputSchema.safeParse({
+        sessionId: "not-a-uuid",
+        intentId: "intent-1",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("walletsCancelPreparedIntentInputSchema", () => {
+  it("same shape as get input — sessionId required", () => {
+    expect(
+      walletsCancelPreparedIntentInputSchema.safeParse({
+        sessionId: SESSION_UUID,
+        intentId: "intent-1",
+      }).success,
+    ).toBe(true);
+    expect(
+      walletsCancelPreparedIntentInputSchema.safeParse({ intentId: "intent-1" })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe("walletsActionResultSchema (phase 4 — 'cancelled' added)", () => {
+  it("accepts 'cancelled' status", () => {
+    expect(
+      walletsActionResultSchema.safeParse({
+        intentId: "intent-1",
+        status: "cancelled",
+        message: "Intent cancelled.",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts 'already_terminal' (cross-session cancel + race miss)", () => {
+    expect(
+      walletsActionResultSchema.safeParse({
+        intentId: "intent-1",
+        status: "already_terminal",
+        message: "No pending intent for this session.",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects unknown status", () => {
+    expect(
+      walletsActionResultSchema.safeParse({
+        intentId: "intent-1",
+        status: "blasted",
+        message: "x",
+      }).success,
     ).toBe(false);
   });
 });
