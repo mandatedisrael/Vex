@@ -40,6 +40,7 @@ import {
 } from "@shared/schemas/sessions.js";
 import { buildPoolConfig } from "./db-config.js";
 import { log } from "../logger/index.js";
+import type { WalletRef } from "../ipc/_wallet-refs.js";
 
 const CONNECT_TIMEOUT_MS = 2_000;
 const QUERY_TIMEOUT_MS = 5_000;
@@ -209,41 +210,66 @@ async function loadMissionStatus(
  * the renderer opens the session and the engine's `processMissionSetupTurn`
  * picks up.
  */
-export async function createSession(
+export async function createSessionWithClient(
+  client: Client,
+  id: string,
   input: SessionCreateInput,
+  walletRefs: { evm: WalletRef | null; solana: WalletRef | null },
 ): Promise<Result<SessionListItem, VexError>> {
-  const id = randomUUID();
   const mode: SessionMode = input.mode;
   const permission: SessionPermission = input.permission;
   const title: string = input.name;
   const initialGoal: string | null = null;
+  const { evm, solana } = walletRefs;
+  // Mission draft allowed_wallets is a deterministic projection of the
+  // session's selected wallet ADDRESSES — 5B mission policy reads this, frozen
+  // at run start. Agent sessions have no missions row.
+  const allowedWallets = [evm?.address, solana?.address].filter(
+    (a): a is string => typeof a === "string",
+  );
 
+  await client.query("BEGIN");
+  await client.query(
+    `INSERT INTO sessions
+       (id, scope, mode, permission, initial_goal, title,
+        selected_evm_wallet_id, selected_evm_wallet_address,
+        selected_solana_wallet_id, selected_solana_wallet_address)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [
+      id, VEX_APP_SESSION_SCOPE, mode, permission, initialGoal, title,
+      evm?.id ?? null, evm?.address ?? null,
+      solana?.id ?? null, solana?.address ?? null,
+    ],
+  );
+  if (mode === "mission") {
+    const missionId = randomUUID();
+    await client.query(
+      "INSERT INTO missions (id, root_session_id, status, allowed_wallets) VALUES ($1, $2, 'draft', $3)",
+      [missionId, id, allowedWallets],
+    );
+  }
+  const sessionResult = await client.query<SessionRow>(
+    `SELECT ${SESSION_ROW_COLUMNS} FROM sessions WHERE id = $1 AND scope = $2`,
+    [id, VEX_APP_SESSION_SCOPE],
+  );
+  await client.query("COMMIT");
+  const row = sessionResult.rows[0];
+  if (!row) {
+    return dbError(`createSession lost row id=${id} after INSERT`);
+  }
+  // Freshly created mission sessions have no mission_run yet — that record
+  // only appears once startMission() is called downstream.
+  return ok(toListItem(row, null));
+}
+
+export async function createSession(
+  input: SessionCreateInput,
+  walletRefs: { evm: WalletRef | null; solana: WalletRef | null } = { evm: null, solana: null },
+): Promise<Result<SessionListItem, VexError>> {
+  const id = randomUUID();
   return withClient(async (client) => {
     try {
-      await client.query("BEGIN");
-      await client.query(
-        "INSERT INTO sessions (id, scope, mode, permission, initial_goal, title) VALUES ($1, $2, $3, $4, $5, $6)",
-        [id, VEX_APP_SESSION_SCOPE, mode, permission, initialGoal, title],
-      );
-      if (mode === "mission") {
-        const missionId = randomUUID();
-        await client.query(
-          "INSERT INTO missions (id, root_session_id, status) VALUES ($1, $2, 'draft')",
-          [missionId, id],
-        );
-      }
-      const sessionResult = await client.query<SessionRow>(
-        `SELECT ${SESSION_ROW_COLUMNS} FROM sessions WHERE id = $1 AND scope = $2`,
-        [id, VEX_APP_SESSION_SCOPE],
-      );
-      await client.query("COMMIT");
-      const row = sessionResult.rows[0];
-      if (!row) {
-        return dbError(`createSession lost row id=${id} after INSERT`);
-      }
-      // Freshly created mission sessions have no mission_run yet — that
-      // record only appears once startMission() is called downstream.
-      return ok(toListItem(row, null));
+      return await createSessionWithClient(client, id, input, walletRefs);
     } catch (cause) {
       try {
         await client.query("ROLLBACK");
@@ -251,6 +277,127 @@ export async function createSession(
         log.warn("[sessions-db] ROLLBACK after createSession failure failed", rbCause);
       }
       return dbError("createSession transaction failed", cause);
+    }
+  });
+}
+
+export interface SessionWalletScopeRow {
+  evm: WalletRef | null;
+  solana: WalletRef | null;
+}
+
+interface ScopeQueryRow {
+  selected_evm_wallet_id: string | null;
+  selected_evm_wallet_address: string | null;
+  selected_solana_wallet_id: string | null;
+  selected_solana_wallet_address: string | null;
+}
+
+function rowToScope(r: ScopeQueryRow | undefined): SessionWalletScopeRow {
+  return {
+    evm:
+      r?.selected_evm_wallet_id && r.selected_evm_wallet_address
+        ? { id: r.selected_evm_wallet_id, address: r.selected_evm_wallet_address }
+        : null,
+    solana:
+      r?.selected_solana_wallet_id && r.selected_solana_wallet_address
+        ? { id: r.selected_solana_wallet_id, address: r.selected_solana_wallet_address }
+        : null,
+  };
+}
+
+/** Read the per-session wallet selection (vex-app pool — sessions are app-owned). */
+export async function getSessionWalletScope(
+  sessionId: string,
+): Promise<Result<SessionWalletScopeRow, VexError>> {
+  return withClient(async (client) => {
+    try {
+      const r = await client.query<ScopeQueryRow>(
+        `SELECT selected_evm_wallet_id, selected_evm_wallet_address,
+                selected_solana_wallet_id, selected_solana_wallet_address
+         FROM sessions WHERE id = $1 AND scope = $2`,
+        [sessionId, VEX_APP_SESSION_SCOPE],
+      );
+      return ok(rowToScope(r.rows[0]));
+    } catch (cause) {
+      return dbError("getSessionWalletScope query failed", cause);
+    }
+  });
+}
+
+/**
+ * Initialize-if-empty CAS for the per-session wallet selection (puzzle 5 5C).
+ * Per family: set the selection ONLY when currently NULL and the session has
+ * no messages yet (immutable after the first turn). For a draft mission
+ * session, recompute missions.allowed_wallets from the resulting selection in
+ * the SAME transaction. Never overwrites a set family, never clears.
+ */
+export async function initializeSessionWalletScopeWithClient(
+  client: Client,
+  sessionId: string,
+  evm: WalletRef | null,
+  solana: WalletRef | null,
+): Promise<{ status: "updated" | "unchanged" }> {
+  await client.query("BEGIN");
+  let changed = false;
+  if (evm) {
+    const r = await client.query(
+      `UPDATE sessions SET selected_evm_wallet_id = $2, selected_evm_wallet_address = $3
+       WHERE id = $1 AND scope = $4 AND selected_evm_wallet_id IS NULL AND message_count = 0`,
+      [sessionId, evm.id, evm.address, VEX_APP_SESSION_SCOPE],
+    );
+    if ((r.rowCount ?? 0) > 0) changed = true;
+  }
+  if (solana) {
+    const r = await client.query(
+      `UPDATE sessions SET selected_solana_wallet_id = $2, selected_solana_wallet_address = $3
+       WHERE id = $1 AND scope = $4 AND selected_solana_wallet_id IS NULL AND message_count = 0`,
+      [sessionId, solana.id, solana.address, VEX_APP_SESSION_SCOPE],
+    );
+    if ((r.rowCount ?? 0) > 0) changed = true;
+  }
+  if (changed) {
+    // Recompute mission draft allowed_wallets from the (now-updated) selection
+    // — draft mission only; no-op for agent sessions (0 rows).
+    const sel = await client.query<ScopeQueryRow>(
+      `SELECT selected_evm_wallet_id, selected_evm_wallet_address,
+              selected_solana_wallet_id, selected_solana_wallet_address
+       FROM sessions WHERE id = $1`,
+      [sessionId],
+    );
+    const scope = rowToScope(sel.rows[0]);
+    const allowed = [scope.evm?.address, scope.solana?.address].filter(
+      (a): a is string => typeof a === "string",
+    );
+    await client.query(
+      `UPDATE missions SET allowed_wallets = $2 WHERE root_session_id = $1 AND status = 'draft'`,
+      [sessionId, allowed],
+    );
+  }
+  await client.query("COMMIT");
+  return { status: changed ? "updated" : "unchanged" };
+}
+
+export async function initializeSessionWalletScope(
+  sessionId: string,
+  evm: WalletRef | null,
+  solana: WalletRef | null,
+): Promise<Result<{ status: "updated" | "unchanged" }, VexError>> {
+  return withClient(async (client) => {
+    try {
+      return ok(
+        await initializeSessionWalletScopeWithClient(client, sessionId, evm, solana),
+      );
+    } catch (cause) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rbCause) {
+        log.warn(
+          "[sessions-db] ROLLBACK after initializeSessionWalletScope failure failed",
+          rbCause,
+        );
+      }
+      return dbError("initializeSessionWalletScope transaction failed", cause);
     }
   });
 }

@@ -24,24 +24,29 @@
 import { CH } from "@shared/ipc/channels.js";
 import { err, ok, type Result, type VexError } from "@shared/ipc/result.js";
 import {
+  availableWalletsDtoSchema,
   preparedIntentDtoSchema,
   sessionWalletScopeDtoSchema,
   walletIntentPreviewSchema,
   walletsActionResultSchema,
   walletsCancelPreparedIntentInputSchema,
   walletsGetPreparedIntentInputSchema,
+  walletsListAvailableInputSchema,
   walletsListSessionInputSchema,
   walletsSetScopeInputSchema,
   walletsSetScopeResultSchema,
+  type AvailableWalletsDto,
   type PreparedIntentDto,
   type SessionWalletScopeDto,
   type WalletsActionResult,
   type WalletsSetScopeResult,
 } from "@shared/schemas/wallets.js";
+import { getWalletById, listWallets } from "@vex-lib/wallet.js";
+import { getSessionWalletScope, initializeSessionWalletScope } from "../database/sessions-db.js";
 import { log } from "../logger/index.js";
-import { featureUnavailable } from "./_feature-unavailable.js";
 import { registerHandler } from "./register-handler.js";
 import { ensureEngineDbUrl } from "./runtime/_ensure-engine-db-url.js";
+import { invalidWalletSelectionError, resolveWalletRef } from "./_wallet-refs.js";
 
 const preparedIntentNullableSchema = preparedIntentDtoSchema.nullable();
 
@@ -60,6 +65,27 @@ function walletsUnexpectedError(
   };
 }
 
+function registerListAvailableHandler(): () => void {
+  return registerHandler({
+    channel: CH.wallets.listAvailable,
+    domain: "wallets",
+    inputSchema: walletsListAvailableInputSchema,
+    outputSchema: availableWalletsDtoSchema,
+    handle: async (_input, ctx): Promise<Result<AvailableWalletsDto>> => {
+      // Engine config inventory — addresses are public; keys never cross here.
+      const toDto = (family: "evm" | "solana") =>
+        listWallets(family).map((e) => ({
+          id: e.id,
+          family,
+          address: e.address,
+          label: e.label,
+        }));
+      log.info(`[ipc:vex:wallets:listAvailable] ok correlationId=${ctx.requestId}`);
+      return ok({ evm: toDto("evm"), solana: toDto("solana") });
+    },
+  });
+}
+
 function registerListSessionWalletsHandler(): () => void {
   return registerHandler({
     channel: CH.wallets.listSessionWallets,
@@ -67,14 +93,24 @@ function registerListSessionWalletsHandler(): () => void {
     inputSchema: walletsListSessionInputSchema,
     outputSchema: sessionWalletScopeDtoSchema,
     handle: async (input, ctx): Promise<Result<SessionWalletScopeDto>> => {
+      const scope = await getSessionWalletScope(input.sessionId);
+      if (!scope.ok) return scope;
+      const toDto = (
+        family: "evm" | "solana",
+        ref: { id: string; address: string } | null,
+      ) => {
+        if (!ref) return null;
+        const entry = getWalletById(family, ref.id);
+        return { walletId: ref.id, address: ref.address, label: entry?.label ?? "Unknown wallet" };
+      };
       log.info(
         `[ipc:vex:wallets:listSessionWallets] ok sessionId=${input.sessionId} ` +
-          `scope=empty correlationId=${ctx.requestId}`,
+          `correlationId=${ctx.requestId}`,
       );
       return ok({
         sessionId: input.sessionId,
-        allowedWalletIds: [],
-        defaultWalletId: null,
+        evm: toDto("evm", scope.data.evm),
+        solana: toDto("solana", scope.data.solana),
       });
     },
   });
@@ -86,19 +122,29 @@ function registerSetScopeHandler(): () => void {
     domain: "wallets",
     inputSchema: walletsSetScopeInputSchema,
     outputSchema: walletsSetScopeResultSchema,
-    handle: async (_input, ctx): Promise<Result<WalletsSetScopeResult>> => {
+    handle: async (input, ctx): Promise<Result<WalletsSetScopeResult>> => {
+      // Renderer sends IDs only; resolve server-side. Invalid id → fail closed.
+      const evm = resolveWalletRef("evm", input.evmWalletId);
+      const solana = resolveWalletRef("solana", input.solanaWalletId);
+      if (evm === "invalid" || solana === "invalid") {
+        return err(invalidWalletSelectionError(ctx.requestId));
+      }
+      // Initialize-if-empty CAS (per family, message_count=0) + mission draft
+      // allowed_wallets recompute, atomically (sessions-db).
+      const outcome = await initializeSessionWalletScope(input.sessionId, evm, solana);
+      if (!outcome.ok) return outcome;
       log.info(
-        `[ipc:vex:wallets:setSessionWalletScope] fail-closed feature_unavailable ` +
-          `correlationId=${ctx.requestId}`,
+        `[ipc:vex:wallets:setSessionWalletScope] ${outcome.data.status} ` +
+          `sessionId=${input.sessionId} correlationId=${ctx.requestId}`,
       );
-      return err(
-        featureUnavailable({
-          domain: "wallets",
-          correlationId: ctx.requestId,
-          message:
-            "Per-session wallet scope lands in puzzle 05 phase 5 (DB-backed scope + mission contract hash).",
-        }),
-      );
+      return ok({
+        sessionId: input.sessionId,
+        status: outcome.data.status,
+        message:
+          outcome.data.status === "updated"
+            ? "Wallet selection saved."
+            : "Wallet selection is already set or the session has started.",
+      });
     },
   });
 }
@@ -226,6 +272,7 @@ function registerCancelPreparedIntentHandler(): () => void {
 
 export function registerWalletsSessionHandlers(): ReadonlyArray<() => void> {
   return [
+    registerListAvailableHandler(),
     registerListSessionWalletsHandler(),
     registerSetScopeHandler(),
     registerGetPreparedIntentHandler(),

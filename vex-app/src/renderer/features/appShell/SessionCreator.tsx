@@ -38,6 +38,7 @@ import {
 import { Label } from "../../components/ui/label.js";
 import { cn } from "../../lib/utils.js";
 import { useCreateSession } from "../../lib/api/sessions.js";
+import { useAvailableWallets } from "../../lib/api/session-wallets.js";
 import { useUiStore } from "../../stores/uiStore.js";
 
 interface SessionCreatorProps {
@@ -90,16 +91,56 @@ const PERMISSION_OPTIONS: ReadonlyArray<PermissionOption> = [
   },
 ];
 
+function WalletSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  readonly label: string;
+  readonly value: string | null;
+  readonly options: ReadonlyArray<{ id: string; address: string; label: string }>;
+  readonly onChange: (id: string | null) => void;
+}): JSX.Element {
+  return (
+    <label className="flex flex-col gap-1 text-xs text-[var(--color-text-secondary)]">
+      <span>{label}</span>
+      <select
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
+        className={cn(
+          "h-9 rounded-lg border border-white/[0.08] bg-white/[0.035] px-2 text-sm text-foreground",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8]",
+        )}
+      >
+        <option value="">None</option>
+        {options.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.label} ({w.address.slice(0, 6)}…{w.address.slice(-4)})
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export function SessionCreator({
   open,
   onOpenChange,
 }: SessionCreatorProps): JSX.Element {
   const setActiveSessionId = useUiStore((s) => s.setActiveSessionId);
   const createMutation = useCreateSession();
+  const availableWallets = useAvailableWallets();
+  const inventory =
+    availableWallets.data?.ok === true
+      ? availableWallets.data.data
+      : { evm: [], solana: [] };
 
   const [name, setName] = useState<string>("");
   const [mode, setMode] = useState<SessionMode>("agent");
   const [permission, setPermission] = useState<SessionPermission>("restricted");
+  const [selectedEvmWalletId, setSelectedEvmWalletId] = useState<string | null>(null);
+  const [selectedSolanaWalletId, setSelectedSolanaWalletId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement | null>(null);
 
@@ -109,6 +150,8 @@ export function SessionCreator({
       setName("");
       setMode("agent");
       setPermission("restricted");
+      setSelectedEvmWalletId(null);
+      setSelectedSolanaWalletId(null);
       setSubmitError(null);
     }
   }, [open]);
@@ -134,8 +177,8 @@ export function SessionCreator({
       setSubmitError(null);
       const input: SessionCreateInput =
         mode === "mission"
-          ? { mode: "mission", name: trimmedName, permission }
-          : { mode: "agent", name: trimmedName, permission };
+          ? { mode: "mission", name: trimmedName, permission, selectedEvmWalletId, selectedSolanaWalletId }
+          : { mode: "agent", name: trimmedName, permission, selectedEvmWalletId, selectedSolanaWalletId };
       const outcome = await createMutation.mutateAsync(input);
       if (!outcome.ok) {
         setSubmitError(outcome.error.message);
@@ -149,6 +192,8 @@ export function SessionCreator({
       mode,
       onOpenChange,
       permission,
+      selectedEvmWalletId,
+      selectedSolanaWalletId,
       setActiveSessionId,
       submitDisabled,
       trimmedName,
@@ -228,6 +273,30 @@ export function SessionCreator({
                     icon={opt.icon}
                   />
                 ))}
+              </div>
+            </fieldset>
+
+            <fieldset className="flex flex-col gap-2">
+              <legend className="text-sm font-medium text-foreground">
+                Wallets (optional)
+              </legend>
+              <p className="text-xs text-[var(--color-text-secondary)]">
+                Pick the EVM + Solana wallet this session may use. Locked once the
+                session starts; leave empty for a chat-only session.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <WalletSelect
+                  label="EVM wallet"
+                  value={selectedEvmWalletId}
+                  options={inventory.evm}
+                  onChange={setSelectedEvmWalletId}
+                />
+                <WalletSelect
+                  label="Solana wallet"
+                  value={selectedSolanaWalletId}
+                  options={inventory.solana}
+                  onChange={setSelectedSolanaWalletId}
+                />
               </div>
             </fieldset>
 

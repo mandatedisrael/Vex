@@ -65,6 +65,7 @@ export {
 export {
   getPrimaryEvmAddress,
   getPrimarySolanaAddress,
+  getWalletById,
   listWallets,
   registerPrimaryLegacyWallet,
 } from "../tools/wallet/inventory.js";

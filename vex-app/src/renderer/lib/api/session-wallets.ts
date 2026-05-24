@@ -20,6 +20,7 @@ import {
 } from "@tanstack/react-query";
 import type { Result } from "@shared/ipc/result.js";
 import type {
+  AvailableWalletsDto,
   PreparedIntentDto,
   SessionWalletScopeDto,
   WalletsActionResult,
@@ -30,6 +31,19 @@ import type {
 import { walletsKeys } from "./queryKeys.js";
 
 const STALE_MS = 10_000;
+
+function availableWalletsOptions() {
+  return queryOptions({
+    queryKey: walletsKeys.available(),
+    queryFn: () => window.vex.wallets.listAvailable({}),
+    staleTime: STALE_MS,
+  });
+}
+
+/** Inventory wallets available to pick from at session creation. */
+export function useAvailableWallets(): UseQueryResult<Result<AvailableWalletsDto>> {
+  return useQuery(availableWalletsOptions());
+}
 
 function sessionScopeOptions(sessionId: string) {
   return queryOptions({

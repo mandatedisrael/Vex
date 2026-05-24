@@ -74,6 +74,10 @@ export const sessionCreateInputSchema = z.discriminatedUnion("mode", [
       mode: z.literal("agent"),
       name: sessionTitleSchema,
       permission: sessionPermissionSchema,
+      // Puzzle 5 phase 5C: optional per-session wallet selection (immutable).
+      // Renderer sends only inventory IDs; main resolves id → address.
+      selectedEvmWalletId: z.string().max(128).nullable().optional(),
+      selectedSolanaWalletId: z.string().max(128).nullable().optional(),
     })
     .strict(),
   z
@@ -81,6 +85,8 @@ export const sessionCreateInputSchema = z.discriminatedUnion("mode", [
       mode: z.literal("mission"),
       name: sessionTitleSchema,
       permission: sessionPermissionSchema,
+      selectedEvmWalletId: z.string().max(128).nullable().optional(),
+      selectedSolanaWalletId: z.string().max(128).nullable().optional(),
     })
     .strict(),
 ]);

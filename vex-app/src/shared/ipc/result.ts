@@ -109,6 +109,7 @@ export type VexErrorCode =
   | "mission.feature_unavailable"
   | "approvals.feature_unavailable"
   | "wallets.feature_unavailable"
+  | "wallets.invalid_selection"
   | "sessions.feature_unavailable"
   /**
    * Puzzle 5 phase 3 — approve/reject runtime semantics. Surfaced when the
@@ -208,6 +209,7 @@ export const VEX_ERROR_CODES = [
   "mission.feature_unavailable",
   "approvals.feature_unavailable",
   "wallets.feature_unavailable",
+  "wallets.invalid_selection",
   "sessions.feature_unavailable",
   "approvals.expired",
   "approvals.already_resolved",

@@ -156,6 +156,7 @@ export const CH = {
   // fail closed (provider hot-wallet keys never live in the Electron
   // process — provider-signed actions need a backend signer).
   wallets: {
+    listAvailable: "vex:wallets:listAvailable",
     listSessionWallets: "vex:wallets:listSessionWallets",
     setSessionWalletScope: "vex:wallets:setSessionWalletScope",
     getPreparedIntent: "vex:wallets:getPreparedIntent",

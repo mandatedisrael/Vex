@@ -101,6 +101,7 @@ export const approvalsKeys = {
 
 export const walletsKeys = {
   all: ["wallets"] as const,
+  available: () => ["wallets", "available"] as const,
   sessionScope: (sessionId: string) =>
     ["wallets", "sessionScope", sessionId] as const,
   preparedIntent: (sessionId: string, intentId: string) =>

@@ -12,7 +12,7 @@
  */
 
 import { CH } from "@shared/ipc/channels.js";
-import type { Result } from "@shared/ipc/result.js";
+import { err, type Result } from "@shared/ipc/result.js";
 import {
   sessionCreateInputSchema,
   sessionCreateResultSchema,
@@ -21,6 +21,7 @@ import {
 import { createSession } from "../../database/sessions-db.js";
 import { log } from "../../logger/index.js";
 import { registerHandler } from "../register-handler.js";
+import { invalidWalletSelectionError, resolveWalletRef } from "../_wallet-refs.js";
 
 export function registerSessionsCreateHandler(): () => void {
   return registerHandler({
@@ -29,7 +30,17 @@ export function registerSessionsCreateHandler(): () => void {
     inputSchema: sessionCreateInputSchema,
     outputSchema: sessionCreateResultSchema,
     handle: async (input, ctx): Promise<Result<SessionCreateResult>> => {
-      const outcome = await createSession(input);
+      // Resolve selected wallet IDs → {id,address} server-side. Invalid id →
+      // fail closed WITHOUT creating the session (or the mission row).
+      const evm = resolveWalletRef("evm", input.selectedEvmWalletId);
+      const solana = resolveWalletRef("solana", input.selectedSolanaWalletId);
+      if (evm === "invalid" || solana === "invalid") {
+        log.info(
+          `[ipc:vex:sessions:create] invalid_wallet_selection correlationId=${ctx.requestId}`,
+        );
+        return err(invalidWalletSelectionError(ctx.requestId));
+      }
+      const outcome = await createSession(input, { evm, solana });
       if (outcome.ok) {
         log.info(
           `[ipc:vex:sessions:create] ok ` +

@@ -1,10 +1,12 @@
 import type { Result } from "../../../ipc/result.js";
 import type {
+  AvailableWalletsDto,
   PreparedIntentDto,
   SessionWalletScopeDto,
   WalletsActionResult,
   WalletsCancelPreparedIntentInput,
   WalletsGetPreparedIntentInput,
+  WalletsListAvailableInput,
   WalletsListSessionInput,
   WalletsSetScopeInput,
   WalletsSetScopeResult,
@@ -18,6 +20,9 @@ import type {
  * provider-signed flows route through a backend signer client.
  */
 export interface WalletsBridge {
+  readonly listAvailable: (
+    input: WalletsListAvailableInput
+  ) => Promise<Result<AvailableWalletsDto>>;
   readonly listSessionWallets: (
     input: WalletsListSessionInput
   ) => Promise<Result<SessionWalletScopeDto>>;
