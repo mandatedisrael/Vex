@@ -174,6 +174,8 @@ async function routeToolCall(
         approved: context.approved,
         sessionId: context.sessionId,
         contextUsageBand: context.contextUsageBand,
+        walletResolution: context.walletResolution,
+        walletPolicy: context.walletPolicy,
       },
     );
   }

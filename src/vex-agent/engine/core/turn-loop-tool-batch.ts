@@ -39,6 +39,7 @@ import type {
   ParsedToolCall,
 } from "@vex-agent/inference/types.js";
 import type { InternalToolContext } from "@vex-agent/tools/internal/types.js";
+import { buildSessionWalletResolution } from "./hydrate.js";
 import { saveAssistantMessage } from "./turn.js";
 import { dispatchTool } from "@vex-agent/tools/dispatcher.js";
 import { computeBand } from "./context-band.js";
@@ -150,6 +151,8 @@ export async function processTurnToolBatch(args: {
       contextUsageBand: dispatchBand,
       sourceSurface: "vex_agent",
       sourceSession: context.sessionId,
+      walletResolution: buildSessionWalletResolution(context),
+      walletPolicy: context.walletPolicy,
     };
 
     const result = await dispatchTool(

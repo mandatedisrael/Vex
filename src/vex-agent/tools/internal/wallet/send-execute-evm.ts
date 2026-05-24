@@ -9,7 +9,7 @@
 
 import { createHash } from "node:crypto";
 
-import { requireEvmWallet } from "@tools/wallet/multi-auth.js";
+import type { EvmWallet } from "@tools/wallet/multi-auth.js";
 
 import type { WalletIntent } from "@vex-agent/db/repos/wallet-intents.js";
 
@@ -21,9 +21,9 @@ import {
 
 export async function executeEvmTransfer(
   intent: WalletIntent,
+  wallet: EvmWallet,
 ): Promise<ExecuteOutcome> {
   let publicClient;
-  let wallet;
   let chainName: string;
   let tokenSymbol: string;
   let hash: `0x${string}`;
@@ -39,7 +39,6 @@ export async function executeEvmTransfer(
     );
     const { parseUnits, getAddress } = await import("viem");
 
-    wallet = requireEvmWallet();
     const chains = await getKhalaniClient().getChains();
     if (intent.chainAlias === null) {
       return preBroadcastFailed(

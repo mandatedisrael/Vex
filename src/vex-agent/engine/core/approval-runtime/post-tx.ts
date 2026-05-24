@@ -34,6 +34,9 @@ import * as approvalIntentsRepo from "../../../db/repos/approval-intents.js";
 import * as missionRunsRepo from "../../../db/repos/mission-runs.js";
 import { dispatchTool } from "../../../tools/dispatcher.js";
 import type { InternalToolContext } from "../../../tools/internal/types.js";
+import { buildSessionWalletResolution, hydrateEngineSession } from "../hydrate.js";
+import type { WalletResolution } from "@tools/wallet/multi-auth.js";
+import type { WalletPolicy } from "@vex-agent/engine/types.js";
 import { appendMessage } from "../../events/index.js";
 import { refreshBlobTtlForRecentMessages } from "../../wake/blob-refresh.js";
 import logger from "@utils/logger.js";
@@ -113,6 +116,16 @@ export async function applyApproveSideEffects(
     // long paused window can expire blobs referenced by recent messages.
     await refreshBlobTtlForRecentMessages(sessionId);
 
+    // Wallet scope for the resumed dispatch: hydrate the session so a resumed
+    // wallet_send_confirm signs with the session's selected wallet under the
+    // mission policy, never the primary. Cold approval-resume path.
+    const walletHydrated = await hydrateEngineSession(sessionId);
+    const walletResolution: WalletResolution = walletHydrated
+      ? buildSessionWalletResolution(walletHydrated.context)
+      : { source: "session", evm: null, solana: null };
+    const walletPolicy: WalletPolicy = walletHydrated?.context.walletPolicy
+      ?? { kind: "invalid", reason: "session_unavailable" };
+
     const toolContext: InternalToolContext = {
       sessionId,
       loadedDocuments: new Map(),
@@ -125,6 +138,8 @@ export async function applyApproveSideEffects(
       contextUsageBand: "normal",
       sourceSurface: "vex_agent",
       sourceSession: sessionId,
+      walletResolution,
+      walletPolicy,
     };
 
     let dispatchResult: { success: boolean; output: string };

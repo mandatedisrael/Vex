@@ -44,17 +44,20 @@ vi.mock("../../../../../vex-agent/tools/internal/wallet/send-execute-evm.js", ()
   executeEvmTransfer: (...a: unknown[]) => mockExecuteEvm(...a),
 }));
 
-vi.mock("@tools/wallet/multi-auth.js", () => ({
-  requireSolanaWallet: vi.fn(() => ({
-    family: "solana" as const,
-    address: "SoLanaAddr1111111111111111111111111111111",
-    secretKey: new Uint8Array(64),
-  })),
-  requireEvmWallet: vi.fn(() => ({
-    family: "evm" as const,
-    address: "0xabcdef1234567890abcdef1234567890abcdef12",
-    privateKey: "0x" + "1".repeat(64),
-  })),
+// Phase 5B: send.ts resolves the wallet via the engine resolver (resolve.ts),
+// not the zero-arg multi-auth primitives. Mock that boundary. Returned signer
+// addresses match the fixture intents so the confirm address-assert passes
+// (walletAddressesEqual is real).
+vi.mock("../../../../../vex-agent/tools/internal/wallet/resolve.js", () => ({
+  resolveSelectedAddress: vi.fn((_r: unknown, _p: unknown, family: string) =>
+    family === "solana"
+      ? "SoLanaAddr1111111111111111111111111111111"
+      : "0xabcdef1234567890abcdef1234567890abcdef12"),
+  resolveSigningWallet: vi.fn((_r: unknown, _p: unknown, family: string) =>
+    family === "solana"
+      ? { family: "solana", address: "SoLanaAddr1111111111111111111111111111111", secretKey: new Uint8Array(64) }
+      : { family: "eip155", address: "0xabcdef1234567890abcdef1234567890abcdef12", privateKey: "0x" + "1".repeat(64) }),
+  walletScopeErrorToResult: (err: unknown) => { throw err; },
 }));
 
 vi.mock("@utils/logger.js", () => ({
@@ -135,6 +138,8 @@ function makeContext(overrides: Partial<{ sessionPermission: "restricted" | "ful
     contextUsageBand: "normal" as const,
     sourceSurface: "vex_agent" as const,
     sourceSession: SESSION_ID,
+    walletResolution: { source: "default" as const },
+    walletPolicy: { kind: "none" as const },
     ...overrides,
   };
 }
@@ -298,6 +303,23 @@ describe("handleWalletSendConfirm — preconditions", () => {
     expect(result.success).toBe(false);
     expect(result.output).toContain("status=consuming");
     expect(mockExecuteEvm).not.toHaveBeenCalled();
+  });
+
+  it("resolved signer != intent wallet → fail closed, NO consume, NO markFailed (intent stays pending)", async () => {
+    // Mocked resolveSigningWallet returns EVM signer 0xabcdef…; this intent
+    // records a DIFFERENT wallet → the pre-consume assert fails closed without
+    // mutating the intent.
+    mockGetById.mockResolvedValueOnce(
+      pendingIntent({ walletAddress: "0x9999999999999999999999999999999999999999" }),
+    );
+    const result = await handleWalletSendConfirm(
+      { network: "eip155", intentId: "intent-test-1" },
+      makeContext({ approved: true }),
+    );
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("does not match this intent");
+    expect(mockConsumeIfPending).not.toHaveBeenCalled();
+    expect(mockMarkFailed).not.toHaveBeenCalled();
   });
 });
 

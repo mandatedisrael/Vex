@@ -56,6 +56,11 @@ interface SessionRow {
   permission?: string | null;
   /** Snapshot of user-supplied goal at session creation; null for `agent` rows. */
   initial_goal?: string | null;
+  /** Per-session selected wallet (id + address snapshot). Null = unselected. */
+  selected_evm_wallet_id?: string | null;
+  selected_evm_wallet_address?: string | null;
+  selected_solana_wallet_id?: string | null;
+  selected_solana_wallet_address?: string | null;
 }
 
 /**
@@ -72,6 +77,12 @@ export type SessionMode = "agent" | "mission";
  * after session creation.
  */
 export type SessionPermission = "restricted" | "full";
+
+/** A session's pinned wallet choice: inventory id + on-chain address snapshot. */
+export interface SessionWalletRef {
+  id: string;
+  address: string;
+}
 
 export interface Session {
   id: string;
@@ -103,6 +114,20 @@ export interface Session {
    * this snapshot. `null` for `mode='agent'` sessions.
    */
   initialGoal: string | null;
+  /**
+   * Per-session wallet selection (puzzle 5 phase 5B). Immutable; set at
+   * creation. `null` means no wallet of that family is selected → wallet tools
+   * for that family fail closed.
+   */
+  selectedEvmWallet: SessionWalletRef | null;
+  selectedSolanaWallet: SessionWalletRef | null;
+}
+
+function walletRef(
+  id: string | null | undefined,
+  address: string | null | undefined,
+): SessionWalletRef | null {
+  return id && address ? { id, address } : null;
 }
 
 function mapRow(r: SessionRow): Session {
@@ -119,6 +144,8 @@ function mapRow(r: SessionRow): Session {
     mode: r.mode === "mission" ? "mission" : "agent",
     permission: r.permission === "full" ? "full" : "restricted",
     initialGoal: r.initial_goal ?? null,
+    selectedEvmWallet: walletRef(r.selected_evm_wallet_id, r.selected_evm_wallet_address),
+    selectedSolanaWallet: walletRef(r.selected_solana_wallet_id, r.selected_solana_wallet_address),
   };
 }
 
@@ -139,6 +166,12 @@ export interface CreateSessionOptions {
    * the `sessions` row + `missions` draft row.
    */
   executor?: Executor;
+  /**
+   * Per-session wallet selection, set atomically at creation and immutable
+   * afterwards (puzzle 5 phase 5B). Typed pair objects, not loose ids.
+   */
+  selectedEvmWallet?: SessionWalletRef | null;
+  selectedSolanaWallet?: SessionWalletRef | null;
 }
 
 /**
@@ -153,11 +186,22 @@ export async function createSession(
   const mode: SessionMode = options.mode ?? "agent";
   const permission: SessionPermission = options.permission ?? "restricted";
   const initialGoal: string | null = mode === "mission" ? (options.initialGoal ?? null) : null;
+  const evm = options.selectedEvmWallet ?? null;
+  const solana = options.selectedSolanaWallet ?? null;
   const executor: Executor = options.executor ?? getPool();
   await executeWith(
     executor,
-    "INSERT INTO sessions (id, mode, permission, initial_goal) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING",
-    [id, mode, permission, initialGoal],
+    `INSERT INTO sessions
+       (id, mode, permission, initial_goal,
+        selected_evm_wallet_id, selected_evm_wallet_address,
+        selected_solana_wallet_id, selected_solana_wallet_address)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      id, mode, permission, initialGoal,
+      evm?.id ?? null, evm?.address ?? null,
+      solana?.id ?? null, solana?.address ?? null,
+    ],
   );
 }
 

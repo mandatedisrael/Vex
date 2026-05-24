@@ -25,7 +25,7 @@ import {
   getMint,
 } from "@solana/spl-token";
 
-import { requireSolanaWallet } from "@tools/wallet/multi-auth.js";
+import type { SolanaWallet } from "@tools/wallet/multi-auth.js";
 import {
   getSolanaConnection,
   signAndSubmitLegacyTxStaged,
@@ -53,6 +53,7 @@ async function safeResolveSolanaToken(
 
 export async function executeSolanaTransfer(
   intent: WalletIntent,
+  wallet: SolanaWallet,
 ): Promise<ExecuteOutcome> {
   // Pre-broadcast build phase — validation + tx assembly. Any throw here
   // returns `pre_broadcast_failed` (no signature exists).
@@ -62,7 +63,6 @@ export async function executeSolanaTransfer(
   let connection;
 
   try {
-    const wallet = requireSolanaWallet();
     keypair = Keypair.fromSecretKey(wallet.secretKey);
     connection = getSolanaConnection();
     const toPubkey = new PublicKey(intent.toAddress);

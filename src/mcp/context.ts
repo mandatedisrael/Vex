@@ -47,5 +47,7 @@ export function makeProductionContext(sessionId: string): InternalToolContext {
     contextUsageBand: "normal",  // no turn loop → no accumulating pressure to surface
     sourceSurface: "mcp_local",  // knowledge provenance tag
     sourceSession: sessionId,
+    walletResolution: { source: "default" }, // MCP has no per-session scope — primary wallet
+    walletPolicy: { kind: "none" },          // no mission policy on the MCP surface
   };
 }

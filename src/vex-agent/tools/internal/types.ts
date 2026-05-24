@@ -11,7 +11,8 @@
  */
 
 import type { ToolResult } from "../types.js";
-import type { Permission, SessionKind } from "@vex-agent/engine/types.js";
+import type { Permission, SessionKind, WalletPolicy } from "@vex-agent/engine/types.js";
+import type { WalletResolution } from "@tools/wallet/multi-auth.js";
 
 /** Result from an internal tool handler */
 export type InternalToolResult = ToolResult;
@@ -64,6 +65,14 @@ export interface InternalToolContext {
    * this undefined and relies on `sessionId` for its own session tracking.
    */
   sourceSession?: string;
+  /**
+   * Per-session wallet resolution (puzzle 5 phase 5B). Engine sessions use
+   * source:"session" (selected wallet, or fail-closed when unselected); MCP/CLI
+   * use source:"default" (primary wallet). Consumed by the wallet resolvers.
+   */
+  walletResolution: WalletResolution;
+  /** Mission wallet policy — enforced alongside the resolution by the resolvers. */
+  walletPolicy: WalletPolicy;
 }
 
 // ── Param accessors ─────────────────────────────────────────────

@@ -12,12 +12,13 @@ import {
   getTokenBalancesAcrossChains,
   parseBalanceChainSelection,
 } from "@tools/khalani/balances.js";
-import { requireEvmWallet, requireSolanaWallet } from "@tools/wallet/multi-auth.js";
+import { walletAddressesEqual, familyToInventory } from "@tools/wallet/inventory.js";
 import { prepareQuoteRequest } from "@tools/khalani/request.js";
 import { VexError, ErrorCodes } from "../../../../../errors.js";
 import type { ChainFamily } from "@tools/khalani/types.js";
 
-import type { ProtocolHandler } from "../../types.js";
+import type { ProtocolHandler, ProtocolExecutionContext } from "../../types.js";
+import { resolveSelectedAddress } from "../../../internal/wallet/resolve.js";
 import { str, toResultData } from "../../handler-helpers.js";
 
 // ── Shared helpers (exported for bridge handler) ────────────────
@@ -41,13 +42,23 @@ export function resolveWalletFamily(params: Record<string, unknown>): ChainFamil
 
 export function resolveWalletAddress(
   params: Record<string, unknown>,
+  context: ProtocolExecutionContext,
   walletFamily = resolveWalletFamily(params),
 ): string {
+  const selected = resolveSelectedAddress(context.walletResolution, context.walletPolicy, walletFamily);
   const explicit = str(params, "address");
-  if (explicit) return explicit;
-
-  if (walletFamily === "solana") return requireSolanaWallet().address;
-  return requireEvmWallet().address;
+  if (!explicit) return selected;
+  // Default (CLI/MCP) may query an arbitrary explicit address. A session scope
+  // is locked to its selected wallet — an explicit address must match it
+  // (Codex 5B #2); generic recipient/quote fields are separate params.
+  if (context.walletResolution.source === "default") return explicit;
+  if (!walletAddressesEqual(familyToInventory(walletFamily), explicit, selected)) {
+    throw new VexError(
+      ErrorCodes.WALLET_SCOPE_MISMATCH,
+      "Explicit address is not the wallet selected for this session.",
+    );
+  }
+  return selected;
 }
 
 // ── Handler map ──────────────────────────────────────────────────
@@ -100,9 +111,9 @@ export const READ_HANDLERS: Record<string, ProtocolHandler> = {
     };
   },
 
-  "khalani.tokens.balances": async (params) => {
+  "khalani.tokens.balances": async (params, context) => {
     const walletFamily = resolveWalletFamily(params);
-    const address = resolveWalletAddress(params, walletFamily);
+    const address = resolveWalletAddress(params, context, walletFamily);
     const selection = await parseBalanceChainSelection(str(params, "chainIds"));
     const chainIds = getSelectedChainIdsForFamily(selection, walletFamily);
     if (selection.rawProvided && chainIds?.length === 0) {
@@ -180,8 +191,8 @@ export const READ_HANDLERS: Record<string, ProtocolHandler> = {
     };
   },
 
-  "khalani.orders.list": async (params) => {
-    const address = resolveWalletAddress(params);
+  "khalani.orders.list": async (params, context) => {
+    const address = resolveWalletAddress(params, context);
     const chains = await getCachedKhalaniChains();
     const limit = typeof params.limit === "number" ? params.limit : undefined;
     const cursor = typeof params.cursor === "number" ? params.cursor : undefined;

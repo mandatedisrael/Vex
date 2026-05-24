@@ -219,6 +219,20 @@ export interface MissionPatch {
 
 // ── Engine context ──────────────────────────────────────────────
 
+/**
+ * Mission wallet policy, resolved once at hydration (puzzle 5 phase 5B) and
+ * enforced at wallet resolution. NOT gated on `sessionKind` — a subagent with
+ * `sessionKind: "agent"` still inherits the parent's mission policy.
+ *   - none: not under a mission → no mission-level wallet restriction.
+ *   - mission_allowed: wallet must be in the accepted contract's allowedWallets.
+ *   - invalid: under a mission but the active-run snapshot is missing /
+ *     malformed / has empty allowedWallets → fail closed (contract drift).
+ */
+export type WalletPolicy =
+  | { kind: "none" }
+  | { kind: "mission_allowed"; allowedWallets: string[] }
+  | { kind: "invalid"; reason: string };
+
 /** Passed to runner, turn, prompt stack — everything the engine needs. */
 export interface EngineContext {
   sessionId: string;
@@ -240,6 +254,11 @@ export interface EngineContext {
   /** Optional mission deadline from the frozen mission constraints. */
   missionDeadline?: string | null;
   isSubagent: boolean;
+  /** Per-session selected wallets (id + address), hydrated from the session row. */
+  selectedEvmWallet: { id: string; address: string } | null;
+  selectedSolanaWallet: { id: string; address: string } | null;
+  /** Mission wallet policy (snapshot-derived); enforced at wallet resolution. */
+  walletPolicy: WalletPolicy;
   loadedDocuments: Map<string, string>;
 }
 

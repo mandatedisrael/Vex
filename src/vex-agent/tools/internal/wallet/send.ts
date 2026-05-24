@@ -17,7 +17,8 @@
 
 import { randomUUID } from "node:crypto";
 
-import { requireEvmWallet, requireSolanaWallet } from "@tools/wallet/multi-auth.js";
+import { walletAddressesEqual } from "@tools/wallet/inventory.js";
+import type { ChainWallet } from "@tools/wallet/multi-auth.js";
 import * as walletIntentsRepo from "@vex-agent/db/repos/wallet-intents.js";
 import logger from "@utils/logger.js";
 
@@ -27,6 +28,11 @@ import { str } from "../types.js";
 
 import { executeEvmTransfer } from "./send-execute-evm.js";
 import { executeSolanaTransfer } from "./send-execute-solana.js";
+import {
+  resolveSelectedAddress,
+  resolveSigningWallet,
+  walletScopeErrorToResult,
+} from "./resolve.js";
 import {
   WALLET_INTENT_TTL_MS,
   buildWalletIntentPreview,
@@ -75,12 +81,12 @@ export async function handleWalletSendPrepare(
     return fail(`Invalid amount: ${amount}`);
   }
 
-  // Single-wallet-per-network model (phase 5 will add per-session scope).
+  // Per-session selected wallet (puzzle 5 phase 5B) — address only, no decrypt.
   let walletAddress: string;
-  if (network === "solana") {
-    walletAddress = requireSolanaWallet().address;
-  } else {
-    walletAddress = requireEvmWallet().address;
+  try {
+    walletAddress = resolveSelectedAddress(context.walletResolution, context.walletPolicy, network);
+  } catch (err) {
+    return walletScopeErrorToResult(err);
   }
 
   const intentId = `intent-${randomUUID()}`;
@@ -166,6 +172,21 @@ export async function handleWalletSendConfirm(
     };
   }
 
+  // Resolve the session's signing wallet AFTER the approval gate, and assert it
+  // matches the intent's recorded wallet BEFORE consuming. A mismatch (selection
+  // drift / bug) fails closed WITHOUT mutating the intent — it stays `pending`
+  // and expires; no markFailed (which requires `consuming`). Codex 5B review.
+  let signer: ChainWallet;
+  try {
+    signer = resolveSigningWallet(context.walletResolution, context.walletPolicy, network);
+  } catch (err) {
+    return walletScopeErrorToResult(err);
+  }
+  const invFamily = network === "solana" ? "solana" : "evm";
+  if (!walletAddressesEqual(invFamily, signer.address, intent.walletAddress)) {
+    return fail("Selected wallet does not match this intent's wallet. Re-prepare the transfer.");
+  }
+
   // CAS-consume atomically; race losers get null.
   const claimed = await walletIntentsRepo.consumeIfPending(
     intentId,
@@ -178,10 +199,14 @@ export async function handleWalletSendConfirm(
     );
   }
 
-  const outcome: ExecuteOutcome =
-    network === "solana"
-      ? await executeSolanaTransfer(claimed)
-      : await executeEvmTransfer(claimed);
+  let outcome: ExecuteOutcome;
+  if (network === "solana") {
+    if (signer.family !== "solana") return fail("Resolved wallet family mismatch.");
+    outcome = await executeSolanaTransfer(claimed, signer);
+  } else {
+    if (signer.family !== "eip155") return fail("Resolved wallet family mismatch.");
+    outcome = await executeEvmTransfer(claimed, signer);
+  }
 
   return finalizeOutcome(intentId, context.sessionId, outcome);
 }

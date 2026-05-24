@@ -75,6 +75,39 @@ export async function executeProtocolTool(
     ? "read"
     : manifest.actionKind;
 
+  // Normalize the wallet scope so the deny-guard + migrated handlers never see
+  // undefined. Both fields are REQUIRED on the type (production is fail-closed
+  // via tsc); this defends test/legacy callers that omit them — they default to
+  // source:"default", which is never session-scoped and never denied.
+  const scopedContext: ProtocolExecutionContext = {
+    ...context,
+    walletResolution: context.walletResolution ?? { source: "default" },
+    walletPolicy: context.walletPolicy ?? { kind: "none" },
+  };
+
+  // Per-session wallet scope (puzzle 5 phase 5B): protocol tools that sign with
+  // the user wallet are NOT yet migrated to session-scoped resolution, so under
+  // a session scope they would fall back to the PRIMARY wallet. Hard-deny them
+  // here — before the approval gate and the handler — until 5D-protocols
+  // migrates them. Keyed on `manifest.actionKind` (NOT effectiveActionKind): a
+  // preview/dryRun of a signing tool must be denied too. Both broadcast AND
+  // external_post sign (EIP-712 gasless orders), so both are covered.
+  if (
+    scopedContext.walletResolution.source === "session"
+    && (manifest.actionKind === "user_wallet_broadcast" || manifest.actionKind === "external_post")
+  ) {
+    logger.info("protocol.execute.wallet_scope_denied", {
+      toolId: request.toolId,
+      actionKind: manifest.actionKind,
+    });
+    return withActionKind({
+      success: false,
+      output:
+        `${request.toolId} is not available in a wallet-scoped session yet. `
+        + `Per-session wallet support for protocol tools lands in a later stage.`,
+    }, effectiveActionKind);
+  }
+
   // Note: `manifest.lifecycle` is always "active" after PR1 narrowed the
   // ToolLifecycle union; no runtime lifecycle gate at the per-tool level.
   // Per-namespace lifecycle is enforced below via `isExecutableNamespace`.
@@ -184,7 +217,7 @@ export async function executeProtocolTool(
   // Execute + capture
   const startTime = Date.now();
   try {
-    const result = await handler(params, context);
+    const result = await handler(params, scopedContext);
     const durationMs = Date.now() - startTime;
 
     logger.info("protocol.execute.completed", {

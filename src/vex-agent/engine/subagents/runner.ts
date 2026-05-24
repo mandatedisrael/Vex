@@ -71,10 +71,14 @@ export async function runSubagentEngine(
   // already resolved at spawn time and persisted on the child sessions row.
   const parentLink = await sessionLinksRepo.getParentSession(sessionId);
   let parentSummarySnapshot: string | undefined;
+  let parentContext: EngineContext | null = null;
   if (parentLink) {
     const parentHydrated = await hydrateEngineSession(parentLink.parentSessionId);
-    if (parentHydrated?.summary && parentHydrated.summary.trim().length > 0) {
-      parentSummarySnapshot = parentHydrated.summary;
+    if (parentHydrated) {
+      parentContext = parentHydrated.context;
+      if (parentHydrated.summary && parentHydrated.summary.trim().length > 0) {
+        parentSummarySnapshot = parentHydrated.summary;
+      }
     }
   }
 
@@ -89,10 +93,16 @@ export async function runSubagentEngine(
   const effectivePermission = allowTrades ? hydrated.context.sessionPermission : "restricted";
 
   // Build context
+  // Subagent inherits the parent's wallet selection + mission policy (Codex
+  // 5B): the child session row carries no selection of its own. No parent
+  // scope → fail closed (invalid policy + null selection).
   const context: EngineContext = {
     ...hydrated.context,
     sessionPermission: effectivePermission,
     isSubagent: true,
+    selectedEvmWallet: parentContext?.selectedEvmWallet ?? null,
+    selectedSolanaWallet: parentContext?.selectedSolanaWallet ?? null,
+    walletPolicy: parentContext?.walletPolicy ?? { kind: "invalid", reason: "no_parent_scope" },
   };
 
   const promptOptions: PromptStackOptions = {

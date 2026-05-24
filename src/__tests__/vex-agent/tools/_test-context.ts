@@ -11,6 +11,8 @@ export function makeTestContext(overrides?: Partial<InternalToolContext>): Inter
     missionId: null,
     sessionKind: "agent",
     contextUsageBand: "normal",
+    walletResolution: { source: "default" },
+    walletPolicy: { kind: "none" },
     ...overrides,
   };
 }

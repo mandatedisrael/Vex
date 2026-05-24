@@ -12,7 +12,13 @@ type InternalHandler = (
 function makeKhalaniAliasHandler(name: KhalaniInternalToolName): InternalHandler {
   return async (params, context) => executeProtocolTool(
     { toolId: KHALANI_INTERNAL_TO_PROTOCOL[name], params },
-    { sessionPermission: context.sessionPermission, approved: context.approved, sessionId: context.sessionId },
+    {
+      sessionPermission: context.sessionPermission,
+      approved: context.approved,
+      sessionId: context.sessionId,
+      walletResolution: context.walletResolution,
+      walletPolicy: context.walletPolicy,
+    },
   );
 }
 

@@ -14,6 +14,7 @@
 
 import type { ToolResult } from "../../tools/types.js";
 import type { InternalToolContext } from "../../tools/internal/types.js";
+import { buildSessionWalletResolution, resolveWalletPolicy } from "./hydrate.js";
 import { dispatchTool } from "../../tools/dispatcher.js";
 import * as sessionsRepo from "../../db/repos/sessions.js";
 import * as missionRunsRepo from "../../db/repos/mission-runs.js";
@@ -57,6 +58,8 @@ export async function runTool(
     contextUsageBand: computeBand(session.tokenCount, DEFAULT_CONTEXT_LIMIT),
     sourceSurface: "vex_agent",
     sourceSession: sessionId,
+    walletResolution: buildSessionWalletResolution(session),
+    walletPolicy: resolveWalletPolicy(mission, activeRun),
   };
 
   const toolCallId = `direct-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

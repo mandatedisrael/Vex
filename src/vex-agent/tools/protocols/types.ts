@@ -12,7 +12,8 @@
 
 import type { ToolResult } from "../types.js";
 import type { ActionKind } from "../taxonomy.js";
-import type { Permission } from "@vex-agent/engine/types.js";
+import type { Permission, WalletPolicy } from "@vex-agent/engine/types.js";
+import type { WalletResolution } from "@tools/wallet/multi-auth.js";
 
 // ── Protocol namespaces ──────────────────────────────────────────
 
@@ -117,6 +118,14 @@ export interface ProtocolExecutionContext {
    */
   sessionPermission: Permission;
   approved: boolean;
+  /**
+   * Per-session wallet resolution + policy (puzzle 5 phase 5B). Threaded from
+   * the dispatcher so the runtime can hard-deny un-migrated wallet-signing
+   * protocol tools under a session scope, and migrated address-only reads
+   * (khalani) resolve the session's selected wallet instead of the primary.
+   */
+  walletResolution: WalletResolution;
+  walletPolicy: WalletPolicy;
   /** Session ID — passed to execution capture for audit trail */
   sessionId?: string;
   /**

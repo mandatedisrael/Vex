@@ -25,6 +25,21 @@ vi.mock("@tools/wallet/multi-auth.js", () => ({
   }),
 }));
 
+// Phase 5B: wallet_read / send / khalani read resolve through the engine
+// resolver (resolve.ts), not the zero-arg multi-auth primitives. Mock that
+// boundary so dispatcher routing tests get the test wallet addresses.
+vi.mock("../../../vex-agent/tools/internal/wallet/resolve.js", () => ({
+  resolveSelectedAddress: (_r: unknown, _p: unknown, family: string) =>
+    family === "solana"
+      ? "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+      : "0x1234567890abcdef1234567890abcdef12345678",
+  resolveSigningWallet: (_r: unknown, _p: unknown, family: string) =>
+    family === "solana"
+      ? { family: "solana", address: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", secretKey: new Uint8Array(64) }
+      : { family: "eip155", address: "0x1234567890abcdef1234567890abcdef12345678", privateKey: `0x${"ab".repeat(32)}` },
+  walletScopeErrorToResult: (err: unknown) => { throw err; },
+}));
+
 vi.mock("@tools/wallet/family.js", () => ({
   normalizeWalletChain: (input?: string) => {
     if (!input || input === "eip155" || input === "evm") return "eip155";

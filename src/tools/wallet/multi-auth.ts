@@ -5,11 +5,13 @@ import { requireWalletAndKeystore } from "./auth.js";
 import { deriveSolanaAddress } from "./solana-keystore.js";
 import {
   familyToInventory,
+  getPrimaryEvmEntry,
   getPrimarySolanaEntry,
   getWalletById,
   loadEvmKey,
   loadSolanaSecret,
   walletAddressesEqual,
+  type InventoryFamily,
 } from "./inventory.js";
 import type { ChainFamily } from "../khalani/types.js";
 
@@ -93,15 +95,32 @@ export type WalletResolution =
  *     re-import under the same id) throws a typed VexError so the caller can
  *     surface a fail-closed tool result rather than sign with the wrong key.
  */
-export function resolveWalletForFamily(
+/**
+ * Validate + return the inventory entry for a family under a resolution policy,
+ * WITHOUT decrypting any key. Address-only callers (wallet_read, send prepare,
+ * balance display) use this; signing callers add `loadWalletFromEntry`.
+ *   - default → primary entry (CLI/MCP).
+ *   - session → selected entry, validated by id AND address snapshot. Missing
+ *     selection / removed wallet / address drift throw typed VexErrors.
+ */
+export function resolveSelectedEntry(
   family: ChainFamily,
   resolution: WalletResolution,
-): ChainWallet {
+): { family: InventoryFamily; entry: WalletInventoryEntry } {
+  const inv = familyToInventory(family);
+
   if (resolution.source === "default") {
-    return requireWalletForChain(family);
+    const entry = inv === "solana" ? getPrimarySolanaEntry() : getPrimaryEvmEntry();
+    if (!entry) {
+      throw new VexError(
+        ErrorCodes.WALLET_NOT_CONFIGURED,
+        `No ${inv} wallet is configured.`,
+        inv === "solana" ? "Run: vex wallet create --chain solana" : "Run: vex wallet create",
+      );
+    }
+    return { family: inv, entry };
   }
 
-  const inv = familyToInventory(family);
   const selected = inv === "solana" ? resolution.solana : resolution.evm;
   if (!selected) {
     throw new VexError(
@@ -110,7 +129,6 @@ export function resolveWalletForFamily(
       "Select a wallet for this session before using wallet tools.",
     );
   }
-
   const entry = getWalletById(inv, selected.id);
   if (!entry) {
     throw new VexError(
@@ -126,6 +144,26 @@ export function resolveWalletForFamily(
       "Re-select a wallet for this session.",
     );
   }
+  return { family: inv, entry };
+}
 
-  return inv === "solana" ? loadSolanaWalletFromEntry(entry) : loadEvmWalletFromEntry(entry);
+/** Decrypt + build a ChainWallet from an already-resolved inventory entry. */
+export function loadWalletFromEntry(
+  family: InventoryFamily,
+  entry: WalletInventoryEntry,
+): ChainWallet {
+  return family === "solana" ? loadSolanaWalletFromEntry(entry) : loadEvmWalletFromEntry(entry);
+}
+
+/**
+ * Resolve + decrypt the signing wallet for a family (address-snapshot pinned).
+ * Composition of `resolveSelectedEntry` + `loadWalletFromEntry`. Kept for CLI
+ * and the engine signing path.
+ */
+export function resolveWalletForFamily(
+  family: ChainFamily,
+  resolution: WalletResolution,
+): ChainWallet {
+  const { family: inv, entry } = resolveSelectedEntry(family, resolution);
+  return loadWalletFromEntry(inv, entry);
 }

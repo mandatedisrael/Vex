@@ -3,7 +3,7 @@
  */
 
 import { z } from "zod";
-import { requireEvmWallet, requireSolanaWallet } from "@tools/wallet/multi-auth.js";
+import { resolveSelectedAddress } from "./resolve.js";
 import {
   type BalanceChainSelection,
   getSelectedChainIdsForFamily,
@@ -40,7 +40,7 @@ interface WalletSnapshot {
 
 export async function handleWalletRead(
   params: Record<string, unknown>,
-  _context: InternalToolContext,
+  context: InternalToolContext,
 ): Promise<ToolResult> {
   const parsed = WalletReadArgs.safeParse(params);
   if (!parsed.success) {
@@ -68,7 +68,7 @@ export async function handleWalletRead(
     }
 
     try {
-      const address = resolveConfiguredWalletAddress(family);
+      const address = resolveSelectedAddress(context.walletResolution, context.walletPolicy, family);
       const scan = await getTokenBalancesAcrossChains({ address, family, chainIds });
       snapshots.push({
         wallet: family,
@@ -104,11 +104,6 @@ export async function handleWalletRead(
 function requestedWalletFamilies(wallet: "eip155" | "solana" | "all"): ChainFamily[] {
   if (wallet === "all") return ["eip155", "solana"];
   return [wallet];
-}
-
-function resolveConfiguredWalletAddress(family: ChainFamily): string {
-  if (family === "solana") return requireSolanaWallet().address;
-  return requireEvmWallet().address;
 }
 
 function formatWalletErrors(errors: Array<{ wallet: ChainFamily; message: string }>): string {

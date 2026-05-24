@@ -18,6 +18,15 @@ vi.mock("@tools/wallet/multi-auth.js", () => ({
   requireSolanaWallet: () => ({ family: "solana", address: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", secretKey: new Uint8Array(64) }),
 }));
 
+// Phase 5B: wallet_read resolves the address via the engine resolver. Mock it
+// to return the test wallet addresses for the session's default resolution.
+vi.mock("../../../vex-agent/tools/internal/wallet/resolve.js", () => ({
+  resolveSelectedAddress: (_r: unknown, _p: unknown, family: string) =>
+    family === "solana"
+      ? "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+      : "0x1234567890abcdef1234567890abcdef12345678",
+}));
+
 vi.mock("@tools/wallet/family.js", () => ({
   normalizeWalletChain: (input?: string) => {
     if (!input || input === "eip155" || input === "evm") return "eip155";
