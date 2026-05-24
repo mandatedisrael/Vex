@@ -43,6 +43,7 @@ const { loadConfig, saveConfig, getDefaultConfig } = await import("@config/store
 const { encryptPrivateKey, saveKeystore } = await import("@tools/wallet/keystore.js");
 const { encryptSolanaSecretKey, saveSolanaKeystore, deriveSolanaAddress } = await import("@tools/wallet/solana-keystore.js");
 const { requireEvmWallet, requireSolanaWallet, requireWalletForChain } = await import("@tools/wallet/multi-auth.js");
+const { registerPrimaryLegacyWallet } = await import("@tools/wallet/inventory.js");
 
 const TEST_EVM_PRIVATE_KEY = "0x" + "ab".repeat(32);
 const TEST_EVM_ADDRESS = privateKeyToAddress(TEST_EVM_PRIVATE_KEY as `0x${string}`);
@@ -63,10 +64,8 @@ describe("multi-auth", () => {
 
   describe("requireEvmWallet", () => {
     it("returns EVM wallet when config and keystore are present", () => {
-      const cfg = getDefaultConfig();
-      cfg.wallet.address = TEST_EVM_ADDRESS;
-      saveConfig(cfg);
       saveKeystore(encryptPrivateKey(TEST_EVM_PRIVATE_KEY, TEST_PASSWORD));
+      registerPrimaryLegacyWallet("evm", TEST_EVM_ADDRESS);
 
       const wallet = requireEvmWallet();
 
@@ -88,9 +87,7 @@ describe("multi-auth", () => {
     });
 
     it("throws KEYSTORE_NOT_FOUND when no keystore file exists", () => {
-      const cfg = getDefaultConfig();
-      cfg.wallet.address = TEST_EVM_ADDRESS;
-      saveConfig(cfg);
+      registerPrimaryLegacyWallet("evm", TEST_EVM_ADDRESS);
 
       expect(() => requireEvmWallet()).toThrow();
       try {
@@ -106,10 +103,8 @@ describe("multi-auth", () => {
       const keypair = Keypair.generate();
       const address = deriveSolanaAddress(keypair.secretKey);
 
-      const cfg = getDefaultConfig();
-      cfg.wallet.solanaAddress = address;
-      saveConfig(cfg);
       saveSolanaKeystore(encryptSolanaSecretKey(keypair.secretKey, TEST_PASSWORD));
+      registerPrimaryLegacyWallet("solana", address);
 
       const wallet = requireSolanaWallet();
 
@@ -132,9 +127,7 @@ describe("multi-auth", () => {
     });
 
     it("throws KHALANI_SOLANA_KEYSTORE_NOT_FOUND when no Solana keystore file", () => {
-      const cfg = getDefaultConfig();
-      cfg.wallet.solanaAddress = "11111111111111111111111111111111";
-      saveConfig(cfg);
+      registerPrimaryLegacyWallet("solana", "11111111111111111111111111111111");
 
       expect(() => requireSolanaWallet()).toThrow();
       try {
@@ -147,10 +140,8 @@ describe("multi-auth", () => {
     it("throws KHALANI_ADDRESS_MISMATCH when keystore address differs from config", () => {
       const keypair = Keypair.generate();
 
-      const cfg = getDefaultConfig();
-      cfg.wallet.solanaAddress = "FakeSolanaAddressDoesNotMatchKeystore111111111";
-      saveConfig(cfg);
       saveSolanaKeystore(encryptSolanaSecretKey(keypair.secretKey, TEST_PASSWORD));
+      registerPrimaryLegacyWallet("solana", "FakeSolanaAddressDoesNotMatchKeystore111111111");
 
       expect(() => requireSolanaWallet()).toThrow();
       try {
@@ -163,10 +154,8 @@ describe("multi-auth", () => {
 
   describe("requireWalletForChain", () => {
     it("routes eip155 to requireEvmWallet", () => {
-      const cfg = getDefaultConfig();
-      cfg.wallet.address = TEST_EVM_ADDRESS;
-      saveConfig(cfg);
       saveKeystore(encryptPrivateKey(TEST_EVM_PRIVATE_KEY, TEST_PASSWORD));
+      registerPrimaryLegacyWallet("evm", TEST_EVM_ADDRESS);
 
       const wallet = requireWalletForChain("eip155");
 
@@ -177,10 +166,8 @@ describe("multi-auth", () => {
       const keypair = Keypair.generate();
       const address = deriveSolanaAddress(keypair.secretKey);
 
-      const cfg = getDefaultConfig();
-      cfg.wallet.solanaAddress = address;
-      saveConfig(cfg);
       saveSolanaKeystore(encryptSolanaSecretKey(keypair.secretKey, TEST_PASSWORD));
+      registerPrimaryLegacyWallet("solana", address);
 
       const wallet = requireWalletForChain("solana");
 

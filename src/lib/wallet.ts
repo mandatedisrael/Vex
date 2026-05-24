@@ -57,9 +57,17 @@ export { autoBackup } from "../tools/wallet/backup.js";
 
 export {
   type VexConfig,
+  type WalletInventoryEntry,
   loadConfig,
   saveConfig,
 } from "../config/store.js";
+
+export {
+  getPrimaryEvmAddress,
+  getPrimarySolanaAddress,
+  listWallets,
+  registerPrimaryLegacyWallet,
+} from "../tools/wallet/inventory.js";
 
 export {
   BACKUPS_DIR,

@@ -1,9 +1,55 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { Address } from "viem";
+import { z } from "zod";
 import { CHAIN } from "../constants/chain.js";
 import { CONFIG_DIR, CONFIG_FILE } from "./paths.js";
 import { minLogger as logger } from "../utils/logger-shim.js";
+
+/**
+ * One wallet in the per-family inventory (puzzle 5 stage 1, multi-wallet).
+ * Private key material lives in a keystore FILE, never in config:
+ *   - `legacy: true` → the pre-multi-wallet fixed keystore (KEYSTORE_FILE /
+ *     SOLANA_KEYSTORE_FILE); reserved id `evm_legacy` / `sol_legacy`.
+ *   - otherwise → a per-id file derived from `id` under CONFIG_DIR
+ *     (see tools/wallet/inventory.ts `derivePath`).
+ * `address` is the on-chain identity every financial table keys on.
+ */
+export interface WalletInventoryEntry {
+  id: string;
+  address: string;
+  label: string;
+  createdAt: string;
+  legacy?: boolean;
+}
+
+const WALLET_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * Family-bound, legacy-aware wallet id validation — the single source of truth
+ * for config normalization (drop non-canonical rows) and `derivePath` (refuse
+ * to build a keystore path for an id that isn't canonical for its family +
+ * legacy flag). Also the path-traversal guard: a non-legacy id must be
+ * `<prefix>_<uuid>`, so no `/`, `\` or `.` can reach the derived filename.
+ *   - legacy === true → exactly `evm_legacy` (EVM) / `sol_legacy` (Solana).
+ *   - legacy !== true → `<prefix>_<uuid>` with the prefix matching the family.
+ */
+export function isValidWalletId(family: "evm" | "solana", id: string, legacy: boolean): boolean {
+  const prefix = family === "solana" ? "sol" : "evm";
+  if (legacy) return id === `${prefix}_legacy`;
+  if (!id.startsWith(`${prefix}_`)) return false;
+  return WALLET_UUID.test(id.slice(prefix.length + 1));
+}
+
+const walletInventoryEntrySchema = z.object({
+  id: z.string().min(1).max(80),
+  address: z.string().min(1).max(128),
+  label: z.string().max(120),
+  createdAt: z.string(),
+  legacy: z.boolean().optional(),
+});
+
+/** Deterministic timestamp for synthesized legacy entries (avoids per-load drift). */
+const LEGACY_CREATED_AT = new Date(0).toISOString();
 
 export interface VexConfig {
   version: 1;
@@ -19,8 +65,8 @@ export interface VexConfig {
     };
   };
   wallet: {
-    address: Address | null;
-    solanaAddress: string | null;
+    evm: WalletInventoryEntry[];
+    solana: WalletInventoryEntry[];
   };
   services: {
     vexApiUrl: string;
@@ -63,8 +109,8 @@ export function getDefaultConfig(): VexConfig {
       nativeCurrency: CHAIN.nativeCurrency,
     },
     wallet: {
-      address: null,
-      solanaAddress: null,
+      evm: [],
+      solana: [],
     },
     solana: {
       cluster: "mainnet-beta" as const,
@@ -116,6 +162,67 @@ function parseClaudeConfig(raw: unknown): VexConfig["claude"] | undefined {
   };
 }
 
+/**
+ * Normalize the persisted `wallet` section into the per-family inventory.
+ *
+ * Shapes accepted:
+ *   - new: `{ evm: WalletInventoryEntry[], solana: WalletInventoryEntry[] }`
+ *   - legacy (pre multi-wallet): `{ address, solanaAddress }` → synthesized
+ *     into reserved `*_legacy` entries pointing at the fixed keystore files.
+ *     Read-once: never written back as authoritative fields (saveConfig only
+ *     persists the arrays).
+ *   - missing/garbage → empty inventory.
+ *
+ * Malformed array entries are dropped with a warning instead of throwing, so a
+ * single corrupt row cannot brick config load; the keystore file survives and
+ * the wallet can be re-imported.
+ */
+function normalizeWalletSection(raw: unknown): VexConfig["wallet"] {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return { evm: [], solana: [] };
+  }
+  const obj = raw as Record<string, unknown>;
+
+  // New shape wins when either array is present.
+  if (Array.isArray(obj.evm) || Array.isArray(obj.solana)) {
+    return {
+      evm: parseEntryArray(obj.evm, "evm"),
+      solana: parseEntryArray(obj.solana, "solana"),
+    };
+  }
+
+  // Legacy single-wallet shape → reserved legacy entries (fixed keystore).
+  const evm: WalletInventoryEntry[] = [];
+  const solana: WalletInventoryEntry[] = [];
+  if (typeof obj.address === "string" && obj.address.length > 0) {
+    evm.push({ id: "evm_legacy", address: obj.address, label: "Primary", createdAt: LEGACY_CREATED_AT, legacy: true });
+  }
+  if (typeof obj.solanaAddress === "string" && obj.solanaAddress.length > 0) {
+    solana.push({ id: "sol_legacy", address: obj.solanaAddress, label: "Primary", createdAt: LEGACY_CREATED_AT, legacy: true });
+  }
+  return { evm, solana };
+}
+
+function parseEntryArray(raw: unknown, family: "evm" | "solana"): WalletInventoryEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: WalletInventoryEntry[] = [];
+  for (const item of raw) {
+    const parsed = walletInventoryEntrySchema.safeParse(item);
+    if (!parsed.success) {
+      logger.warn(`Dropping malformed ${family} wallet inventory entry`);
+      continue;
+    }
+    if (!isValidWalletId(family, parsed.data.id, parsed.data.legacy === true)) {
+      // Cross-family, reserved-as-non-legacy, or non-canonical id — drop it
+      // rather than let a bad row reach derivePath.
+      logger.warn(`Dropping ${family} wallet inventory entry with non-canonical id`);
+      continue;
+    }
+    out.push(parsed.data);
+  }
+  return out;
+}
+
 export function loadConfig(): VexConfig {
   ensureConfigDir();
   const defaults = getDefaultConfig();
@@ -148,10 +255,7 @@ export function loadConfig(): VexConfig {
         ...defaults.chain,
         ...((parsed.chain as Record<string, unknown> | undefined) ?? {}),
       },
-      wallet: {
-        ...defaults.wallet,
-        ...((parsed.wallet as Record<string, unknown> | undefined) ?? {}),
-      },
+      wallet: normalizeWalletSection(parsed.wallet),
       solana: {
         ...defaults.solana,
         ...((parsed.solana as Record<string, unknown> | undefined) ?? {}),

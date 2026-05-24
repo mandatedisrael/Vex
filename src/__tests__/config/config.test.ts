@@ -42,8 +42,8 @@ describe("config store", () => {
       expect(config.chain.chainId).toBe(1);
       expect(config.chain.rpcUrl).toBe("https://ethereum-rpc.publicnode.com");
       expect(config.chain.nativeCurrency.symbol).toBe("ETH");
-      expect(config.wallet.address).toBeNull();
-      expect(config.wallet.solanaAddress).toBeNull();
+      expect(config.wallet.evm).toEqual([]);
+      expect(config.wallet.solana).toEqual([]);
     });
   });
 
@@ -98,8 +98,14 @@ describe("config store", () => {
       const loaded = loadConfig();
 
       expect(loaded.chain.rpcUrl).toBe("https://custom-rpc.example.com");
-      expect(loaded.wallet.address).toBe("0x1234567890123456789012345678901234567890");
+      // Legacy single-wallet config normalizes into the inventory array
+      // (read-once; old `address` field is not persisted as authoritative).
+      expect(loaded.wallet.evm).toHaveLength(1);
+      expect(loaded.wallet.evm[0]?.address).toBe("0x1234567890123456789012345678901234567890");
+      expect(loaded.wallet.evm[0]?.id).toBe("evm_legacy");
+      expect(loaded.wallet.evm[0]?.legacy).toBe(true);
       expect("watchlist" in loaded).toBe(false);
+      expect("address" in loaded.wallet).toBe(false);
     });
 
     it("should return defaults for invalid JSON", () => {
@@ -226,10 +232,17 @@ describe("config store", () => {
       expect(loaded.polymarket?.gammaBaseUrl).toBe("https://gamma.second");
     });
 
-    it("applies wallet address patch without touching solana settings", () => {
-      const result = saveConfigPatch({ wallet: { address: "0xabc" as `0x${string}` } });
+    it("applies wallet inventory patch without touching solana settings", () => {
+      const entry = {
+        id: "evm_legacy",
+        address: "0x1234567890123456789012345678901234567890",
+        label: "Primary",
+        createdAt: new Date(0).toISOString(),
+        legacy: true,
+      };
+      const result = saveConfigPatch({ wallet: { evm: [entry] } });
 
-      expect(result.wallet.address).toBe("0xabc");
+      expect(result.wallet.evm[0]?.address).toBe("0x1234567890123456789012345678901234567890");
       expect(result.solana.cluster).toBe(getDefaultConfig().solana.cluster);
     });
   });

@@ -1,7 +1,8 @@
 import type { Address } from "viem";
 import { generatePrivateKey, privateKeyToAddress } from "viem/accounts";
-import { loadConfig, saveConfig } from "../../config/store.js";
+import { loadConfig } from "../../config/store.js";
 import { encryptPrivateKey, saveKeystore, keystoreExists } from "./keystore.js";
+import { registerPrimaryLegacyWallet } from "./inventory.js";
 import { autoBackup } from "./backup.js";
 import { requireKeystorePassword } from "../../utils/env.js";
 import { VexError, ErrorCodes } from "../../errors.js";
@@ -39,9 +40,7 @@ export async function createWallet(opts: { force?: boolean } = {}): Promise<Wall
   const keystore = encryptPrivateKey(privateKey, password);
   saveKeystore(keystore);
 
-  const cfg = loadConfig();
-  cfg.wallet.address = address;
-  saveConfig(cfg);
+  registerPrimaryLegacyWallet("evm", address);
 
-  return { address, chainId: cfg.chain.chainId, overwritten: existed };
+  return { address, chainId: loadConfig().chain.chainId, overwritten: existed };
 }

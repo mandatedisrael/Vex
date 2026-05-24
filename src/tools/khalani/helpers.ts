@@ -5,6 +5,7 @@
 
 import { getAddress, isAddress } from "viem";
 import { loadConfig } from "../../config/store.js";
+import { getPrimaryEvmAddress, getPrimarySolanaAddress } from "../wallet/inventory.js";
 import { VexError, ErrorCodes } from "../../errors.js";
 import { resolveChainId } from "./chains.js";
 import { isSolanaAddressLike } from "./validation.js";
@@ -30,7 +31,7 @@ export function normalizeAddressForFamily(address: string, family: ChainFamily, 
 
 export function resolveConfiguredAddress(family: ChainFamily): string | null {
   const cfg = loadConfig();
-  return family === "solana" ? cfg.wallet.solanaAddress : cfg.wallet.address;
+  return family === "solana" ? getPrimarySolanaAddress(cfg) : getPrimaryEvmAddress(cfg);
 }
 
 export function parseChainIdsOption(value: string | undefined, chains: KhalaniChain[]): number[] | undefined {

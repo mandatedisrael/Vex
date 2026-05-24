@@ -1,25 +1,22 @@
-import type { Address, Hex } from "viem";
-import { loadConfig } from "../../config/store.js";
-import { loadKeystore, decryptPrivateKey } from "./keystore.js";
-import { requireKeystorePassword } from "../../utils/env.js";
+import { type Address, type Hex } from "viem";
 import { VexError, ErrorCodes } from "../../errors.js";
+import { getPrimaryEvmEntry, loadEvmKey } from "./inventory.js";
 
+/**
+ * Resolve the PRIMARY EVM wallet (inventory index 0) + its private key.
+ *
+ * Back-compat: CLI/MCP have no session, so they always get the primary entry —
+ * which on a legacy install is the single wallet migrated from the old
+ * `wallet.address` config field (keystore in the fixed KEYSTORE_FILE).
+ */
 export function requireWalletAndKeystore(): { address: Address; privateKey: Hex } {
-  const cfg = loadConfig();
-  if (!cfg.wallet.address) {
+  const entry = getPrimaryEvmEntry();
+  if (!entry) {
     throw new VexError(
       ErrorCodes.WALLET_NOT_CONFIGURED,
       "No wallet configured.",
-      "Run: vex wallet create --json"
+      "Run: vex wallet create --json",
     );
   }
-
-  const password = requireKeystorePassword();
-  const keystore = loadKeystore();
-  if (!keystore) {
-    throw new VexError(ErrorCodes.KEYSTORE_NOT_FOUND, "Keystore not found.", "Run: vex wallet create --json");
-  }
-
-  const privateKey = decryptPrivateKey(keystore, password);
-  return { address: cfg.wallet.address, privateKey };
+  return loadEvmKey(entry);
 }

@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, cpSync
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "../../config/store.js";
+import { getPrimaryEvmAddress, getPrimarySolanaAddress } from "./inventory.js";
 import { CONFIG_DIR, BACKUPS_DIR, SOLANA_KEYSTORE_FILE } from "../../config/paths.js";
 import { VexError, ErrorCodes } from "../../errors.js";
 import { minLogger as logger } from "../../utils/logger-shim.js";
@@ -79,8 +80,8 @@ export async function autoBackup(): Promise<string | null> {
       version: 1,
       cliVersion: getCLIVersion(),
       createdAt: new Date().toISOString(),
-      walletAddress: cfg.wallet.address ?? null,
-      solanaWalletAddress: cfg.wallet.solanaAddress ?? null,
+      walletAddress: getPrimaryEvmAddress(cfg),
+      solanaWalletAddress: getPrimarySolanaAddress(cfg),
       chainId: cfg.chain.chainId,
       files,
     };

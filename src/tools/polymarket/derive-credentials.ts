@@ -25,6 +25,7 @@
 import type { Address, Hex } from "viem";
 import { loadKeystore, decryptPrivateKey } from "../wallet/keystore.js";
 import { loadConfig } from "../../config/store.js";
+import { getPrimaryEvmAddress } from "../wallet/inventory.js";
 import { fetchWithTimeout, readJson } from "../../utils/http.js";
 import { VexError, ErrorCodes } from "../../errors.js";
 import {
@@ -167,7 +168,7 @@ export async function deriveAndSavePolymarketCredentials(
 ): Promise<DeriveResult> {
   // Wallet config sanity check (legacy CLI behavior).
   const cfg = loadConfig();
-  if (!cfg.wallet.address) {
+  if (!getPrimaryEvmAddress(cfg)) {
     throw new VexError(
       ErrorCodes.WALLET_NOT_CONFIGURED,
       "No wallet configured.",

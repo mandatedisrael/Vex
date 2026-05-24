@@ -1,5 +1,5 @@
-import { loadConfig, saveConfig } from "../../config/store.js";
 import { autoBackup } from "./backup.js";
+import { registerPrimaryLegacyWallet } from "./inventory.js";
 import { VexError, ErrorCodes } from "../../errors.js";
 import { requireKeystorePassword } from "../../utils/env.js";
 import {
@@ -38,10 +38,7 @@ export async function importSolanaWallet(
   const address = deriveSolanaAddress(normalizedKey);
 
   saveSolanaKeystore(encryptSolanaSecretKey(normalizedKey, password));
-
-  const cfg = loadConfig();
-  cfg.wallet.solanaAddress = address;
-  saveConfig(cfg);
+  registerPrimaryLegacyWallet("solana", address);
 
   return { address, overwritten: existed };
 }

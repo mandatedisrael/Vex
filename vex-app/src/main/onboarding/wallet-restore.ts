@@ -21,11 +21,12 @@ import {
   autoBackup,
   decryptPrivateKey,
   decryptSolanaSecretKey,
+  getPrimaryEvmAddress,
+  getPrimarySolanaAddress,
   KEYSTORE_FILE,
-  loadConfig,
   loadKeystoreFile,
   privateKeyToAddress,
-  saveConfig,
+  registerPrimaryLegacyWallet,
   saveKeystoreFile,
   SOLANA_KEYSTORE_FILE,
   type KeystoreV1,
@@ -61,9 +62,7 @@ function targetKeystorePath(chain: WalletChain): string {
 }
 
 function existingAddressFor(chain: WalletChain): string | null {
-  const cfg = loadConfig();
-  if (chain === "evm") return cfg.wallet.address ?? null;
-  return cfg.wallet.solanaAddress ?? null;
+  return chain === "evm" ? getPrimaryEvmAddress() : getPrimarySolanaAddress();
 }
 
 async function readSourceKeystore(
@@ -162,16 +161,9 @@ function persistAddress(
   address: string
 ): Result<true, VexError> {
   try {
-    const cfg = loadConfig();
-    if (chain === "evm") {
-      // address is the derived EVM checksum address (typed as Hex by viem
-      // but persisted as `Address` in VexConfig). Cast through unknown
-      // because VexConfig.wallet.address is the viem `Address` brand.
-      cfg.wallet.address = address as `0x${string}`;
-    } else {
-      cfg.wallet.solanaAddress = address;
-    }
-    saveConfig(cfg);
+    // Restored keystores land in the fixed legacy files, so register the
+    // address as the primary legacy inventory entry (stage 1 multi-wallet).
+    registerPrimaryLegacyWallet(chain === "evm" ? "evm" : "solana", address);
     return ok(true);
   } catch (cause) {
     log.error(`[wallet-restore] config write failed`, cause);

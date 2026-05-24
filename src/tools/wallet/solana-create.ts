@@ -1,6 +1,6 @@
 import { Keypair } from "@solana/web3.js";
-import { loadConfig, saveConfig } from "../../config/store.js";
 import { autoBackup } from "./backup.js";
+import { registerPrimaryLegacyWallet } from "./inventory.js";
 import { VexError, ErrorCodes } from "../../errors.js";
 import { requireKeystorePassword } from "../../utils/env.js";
 import { deriveSolanaAddress, encryptSolanaSecretKey, saveSolanaKeystore, solanaKeystoreExists } from "./solana-keystore.js";
@@ -30,10 +30,7 @@ export async function createSolanaWallet(opts: { force?: boolean } = {}): Promis
   const address = deriveSolanaAddress(keypair.secretKey);
 
   saveSolanaKeystore(encryptSolanaSecretKey(keypair.secretKey, password));
-
-  const cfg = loadConfig();
-  cfg.wallet.solanaAddress = address;
-  saveConfig(cfg);
+  registerPrimaryLegacyWallet("solana", address);
 
   return { address, overwritten: existed };
 }

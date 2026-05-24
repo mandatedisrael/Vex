@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { CONFIG_FILE, ENV_FILE, KEYSTORE_FILE, SOLANA_KEYSTORE_FILE } from "../../config/paths.js";
 import { loadConfig } from "../../config/store.js";
+import { getPrimaryEvmAddress, getPrimarySolanaAddress } from "../../tools/wallet/inventory.js";
 import { readEnvValue } from "../../providers/env-resolution.js";
 import { MANAGED_SECRET_ENV_KEYS, isManagedSecretEnvKey } from "../../lib/secret-keys.js";
 import { getKeystorePassword } from "../../utils/env.js";
@@ -124,7 +125,9 @@ export function collectEnvFieldStatuses(envPath: string = ENV_FILE): EnvFieldSta
 
 export function getEvmWalletStatus(): WalletStatus {
   const config = loadConfig();
-  const address = config.wallet.address;
+  // Stage 1: primary entry. Stage 3 (onboarding/derived wallets) generalizes
+  // the keystore check below to per-entry derived paths.
+  const address = getPrimaryEvmAddress(config);
   const hasStoredState = Boolean(address) || existsSync(KEYSTORE_FILE) || existsSync(CONFIG_FILE);
 
   if (!address) {
@@ -181,7 +184,7 @@ export function getEvmWalletStatus(): WalletStatus {
 
 export function getSolanaWalletStatus(): WalletStatus {
   const config = loadConfig();
-  const address = config.wallet.solanaAddress;
+  const address = getPrimarySolanaAddress(config);
   const hasStoredState = Boolean(address) || existsSync(SOLANA_KEYSTORE_FILE) || existsSync(CONFIG_FILE);
 
   if (!address) {
