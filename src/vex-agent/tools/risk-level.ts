@@ -17,7 +17,6 @@
  *   - `approval_prepare`         → "medium"    (signals incoming confirm with real effect)
  *   - `external_post`            → "medium"    (off-chain mutation: CEX order, social post)
  *   - `user_wallet_broadcast`    → "high"      (user-signed on-chain action)
- *   - `provider_action_request`  → "high"      (provider-funded action, backend signer)
  *   - `destructive`              → "critical"  (no expand-and-contract recovery)
  *
  * Risk level is ORDERED for policy gates (e.g. "block at risk_level >= high
@@ -79,7 +78,6 @@ export function riskLevelFromActionKind(kind: ActionKind): RiskLevel {
     case "external_post":
       return "medium";
     case "user_wallet_broadcast":
-    case "provider_action_request":
       return "high";
     case "destructive":
       return "critical";

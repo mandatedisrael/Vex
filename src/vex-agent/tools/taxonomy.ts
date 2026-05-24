@@ -29,11 +29,6 @@
  *                                 USER's local wallet (wallet_send_confirm +
  *                                 future protocol mutations that bind user
  *                                 wallet keys).
- *  - `provider_action_request`  — requests an action from the provider
- *                                 backend signer / policy service. NOT used
- *                                 in 1A (no backend signer in repo yet) —
- *                                 phase 6 will introduce the client + UI
- *                                 fail-closed paths.
  *  - `external_post`            — mutates external system state via an API
  *                                 (CEX order submit, off-chain order book,
  *                                 social post, etc.). Distinct from `read`
@@ -63,7 +58,6 @@ export const ACTION_KINDS = [
   "schedule",
   "approval_prepare",
   "user_wallet_broadcast",
-  "provider_action_request",
   "external_post",
   "destructive",
 ] as const;

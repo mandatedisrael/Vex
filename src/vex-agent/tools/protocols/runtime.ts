@@ -94,7 +94,7 @@ export async function executeProtocolTool(
   // resolution; no second global gate is needed. The signer-import + keystore
   // scans (src/vex-agent/tools + src/tools/**) prevent a signer from regressing
   // to the primary wallet under a session, and the actionKind census test forces
-  // a review if a new signing kind (e.g. provider_action_request) ever appears.
+  // a review if a new signing actionKind ever appears.
 
   // Note: `manifest.lifecycle` is always "active" after PR1 narrowed the
   // ToolLifecycle union; no runtime lifecycle gate at the per-tool level.

@@ -53,7 +53,6 @@ describe("ActionKind taxonomy — registry coverage", () => {
       "destructive",
       "external_post",
       "local_write",
-      "provider_action_request",
       "read",
       "schedule",
       "user_wallet_broadcast",

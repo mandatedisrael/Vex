@@ -23,8 +23,7 @@
  *
  * Distribution at 1B ship (140 protocol tools): 112 read, 17
  * user_wallet_broadcast, 11 external_post; 0 destructive,
- * approval_prepare, schedule, local_write, provider_action_request.
- * (Provider_action_request reserved for puzzle 5 phase 6 backend signer.)
+ * approval_prepare, schedule, local_write.
  */
 
 import { describe, it, expect } from "vitest";

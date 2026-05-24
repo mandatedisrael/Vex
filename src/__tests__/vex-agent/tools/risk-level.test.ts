@@ -42,7 +42,6 @@ describe("RiskLevel — pinned mappings (Codex GREEN LIGHT puzzle 5/2)", () => {
     ["approval_prepare", "medium"],
     ["external_post", "medium"],
     ["user_wallet_broadcast", "high"],
-    ["provider_action_request", "high"],
     ["destructive", "critical"],
   ];
 

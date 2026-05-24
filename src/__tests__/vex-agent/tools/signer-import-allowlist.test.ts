@@ -91,8 +91,8 @@ describe("signer import allowlist", () => {
     }
     const outside = [...seen].filter((k) => !allowedKinds.has(k));
     // The 5B deny-guard is gone (lifted in 5D-protocols p5), but a NEW signing
-    // actionKind (e.g. provider_action_request, which has no backend signer)
-    // must still force a deliberate review here before it can reach a handler.
+    // actionKind must still force a deliberate review here before it can reach
+    // a handler.
     expect(outside).toEqual([]);
   });
 });

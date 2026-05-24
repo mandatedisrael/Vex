@@ -40,7 +40,6 @@ CREATE TABLE IF NOT EXISTS approval_intents (
     'schedule',
     'approval_prepare',
     'user_wallet_broadcast',
-    'provider_action_request',
     'external_post',
     'destructive'
   )),
