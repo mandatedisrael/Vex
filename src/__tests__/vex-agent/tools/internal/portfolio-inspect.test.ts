@@ -4,8 +4,9 @@ const mockGetOpen = vi.fn().mockResolvedValue([]);
 const mockGetActivities = vi.fn().mockResolvedValue([]);
 const mockGetByNamespace = vi.fn().mockResolvedValue([]);
 const mockGetTotalUsd = vi.fn().mockResolvedValue(0);
-const mockGetLatestSnapshot = vi.fn().mockResolvedValue(null);
-const mockGetSnapshotHistory = vi.fn().mockResolvedValue([]);
+const mockGetLatestAggregateSnapshot = vi.fn().mockResolvedValue(null);
+const mockGetAggregateSnapshots = vi.fn().mockResolvedValue([]);
+const mockResolveSet = vi.fn().mockReturnValue({ evm: "0xEVM", solana: "SOL", all: ["0xEVM", "SOL"] });
 
 vi.mock("@vex-agent/db/repos/open-positions.js", () => ({
   getOpen: (...a: unknown[]) => mockGetOpen(...a),
@@ -17,10 +18,19 @@ vi.mock("@vex-agent/db/repos/executions.js", () => ({
   getByNamespace: (...a: unknown[]) => mockGetByNamespace(...a),
 }));
 vi.mock("@vex-agent/db/repos/balances.js", () => ({
-  getTotalUsd: () => mockGetTotalUsd(),
-  getLatestSnapshot: () => mockGetLatestSnapshot(),
-  getSnapshotHistory: (...a: unknown[]) => mockGetSnapshotHistory(...a),
+  getTotalUsd: (...a: unknown[]) => mockGetTotalUsd(...a),
+  getLatestAggregateSnapshot: (...a: unknown[]) => mockGetLatestAggregateSnapshot(...a),
+  getAggregateSnapshots: (...a: unknown[]) => mockGetAggregateSnapshots(...a),
 }));
+
+// Mock ONLY resolveSelectedAddressSet so the handler test controls the wallet
+// set; keep the REAL walletScopeErrorToResult so fail-closed behaviour is real.
+vi.mock("../../../../vex-agent/tools/internal/wallet/resolve.js", async () => {
+  const actual = await vi.importActual<typeof import("../../../../vex-agent/tools/internal/wallet/resolve.js")>(
+    "../../../../vex-agent/tools/internal/wallet/resolve.js",
+  );
+  return { ...actual, resolveSelectedAddressSet: (...a: unknown[]) => mockResolveSet(...a) };
+});
 
 const mockGetTotalRealizedPnl = vi.fn().mockResolvedValue(null);
 vi.mock("@vex-agent/db/repos/pnl-matches.js", () => ({
@@ -40,6 +50,7 @@ vi.mock("@vex-agent/db/client.js", () => ({
 
 const { handlePortfolioInspect } = await import("../../../../vex-agent/tools/internal/portfolio-inspect.js");
 import { makeTestContext } from "../_test-context.js";
+import { VexError, ErrorCodes } from "../../../../errors.js";
 
 const ctx = makeTestContext({ sessionId: "s1" });
 
@@ -47,6 +58,7 @@ describe("portfolio_inspect tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockResolvePortfolioChainIds.mockResolvedValue(new Map());
+    mockResolveSet.mockReturnValue({ evm: "0xEVM", solana: "SOL", all: ["0xEVM", "SOL"] });
   });
 
   it("rejects invalid view", async () => {
@@ -78,7 +90,7 @@ describe("portfolio_inspect tool", () => {
 
     it("passes namespace filter", async () => {
       await handlePortfolioInspect({ view: "open_positions", namespace: "solana" }, ctx);
-      expect(mockGetOpen).toHaveBeenCalledWith(undefined, "solana");
+      expect(mockGetOpen).toHaveBeenCalledWith(["0xEVM", "SOL"], "solana");
     });
   });
 
@@ -110,9 +122,9 @@ describe("portfolio_inspect tool", () => {
   });
 
   describe("snapshots", () => {
-    it("calls getSnapshotHistory with 7d", async () => {
+    it("calls getAggregateSnapshots with the wallet set + 7d", async () => {
       await handlePortfolioInspect({ view: "snapshots" }, ctx);
-      expect(mockGetSnapshotHistory).toHaveBeenCalledWith("7d");
+      expect(mockGetAggregateSnapshots).toHaveBeenCalledWith(["0xEVM", "SOL"], "7d");
     });
   });
 
@@ -120,9 +132,9 @@ describe("portfolio_inspect tool", () => {
     it("aggregates data from multiple repos", async () => {
       mockGetTotalUsd.mockResolvedValueOnce(5000);
       mockGetOpen.mockResolvedValueOnce([{ id: 1 }, { id: 2 }]);
-      mockGetLatestSnapshot.mockResolvedValueOnce({
+      mockGetLatestAggregateSnapshot.mockResolvedValueOnce({
         totalUsd: 4900, pnlVsPrev: 100, pnlPctVsPrev: 2.08,
-        activeChains: 3, createdAt: "2026-03-29",
+        activeChains: ["1"], at: "2026-03-29",
       });
       mockGetTotalRealizedPnl.mockResolvedValueOnce(null);
       const { query } = await import("@vex-agent/db/client.js");
@@ -143,7 +155,7 @@ describe("portfolio_inspect tool", () => {
     it("shows realized PnL when matches exist", async () => {
       mockGetTotalUsd.mockResolvedValueOnce(1000);
       mockGetOpen.mockResolvedValueOnce([]);
-      mockGetLatestSnapshot.mockResolvedValueOnce(null);
+      mockGetLatestAggregateSnapshot.mockResolvedValueOnce(null);
       mockGetTotalRealizedPnl.mockResolvedValueOnce("42.50");
       const { query } = await import("@vex-agent/db/client.js");
       (query as any).mockResolvedValueOnce([{ total: null }]);
@@ -361,7 +373,7 @@ describe("portfolio_inspect tool", () => {
     it("aggregates prediction MTM + spot unrealized", async () => {
       mockGetTotalUsd.mockResolvedValueOnce(1000);
       mockGetOpen.mockResolvedValueOnce([]);
-      mockGetLatestSnapshot.mockResolvedValueOnce(null);
+      mockGetLatestAggregateSnapshot.mockResolvedValueOnce(null);
       mockGetTotalRealizedPnl.mockResolvedValueOnce("50.00");
       const { query } = await import("@vex-agent/db/client.js");
       // prediction MTM aggregate
@@ -376,6 +388,31 @@ describe("portfolio_inspect tool", () => {
       const r = await handlePortfolioInspect({ view: "summary" }, ctx);
       expect(r.data!.unrealizedPnlUsd).toBe(19.75);
       expect(r.data!.openSpotLotCount).toBe(1);
+    });
+  });
+
+  describe("per-session wallet scoping (5E-2a)", () => {
+    it("scopes reads to ONLY the session's selected wallet set", async () => {
+      mockResolveSet.mockReturnValueOnce({ evm: "0xEVM", solana: "SOL", all: ["0xEVM", "SOL"] });
+      mockGetTotalUsd.mockResolvedValueOnce(777);
+      const r = await handlePortfolioInspect({ view: "balances" }, ctx);
+      expect(mockGetTotalUsd).toHaveBeenCalledWith(["0xEVM", "SOL"]);
+      expect(r.data!.totalUsd).toBe(777);
+    });
+
+    it("a session with no selected wallets passes an EMPTY set (never global)", async () => {
+      mockResolveSet.mockReturnValueOnce({ evm: null, solana: null, all: [] });
+      await handlePortfolioInspect({ view: "summary" }, ctx);
+      expect(mockGetTotalUsd).toHaveBeenCalledWith([]);
+    });
+
+    it("fails closed on invalid wallet policy / scope drift (no repo query)", async () => {
+      mockResolveSet.mockImplementationOnce(() => {
+        throw new VexError(ErrorCodes.WALLET_SCOPE_MISMATCH, "contract drift");
+      });
+      const r = await handlePortfolioInspect({ view: "summary" }, ctx);
+      expect(r.success).toBe(false);
+      expect(mockGetTotalUsd).not.toHaveBeenCalled();
     });
   });
 });

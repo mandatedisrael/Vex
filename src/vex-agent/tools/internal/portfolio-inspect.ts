@@ -13,6 +13,7 @@
 import type { ToolResult } from "../types.js";
 import type { InternalToolContext } from "./types.js";
 import { str, num, fail } from "./types.js";
+import { resolveSelectedAddressSet, walletScopeErrorToResult } from "./wallet/resolve.js";
 
 // Trading views
 import { inspectLots, inspectProfits, inspectUnrealized } from "./inspect-views/trading.js";
@@ -29,9 +30,20 @@ const VALID_VIEWS = new Set<string>([
   "bridges", "lp_history", "orders", "unrealized",
 ]);
 
+/**
+ * Views scoped to the session's selected wallet set (puzzle 5 phase 5E-2a).
+ * Remaining views: activity/bridges/lp_history/non_trading_history → 5E-2b;
+ * `executions` is global (no wallet_address).
+ */
+const WALLET_SCOPED_VIEWS = new Set<string>([
+  "summary", "balances", "snapshots",
+  "open_positions", "closed_positions", "orders",
+  "lots", "profits", "unrealized",
+]);
+
 export async function handlePortfolioInspect(
   params: Record<string, unknown>,
-  _context: InternalToolContext,
+  context: InternalToolContext,
 ): Promise<ToolResult> {
   const view = str(params, "view");
   if (!view || !VALID_VIEWS.has(view)) {
@@ -42,24 +54,36 @@ export async function handlePortfolioInspect(
   const productType = str(params, "productType") || undefined;
   const limit = num(params, "limit") ?? 20;
 
+  if (WALLET_SCOPED_VIEWS.has(view)) {
+    // Resolve the session's selected wallet set. Fails closed on invalid
+    // mission policy / address drift / removed wallet; a valid session with a
+    // family unselected yields a smaller set; an empty set → zero/empty rows.
+    let addresses: string[];
+    try {
+      addresses = resolveSelectedAddressSet(context.walletResolution, context.walletPolicy).all;
+    } catch (err) {
+      return walletScopeErrorToResult(err);
+    }
+    switch (view) {
+      case "summary": return inspectSummary(addresses);
+      case "balances": return inspectBalances(addresses);
+      case "snapshots": return inspectSnapshots(addresses);
+      case "open_positions": return inspectOpenPositions(addresses, namespace);
+      case "closed_positions": return inspectClosedPositions(addresses, namespace);
+      case "orders": return inspectOrders(addresses, namespace, str(params, "status") || undefined);
+      case "lots": return inspectLots(addresses, str(params, "instrumentKey") || undefined, namespace, str(params, "status") || undefined);
+      case "profits": return inspectProfits(addresses, namespace, str(params, "instrumentKey") || undefined, str(params, "groupBy") || undefined);
+      case "unrealized": return inspectUnrealized(addresses, namespace);
+      default: return fail(`Unknown view: ${view}`);
+    }
+  }
+
+  // Unscoped views — activity/history (5E-2b) + global executions.
   switch (view) {
-    // Position views
-    case "open_positions": return inspectOpenPositions(namespace);
-    case "closed_positions": return inspectClosedPositions(namespace);
-    case "orders": return inspectOrders(namespace, str(params, "status") || undefined);
-    // Trading views
-    case "lots": return inspectLots(str(params, "instrumentKey") || undefined, namespace, str(params, "status") || undefined);
-    case "profits": return inspectProfits(str(params, "walletAddress") || undefined, namespace, str(params, "instrumentKey") || undefined, str(params, "groupBy") || undefined);
-    case "unrealized": return inspectUnrealized(namespace);
-    // Activity views
     case "activity": return inspectActivity(namespace, productType, limit);
     case "bridges": return inspectBridges(namespace, limit);
     case "lp_history": return inspectLpHistory(namespace, limit);
     case "non_trading_history": return inspectNonTradingHistory(namespace, limit);
-    // Portfolio views
-    case "summary": return inspectSummary();
-    case "balances": return inspectBalances();
-    case "snapshots": return inspectSnapshots();
     case "executions": return inspectExecutions(namespace, limit);
     default: return fail(`Unknown view: ${view}`);
   }

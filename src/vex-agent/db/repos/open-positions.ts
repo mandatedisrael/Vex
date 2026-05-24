@@ -92,13 +92,18 @@ export async function closePosition(
   return n > 0;
 }
 
-/** Get open positions, optionally filtered. */
-export async function getOpen(walletAddress?: string, namespace?: string): Promise<Position[]> {
+/**
+ * Get open positions, optionally scoped to a wallet set. `addresses` undefined →
+ * all wallets (legacy/global); a set → only those; EMPTY set → [] (never
+ * global — Codex 5E-2).
+ */
+export async function getOpen(addresses?: string[], namespace?: string): Promise<Position[]> {
+  if (addresses !== undefined && addresses.length === 0) return [];
   const conditions: string[] = ["status = 'open'"];
   const params: unknown[] = [];
   let idx = 1;
 
-  if (walletAddress) { conditions.push(`wallet_address = $${idx++}`); params.push(walletAddress); }
+  if (addresses !== undefined) { conditions.push(`wallet_address = ANY($${idx++}::text[])`); params.push(addresses); }
   if (namespace) { conditions.push(`namespace = $${idx++}`); params.push(namespace); }
 
   const rows = await query<Record<string, unknown>>(

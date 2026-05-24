@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ErrorCodes } from "../../../../../errors.js";
+import { ErrorCodes, VexError } from "../../../../../errors.js";
 import type { WalletPolicy } from "../../../../../vex-agent/engine/types.js";
 
 const mockResolveSelectedEntry = vi.fn();
@@ -19,7 +19,7 @@ vi.mock("@tools/wallet/multi-auth.js", () => ({
   loadWalletFromEntry: (...a: unknown[]) => mockLoadWalletFromEntry(...a),
 }));
 
-const { resolveSelectedAddress, resolveSigningWallet } = await import(
+const { resolveSelectedAddress, resolveSigningWallet, resolveSelectedAddressSet } = await import(
   "../../../../../vex-agent/tools/internal/wallet/resolve.js"
 );
 
@@ -98,5 +98,57 @@ describe("resolveSigningWallet — decrypts only after policy passes", () => {
       ErrorCodes.WALLET_SCOPE_MISMATCH,
     );
     expect(mockLoadWalletFromEntry).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveSelectedAddressSet — read-side wallet set (5E-2)", () => {
+  const SOL = "SoLAddrAAA";
+
+  it("returns BOTH selected addresses for a fully-selected session", () => {
+    mockResolveSelectedEntry.mockImplementation((family: string) =>
+      family === "solana"
+        ? { family: "solana", entry: { id: "sol_x", address: SOL, label: "s", createdAt: "" } }
+        : { family: "evm", entry: { id: "evm_x", address: EVM, label: "e", createdAt: "" } },
+    );
+    const set = resolveSelectedAddressSet(SESSION, NONE);
+    expect(set.evm).toBe(EVM);
+    expect(set.solana).toBe(SOL);
+    expect(set.all).toEqual([EVM, SOL]);
+  });
+
+  it("a family with no selection (WALLET_NOT_SELECTED) → null, not an error", () => {
+    mockResolveSelectedEntry.mockImplementation((family: string) => {
+      if (family === "solana") throw new VexError(ErrorCodes.WALLET_NOT_SELECTED, "no sol");
+      return { family: "evm", entry: { id: "evm_x", address: EVM, label: "e", createdAt: "" } };
+    });
+    const set = resolveSelectedAddressSet(SESSION, NONE);
+    expect(set.evm).toBe(EVM);
+    expect(set.solana).toBeNull();
+    expect(set.all).toEqual([EVM]);
+  });
+
+  it("default/MCP with no wallet configured for a family (WALLET_NOT_CONFIGURED) → empty set", () => {
+    mockResolveSelectedEntry.mockImplementation(() => {
+      throw new VexError(ErrorCodes.WALLET_NOT_CONFIGURED, "none configured");
+    });
+    const set = resolveSelectedAddressSet({ source: "default" }, NONE);
+    expect(set.all).toEqual([]);
+  });
+
+  it("invalid mission policy fails closed FIRST (resolveSelectedEntry never called)", () => {
+    const policy: WalletPolicy = { kind: "invalid", reason: "empty_allowed_wallets" };
+    expect(codeOf(() => resolveSelectedAddressSet(SESSION, policy))).toBe(
+      ErrorCodes.WALLET_SCOPE_MISMATCH,
+    );
+    expect(mockResolveSelectedEntry).not.toHaveBeenCalled();
+  });
+
+  it("address drift / removed wallet (WALLET_SCOPE_MISMATCH) re-throws (never silently empties)", () => {
+    mockResolveSelectedEntry.mockImplementation(() => {
+      throw new VexError(ErrorCodes.WALLET_SCOPE_MISMATCH, "drift");
+    });
+    expect(codeOf(() => resolveSelectedAddressSet(SESSION, NONE))).toBe(
+      ErrorCodes.WALLET_SCOPE_MISMATCH,
+    );
   });
 });

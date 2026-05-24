@@ -124,13 +124,18 @@ export async function getMatchesBySell(sellActivityId: number): Promise<PnlMatch
   return rows.map(mapRow);
 }
 
-/** Total realized PnL (NUMERIC → string). NULL if no matches. */
-export async function getTotalRealizedPnl(walletAddress?: string, namespace?: string): Promise<string | null> {
+/**
+ * Total realized PnL (NUMERIC → string). NULL if no matches. `addresses`
+ * undefined → all wallets (legacy/global); a set → only those; EMPTY set →
+ * null (never global — Codex 5E-2).
+ */
+export async function getTotalRealizedPnl(addresses?: string[], namespace?: string): Promise<string | null> {
+  if (addresses !== undefined && addresses.length === 0) return null;
   const conditions: string[] = ["match_kind = 'matched'"];
   const params: unknown[] = [];
   let idx = 1;
 
-  if (walletAddress) { conditions.push(`wallet_address = $${idx++}`); params.push(walletAddress); }
+  if (addresses !== undefined) { conditions.push(`wallet_address = ANY($${idx++}::text[])`); params.push(addresses); }
   if (namespace) { conditions.push(`namespace = $${idx++}`); params.push(namespace); }
 
   const row = await queryOne<{ total: string | null }>(

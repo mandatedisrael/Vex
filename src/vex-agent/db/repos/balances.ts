@@ -141,15 +141,16 @@ export async function getBalancesByChain(walletAddress: string): Promise<ChainSu
 }
 
 /**
- * Total USD value. Without `walletAddress` it sums ALL wallets (global /
- * legacy callers); with it, only that wallet's balances. Session-scoped reads
- * pass the selected wallet (puzzle 5 phase 5E-2).
+ * Total USD value. `addresses` undefined → ALL wallets (legacy/global); a set →
+ * only those wallets; an EMPTY set → 0 (never global — Codex 5E-2). Session
+ * reads pass the selected wallet set (puzzle 5 phase 5E-2).
  */
-export async function getTotalUsd(walletAddress?: string): Promise<number> {
-  const row = walletAddress !== undefined
+export async function getTotalUsd(addresses?: string[]): Promise<number> {
+  if (addresses !== undefined && addresses.length === 0) return 0;
+  const row = addresses !== undefined
     ? await queryOne<{ total: string }>(
-        "SELECT COALESCE(SUM(balance_usd), 0) AS total FROM proj_balances WHERE wallet_address = $1",
-        [walletAddress],
+        "SELECT COALESCE(SUM(balance_usd), 0) AS total FROM proj_balances WHERE wallet_address = ANY($1::text[])",
+        [addresses],
       )
     : await queryOne<{ total: string }>(
         "SELECT COALESCE(SUM(balance_usd), 0) AS total FROM proj_balances",
@@ -228,6 +229,107 @@ export async function getSnapshotHistory(
         `SELECT * FROM proj_portfolio_snapshots WHERE created_at > NOW() - INTERVAL '${intervals[range]}' ORDER BY created_at ASC`,
       );
   return rows.map(mapSnapshotRow);
+}
+
+// ── Aggregate (per-session) snapshots ───────────────────────────
+
+/** One full-sync CYCLE aggregated across a wallet set (puzzle 5 phase 5E-2). */
+export interface AggregateSnapshot {
+  snapshotGroupId: string;
+  totalUsd: number;
+  pnlVsPrev: number | null;
+  pnlPctVsPrev: number | null;
+  activeChains: string[];
+  at: string;
+}
+
+interface AggregateGroupRow {
+  snapshot_group_id: string;
+  total_usd: string;
+  at: string;
+  chains: string[][] | null;
+}
+
+function flattenChains(nested: string[][] | null): string[] {
+  return [...new Set((nested ?? []).flat())];
+}
+
+function aggregatePnl(totalUsd: number, prevTotal: number | null): { pnlVsPrev: number | null; pnlPctVsPrev: number | null } {
+  if (prevTotal === null) return { pnlVsPrev: null, pnlPctVsPrev: null };
+  const pnlVsPrev = totalUsd - prevTotal;
+  return { pnlVsPrev, pnlPctVsPrev: prevTotal > 0 ? (pnlVsPrev / prevTotal) * 100 : null };
+}
+
+/**
+ * Aggregate per-wallet snapshots into per-CYCLE totals for the given wallet
+ * set. Only COMPLETE cycles (a row for EVERY selected wallet, via
+ * `HAVING COUNT(DISTINCT wallet_address) = <n>`) count, so a partial/failed
+ * sync can't understate the total. PnL is the delta between consecutive
+ * complete cycles. Empty set → [] (never global — Codex 5E-2).
+ */
+export async function getAggregateSnapshots(
+  addresses: string[],
+  range: "24h" | "7d" | "30d" | "all" = "7d",
+): Promise<AggregateSnapshot[]> {
+  if (addresses.length === 0) return [];
+  const intervals: Record<string, string> = { "24h": "24 hours", "7d": "7 days", "30d": "30 days", "all": "100 years" };
+  const rows = await query<AggregateGroupRow>(
+    `SELECT snapshot_group_id, SUM(total_usd) AS total_usd, MAX(created_at) AS at,
+            array_agg(active_chains) AS chains
+     FROM proj_portfolio_snapshots
+     WHERE created_at > NOW() - INTERVAL '${intervals[range]}' AND wallet_address = ANY($1::text[])
+     GROUP BY snapshot_group_id
+     HAVING COUNT(DISTINCT wallet_address) = $2
+     ORDER BY at ASC`,
+    [addresses, addresses.length],
+  );
+  let prevTotal: number | null = null;
+  return rows.map((r) => {
+    const totalUsd = Number(r.total_usd);
+    const { pnlVsPrev, pnlPctVsPrev } = aggregatePnl(totalUsd, prevTotal);
+    prevTotal = totalUsd;
+    return {
+      snapshotGroupId: r.snapshot_group_id,
+      totalUsd,
+      pnlVsPrev,
+      pnlPctVsPrev,
+      activeChains: flattenChains(r.chains),
+      at: String(r.at),
+    };
+  });
+}
+
+/**
+ * Latest COMPLETE cycle for the wallet set, with PnL vs the previous complete
+ * cycle. Empty set → null. Used by the portfolio summary.
+ */
+export async function getLatestAggregateSnapshot(
+  addresses: string[],
+): Promise<AggregateSnapshot | null> {
+  if (addresses.length === 0) return null;
+  const rows = await query<AggregateGroupRow>(
+    `SELECT snapshot_group_id, SUM(total_usd) AS total_usd, MAX(created_at) AS at,
+            array_agg(active_chains) AS chains
+     FROM proj_portfolio_snapshots
+     WHERE wallet_address = ANY($1::text[])
+     GROUP BY snapshot_group_id
+     HAVING COUNT(DISTINCT wallet_address) = $2
+     ORDER BY at DESC
+     LIMIT 2`,
+    [addresses, addresses.length],
+  );
+  if (rows.length === 0) return null;
+  const latest = rows[0];
+  const totalUsd = Number(latest.total_usd);
+  const { pnlVsPrev, pnlPctVsPrev } = aggregatePnl(totalUsd, rows[1] ? Number(rows[1].total_usd) : null);
+  return {
+    snapshotGroupId: latest.snapshot_group_id,
+    totalUsd,
+    pnlVsPrev,
+    pnlPctVsPrev,
+    activeChains: flattenChains(latest.chains),
+    at: String(latest.at),
+  };
 }
 
 // ── Mappers ─────────────────────────────────────────────────────

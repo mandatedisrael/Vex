@@ -6,17 +6,18 @@
 import type { ToolResult } from "../../types.js";
 import { ok } from "../types.js";
 
-export async function inspectLots(instrumentKey?: string, namespace?: string, status?: string): Promise<ToolResult> {
+export async function inspectLots(addresses: string[], instrumentKey?: string, namespace?: string, status?: string): Promise<ToolResult> {
   const { query } = await import("@vex-agent/db/client.js");
-  const conditions: string[] = [];
-  const params: unknown[] = [];
-  let idx = 1;
+  // Always wallet-scoped (ANY('{}') → no rows for an empty selection).
+  const conditions: string[] = ["wallet_address = ANY($1::text[])"];
+  const params: unknown[] = [addresses];
+  let idx = 2;
 
   if (instrumentKey) { conditions.push(`instrument_key = $${idx++}`); params.push(instrumentKey); }
   if (namespace) { conditions.push(`namespace = $${idx++}`); params.push(namespace); }
   if (status) { conditions.push(`status = $${idx++}`); params.push(status); }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = `WHERE ${conditions.join(" AND ")}`;
   params.push(50);
   const rows = await query<Record<string, unknown>>(
     `SELECT * FROM proj_pnl_lots ${where} ORDER BY opened_at DESC LIMIT $${idx}`,
@@ -45,18 +46,19 @@ export async function inspectLots(instrumentKey?: string, namespace?: string, st
   });
 }
 
-export async function inspectProfits(walletAddress?: string, namespace?: string, instrumentKey?: string, groupBy?: string): Promise<ToolResult> {
+export async function inspectProfits(addresses: string[], namespace?: string, instrumentKey?: string, groupBy?: string): Promise<ToolResult> {
   const { query } = await import("@vex-agent/db/client.js");
 
-  const conditions: string[] = [];
-  const params: unknown[] = [];
-  let idx = 1;
+  // Wallet scope comes from the session selection, NOT a caller-supplied
+  // address (which the renderer must not be trusted to set).
+  const conditions: string[] = ["wallet_address = ANY($1::text[])"];
+  const params: unknown[] = [addresses];
+  let idx = 2;
 
-  if (walletAddress) { conditions.push(`wallet_address = $${idx++}`); params.push(walletAddress); }
   if (namespace) { conditions.push(`namespace = $${idx++}`); params.push(namespace); }
   if (instrumentKey) { conditions.push(`instrument_key = $${idx++}`); params.push(instrumentKey); }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = `WHERE ${conditions.join(" AND ")}`;
   const groupCol = groupBy === "namespace" ? "namespace" : "instrument_key";
 
   const rows = await query<Record<string, unknown>>(
@@ -91,14 +93,14 @@ export async function inspectProfits(walletAddress?: string, namespace?: string,
   });
 }
 
-export async function inspectUnrealized(namespace?: string): Promise<ToolResult> {
+export async function inspectUnrealized(addresses: string[], namespace?: string): Promise<ToolResult> {
   const { query } = await import("@vex-agent/db/client.js");
   const { parseInstrumentKey } = await import("@vex-agent/sync/instrument-key.js");
   const { getPortfolioChainId, resolvePortfolioChainIds } = await import("@vex-agent/sync/portfolio-chain-map.js");
 
-  const lotConditions: string[] = ["l.status IN ('open', 'partial')"];
-  const lotParams: unknown[] = [];
-  let idx = 1;
+  const lotConditions: string[] = ["l.status IN ('open', 'partial')", "l.wallet_address = ANY($1::text[])"];
+  const lotParams: unknown[] = [addresses];
+  let idx = 2;
   if (namespace) { lotConditions.push(`l.namespace = $${idx++}`); lotParams.push(namespace); }
 
   const rows = await query<Record<string, unknown>>(

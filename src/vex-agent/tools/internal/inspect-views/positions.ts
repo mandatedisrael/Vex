@@ -6,9 +6,9 @@
 import type { ToolResult } from "../../types.js";
 import { ok } from "../types.js";
 
-export async function inspectOpenPositions(namespace?: string): Promise<ToolResult> {
+export async function inspectOpenPositions(addresses: string[], namespace?: string): Promise<ToolResult> {
   const { getOpen } = await import("@vex-agent/db/repos/open-positions.js");
-  const positions = await getOpen(undefined, namespace);
+  const positions = await getOpen(addresses, namespace);
 
   if (positions.length === 0) {
     return ok({ view: "open_positions", count: 0, positions: [], note: "No open positions found" });
@@ -37,11 +37,12 @@ export async function inspectOpenPositions(namespace?: string): Promise<ToolResu
   });
 }
 
-export async function inspectClosedPositions(namespace?: string): Promise<ToolResult> {
+export async function inspectClosedPositions(addresses: string[], namespace?: string): Promise<ToolResult> {
   const { query } = await import("@vex-agent/db/client.js");
-  const conditions: string[] = ["status != 'open'"];
-  const params: unknown[] = [];
-  let idx = 1;
+  // wallet-scoped: ANY('{}') matches nothing, so an empty set → no rows.
+  const conditions: string[] = ["status != 'open'", "wallet_address = ANY($1::text[])"];
+  const params: unknown[] = [addresses];
+  let idx = 2;
 
   if (namespace) { conditions.push(`namespace = $${idx++}`); params.push(namespace); }
   params.push(50);
@@ -69,11 +70,11 @@ export async function inspectClosedPositions(namespace?: string): Promise<ToolRe
   });
 }
 
-export async function inspectOrders(namespace?: string, status?: string): Promise<ToolResult> {
+export async function inspectOrders(addresses: string[], namespace?: string, status?: string): Promise<ToolResult> {
   const { query } = await import("@vex-agent/db/client.js");
-  const conditions: string[] = ["position_type = 'order'"];
-  const params: unknown[] = [];
-  let idx = 1;
+  const conditions: string[] = ["position_type = 'order'", "wallet_address = ANY($1::text[])"];
+  const params: unknown[] = [addresses];
+  let idx = 2;
 
   if (namespace) { conditions.push(`namespace = $${idx++}`); params.push(namespace); }
   if (status) { conditions.push(`status = $${idx++}`); params.push(status); }

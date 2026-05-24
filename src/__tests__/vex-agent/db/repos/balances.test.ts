@@ -82,19 +82,66 @@ describe("insertSnapshot — per-wallet PnL", () => {
   });
 });
 
-describe("getTotalUsd — optional wallet filter", () => {
-  it("filters by wallet_address when provided", async () => {
+describe("getTotalUsd — wallet set filter", () => {
+  it("filters by the wallet set with ANY()", async () => {
     mockQueryOne.mockResolvedValue({ total: "250" });
-    await repo.getTotalUsd("0xA");
+    await repo.getTotalUsd(["0xA", "0xB"]);
     const call = mockQueryOne.mock.calls[0];
-    expect(String(call[0])).toContain("WHERE wallet_address = $1");
-    expect(call[1]).toEqual(["0xA"]);
+    expect(String(call[0])).toContain("wallet_address = ANY($1::text[])");
+    expect(call[1]).toEqual([["0xA", "0xB"]]);
   });
 
-  it("sums across all wallets when no address is given", async () => {
+  it("returns 0 for an EMPTY set WITHOUT querying (never global)", async () => {
+    const total = await repo.getTotalUsd([]);
+    expect(total).toBe(0);
+    expect(mockQueryOne).not.toHaveBeenCalled();
+  });
+
+  it("sums across all wallets when the set is undefined (legacy/global)", async () => {
     mockQueryOne.mockResolvedValue({ total: "250" });
     await repo.getTotalUsd();
-    expect(String(mockQueryOne.mock.calls[0][0])).not.toContain("WHERE wallet_address");
+    expect(String(mockQueryOne.mock.calls[0][0])).not.toContain("wallet_address");
+  });
+});
+
+describe("aggregate snapshots — per-cycle, complete groups only", () => {
+  it("groups by snapshot_group_id (complete-group HAVING) + computes pnl deltas + flattens chains", async () => {
+    mockQuery.mockResolvedValue([
+      { snapshot_group_id: "g1", total_usd: "1000", at: "2026-05-24T00:00:00.000Z", chains: [["1"], ["8453"]] },
+      { snapshot_group_id: "g2", total_usd: "1500", at: "2026-05-24T01:00:00.000Z", chains: [["1"], ["1"]] },
+    ]);
+    const res = await repo.getAggregateSnapshots(["0xA", "0xB"], "7d");
+    const call = mockQuery.mock.calls[0];
+    expect(String(call[0])).toContain("HAVING COUNT(DISTINCT wallet_address) = $2");
+    expect(call[1]).toEqual([["0xA", "0xB"], 2]);
+    expect(res).toHaveLength(2);
+    expect(res[0].pnlVsPrev).toBeNull(); // first cycle has no baseline
+    expect(res[1].pnlVsPrev).toBe(500); // 1500 - 1000
+    expect([...res[0].activeChains].sort()).toEqual(["1", "8453"]); // flattened + deduped
+    expect(res[1].activeChains).toEqual(["1"]);
+  });
+
+  it("returns [] for an empty wallet set without querying", async () => {
+    const res = await repo.getAggregateSnapshots([], "7d");
+    expect(res).toEqual([]);
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it("getLatestAggregateSnapshot: latest complete cycle + pnl vs previous (LIMIT 2)", async () => {
+    mockQuery.mockResolvedValue([
+      { snapshot_group_id: "g2", total_usd: "1500", at: "2026-05-24T01:00:00.000Z", chains: [["1"]] },
+      { snapshot_group_id: "g1", total_usd: "1000", at: "2026-05-24T00:00:00.000Z", chains: [["1"]] },
+    ]);
+    const res = await repo.getLatestAggregateSnapshot(["0xA", "0xB"]);
+    expect(String(mockQuery.mock.calls[0][0])).toContain("LIMIT 2");
+    expect(res?.totalUsd).toBe(1500);
+    expect(res?.pnlVsPrev).toBe(500);
+  });
+
+  it("getLatestAggregateSnapshot returns null for an empty set without querying", async () => {
+    const res = await repo.getLatestAggregateSnapshot([]);
+    expect(res).toBeNull();
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 });
 

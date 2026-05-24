@@ -62,6 +62,67 @@ export function resolveSelectedAddress(
 }
 
 /**
+ * The session's selected wallet addresses for READ scoping (puzzle 5 phase
+ * 5E-2). `all` is the non-null set used as a `wallet_address = ANY(...)` filter.
+ */
+export interface SelectedWalletAddresses {
+  evm: string | null;
+  solana: string | null;
+  all: string[];
+}
+
+/**
+ * Resolve BOTH families' selected addresses for read-side wallet scoping.
+ *
+ *  - Invalid mission policy fails closed FIRST (contract drift must never
+ *    degrade to an empty/global read — Codex 5E-2 review).
+ *  - A family with no wallet (`WALLET_NOT_SELECTED` for a session, or
+ *    `WALLET_NOT_CONFIGURED` for CLI/MCP default) is a VALID empty → null; the
+ *    read simply shows nothing for that family.
+ *  - Address drift / removed wallet / policy violation (`WALLET_SCOPE_MISMATCH`)
+ *    re-throws so the read fails closed.
+ *
+ * `all` may be empty (a valid session with neither family selected) — callers
+ * MUST treat an empty set as "no rows", never as a global query.
+ */
+export function resolveSelectedAddressSet(
+  resolution: WalletResolution,
+  policy: WalletPolicy,
+): SelectedWalletAddresses {
+  if (policy.kind === "invalid") {
+    throw new VexError(
+      ErrorCodes.WALLET_SCOPE_MISMATCH,
+      "Mission wallet policy is invalid (contract drift — no accepted allowed wallets).",
+      "Re-accept the mission contract and start a fresh run.",
+    );
+  }
+  const evm = tryResolveSelectedAddress(resolution, policy, "eip155");
+  const solana = tryResolveSelectedAddress(resolution, policy, "solana");
+  const all = [evm, solana].filter((a): a is string => a !== null);
+  return { evm, solana, all };
+}
+
+/** Per-family resolve that maps "validly absent" to null and re-throws drift. */
+function tryResolveSelectedAddress(
+  resolution: WalletResolution,
+  policy: WalletPolicy,
+  family: ChainFamily,
+): string | null {
+  try {
+    return resolveSelectedAddress(resolution, policy, family);
+  } catch (err) {
+    if (
+      err instanceof VexError &&
+      (err.code === ErrorCodes.WALLET_NOT_SELECTED ||
+        err.code === ErrorCodes.WALLET_NOT_CONFIGURED)
+    ) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+/**
  * Resolve AND decrypt the signing wallet for a family. Same validation as
  * `resolveSelectedAddress` plus the key load. Call only after the approval gate
  * and just before broadcast.

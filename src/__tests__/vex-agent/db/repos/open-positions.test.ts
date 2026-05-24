@@ -9,14 +9,16 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 
 let mockExecute: Mock<(sql: string, params?: unknown[]) => Promise<number>>;
+let mockQuery: Mock<(sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>>;
 
 function resetMocks() {
   mockExecute = vi.fn<(sql: string, params?: unknown[]) => Promise<number>>().mockResolvedValue(1);
+  mockQuery = vi.fn<(sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>>().mockResolvedValue([]);
 }
 resetMocks();
 
 vi.mock("@vex-agent/db/client.js", () => ({
-  query: vi.fn().mockResolvedValue([]),
+  query: (sql: string, params?: unknown[]) => mockQuery(sql, params),
   queryOne: vi.fn().mockResolvedValue(null),
   execute: (sql: string, params?: unknown[]) => mockExecute(sql, params),
   getPool: vi.fn(),
@@ -65,5 +67,20 @@ describe("closePosition — full identity", () => {
     const [sql, params] = mockExecute.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain("chain = $3 AND wallet_address = $4 AND external_id = $5");
     expect(params).toEqual(["khalani", "perps", "base", "0xWalletA", "ext-1", "closed"]);
+  });
+});
+
+describe("getOpen — wallet set filter", () => {
+  it("returns [] for an EMPTY set WITHOUT querying (never global)", async () => {
+    const res = await repo.getOpen([]);
+    expect(res).toEqual([]);
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it("scopes to the wallet set with ANY()", async () => {
+    await repo.getOpen(["0xA", "0xB"], "khalani");
+    const [sql, params] = mockQuery.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("wallet_address = ANY($1::text[])");
+    expect(params[0]).toEqual(["0xA", "0xB"]);
   });
 });
