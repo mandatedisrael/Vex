@@ -11,11 +11,17 @@
 import { CH } from "@shared/ipc/channels.js";
 import type { Result } from "@shared/ipc/result.js";
 import {
+  compactionHistoryInputSchema,
+  compactionHistoryResultSchema,
   compactionStatusInputSchema,
   compactionStatusResultSchema,
+  type CompactionHistoryResult,
   type CompactionStatusResult,
 } from "@shared/schemas/compaction.js";
-import { getCompactionStatus } from "../database/compaction-db.js";
+import {
+  getCompactionStatus,
+  listCompactionHistory,
+} from "../database/compaction-db.js";
 import { log } from "../logger/index.js";
 import { registerHandler } from "./register-handler.js";
 
@@ -46,6 +52,31 @@ function registerGetStatusHandler(): () => void {
   });
 }
 
+function registerListHistoryHandler(): () => void {
+  return registerHandler({
+    channel: CH.compaction.listHistory,
+    domain: "compaction",
+    inputSchema: compactionHistoryInputSchema,
+    outputSchema: compactionHistoryResultSchema,
+    handle: async (input, ctx): Promise<Result<CompactionHistoryResult>> => {
+      const outcome = await listCompactionHistory(input.sessionId, input.limit);
+      if (outcome.ok) {
+        log.info(
+          `[ipc:vex:compaction:listHistory] ok sessionId=${input.sessionId} ` +
+            `present=${outcome.data !== null} count=${outcome.data?.length ?? 0} ` +
+            `correlationId=${ctx.requestId}`,
+        );
+        return outcome;
+      }
+      log.info(
+        `[ipc:vex:compaction:listHistory] errCode=${outcome.error.code} ` +
+          `correlationId=${ctx.requestId}`,
+      );
+      return outcome;
+    },
+  });
+}
+
 export function registerCompactionHandlers(): ReadonlyArray<() => void> {
-  return [registerGetStatusHandler()];
+  return [registerGetStatusHandler(), registerListHistoryHandler()];
 }

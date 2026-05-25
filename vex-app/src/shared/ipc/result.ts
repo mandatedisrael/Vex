@@ -54,6 +54,15 @@ export type VexDomain =
    */
   | "compaction"
   /**
+   * Agent integration stage 7-2a — read-only knowledge + per-session memory
+   * management surfaces (sanitized list reads; no mutation yet — knowledge
+   * disable/archive lands in 7-2b). `knowledge` is the global store;
+   * `memory` is per-session. DB unavailability maps to `internal.unexpected`
+   * like the other read domains.
+   */
+  | "knowledge"
+  | "memory"
+  /**
    * Used by the read-only `sessions.getModel` handler (global runtime
    * model resolution). Existing sessions handlers
    * (`vex:sessions:create|list|get|setPinned|delete`) deliberately keep
@@ -258,6 +267,8 @@ export const VEX_DOMAINS = [
   "models",
   "usage",
   "compaction",
+  "knowledge",
+  "memory",
   "sessions",
   "preload",
   "internal",

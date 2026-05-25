@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   COMPACT_JOB_STATUSES,
+  COMPACTION_HISTORY_MAX_LIMIT,
+  compactionHistoryInputSchema,
+  compactionHistoryItemSchema,
+  compactionHistoryResultSchema,
   compactionStatusDtoSchema,
   compactionStatusInputSchema,
   compactionStatusResultSchema,
@@ -95,5 +99,51 @@ describe("compaction schemas", () => {
       "failed",
       "permanently_failed",
     ]);
+  });
+});
+
+describe("compaction history schemas (stage 7-2a)", () => {
+  const ISO = "2026-05-21T10:00:00.000Z";
+  const SESSION = "00000000-0000-4000-8000-000000000008";
+  const VALID_ITEM = {
+    checkpointGeneration: 3,
+    status: "completed",
+    sourceStartMessageId: 1,
+    sourceEndMessageId: 30,
+    chunksInserted: 2,
+    createdAt: ISO,
+    startedAt: ISO,
+    completedAt: ISO,
+  };
+
+  it("history input requires a uuid + caps the limit", () => {
+    expect(
+      compactionHistoryInputSchema.safeParse({ sessionId: SESSION }).success,
+    ).toBe(true);
+    expect(
+      compactionHistoryInputSchema.safeParse({
+        sessionId: SESSION,
+        limit: COMPACTION_HISTORY_MAX_LIMIT + 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("history item accepts null message ids + nullable started/completed", () => {
+    expect(compactionHistoryItemSchema.safeParse(VALID_ITEM).success).toBe(true);
+    expect(
+      compactionHistoryItemSchema.safeParse({
+        ...VALID_ITEM,
+        sourceStartMessageId: null,
+        startedAt: null,
+        completedAt: null,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("history result accepts null (foreign session) and an array", () => {
+    expect(compactionHistoryResultSchema.safeParse(null).success).toBe(true);
+    expect(compactionHistoryResultSchema.safeParse([VALID_ITEM]).success).toBe(
+      true,
+    );
   });
 });

@@ -35,9 +35,8 @@ vi.mock("../../logger/index.js", () => ({
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const { getCompactionStatus, probeCompactJobsReady } = await import(
-  "../compaction-db.js"
-);
+const { getCompactionStatus, listCompactionHistory, probeCompactJobsReady } =
+  await import("../compaction-db.js");
 const { VEX_APP_SESSION_SCOPE } = await import("@shared/schemas/sessions.js");
 
 const SESSION = "00000000-0000-4000-8000-00000000aa01";
@@ -153,5 +152,53 @@ describe("probeCompactJobsReady", () => {
   it("is false when Postgres is unreachable", async () => {
     connectMock.mockRejectedValueOnce(new Error("no db"));
     expect(await probeCompactJobsReady()).toBe(false);
+  });
+});
+
+describe("listCompactionHistory (app-scoped)", () => {
+  it("returns null for an unknown/foreign session", async () => {
+    connectMock.mockResolvedValue(undefined);
+    queryMock.mockResolvedValueOnce({ rows: [] }); // session not in scope
+    endMock.mockResolvedValue(undefined);
+
+    const res = await listCompactionHistory(SESSION, 50);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.data).toBeNull();
+    expect(queryMock.mock.calls).toHaveLength(1);
+  });
+
+  it("maps the generation timeline for an in-scope session", async () => {
+    connectMock.mockResolvedValue(undefined);
+    queryMock
+      .mockResolvedValueOnce({ rows: [{ "?column?": 1 }] }) // in scope
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            checkpoint_generation: 4,
+            status: "completed",
+            source_start_message_id: 1,
+            source_end_message_id: 30,
+            chunks_inserted: "3",
+            created_at: "2026-05-21T10:00:00.000Z",
+            started_at: "2026-05-21T10:00:00.000Z",
+            completed_at: "2026-05-21T10:00:00.000Z",
+          },
+        ],
+      });
+    endMock.mockResolvedValue(undefined);
+
+    const res = await listCompactionHistory(SESSION, 50);
+    expect(res.ok).toBe(true);
+    if (!res.ok || res.data === null) throw new Error("expected history");
+    expect(res.data[0]).toEqual({
+      checkpointGeneration: 4,
+      status: "completed",
+      sourceStartMessageId: 1,
+      sourceEndMessageId: 30,
+      chunksInserted: 3,
+      createdAt: "2026-05-21T10:00:00.000Z",
+      startedAt: "2026-05-21T10:00:00.000Z",
+      completedAt: "2026-05-21T10:00:00.000Z",
+    });
   });
 });

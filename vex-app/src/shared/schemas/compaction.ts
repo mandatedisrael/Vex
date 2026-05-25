@@ -78,3 +78,52 @@ export const compactionStatusResultSchema = compactionStatusDtoSchema.nullable()
 export type CompactionStatusResult = z.infer<
   typeof compactionStatusResultSchema
 >;
+
+// ── Compaction history (stage 7-2a) ──────────────────────────────────────
+// Replayable timeline of a session's compaction generations — the "what
+// happened" surface in the knowledge/memory panel (until inline transcript
+// markers become possible at stage 08). Read-only, app-scoped.
+
+export const COMPACTION_HISTORY_DEFAULT_LIMIT = 50;
+export const COMPACTION_HISTORY_MAX_LIMIT = 200;
+
+export const compactionHistoryInputSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    limit: z
+      .number()
+      .int()
+      .positive()
+      .max(COMPACTION_HISTORY_MAX_LIMIT)
+      .default(COMPACTION_HISTORY_DEFAULT_LIMIT),
+  })
+  .strict();
+export type CompactionHistoryInput = z.infer<
+  typeof compactionHistoryInputSchema
+>;
+
+/** One compaction generation's lifecycle + the transcript range it covered. */
+export const compactionHistoryItemSchema = z
+  .object({
+    checkpointGeneration: z.number().int().min(0),
+    status: compactJobStatusSchema,
+    sourceStartMessageId: z.number().int().nullable(),
+    sourceEndMessageId: z.number().int().nullable(),
+    chunksInserted: z.number().int().min(0),
+    createdAt: z.string().datetime({ offset: true }),
+    startedAt: z.string().datetime({ offset: true }).nullable(),
+    completedAt: z.string().datetime({ offset: true }).nullable(),
+  })
+  .strict();
+export type CompactionHistoryItem = z.infer<typeof compactionHistoryItemSchema>;
+
+/**
+ * Result for `compaction.listHistory` — `null` for an unknown/foreign/
+ * deleted session; an empty array when the session has no compaction jobs.
+ */
+export const compactionHistoryResultSchema = z
+  .array(compactionHistoryItemSchema)
+  .nullable();
+export type CompactionHistoryResult = z.infer<
+  typeof compactionHistoryResultSchema
+>;

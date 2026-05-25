@@ -28,6 +28,12 @@ const mocks = vi.hoisted(() => ({
   getContextWindow: vi.fn(),
   // compaction-db
   getCompactionStatus: vi.fn(),
+  listCompactionHistory: vi.fn(),
+  // knowledge-db
+  listKnowledge: vi.fn(),
+  // memory-db
+  listSessionMemories: vi.fn(),
+  getMemoryStats: vi.fn(),
   // mission-runs-db
   getActiveRunForSession: vi.fn(),
   // approvals-db
@@ -70,7 +76,17 @@ vi.mock("../../database/usage-db.js", () => ({
 
 vi.mock("../../database/compaction-db.js", () => ({
   getCompactionStatus: mocks.getCompactionStatus,
+  listCompactionHistory: mocks.listCompactionHistory,
   probeCompactJobsReady: vi.fn(),
+}));
+
+vi.mock("../../database/knowledge-db.js", () => ({
+  listKnowledge: mocks.listKnowledge,
+}));
+
+vi.mock("../../database/memory-db.js", () => ({
+  listSessionMemories: mocks.listSessionMemories,
+  getMemoryStats: mocks.getMemoryStats,
 }));
 
 vi.mock("../../database/mission-runs-db.js", () => ({
@@ -92,6 +108,8 @@ vi.mock("../../logger/index.js", () => ({ log: mocks.log }));
 const { registerMessagesHandlers } = await import("../messages.js");
 const { registerUsageHandlers } = await import("../usage.js");
 const { registerCompactionHandlers } = await import("../compaction.js");
+const { registerKnowledgeHandlers } = await import("../knowledge.js");
+const { registerMemoryHandlers } = await import("../memory.js");
 const { registerRuntimeHandlers } = await import("../runtime.js");
 const { registerMissionHandlers } = await import("../mission.js");
 const { registerApprovalsHandlers } = await import("../approvals.js");
@@ -120,6 +138,8 @@ beforeEach(() => {
   registerMessagesHandlers();
   registerUsageHandlers();
   registerCompactionHandlers();
+  registerKnowledgeHandlers();
+  registerMemoryHandlers();
   registerRuntimeHandlers();
   registerMissionHandlers();
   registerApprovalsHandlers();
@@ -311,6 +331,78 @@ describe("compaction handler", () => {
     if (result.ok) return;
     expect(result.error?.code).toBe("internal.unexpected");
     expect(result.error?.domain).toBe("compaction");
+  });
+
+  it("listHistory returns the timeline array", async () => {
+    mocks.listCompactionHistory.mockResolvedValueOnce({ ok: true, data: [] });
+    const result = await call(CH.compaction.listHistory, {
+      sessionId: SESSION,
+      limit: 50,
+    });
+    expect(result.ok).toBe(true);
+    expect(mocks.listCompactionHistory).toHaveBeenCalledWith(SESSION, 50);
+  });
+
+  it("listHistory returns null for a missing/foreign session", async () => {
+    mocks.listCompactionHistory.mockResolvedValueOnce({ ok: true, data: null });
+    const result = await call(CH.compaction.listHistory, {
+      sessionId: SESSION,
+      limit: 50,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.data).toBeNull();
+  });
+});
+
+describe("knowledge handler", () => {
+  it("list returns the sanitized array and passes the parsed input", async () => {
+    mocks.listKnowledge.mockResolvedValueOnce({ ok: true, data: [] });
+    const result = await call(CH.knowledge.list, { limit: 100 });
+    expect(result.ok).toBe(true);
+    expect(mocks.listKnowledge).toHaveBeenCalledWith({ limit: 100 });
+  });
+
+  it("list rejects an out-of-range limit (bounded input)", async () => {
+    const result = await call(CH.knowledge.list, { limit: 100_000 });
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation.invalid_input");
+  });
+});
+
+describe("memory handlers", () => {
+  it("listSession returns null for a missing/foreign session", async () => {
+    mocks.listSessionMemories.mockResolvedValueOnce({ ok: true, data: null });
+    const result = await call(CH.memory.listSession, {
+      sessionId: SESSION,
+      limit: 50,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.data).toBeNull();
+    expect(mocks.listSessionMemories).toHaveBeenCalledWith(SESSION, 50);
+  });
+
+  it("listSession rejects a non-uuid sessionId", async () => {
+    const result = await call(CH.memory.listSession, {
+      sessionId: "nope",
+      limit: 50,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation.invalid_input");
+  });
+
+  it("getStats returns the stats DTO", async () => {
+    mocks.getMemoryStats.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        activeCount: 2,
+        compactCount: 3,
+        unresolvedOutstandingCount: 1,
+        recentThemes: ["t"],
+      },
+    });
+    const result = await call(CH.memory.getStats, { sessionId: SESSION });
+    expect(result.ok).toBe(true);
+    expect(mocks.getMemoryStats).toHaveBeenCalledWith(SESSION);
   });
 });
 

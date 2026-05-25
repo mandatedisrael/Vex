@@ -187,13 +187,28 @@ export const CH = {
     getContextWindow: "vex:usage:getContextWindow",
   },
 
-  // Compaction — read-only Track-2 worker status for the runtime bar
-  // (agent integration stage 7-1). `getStatus` projects the session's
-  // latest `compact_jobs` row + active job count (app-scoped). The Track-2
-  // executor itself is owned by Electron main; this is purely a status read
-  // (null when the session is missing/deleted/out-of-scope).
+  // Compaction — read-only Track-2 status + history (stages 7-1, 7-2a).
+  // `getStatus` = latest job + active count for the runtime-bar chip;
+  // `listHistory` = the session's compaction-generation timeline for the
+  // knowledge/memory panel. Both app-scoped; null for missing/foreign sessions.
   compaction: {
     getStatus: "vex:compaction:getStatus",
+    listHistory: "vex:compaction:listHistory",
+  },
+
+  // Knowledge — read-only management list of the GLOBAL knowledge store
+  // (stage 7-2a). Sanitized metadata only (no content_md / source_refs /
+  // embeddings). Disable/archive mutation lands in 7-2b.
+  knowledge: {
+    list: "vex:knowledge:list",
+  },
+
+  // Memory — read-only per-session memory list + stats (stage 7-2a).
+  // Sanitized HARD (no narrative bodies / raw outstanding items / embeddings);
+  // outstanding work is exposed as counts. App-scoped; null for missing sessions.
+  memory: {
+    listSession: "vex:memory:listSession",
+    getStats: "vex:memory:getStats",
   },
 
   // Settings — read-only Phase 1 (Phase 2 dodaje setters)

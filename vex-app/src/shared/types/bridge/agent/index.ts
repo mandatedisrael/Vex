@@ -17,6 +17,8 @@ import type { ApprovalsBridge } from "./approvals.js";
 import type { ChatBridge } from "./chat.js";
 import type { CompactionBridge } from "./compaction.js";
 import type { EngineEventsBridge } from "./engine.js";
+import type { KnowledgeBridge } from "./knowledge.js";
+import type { MemoryBridge } from "./memory.js";
 import type { MessagesBridge } from "./messages.js";
 import type { MissionBridge } from "./mission.js";
 import type { ModelsBridge } from "./models.js";
@@ -29,6 +31,8 @@ export type { ApprovalsBridge } from "./approvals.js";
 export type { ChatBridge } from "./chat.js";
 export type { CompactionBridge } from "./compaction.js";
 export type { EngineEventsBridge } from "./engine.js";
+export type { KnowledgeBridge } from "./knowledge.js";
+export type { MemoryBridge } from "./memory.js";
 export type { MessagesBridge } from "./messages.js";
 export type { MissionBridge } from "./mission.js";
 export type { ModelsBridge } from "./models.js";
@@ -49,6 +53,9 @@ export interface VexAgentBridge {
   readonly usage: UsageBridge;
   /** Read-only Track-2 compaction status for the runtime bar (stage 7-1). */
   readonly compaction: CompactionBridge;
+  /** Read-only knowledge + per-session memory management lists (stage 7-2a). */
+  readonly knowledge: KnowledgeBridge;
+  readonly memory: MemoryBridge;
   /**
    * Engine -> renderer push events (transcript spine, future runtime
    * deltas, etc.). The namespace mirrors `EV.engine.<topic>` so the

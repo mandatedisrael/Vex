@@ -11,6 +11,7 @@ import { SessionPanel } from "./SessionPanel.js";
 import { SessionsLibrary } from "./SessionsLibrary.js";
 import { SessionsList } from "./SessionsList.js";
 import { SettingsPanel } from "./SettingsPanel.js";
+import { KnowledgePanel } from "./KnowledgePanel.js";
 
 export function AppShell(): JSX.Element {
   const [creatorOpen, setCreatorOpen] = useState<boolean>(false);
@@ -51,6 +52,8 @@ export function AppShell(): JSX.Element {
             <SessionsLibrary />
           ) : appShellView === "settings" ? (
             <SettingsPanel />
+          ) : appShellView === "knowledge" ? (
+            <KnowledgePanel />
           ) : (
             <SessionPanel />
           )}

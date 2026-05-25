@@ -38,7 +38,12 @@ export type SessionModeFilter = "all" | "agent" | "mission";
  * management + Polymarket). NOT persisted — view selection is
  * launch-ephemeral, like `activeSessionId`.
  */
-export type AppShellView = "session" | "sessionsLibrary" | "settings";
+export type AppShellView =
+  | "session"
+  | "sessionsLibrary"
+  | "settings"
+  // Read-only knowledge + session-memory management panel (stage 7-2a).
+  | "knowledge";
 
 export interface UiLogEntry {
   readonly id: string;

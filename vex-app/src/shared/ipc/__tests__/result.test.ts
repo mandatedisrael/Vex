@@ -49,6 +49,8 @@ describe("VEX_DOMAINS / VEX_ERROR_CODES bridge coverage", () => {
       "models",
       "usage",
       "compaction",
+      "knowledge",
+      "memory",
       "sessions",
     ] as const;
     for (const domain of required) {

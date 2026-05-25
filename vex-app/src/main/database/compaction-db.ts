@@ -17,6 +17,7 @@ import { Client, type ClientConfig } from "pg";
 import { err, ok, type Result, type VexError } from "@shared/ipc/result.js";
 import { VEX_APP_SESSION_SCOPE } from "@shared/schemas/sessions.js";
 import {
+  type CompactionHistoryResult,
   type CompactionStatusResult,
   type CompactJobStatusDto,
 } from "@shared/schemas/compaction.js";
@@ -193,4 +194,70 @@ export async function probeCompactJobsReady(): Promise<boolean> {
     }
   });
   return outcome.ok ? outcome.data : false;
+}
+
+function toIsoNullable(value: string | Date | null): string | null {
+  return value === null ? null : toIso(value);
+}
+
+function toIntNullable(value: number | string | null): number | null {
+  if (value === null) return null;
+  const n = typeof value === "number" ? value : Number.parseInt(value, 10);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
+interface HistoryRow {
+  readonly checkpoint_generation: number | string;
+  readonly status: string;
+  readonly source_start_message_id: number | string | null;
+  readonly source_end_message_id: number | string | null;
+  readonly chunks_inserted: number | string;
+  readonly created_at: string | Date;
+  readonly started_at: string | Date | null;
+  readonly completed_at: string | Date | null;
+}
+
+/**
+ * Replayable compaction-generation timeline for a session (newest first),
+ * app-scoped. `null` for an unknown/foreign/deleted session; `[]` when the
+ * session has no compaction jobs. Bounded by `limit` (capped in the schema).
+ */
+export async function listCompactionHistory(
+  sessionId: string,
+  limit: number,
+): Promise<Result<CompactionHistoryResult, VexError>> {
+  return withClient(async (client) => {
+    try {
+      const sess = await client.query(
+        `SELECT 1 FROM sessions WHERE id = $1 AND scope = $2 AND deleted_at IS NULL`,
+        [sessionId, VEX_APP_SESSION_SCOPE],
+      );
+      if (sess.rows.length === 0) return ok(null);
+
+      const result = await client.query<HistoryRow>(
+        `SELECT checkpoint_generation, status,
+                source_start_message_id, source_end_message_id,
+                chunks_inserted, created_at, started_at, completed_at
+           FROM compact_jobs
+          WHERE session_id = $1
+          ORDER BY checkpoint_generation DESC, id DESC
+          LIMIT $2`,
+        [sessionId, limit],
+      );
+      return ok(
+        result.rows.map((r) => ({
+          checkpointGeneration: toInt(r.checkpoint_generation),
+          status: r.status as CompactJobStatusDto,
+          sourceStartMessageId: toIntNullable(r.source_start_message_id),
+          sourceEndMessageId: toIntNullable(r.source_end_message_id),
+          chunksInserted: toInt(r.chunks_inserted),
+          createdAt: toIso(r.created_at),
+          startedAt: toIsoNullable(r.started_at),
+          completedAt: toIsoNullable(r.completed_at),
+        })),
+      );
+    } catch (cause) {
+      return dbError("listCompactionHistory query failed", cause);
+    }
+  });
 }

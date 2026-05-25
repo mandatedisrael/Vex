@@ -93,6 +93,21 @@ export function isUsageQueryForSession(
 export const compactionKeys = {
   all: ["compaction"] as const,
   status: (sessionId: string) => ["compaction", "status", sessionId] as const,
+  history: (sessionId: string) => ["compaction", "history", sessionId] as const,
+};
+
+/** Knowledge management (stage 7-2a) — global store list, keyed by status filter. */
+export const knowledgeKeys = {
+  all: ["knowledge"] as const,
+  list: (status: string) => ["knowledge", "list", status] as const,
+};
+
+/** Session-memory management (stage 7-2a) — per-session list + stats. */
+export const memoryKeys = {
+  all: ["memory"] as const,
+  sessionList: (sessionId: string) =>
+    ["memory", "sessionList", sessionId] as const,
+  stats: (sessionId: string) => ["memory", "stats", sessionId] as const,
 };
 
 export const runtimeKeys = {

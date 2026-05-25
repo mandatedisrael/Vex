@@ -22,7 +22,11 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 import type { Result } from "@shared/ipc/result.js";
-import type { CompactionStatusResult } from "@shared/schemas/compaction.js";
+import {
+  COMPACTION_HISTORY_DEFAULT_LIMIT,
+  type CompactionHistoryResult,
+  type CompactionStatusResult,
+} from "@shared/schemas/compaction.js";
 import { compactionKeys } from "./queryKeys.js";
 
 const STALE_MS = 5_000;
@@ -86,4 +90,24 @@ export function useCompactionLiveSync(sessionId: string | null): void {
       off();
     };
   }, [sessionId, queryClient]);
+}
+
+/**
+ * Compaction-generation history for a session (stage 7-2a). Read-only
+ * timeline for the knowledge/memory panel; gates on a non-empty session id.
+ */
+export function useCompactionHistory(
+  sessionId: string | null,
+): UseQueryResult<Result<CompactionHistoryResult>> {
+  const id = sessionId ?? "";
+  return useQuery({
+    queryKey: compactionKeys.history(id),
+    queryFn: () =>
+      window.vex.compaction.listHistory({
+        sessionId: id,
+        limit: COMPACTION_HISTORY_DEFAULT_LIMIT,
+      }),
+    staleTime: STALE_MS,
+    enabled: id.length > 0,
+  });
 }

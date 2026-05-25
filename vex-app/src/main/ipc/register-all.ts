@@ -13,6 +13,8 @@ import { registerCapabilitiesHandler } from "./capabilities.js";
 import { registerChatSubmitHandler } from "./chat.js";
 import { registerCompactionHandlers } from "./compaction.js";
 import { registerDatabaseHandlers } from "./database.js";
+import { registerKnowledgeHandlers } from "./knowledge.js";
+import { registerMemoryHandlers } from "./memory.js";
 import { registerDockerHandlers } from "./docker.js";
 import { registerMessagesHandlers } from "./messages.js";
 import { registerMissionHandlers } from "./mission.js";
@@ -75,8 +77,12 @@ export function registerAllIpcHandlers(): void {
   teardowns.push(...registerUsageHandlers());
   // Agent integration stage 7-1: read-only Track-2 compaction status for the
   // runtime bar. The Track-2 executor itself is owned by main and started in
-  // `index.ts` (see `setupCompactWorker`), not here.
+  // `index.ts` (see `setupCompactWorker`), not here. Stage 7-2a extends this
+  // with `compaction.listHistory` + adds read-only knowledge/memory lists for
+  // the knowledge-management panel.
   teardowns.push(...registerCompactionHandlers());
+  teardowns.push(...registerKnowledgeHandlers());
+  teardowns.push(...registerMemoryHandlers());
   teardowns.push(...registerRuntimeHandlers());
   teardowns.push(...registerMissionHandlers());
   teardowns.push(...registerApprovalsHandlers());
