@@ -114,6 +114,15 @@ describe("polymarket clob session wallet scope (5D-protocols p3)", () => {
     expect(mockPostOrder).not.toHaveBeenCalled();
   });
 
+  it("buy with MISSING creds fails BEFORE decrypting the key (no resolveSigningWallet / postOrder)", async () => {
+    // B-core-2 reorder: resolveSelectedAddress -> requireCreds -> resolveSigningWallet.
+    // A creds miss must short-circuit before the signing wallet is ever decrypted.
+    mockRequireCreds.mockImplementationOnce(() => { throw new Error("POLYMARKET_NOT_CONFIGURED"); });
+    await expect(CLOB_HANDLERS["polymarket.clob.buy"]!(buyParams, SESSION_CTX)).rejects.toThrow();
+    expect(mockResolveSigningWallet).not.toHaveBeenCalled();
+    expect(mockPostOrder).not.toHaveBeenCalled();
+  });
+
   it("cancel threads the session address as auth", async () => {
     await CLOB_HANDLERS["polymarket.clob.cancel"]!({ orderId: "oid-1" }, SESSION_CTX);
     expect(mockCancelOrder.mock.calls[0][0]).toEqual({ address: SEL });

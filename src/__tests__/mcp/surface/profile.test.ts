@@ -106,16 +106,17 @@ describe("mcp surface — getProductionTools", () => {
     expect(names).toContain("twitter_account");
   });
 
-  // ── Env gating: showOnlyWhenEnvMissing ──────────────────────────
+  // ── polymarket_setup visibility (B-core-2 Option A) ─────────────
 
-  it("shows polymarket_setup ONLY when POLYMARKET_API_KEY is unset", () => {
+  it("shows polymarket_setup regardless of POLYMARKET_API_KEY (per-wallet, idempotent)", () => {
+    // B-core-2 removed the showOnlyWhenEnvMissing env gate so the tool can
+    // configure any wallet; the handler is idempotent per wallet. The primary
+    // env key no longer hides it.
     delete process.env.POLYMARKET_API_KEY;
-    const namesUnset = getProductionTools().map((t) => t.name);
-    expect(namesUnset).toContain("polymarket_setup");
+    expect(getProductionTools().map((t) => t.name)).toContain("polymarket_setup");
 
     process.env.POLYMARKET_API_KEY = "real-key";
-    const namesSet = getProductionTools().map((t) => t.name);
-    expect(namesSet).not.toContain("polymarket_setup");
+    expect(getProductionTools().map((t) => t.name)).toContain("polymarket_setup");
   });
 
   // ── No PROTOCOL_TOOLS leaked individually ───────────────────────

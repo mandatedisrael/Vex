@@ -72,6 +72,21 @@ describe("dispatcher — subagent, wallet, unknown, no-stubs", () => {
     expect(result.output).not.toContain("[STUB]");
   });
 
+  // ── Approval gate (mutating + restricted + !approved) ────────────
+
+  it("polymarket_setup under restricted + unapproved → pendingApproval (handler not reached)", async () => {
+    // baseContext = makeTestContext() → restricted + approved:false. The
+    // dispatcher's mutating-tool gate must fire BEFORE the credential derive.
+    const result = await dispatchTool(
+      { name: "polymarket_setup", args: {}, toolCallId: "call_pm_setup" },
+      baseContext,
+    );
+
+    expect(result.pendingApproval).toBe(true);
+    expect(result.success).toBe(false);
+    expect(result.output).toMatch(/approval/i);
+  });
+
   // ── Unknown tool ─────────────────────────────────────────────────
 
   it("returns error for completely unknown tool", async () => {

@@ -13,7 +13,7 @@ import { USDC_E_DECIMALS } from "@tools/polymarket/constants.js";
 import type { ChainWallet } from "@tools/wallet/multi-auth.js";
 import { resolveSelectedAddress, resolveSigningWallet, walletScopeErrorToResult } from "@vex-agent/tools/internal/wallet/resolve.js";
 import { parseClobTokenIds } from "@tools/polymarket/helpers.js";
-import type { Hex } from "viem";
+import { type Hex, getAddress } from "viem";
 import type { ProtocolHandler } from "../types.js";
 import { str, num, ok, fail } from "../handler-helpers.js";
 function usdcToBaseUnits(amount: number): string {
@@ -152,7 +152,18 @@ export const CLOB_HANDLERS: Record<string, ProtocolHandler> = {
       return ok({ dryRun: true, conditionId, outcome, amount, price, shares: shares.toFixed(2), tokenId, question: market.question });
     }
 
-    // Session signing wallet (5D-protocols p3) — after the dryRun gate, real exec only.
+    // Session order (5D-protocols p3 / B-core-2 reorder): resolve the selected
+    // address (no decrypt) -> require creds for it -> only THEN resolve+decrypt
+    // the signing key -> assert it matches. Missing creds fail BEFORE the key is
+    // ever decrypted; the assert guards against resolver drift.
+    let address: string;
+    try {
+      address = resolveSelectedAddress(ctx.walletResolution, ctx.walletPolicy, "eip155");
+    } catch (err) {
+      return walletScopeErrorToResult(err);
+    }
+    const creds = requirePolyClobCredentials(address);
+
     let signer: ChainWallet;
     try {
       signer = resolveSigningWallet(ctx.walletResolution, ctx.walletPolicy, "eip155");
@@ -160,8 +171,9 @@ export const CLOB_HANDLERS: Record<string, ProtocolHandler> = {
       return walletScopeErrorToResult(err);
     }
     if (signer.family !== "eip155") return fail("Resolved wallet family mismatch.");
-
-    const creds = requirePolyClobCredentials(signer.address);
+    if (getAddress(signer.address) !== getAddress(address)) {
+      return fail("Resolved signer does not match the selected wallet.");
+    }
     const feeRate = await clob.getFeeRate(tokenId);
     const { makerAmount, takerAmount } = calcAmounts("BUY", shares, price);
     const orderData = buildClobOrder({ maker: signer.address, signer: signer.address, tokenId, makerAmount, takerAmount, side: "BUY", feeRateBps: String(feeRate.base_fee) });
@@ -223,7 +235,18 @@ export const CLOB_HANDLERS: Record<string, ProtocolHandler> = {
       return ok({ dryRun: true, conditionId, outcome, shares, price, usdcValue: (shares * price).toFixed(2), tokenId, question: market.question });
     }
 
-    // Session signing wallet (5D-protocols p3) — after the dryRun gate, real exec only.
+    // Session order (5D-protocols p3 / B-core-2 reorder): resolve the selected
+    // address (no decrypt) -> require creds for it -> only THEN resolve+decrypt
+    // the signing key -> assert it matches. Missing creds fail BEFORE the key is
+    // ever decrypted; the assert guards against resolver drift.
+    let address: string;
+    try {
+      address = resolveSelectedAddress(ctx.walletResolution, ctx.walletPolicy, "eip155");
+    } catch (err) {
+      return walletScopeErrorToResult(err);
+    }
+    const creds = requirePolyClobCredentials(address);
+
     let signer: ChainWallet;
     try {
       signer = resolveSigningWallet(ctx.walletResolution, ctx.walletPolicy, "eip155");
@@ -231,8 +254,9 @@ export const CLOB_HANDLERS: Record<string, ProtocolHandler> = {
       return walletScopeErrorToResult(err);
     }
     if (signer.family !== "eip155") return fail("Resolved wallet family mismatch.");
-
-    const creds = requirePolyClobCredentials(signer.address);
+    if (getAddress(signer.address) !== getAddress(address)) {
+      return fail("Resolved signer does not match the selected wallet.");
+    }
     const feeRate = await clob.getFeeRate(tokenId);
     const { makerAmount, takerAmount } = calcAmounts("SELL", shares, price);
     const orderData = buildClobOrder({ maker: signer.address, signer: signer.address, tokenId, makerAmount, takerAmount, side: "SELL", feeRateBps: String(feeRate.base_fee) });
