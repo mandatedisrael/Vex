@@ -13,7 +13,7 @@
  * Approval / wallet / audit semantics in puzzle 5 phases 2+ consume this enum
  * via `ToolResult.actionKind` (stamped by dispatcher / protocol runtime).
  *
- * The eight variants and their intended scope:
+ * The seven variants and their intended scope:
  *  - `read`                     — no side effect outside the read path
  *                                 (DB selects, RPC reads, external GETs).
  *  - `local_write`              — mutates Vex-local DB / file / memory state

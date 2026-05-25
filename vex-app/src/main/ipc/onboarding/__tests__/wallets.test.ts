@@ -311,7 +311,7 @@ describe("walletOpenBackupFolder handler", () => {
     );
   });
 
-  it("passes the realpath-resolved candidate to shell.openPath, not the raw input (codex turn 10)", async () => {
+  it("passes the realpath-resolved candidate to shell.openPath, not the raw input", async () => {
     // User picked a symlinked path; resolved realpath differs but
     // still points inside backups base. Handler MUST hand the
     // resolved path to shell.openPath to avoid the TOCTOU swap.

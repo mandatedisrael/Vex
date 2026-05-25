@@ -18,7 +18,7 @@ import {
 } from "../wizard.js";
 
 describe("WIZARD_STEP_IDS canonical order", () => {
-  it("contains exactly the seven Phase 2 wizard steps in setup order (Mode + Wake removed)", () => {
+  it("contains exactly the seven wizard steps in setup order", () => {
     expect(WIZARD_STEP_IDS).toEqual([
       "keystore",
       "wallets",
@@ -124,7 +124,7 @@ describe("wizardStateSchema (persisted)", () => {
     expect(r.success).toBe(true);
   });
 
-  it("rejects schemaVersion ≠ 2 (Phase 2 wizard bump invalidates v1 files)", () => {
+  it("rejects schemaVersion ≠ 2 to invalidate v1 persisted files", () => {
     expect(
       wizardStateSchema.safeParse({
         ...defaultWizardState,
@@ -230,7 +230,7 @@ describe("wizardStateSchema (persisted)", () => {
     ).toBe(false);
   });
 
-  it("accepts completed=true at review with every prior step (Phase 2: 6 priors)", () => {
+  it("accepts completed=true at review with every prior step completed", () => {
     const priors = WIZARD_STEP_IDS.filter((id) => id !== "review");
     expect(
       wizardStateSchema.safeParse({

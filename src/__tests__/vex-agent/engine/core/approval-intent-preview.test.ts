@@ -115,7 +115,7 @@ describe("buildIntentPreview", () => {
   });
 });
 
-describe("buildIntentPreview — execute_tool wrapper unwrap (Codex 2/2 fix)", () => {
+describe("buildIntentPreview — execute_tool wrapper unwrap", () => {
   it("unwraps execute_tool({toolId, params}) → target tool preview", () => {
     const preview = buildIntentPreview("execute_tool", {
       toolId: "kyberswap.swap.sell",
@@ -227,7 +227,7 @@ describe("buildPolicySnapshot", () => {
     expect(snap.missionRunId).toBeNull();
   });
 
-  it("captures permission='full' when set (audit snapshot for phase 3)", () => {
+  it("captures permission='full' in the approval audit snapshot", () => {
     const snap = buildPolicySnapshot({ ...baseContext, sessionPermission: "full" });
     expect(snap.permission).toBe("full");
   });

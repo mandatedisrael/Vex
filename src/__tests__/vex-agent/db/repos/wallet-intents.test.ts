@@ -187,7 +187,7 @@ describe("getById", () => {
     });
   });
 
-  it("normalises Date columns to ISO strings (Codex puzzle-5 phase-2 pattern)", async () => {
+  it("normalises Date columns to ISO strings for DB timestamp values", async () => {
     mockQueryOne.mockResolvedValueOnce(
       fullRow({
         expires_at: new Date("2026-05-25T10:00:00.000Z"),

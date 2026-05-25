@@ -35,7 +35,7 @@ describe("Result helpers", () => {
   });
 });
 
-describe("VEX_DOMAINS / VEX_ERROR_CODES (agent integration puzzle 1)", () => {
+describe("VEX_DOMAINS / VEX_ERROR_CODES bridge coverage", () => {
   it("includes the seven new bridge domains + the sessions domain", () => {
     // Closed-union exhaustiveness assertion at the bottom of result.ts
     // already prevents the union from drifting from the runtime array.
@@ -55,7 +55,7 @@ describe("VEX_DOMAINS / VEX_ERROR_CODES (agent integration puzzle 1)", () => {
     }
   });
 
-  it("includes per-domain feature_unavailable codes for puzzle-1 fail-closed mutations", () => {
+  it("includes per-domain feature_unavailable codes for fail-closed mutations", () => {
     const required = [
       "runtime.feature_unavailable",
       "mission.feature_unavailable",

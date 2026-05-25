@@ -238,7 +238,7 @@ beforeEach(() => {
   wireStatefulMocks();
 });
 
-describe("archive ↔ restore round-trip (puzzle 04 phase 8)", () => {
+describe("archive ↔ restore round-trip", () => {
   it("returns messageCount to its initial value after archive + restore", async () => {
     expect(messageCount).toBe(INITIAL_COUNT);
 

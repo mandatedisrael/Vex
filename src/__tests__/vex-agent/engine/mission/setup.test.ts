@@ -115,7 +115,7 @@ describe("mission setup", () => {
       expect(result.ready).toBe(false);
     });
 
-    it("transitions to ready when all fields populated (puzzle 04: no acceptance needed)", async () => {
+    it("transitions to ready when all draft fields are populated", async () => {
       // Puzzle 04: draft readiness is independent of host acceptance.
       // The mission row carries `acceptedContractHash: null` (unaccepted)
       // but the draft still transitions to `ready` once every required
@@ -152,7 +152,7 @@ describe("mission setup", () => {
       expect(mockSetStatus).toHaveBeenCalledWith("mission-1", "ready");
     });
 
-    it("drops model-supplied stopConditionsAccepted (puzzle 04 security regression)", async () => {
+    it("drops model-supplied stopConditionsAccepted", async () => {
       // Even if a hostile model emits `stopConditionsAccepted: true` in
       // its tool args, the patch parser must drop the key, and the row
       // mapper must never propagate it into `constraints_json`. The

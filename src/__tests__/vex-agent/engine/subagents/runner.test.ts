@@ -241,7 +241,7 @@ describe("subagent runner", () => {
     expect(context.isSubagent).toBe(true);
   });
 
-  it("passes buildToolsForBand to runTurnLoop so Tool Map + catalog stay in sync under pressure (codex PR3 P1)", async () => {
+  it("passes buildToolsForBand to runTurnLoop so Tool Map + catalog stay in sync under pressure", async () => {
     // PR3-clarity catalog/Tool Map invariant: subagents must rebuild the
     // OpenAI tools array per-band, otherwise the system-prompt Tool Map
     // (rendered per-iteration from live band) and the actual visible

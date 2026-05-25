@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseSlashCommand } from "../slash/parser.js";
 
-describe("parseSlashCommand (puzzle 04 phase 7)", () => {
+describe("parseSlashCommand", () => {
   describe("not-a-command", () => {
     it("classifies plain text as not-a-command", () => {
       expect(parseSlashCommand("hello vex").kind).toBe("not-a-command");

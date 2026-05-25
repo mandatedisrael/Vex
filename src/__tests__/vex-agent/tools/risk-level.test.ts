@@ -34,7 +34,7 @@ describe("RiskLevel taxonomy — coverage", () => {
   });
 });
 
-describe("RiskLevel — pinned mappings (Codex GREEN LIGHT puzzle 5/2)", () => {
+describe("RiskLevel — pinned action-kind mappings", () => {
   const MAPPING: ReadonlyArray<readonly [ActionKind, RiskLevel]> = [
     ["read", "info"],
     ["local_write", "low"],
@@ -49,7 +49,7 @@ describe("RiskLevel — pinned mappings (Codex GREEN LIGHT puzzle 5/2)", () => {
     expect(riskLevelFromActionKind(kind)).toBe(expected);
   });
 
-  it("approval_prepare is `medium` (signals incoming high-risk confirm — Codex Q1)", () => {
+  it("approval_prepare is `medium` because it signals an incoming high-risk confirm", () => {
     // Pin the boundary case explicitly: approval_prepare itself does not
     // mutate, but it produces a prepared intent for a follow-up confirm
     // that almost always carries `user_wallet_broadcast` risk. Treating

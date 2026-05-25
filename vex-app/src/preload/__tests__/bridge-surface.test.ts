@@ -105,7 +105,7 @@ describe("preload bridge surface", () => {
     expect(src).toMatch(/from\s+["']\.\/agent\/index\.js["']/);
   });
 
-  it("every puzzle-1 CH.* channel is referenced somewhere in the preload tree", () => {
+  it("every bridge CH.* channel is referenced somewhere in the preload tree", () => {
     const expected = [
       "CH.messages.list",
       "CH.messages.getTail",
@@ -149,7 +149,7 @@ describe("preload bridge surface", () => {
     }
   });
 
-  it("agent integration puzzle 2 exposes EV.engine.transcriptAppend and a bridge method", () => {
+  it("exposes EV.engine.transcriptAppend and the transcript bridge method", () => {
     const corpus = PRELOAD_FILES.map((f) => readFileSync(f, "utf8")).join("\n");
     expect(corpus, "EV.engine.transcriptAppend not referenced in preload").toContain(
       "EV.engine.transcriptAppend",

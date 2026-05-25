@@ -236,7 +236,7 @@ describe("useSlashCommandDispatch routing", () => {
   });
 });
 
-describe("refusal outcomes (codex phase 7 final review #1)", () => {
+describe("refusal outcomes", () => {
   // Engine returns `ok: true` with an outcome that means "I refused".
   // The dispatcher must NOT surface these as successes.
 

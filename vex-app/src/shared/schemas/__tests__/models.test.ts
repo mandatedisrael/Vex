@@ -7,16 +7,16 @@ import {
 } from "../models.js";
 
 describe("models schemas", () => {
-  it("modelsListSourceSchema accepts the puzzle-1 sources", () => {
+  it("modelsListSourceSchema accepts env-derived and unconfigured sources", () => {
     expect(modelsListSourceSchema.safeParse("global_default").success).toBe(true);
     expect(modelsListSourceSchema.safeParse("unconfigured").success).toBe(true);
   });
 
-  it("modelsListSourceSchema rejects openrouter (puzzle 06 territory)", () => {
+  it("modelsListSourceSchema rejects direct OpenRouter catalogue source", () => {
     expect(modelsListSourceSchema.safeParse("openrouter").success).toBe(false);
   });
 
-  it("modelOptionDtoSchema allows nullable pricing + context (puzzle 1 has no catalogue)", () => {
+  it("modelOptionDtoSchema allows nullable pricing and context metadata", () => {
     const parsed = modelOptionDtoSchema.safeParse({
       providerId: "openrouter",
       modelId: "anthropic/claude-opus-4.7",

@@ -90,7 +90,7 @@ beforeEach(() => {
   mockExecuteDepositPlan.mockResolvedValue({ orderId: "o1", txHash: "0xhash" });
 });
 
-describe("khalani.bridge session wallet scope (5D-protocols p4)", () => {
+describe("khalani.bridge session wallet scope", () => {
   it("dryRun does NOT resolve a signer or call the executor", async () => {
     const r = await BRIDGE_HANDLERS["khalani.bridge"]!({ ...baseParams, dryRun: true }, SESSION_CTX);
     expect(r.success).toBe(true);

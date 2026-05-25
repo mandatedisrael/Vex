@@ -1,12 +1,12 @@
 /**
- * Approvals IPC handlers — puzzle 5 phase 3 wiring.
+ * Approvals decision IPC handlers.
  *
  * Pinned invariants:
  *   - `ensureEngineDbUrl(ctx.requestId)` first; bail with its Result on DB
  *     unavailability.
  *   - approve / reject map `ApprovePrepareOutcome` / `RejectPrepareOutcome`
- *     to `Result<ApprovalActionResult>` with the new phase-3 fields
- *     (`executionStatus`, `missionRunId`, `cached`).
+ *     to `Result<ApprovalActionResult>` with execution state, mission run,
+ *     and cache metadata.
  *   - Background `dispatchPreparedMission` fires ONLY for outcomes that
  *     carry a continuation (dispatched / expired.autoRejection /
  *     rejected). Cached / already_* / run_terminated NEVER dispatch.
@@ -207,7 +207,7 @@ const STUB_CONTINUATION = {
   leaseHandle: { lease: {}, ownerId: "approve-test", release: vi.fn() },
 } as never;
 
-describe("approve handler — phase 3 outcome mapping", () => {
+describe("approve handler decision outcome mapping", () => {
   it("dispatched + missionRun + success → ok runtimeOutcome=resumed executionStatus=succeeded cached=false; dispatch fires", async () => {
     mocks.prepareApprove.mockResolvedValue({
       kind: "dispatched",
@@ -426,7 +426,7 @@ describe("approve handler — phase 3 outcome mapping", () => {
 
 // ── reject handler ─────────────────────────────────────────────────────
 
-describe("reject handler — phase 3 outcome mapping", () => {
+describe("reject handler decision outcome mapping", () => {
   it("rejected + continuation → ok runtimeOutcome=resumed cached=false; dispatch fires", async () => {
     mocks.prepareReject.mockResolvedValue({
       kind: "rejected",

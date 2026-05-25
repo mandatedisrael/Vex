@@ -111,7 +111,7 @@ describe("mission validator", () => {
       expect(missing).toContain("stopConditions");
     });
 
-    it("treats stopConditions as present when the list is non-empty, regardless of acceptance (puzzle 04)", () => {
+    it("treats stopConditions as present when the list is non-empty, regardless of acceptance", () => {
       // Puzzle 04 decouples draft completeness from acceptance. As long
       // as the user-provided stop conditions list is non-empty, the
       // draft considers `stopConditions` present. Acceptance is a
@@ -125,7 +125,7 @@ describe("mission validator", () => {
       expect(missing).not.toContain("stopConditions");
     });
 
-    it("ignores legacy constraints_json.stopConditionsAccepted on old rows (puzzle 04)", () => {
+    it("ignores legacy constraints_json.stopConditionsAccepted on old rows", () => {
       // A pre-puzzle-04 mission row may still carry
       // `stopConditionsAccepted: true` inside constraints_json. The
       // validator must NOT consult that legacy boolean — the field's

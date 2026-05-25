@@ -16,8 +16,8 @@ import type {
  * Per-session wallet scope. Puzzle 1 returns an empty scope (no DB
  * column yet); puzzle 05/10 lands the wallet scope rows + audit
  * trail. Mutations fail closed with `wallets.feature_unavailable`.
- * Provider hot-wallet signing NEVER lives in the Electron process —
- * provider-signed flows route through a backend signer client.
+ * Wallet side effects use hot wallets created or imported by the user
+ * during onboarding. This bridge exposes only that user-wallet flow.
  */
 export interface WalletsBridge {
   readonly listAvailable: (

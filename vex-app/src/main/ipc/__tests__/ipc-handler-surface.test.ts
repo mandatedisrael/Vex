@@ -1,7 +1,7 @@
 /**
- * Puzzle 1 IPC handler smoke tests — sender + payload validation +
- * happy path (read-only) or fail-closed (mutating). One file bundles
- * the surface to keep the diff and CI run-time tight.
+ * IPC handler surface smoke tests — sender validation, payload validation,
+ * read-only success paths, and mutation handler registration. One file
+ * bundles the broad surface to keep CI run-time tight.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -221,7 +221,7 @@ describe("usage handlers", () => {
 });
 
 describe("runtime handlers", () => {
-  it("getState returns the mission-runs-db state (incl. puzzle 03 lease + pending fields)", async () => {
+  it("getState returns mission run state with lease and pending-control fields", async () => {
     mocks.getActiveRunForSession.mockResolvedValueOnce({
       ok: true,
       data: {
@@ -242,9 +242,8 @@ describe("runtime handlers", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("requestPause/Stop/Resume/cancelWake reach the DB layer (puzzle 03 wires real handlers)", async () => {
-    // Puzzle 03 replaced the `feature_unavailable` stubs with real
-    // DB-backed handlers. In this unit test environment there is no
+  it("requestPause/Stop/Resume/cancelWake reach the DB-backed control handlers", async () => {
+    // In this unit test environment there is no
     // Postgres connection, so the handlers fail at `ensureEngineDbUrl`
     // and surface `internal.unexpected`. This confirms the handlers
     // are no longer fail-closed by contract — they actually run.
@@ -270,10 +269,10 @@ describe("mission handlers", () => {
     expect(result.data).toBeNull();
   });
 
-  // Puzzle 04 phase 6 mission-handler coverage (per-command schema
-  // validation + updateDraft fail-closed) lives in the focused files
+  // Mission command coverage (per-command schema validation +
+  // updateDraft fail-closed) lives in the focused files
   // under `__tests__/mission/` so this suite does not exceed the
-  // 350-LOC budget (codex puzzle 04 phase 6 review #2).
+  // 350-LOC budget.
 });
 
 describe("approvals handlers", () => {
@@ -284,10 +283,10 @@ describe("approvals handlers", () => {
     expect(result.data).toEqual([]);
   });
 
-  // Phase 3 wires approve/reject — fail-closed assertions moved out.
-  // Focused phase-3 behavior pinned in `approvals-phase3.test.ts`; this
+  // Approve/reject fail-closed assertions moved out.
+  // Focused decision behavior is pinned in `approvals-decision-ipc.test.ts`; this
   // file keeps the smoke-level "handlers registered" coverage only.
-  it("approve / reject handlers are registered (phase 3 wired)", () => {
+  it("approve / reject handlers are registered", () => {
     // `handlers` map is the registered-handler shape from the `electron`
     // mock; presence here means register{Approve,Reject}Handler ran.
     expect(handlers.has(CH.approvals.approve)).toBe(true);
@@ -296,21 +295,21 @@ describe("approvals handlers", () => {
 });
 
 describe("wallets-session handlers", () => {
-  // Phase 5C wires listSessionWallets (DB-backed scope DTO) +
-  // setSessionWalletScope (id-resolved, fail-closed on unknown id). The
-  // focused contract lives in `wallets-phase5.test.ts`, `wallet-refs.test.ts`
+  // listSessionWallets returns the DB-backed scope DTO.
+  // setSessionWalletScope resolves ids and fails closed on unknown id. The
+  // focused contract lives in `session-wallet-scope-ipc.test.ts`, `wallet-refs.test.ts`
   // (resolveWalletRef + invalid_selection), and `database/__tests__/
   // sessions-wallet-scope.test.ts` (CAS + allowed_wallets). Here we only check
   // the handlers exist after registration (smoke regression).
-  it("listSessionWallets / setSessionWalletScope registered (phase 5 wired)", () => {
+  it("listSessionWallets / setSessionWalletScope handlers are registered", () => {
     expect(handlers.has(CH.wallets.listSessionWallets)).toBe(true);
     expect(handlers.has(CH.wallets.setSessionWalletScope)).toBe(true);
   });
 
-  // Phase 4 wires getPreparedIntent / cancelPreparedIntent — the focused
-  // contract pinning lives in `wallets-phase4.test.ts`. Here we only check
+  // getPreparedIntent / cancelPreparedIntent are covered in
+  // `wallet-prepared-intents-ipc.test.ts`. Here we only check
   // that the handlers exist after registration (smoke regression).
-  it("getPreparedIntent / cancelPreparedIntent registered (phase 4 wired)", () => {
+  it("getPreparedIntent / cancelPreparedIntent handlers are registered", () => {
     expect(handlers.has(CH.wallets.getPreparedIntent)).toBe(true);
     expect(handlers.has(CH.wallets.cancelPreparedIntent)).toBe(true);
   });
@@ -338,10 +337,10 @@ describe("models handler", () => {
   });
 });
 
-describe("DB-error path preserves intended VexError shape (Codex final-review must-fix)", () => {
+describe("DB helper errors preserve intended VexError shape", () => {
   it("DB helper error (internal.unexpected, no correlationId) survives registerHandler — code preserved, correlationId stamped", async () => {
-    // Codex caught this: helpers must omit `correlationId` from error
-    // literals. An empty-string correlationId is rejected by
+    // Helpers must omit `correlationId` from error literals. An empty-string
+    // correlationId is rejected by
     // `isValidVexErrorShape` (length === 0) and downgrades the public
     // error to `internal.contract_violation` — masking real DB faults.
     //

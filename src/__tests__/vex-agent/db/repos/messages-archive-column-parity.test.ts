@@ -30,7 +30,7 @@ import {
 
 const REWIND_CHECKPOINT_ID = "rewind_checkpoint_id";
 
-describe("messages column lists (puzzle 04 phase 8 parity)", () => {
+describe("messages column-list parity for archive and restore", () => {
   it("MESSAGE_DB_COLUMNS is non-empty", () => {
     expect(MESSAGE_DB_COLUMNS.length).toBeGreaterThan(0);
   });

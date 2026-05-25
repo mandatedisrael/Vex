@@ -1,11 +1,11 @@
 /**
- * Wallet IPC handlers — puzzle 5 phase 5C wiring (per-session wallet scope).
+ * Session wallet-scope IPC handlers.
  *
- * Focused contract for the two handlers that graduated from phase-4
- * placeholders. The DB-layer CAS + missions.allowed_wallets recompute is
- * pinned in `database/__tests__/sessions-wallet-scope.test.ts`, and the
- * id→ref resolution + fail-closed error in `wallet-refs.test.ts`. This file
- * pins the HANDLER seam between them:
+ * Focused contract for the two handlers that expose per-session wallet
+ * selection. The DB-layer CAS + missions.allowed_wallets recompute is pinned
+ * in `database/__tests__/sessions-wallet-scope.test.ts`, and the id→ref
+ * resolution + fail-closed error in `wallet-refs.test.ts`. This file pins the
+ * handler seam between them:
  *   - listSessionWallets: DB scope row → {sessionId, evm, solana} DTO
  *     (address from the scope row, label from the inventory entry).
  *   - setSessionWalletScope: resolve ids server-side, fail closed on an
@@ -138,7 +138,7 @@ afterEach(() => {
   handlers.clear();
 });
 
-describe("listSessionWallets (phase 5C)", () => {
+describe("listSessionWallets session wallet scope", () => {
   it("returns the empty {sessionId, evm:null, solana:null} DTO when nothing is selected", async () => {
     const result = await call(CH.wallets.listSessionWallets, {
       sessionId: SESSION,
@@ -197,7 +197,7 @@ describe("listSessionWallets (phase 5C)", () => {
   });
 });
 
-describe("setSessionWalletScope (phase 5C)", () => {
+describe("setSessionWalletScope session wallet scope", () => {
   it("resolves ids server-side and persists via initializeSessionWalletScope", async () => {
     mocks.getWalletById.mockImplementation((family: string, id: string) => ({
       id,

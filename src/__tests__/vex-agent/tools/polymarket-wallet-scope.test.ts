@@ -84,7 +84,7 @@ beforeEach(() => {
   mockRequireCreds.mockReturnValue({ apiKey: "ak", apiSecret: "as", passphrase: "pp" });
 });
 
-describe("polymarket clob session wallet scope (5D-protocols p3)", () => {
+describe("polymarket clob session wallet scope", () => {
   const buyParams = { conditionId: "0xcond", outcome: "YES", amount: 10 };
 
   it("buy uses the SESSION address for order maker/signer, postOrder auth, and capture", async () => {
@@ -135,7 +135,7 @@ describe("polymarket clob session wallet scope (5D-protocols p3)", () => {
   });
 });
 
-describe("polymarket clob client signer regression (5D-protocols p3)", () => {
+describe("polymarket clob client signer regression", () => {
   it("clob/client.ts no longer imports the zero-arg signer primitive", () => {
     const src = readFileSync(join(process.cwd(), "src/tools/polymarket/clob/client.ts"), "utf-8");
     expect(/\brequireEvmWallet\b/.test(src)).toBe(false);

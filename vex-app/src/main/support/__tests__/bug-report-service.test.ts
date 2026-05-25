@@ -64,7 +64,7 @@ const validInput = {
   correlationIdFromIpc: "req-test",
 };
 
-describe("createBugReport — Phase 1 service orchestrator", () => {
+describe("createBugReport service orchestrator", () => {
   beforeEach(() => {
     insertMock.mockReset();
     transportMock.mockReset();

@@ -12,7 +12,7 @@ import {
 } from "../installer-urls.js";
 
 describe("DESKTOP_INSTALLER_URLS", () => {
-  it("has exactly the three Phase 1 supported targets", () => {
+  it("has exactly the three supported installer targets", () => {
     expect(Object.keys(DESKTOP_INSTALLER_URLS).sort()).toEqual([
       "macos-arm64",
       "macos-x64",

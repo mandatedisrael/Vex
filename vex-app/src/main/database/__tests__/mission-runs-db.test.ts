@@ -91,7 +91,7 @@ describe("mission-runs-db mapper", () => {
     });
   });
 
-  it("maps an active mission run row (with puzzle 03 lease + pending fields)", async () => {
+  it("maps an active mission run row with lease and pending-control fields", async () => {
     mocks.query.mockResolvedValueOnce({
       rows: [
         {
@@ -120,7 +120,7 @@ describe("mission-runs-db mapper", () => {
     expect(result.data.pendingControlKind).toBeNull();
   });
 
-  it("accepts paused_user as a valid active status (puzzle 03)", async () => {
+  it("accepts paused_user as a valid active status", async () => {
     mocks.query.mockResolvedValueOnce({
       rows: [
         {

@@ -13,7 +13,7 @@ describe("runtimeStatusSchema (lib) ↔ MISSION_RUN_STATUSES (engine) drift guar
     expect(libValues).toEqual(engineValues);
   });
 
-  it("paused_user (puzzle 03) is present in both", () => {
+  it("paused_user is present in both runtime status schemas", () => {
     expect(runtimeStatusSchema.options).toContain("paused_user");
     expect(MISSION_RUN_STATUSES).toContain("paused_user");
   });

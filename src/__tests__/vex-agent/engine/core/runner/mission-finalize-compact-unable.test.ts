@@ -42,7 +42,7 @@ vi.mock("../../../../../vex-agent/engine/core/runner/runtime-continuation.js", (
 
 import { finalizeMissionRunStatus } from "../../../../../vex-agent/engine/core/runner/mission-finalize.js";
 
-describe("finalizeMissionRunStatus — compact_unable_at_critical (codex P1 round 3)", () => {
+describe("finalizeMissionRunStatus — compact_unable_at_critical", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsContinuableRuntimeStop.mockReturnValue(false);

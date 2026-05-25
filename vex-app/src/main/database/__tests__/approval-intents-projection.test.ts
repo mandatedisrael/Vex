@@ -1,8 +1,8 @@
 /**
- * approvals-db phase 2 tests — `approval_intents` LEFT JOIN projection.
+ * Approval intent projection tests.
  *
- * Puzzle 5 phase 2 (2026-05-23). Sibling of `approvals-db.test.ts`
- * (puzzle 1 trust-boundary tests stay there). This file adds:
+ * Sibling of `approvals-db.test.ts` for the companion
+ * `approval_intents` LEFT JOIN contract. This file adds:
  *   - LEFT JOIN read with companion intent populated → DTO carries
  *     actionKind / riskLevel / preview / expiresAt / decision /
  *     decisionReason / executionStatus
@@ -48,7 +48,7 @@ const { getApprovalById, getHistoryForSession, listPendingForSession } =
   await import("../approvals-db.js");
 
 const SESSION = "00000000-0000-4000-8000-00000000bbbb";
-const APPROVAL_ID = "approval-phase2-001";
+const APPROVAL_ID = "approval-intent-001";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -120,7 +120,7 @@ function rowWithoutIntent(overrides: Record<string, unknown> = {}): Record<strin
 // ── LEFT JOIN — companion intent populated ───────────────────────────
 
 describe("DTO projection — companion intent present", () => {
-  it("surfaces all phase-2 companion fields when JOIN finds an intent row", async () => {
+  it("surfaces all companion intent fields when JOIN finds an intent row", async () => {
     mocks.query.mockResolvedValueOnce({ rows: [rowWithIntent()] });
     const result = await listPendingForSession(SESSION);
     expect(result.ok).toBe(true);
@@ -150,7 +150,7 @@ describe("DTO projection — companion intent present", () => {
     expect(result.data[0]!.expiresAt).toBe("2026-06-01T12:00:00.000Z");
   });
 
-  it("surfaces decision + decisionReason when phase 3 has populated them", async () => {
+  it("surfaces decision + decisionReason when runtime has populated them", async () => {
     mocks.query.mockResolvedValueOnce({
       rows: [
         rowWithIntent({

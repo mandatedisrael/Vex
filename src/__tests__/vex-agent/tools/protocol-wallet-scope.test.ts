@@ -74,7 +74,7 @@ beforeEach(() => {
   vi.mocked(catalog.getProtocolHandler).mockReset();
 });
 
-describe("protocol wallet-scope (deny-guard lifted in 5D-protocols p5)", () => {
+describe("protocol wallet-scope with signing handlers enabled", () => {
   for (const actionKind of ["user_wallet_broadcast", "external_post"] as const) {
     it(`no longer denies ${actionKind} under source:session — handler is reached`, async () => {
       vi.mocked(catalog.getProtocolManifest).mockReturnValue(

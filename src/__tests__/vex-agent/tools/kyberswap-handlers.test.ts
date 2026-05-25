@@ -433,7 +433,7 @@ describe("kyberswap handlers", () => {
 
 // ── Per-session signing wallet (5D-protocols p1) ─────────────────
 
-describe("kyberswap session wallet resolution (5D-protocols p1)", () => {
+describe("kyberswap session wallet resolution", () => {
   const SESSION_CTX = ctx({
     walletResolution: { source: "session", evm: { id: "w-evm-1", address: SESSION_EVM.address }, solana: null },
     walletPolicy: { kind: "none" },

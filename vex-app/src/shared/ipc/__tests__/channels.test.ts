@@ -46,8 +46,8 @@ describe("CH / EV channel constants", () => {
     }
   });
 
-  it("puzzle 02 ships EV.engine.transcriptAppend with the canonical channel name", () => {
-    // Event spine arrived in puzzle 02 — `setupTranscriptBridge` (in
+  it("ships EV.engine.transcriptAppend with the canonical channel name", () => {
+    // `setupTranscriptBridge` (in
     // `main/agent/transcript-bridge.ts`) is its publishing path. The
     // renderer subscribes through `window.vex.engine.onTranscriptAppend`,
     // which validates the payload through `transcriptAppendEventSchema`

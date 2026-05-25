@@ -357,7 +357,7 @@ describe("executeDepositPlan", () => {
   });
 });
 
-describe("bridge-executor signer regression (5D-protocols p4)", () => {
+describe("bridge-executor source-family signer regression", () => {
   it("bridge-executor.ts no longer imports the zero-arg signer primitives", () => {
     const src = readFileSync(join(process.cwd(), "src/tools/khalani/bridge-executor.ts"), "utf-8");
     expect(/\brequireEvmWallet\b/.test(src) || /\brequireSolanaWallet\b/.test(src)).toBe(false);

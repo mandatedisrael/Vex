@@ -205,11 +205,8 @@ export type WalletExportPrivateKeyResult = z.infer<
 // Field names match the canonical refs vocabulary in `BUG-REPORTING.md §3`
 // — `sessionId` is the canonical identifier, never `session_id` snake_case.
 //
-// Provider hot-wallet keys NEVER ship in the Electron app: `intent_id`
-// shape here is local-wallet only. Provider-signed actions still flow
-// through `engine/tools/internal/wallet` paths that puzzle 05 will wrap
-// with a backend signer client; nothing in `vex-app` ever holds provider
-// private keys.
+// `intent_id` is local-wallet only. Wallet side effects use hot wallets
+// created or imported by the user during onboarding.
 
 export const WALLET_INTENT_MAX_LIST = 16;
 

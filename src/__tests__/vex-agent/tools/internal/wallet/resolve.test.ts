@@ -101,7 +101,7 @@ describe("resolveSigningWallet — decrypts only after policy passes", () => {
   });
 });
 
-describe("resolveSelectedAddressSet — read-side wallet set (5E-2)", () => {
+describe("resolveSelectedAddressSet — read-side wallet set", () => {
   const SOL = "SoLAddrAAA";
 
   it("returns BOTH selected addresses for a fully-selected session", () => {

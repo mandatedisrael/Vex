@@ -49,7 +49,7 @@ describe("runtime schemas", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("accepts paused_user status (puzzle 03)", () => {
+  it("accepts paused_user status", () => {
     const parsed = runtimeStateDtoSchema.safeParse({
       sessionId: SESSION,
       hasActiveRun: true,
@@ -87,7 +87,7 @@ describe("runtime schemas", () => {
   });
 });
 
-describe("runtime per-action discriminated unions (puzzle 03)", () => {
+describe("runtime per-action discriminated unions", () => {
   it("requestPause accepts all 5 outcomes", () => {
     expect(
       runtimeRequestPauseResultSchema.safeParse({

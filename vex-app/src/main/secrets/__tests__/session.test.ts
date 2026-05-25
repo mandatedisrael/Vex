@@ -213,7 +213,7 @@ describe("unlockSecretSession error mapping", () => {
   });
 });
 
-describe("getConfiguredPolymarketAddresses (puzzle 5 B-UI)", () => {
+describe("getConfiguredPolymarketAddresses", () => {
   const MAP_KEY = "POLYMARKET_CLOB_CREDENTIALS_BY_ADDRESS";
   const PRIMARY = "0xAbCdEf0123456789AbCdEf0123456789AbCdEf01";
   const PRIMARY_LC = PRIMARY.toLowerCase();

@@ -391,7 +391,7 @@ describe("portfolio_inspect tool", () => {
     });
   });
 
-  describe("per-session wallet scoping (5E-2a)", () => {
+  describe("per-session wallet scoping", () => {
     it("scopes reads to ONLY the session's selected wallet set", async () => {
       mockResolveSet.mockReturnValueOnce({ evm: "0xEVM", solana: "SOL", all: ["0xEVM", "SOL"] });
       mockGetTotalUsd.mockResolvedValueOnce(777);

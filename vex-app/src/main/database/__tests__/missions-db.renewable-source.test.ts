@@ -79,7 +79,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("getRenewableSourceForSession (puzzle 04 phase 7)", () => {
+describe("getRenewableSourceForSession", () => {
   it("returns missionId when latest run terminal AND acceptance four-tuple complete", async () => {
     mocks.query.mockResolvedValueOnce({
       rows: [{ mission_id: "mission-finished" }],

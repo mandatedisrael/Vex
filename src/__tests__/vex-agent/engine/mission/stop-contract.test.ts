@@ -72,7 +72,7 @@ describe("mission stop contract", () => {
     ]);
   });
 
-  it("ignores legacy constraints_json.stopConditionsAccepted boolean (puzzle 04)", () => {
+  it("ignores legacy constraints_json.stopConditionsAccepted boolean", () => {
     // A pre-puzzle-04 mission row carrying `stopConditionsAccepted=true`
     // inside constraints_json must NOT be treated as accepted. Only the
     // `acceptedContractHash` column counts.

@@ -225,7 +225,7 @@ describe("mission.renew", () => {
   });
 });
 
-describe("mission.getRenewableSource (puzzle 04 phase 7)", () => {
+describe("mission.getRenewableSource", () => {
   it("returns the resolved missionId from the DB helper", async () => {
     mockGetRenewableSourceForSession.mockResolvedValueOnce({
       ok: true,

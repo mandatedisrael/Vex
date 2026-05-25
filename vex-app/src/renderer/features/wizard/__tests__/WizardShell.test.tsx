@@ -217,7 +217,7 @@ describe("WizardShell", () => {
     await findByTestId("agentcore-step");
   });
 
-  it("renders ReviewStep when persisted.currentStepId === 'review' (Phase 2)", async () => {
+  it("renders ReviewStep when persisted.currentStepId === 'review'", async () => {
     mockUseWizardState.mockReturnValue(
       makeQueryResult({
         ok: true,

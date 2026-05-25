@@ -129,7 +129,7 @@ describe("createWith", () => {
     expect(params![3]).toBeNull(); // tool_call_id
   });
 
-  it("forwards explicit expires_at and idempotency_key (phase 3 will set)", async () => {
+  it("forwards explicit expires_at and idempotency_key", async () => {
     await intents.createWith(mockClient as never, {
       ...makeCreateInput(),
       expiresAt: "2026-06-01T00:00:00Z",
@@ -198,7 +198,7 @@ describe("getByApprovalId", () => {
     });
   });
 
-  it("converts TIMESTAMPTZ Date values to ISO-8601 strings (Codex 2/2 fix)", async () => {
+  it("converts TIMESTAMPTZ Date values to ISO-8601 strings", async () => {
     // `pg` driver returns `Date` objects for TIMESTAMPTZ columns, but the
     // repo interface stores them as ISO-8601 strings so the IPC boundary
     // stays scalar. Mirror the pattern from sessions-db / messages repos.

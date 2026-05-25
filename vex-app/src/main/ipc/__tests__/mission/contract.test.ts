@@ -153,7 +153,7 @@ describe("mission.getDiff", () => {
 });
 
 describe("mission.updateDraft", () => {
-  it("returns ok+`unavailable` (fail-closed for phase 6)", async () => {
+  it("returns ok+`unavailable` while draft mutation remains fail-closed", async () => {
     const result = await call(CH.mission.updateDraft, { sessionId: SESSION });
     expect(result.ok).toBe(true);
     expect((result.data as { outcome: string }).outcome).toBe("unavailable");

@@ -39,7 +39,7 @@ export type ApprovalPermission = z.infer<typeof approvalPermissionSchema>;
 
 /**
  * Mirrors the `approval_intents.action_kind` CHECK from migration 024.
- * Same 8 variants as `src/vex-agent/tools/taxonomy.ts::ACTION_KINDS`; kept
+ * Same 7 variants as `src/vex-agent/tools/taxonomy.ts::ACTION_KINDS`; kept
  * as a separate Zod schema here so the renderer schema layer does not
  * depend on the agent runtime. Adding a variant requires updating both
  * sides — `protocol-taxonomy.test.ts` + `registry-taxonomy.test.ts` pin
@@ -51,7 +51,6 @@ export const approvalActionKindSchema = z.enum([
   "schedule",
   "approval_prepare",
   "user_wallet_broadcast",
-  "provider_action_request",
   "external_post",
   "destructive",
 ]);

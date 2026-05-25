@@ -75,7 +75,7 @@ describe("ProtocolToolManifest taxonomy — mutating ↔ taxonomy invariant", ()
   });
 });
 
-describe("ProtocolToolManifest taxonomy — pinned critical mappings (Codex 1B)", () => {
+describe("ProtocolToolManifest taxonomy — pinned critical mappings", () => {
   // Each per-namespace critical mapping captures a Codex 1B binding.
   // Regressions here surface as failed test ids, not silent semantic drift.
 

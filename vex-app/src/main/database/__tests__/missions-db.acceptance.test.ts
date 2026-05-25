@@ -105,7 +105,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("missions-db acceptance projection (puzzle 04 phase 6)", () => {
+describe("missions-db acceptance projection", () => {
   it("projects the acceptance four-tuple when ALL columns are non-null", async () => {
     mocks.query.mockResolvedValueOnce({
       rows: [
@@ -177,7 +177,7 @@ describe("missions-db acceptance projection (puzzle 04 phase 6)", () => {
     expect(result.data.renewedFromMissionId).toBe("mission-source");
   });
 
-  it("returns row with status='ready' so the contract card survives acceptance (phase 7 #1)", async () => {
+  it("returns status='ready' rows so the contract card survives acceptance", async () => {
     // Before phase 7 the filter was `status = 'draft'`, which dropped
     // the card the moment the engine flipped the row to `ready`. The
     // mapper must now expose ready rows so the Accept button can stay

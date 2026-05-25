@@ -162,7 +162,7 @@ describe("patch-parser", () => {
       expect(result.deadline).toBe("2026-04-04");
     });
 
-    it("drops stopConditionsAccepted from model output (puzzle 04 security regression)", () => {
+    it("drops stopConditionsAccepted from model output", () => {
       // The model surface no longer exposes `stopConditionsAccepted`.
       // Even if the model emits the key in its JSON output (prose or
       // tool args), the parser must drop it at the boundary. Acceptance

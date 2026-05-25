@@ -29,7 +29,7 @@ const AGENT_SURFACE_TOOL_NAMES = getAllTools()
 
 const TOOL_MAP_NAMES = TOOL_MAP_CATEGORIES.flatMap(c => c.toolNames);
 
-describe("TOOL_MAP_CATEGORIES integrity (codex PR3)", () => {
+describe("TOOL_MAP_CATEGORIES integrity", () => {
   it("every agent-surface tool appears in exactly one category", () => {
     const orphans: string[] = [];
     for (const name of AGENT_SURFACE_TOOL_NAMES) {

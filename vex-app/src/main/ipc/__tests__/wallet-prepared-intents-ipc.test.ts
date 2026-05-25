@@ -1,5 +1,5 @@
 /**
- * Wallet IPC handlers — puzzle 5 phase 4 wiring.
+ * Wallet prepared-intent IPC handlers.
  *
  * Pinned invariants:
  *   - `ensureEngineDbUrl` first; DB failure short-circuits to err.
@@ -8,8 +8,8 @@
  *   - cancelPreparedIntent: ok({status:'cancelled'}) on CAS win,
  *     ok({status:'already_terminal'}) on race miss OR cross-session
  *   - cross-session calls do NOT expose existence
- *   - listSessionWallets / setSessionWalletScope registered (phase 5C wired;
- *     focused contract in wallets-phase5.test.ts)
+ *   - listSessionWallets / setSessionWalletScope registered; focused
+ *     contract in session-wallet-scope-ipc.test.ts
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -341,14 +341,15 @@ describe("cancelPreparedIntent handler", () => {
   });
 });
 
-// ── listSessionWallets / setSessionWalletScope (phase 5C wired, smoke) ───
+// ── listSessionWallets / setSessionWalletScope registration smoke ───────
 
-describe("wallet scope handlers (phase 5C wired)", () => {
-  // Focused contract lives in `wallets-phase5.test.ts`, `wallet-refs.test.ts`
+describe("wallet scope handler registration", () => {
+  // Focused contract lives in `session-wallet-scope-ipc.test.ts`,
+  // `wallet-refs.test.ts`
   // (resolveWalletRef + invalid_selection), and `database/__tests__/
   // sessions-wallet-scope.test.ts` (CAS + missions.allowed_wallets). Here we
   // only assert the handlers are registered (smoke regression).
-  it("listSessionWallets / setSessionWalletScope registered (phase 5 wired)", () => {
+  it("listSessionWallets / setSessionWalletScope handlers are registered", () => {
     expect(handlers.has(CH.wallets.listSessionWallets)).toBe(true);
     expect(handlers.has(CH.wallets.setSessionWalletScope)).toBe(true);
   });

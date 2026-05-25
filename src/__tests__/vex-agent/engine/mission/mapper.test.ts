@@ -64,7 +64,7 @@ describe("mission mapper", () => {
       expect(draft.deadline).toBeNull();
     });
 
-    it("ignores legacy constraints_json.stopConditionsAccepted on old rows (puzzle 04)", () => {
+    it("ignores legacy constraints_json.stopConditionsAccepted on old rows", () => {
       // Mission rows written before puzzle 04 may carry a leftover
       // `stopConditionsAccepted: true` inside constraints_json. The
       // mapper must NOT surface it onto MissionDraft anymore — the
@@ -107,7 +107,7 @@ describe("mission mapper", () => {
       expect(row.constraints_json).toEqual({ deadline: "2026-04-04" });
     });
 
-    it("does NOT write a stopConditionsAccepted key (puzzle 04 security regression)", () => {
+    it("does not write a stopConditionsAccepted key", () => {
       // Even if a stray boolean reaches domainToRow via legacy code,
       // the row mapper must never emit a `stopConditionsAccepted` JSONB
       // field — acceptance lives on `missions.accepted_contract_hash`,

@@ -32,7 +32,7 @@ const ANTI_PATTERNS: ReadonlyArray<{ name: string; regex: RegExp }> = [
   { name: "permanent truth", regex: /\bpermanent truth\b/i },
 ];
 
-describe("ToolDef anti-pattern lint (codex PR3 round 2)", () => {
+describe("ToolDef anti-pattern lint", () => {
   for (const pattern of ANTI_PATTERNS) {
     it(`no ToolDef.description contains "${pattern.name}"`, () => {
       const offenders: string[] = [];
@@ -94,7 +94,7 @@ describe("orthogonal classification lint: `mutating: false` tools must not promi
   });
 });
 
-describe("knowledge_write `source` schema field (codex PR3 round 1)", () => {
+describe("knowledge_write `source` schema field", () => {
   it("knowledge_write exposes `source` enum with 4 PR1 values", () => {
     const def = getToolDef("knowledge_write");
     expect(def).toBeDefined();

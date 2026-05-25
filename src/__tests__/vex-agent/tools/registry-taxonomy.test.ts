@@ -8,7 +8,7 @@
  *  1. Every registered tool's `actionKind` is a member of `ACTION_KINDS`
  *     (no string drift between the type union and the runtime list).
  *  2. The list (`ACTION_KINDS`) and the union (`ActionKind`) cover the same
- *     8 values — `assertExhaustiveActionKind` would surface a missing branch
+ *     7 values — `assertExhaustiveActionKind` would surface a missing branch
  *     at compile time; this test pins both directions.
  *  3. Critical mappings agreed in the puzzle 5/1A Codex review stay stable
  *     (regression guard for "someone reclassified wallet_send_confirm").
@@ -43,8 +43,8 @@ describe("ActionKind taxonomy — registry coverage", () => {
     expect(violations, "tools with actionKind outside ACTION_KINDS").toEqual([]);
   });
 
-  it("ACTION_KINDS array contains exactly the 8 documented variants", () => {
-    // If the union is widened (e.g. phase 6 adds `provider_action_response`),
+  it("ACTION_KINDS array contains exactly the 7 documented variants", () => {
+    // If the union is widened,
     // bump both the union AND this list — and update every consumer that
     // switches on ActionKind (the `assertExhaustiveActionKind` guard will
     // make the missing branches compile-fail before this test runs).
@@ -57,10 +57,16 @@ describe("ActionKind taxonomy — registry coverage", () => {
       "schedule",
       "user_wallet_broadcast",
     ]);
+    const removedRemoteSigningKind = ["provider", "action", "request"].join(
+      "_",
+    );
+    expect(new Set<string>(ACTION_KINDS).has(removedRemoteSigningKind)).toBe(
+      false,
+    );
   });
 });
 
-describe("ActionKind — pinned critical classifications (Codex puzzle 5/1A)", () => {
+describe("ActionKind — pinned critical classifications", () => {
   // Codex GREEN LIGHT 2026-05-23 — these mappings drive puzzle 5 phase 2+
   // approval / wallet / audit policy. A regression here would silently change
   // approval semantics, so each one is pinned explicitly.

@@ -16,10 +16,10 @@
  *   - `cancelPreparedIntent`      — phase 4 wired: CAS cancel + safe
  *                                   `already_terminal` for cross-session.
  *
- * Provider hot-wallet keys never enter the Electron process — provider
- * signing belongs in a backend signer. The wallet intent rows only carry
- * the local user-wallet address + transfer params; `failure_reason` and
- * raw error data NEVER cross this boundary.
+ * Wallet side effects use hot wallets created or imported by the user
+ * during onboarding. The wallet intent rows only carry the local
+ * user-wallet address + transfer params; `failure_reason` and raw error
+ * data NEVER cross this boundary.
  */
 
 import { CH } from "@shared/ipc/channels.js";

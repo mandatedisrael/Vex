@@ -195,7 +195,7 @@ describe("walletOpenBackupFolder schemas", () => {
   });
 });
 
-// ── Puzzle 5 phase 4 — wallet intents schemas ────────────────────────────
+// ── Wallet intent schemas ────────────────────────────────────────────────
 
 const SESSION_UUID = "00000000-0000-4000-8000-000000000001";
 const ISO = "2026-05-24T20:00:00.000Z";
@@ -263,7 +263,7 @@ describe("walletIntentPreviewSchema", () => {
   });
 });
 
-describe("preparedIntentDtoSchema (phase 4 extended)", () => {
+describe("preparedIntentDtoSchema", () => {
   function validDto() {
     return {
       intentId: "intent-1",
@@ -304,7 +304,7 @@ describe("preparedIntentDtoSchema (phase 4 extended)", () => {
     ).toBe(true);
   });
 
-  it("REJECTS pre-phase-4 minimal payload (now needs walletAddress/network/etc.)", () => {
+  it("rejects legacy minimal payload without walletAddress/network fields", () => {
     expect(
       preparedIntentDtoSchema.safeParse({
         intentId: "intent-1",
@@ -324,7 +324,7 @@ describe("preparedIntentDtoSchema (phase 4 extended)", () => {
   });
 });
 
-describe("walletsGetPreparedIntentInputSchema (phase 4 — sessionId required)", () => {
+describe("walletsGetPreparedIntentInputSchema", () => {
   it("requires both sessionId + intentId", () => {
     expect(
       walletsGetPreparedIntentInputSchema.safeParse({
@@ -334,7 +334,7 @@ describe("walletsGetPreparedIntentInputSchema (phase 4 — sessionId required)",
     ).toBe(true);
   });
 
-  it("REJECTS pre-phase-4 input shape ({intentId} only)", () => {
+  it("rejects intent-only input without sessionId", () => {
     expect(
       walletsGetPreparedIntentInputSchema.safeParse({ intentId: "intent-1" })
         .success,
@@ -366,7 +366,7 @@ describe("walletsCancelPreparedIntentInputSchema", () => {
   });
 });
 
-describe("walletsActionResultSchema (phase 4 — 'cancelled' added)", () => {
+describe("walletsActionResultSchema", () => {
   it("accepts 'cancelled' status", () => {
     expect(
       walletsActionResultSchema.safeParse({

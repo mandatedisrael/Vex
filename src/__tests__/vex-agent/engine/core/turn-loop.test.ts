@@ -405,7 +405,7 @@ describe("turn-loop", () => {
   // ── Approval pause ──────────────────────────────────────────
 
   describe("approval pause", () => {
-    it("throws when pendingApproval=true but dispatch result lacks actionKind (phase 2 fail-closed)", async () => {
+    it("throws when pendingApproval=true but dispatch result lacks actionKind", async () => {
       // Codex 2 phase-2 invariant: `approval_intents.action_kind` is NOT
       // NULL. The dispatcher's `withActionKindFallback` MUST stamp a kind
       // before `pendingApproval` returns; a missing stamp means the tool
@@ -441,7 +441,7 @@ describe("turn-loop", () => {
       );
     });
 
-    it("enqueues queue + intent + mission status flip in a single transaction (phase 2 invariant)", async () => {
+    it("enqueues queue + intent + mission status flip in a single transaction", async () => {
       // Codex final review puzzle 5/2 — pin the transactional contract:
       // `withTransaction(fn)` calls `enqueueWith`, `createWith`, and
       // `updateStatus(..., client)` with the SAME PoolClient. A partial
@@ -858,7 +858,7 @@ describe("turn-loop", () => {
       expect(mockSetLastCheckpoint).toHaveBeenCalledWith("run-1");
     });
 
-    it("bridge counter is armed at loop entry when sessions.checkpoint_generation > 0 (codex P2 round 3 — wake-resume recovery)", async () => {
+    it("arms the bridge counter at loop entry when checkpoint_generation > 0", async () => {
       // Pre-compacted session (gen=3, summary='post-compact'). The runTurnLoop
       // entry-guard must read this and arm `postCompactBridgeRemaining` so the
       // first provider call after a wake-resume / app-restart still gets the

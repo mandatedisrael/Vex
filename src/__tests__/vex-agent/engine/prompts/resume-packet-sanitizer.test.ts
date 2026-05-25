@@ -108,7 +108,7 @@ describe("sanitizePreserveMd — fence escape + pseudo-role neutralization", () 
   });
 });
 
-describe("sanitizeForSystemPrompt — extended coverage (codex P1 #1 round 2)", () => {
+describe("sanitizeForSystemPrompt — extended secret-redaction coverage", () => {
   // The generalized sanitizer must defend EVERY DB/LLM-derived string the
   // resume packet emits (rolling summary, outstanding text, recent
   // decisions, tool outcomes), not just preserve_md. These cases pin the

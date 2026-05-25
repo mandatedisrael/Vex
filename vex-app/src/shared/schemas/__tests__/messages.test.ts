@@ -121,7 +121,7 @@ describe("messages schemas", () => {
   });
 });
 
-describe("transcriptAppendEventSchema (agent integration puzzle 02)", () => {
+describe("transcriptAppendEventSchema", () => {
   const VALID = {
     type: TRANSCRIPT_APPEND_EVENT_TYPE,
     sessionId: SESSION,

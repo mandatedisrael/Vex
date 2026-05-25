@@ -159,8 +159,8 @@ export const CH = {
   // Wallets — per-session wallet scope contract. `listSessionWallets`
   // returns an empty scope until puzzle 05 introduces the DB-backed
   // wallet scope rows. setSessionWalletScope / prepared-intent mutations
-  // fail closed (provider hot-wallet keys never live in the Electron
-  // process — provider-signed actions need a backend signer).
+  // fail closed. Wallet side effects are local user-wallet flows only; no
+  // remote-signing action kind exists in the app contract.
   wallets: {
     listAvailable: "vex:wallets:listAvailable",
     listSessionWallets: "vex:wallets:listSessionWallets",

@@ -212,7 +212,7 @@ describe("forkToolMessageToArchive SQL", () => {
 // `restoreLatestCheckpoint`. This block pins the ordering on the
 // no-client (helper-owned tx) paths.
 
-describe("session row lock ordering (puzzle 04 phase 5)", () => {
+describe("session row lock ordering", () => {
   it("archivePrefix locks the sessions row before the DELETE FROM messages", async () => {
     await archivePrefix("session-1", 42, 5);
     const sqlCalls = clientQuery.mock.calls.map((c: unknown[]) => String(c[0]));
@@ -259,7 +259,7 @@ describe("session row lock ordering (puzzle 04 phase 5)", () => {
 // NULL — re-stamping NULL rows with the current rewind's id while
 // refusing to overwrite an already-stamped row.
 
-describe("archiveSuffix conflict re-stamp invariant (puzzle 04 phase 5)", () => {
+describe("archiveSuffix conflict re-stamp invariant", () => {
   it("uses ON CONFLICT DO UPDATE re-stamping NULL → checkpoint id", async () => {
     clientQuery.mockImplementation(async (sql: string) => {
       if (sql.includes("id >= $2")) {

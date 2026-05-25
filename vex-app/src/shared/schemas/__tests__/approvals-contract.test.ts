@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   APPROVAL_REASONING_PREVIEW_MAX,
   approvalActionInputSchema,
+  approvalActionKindSchema,
   approvalActionResultSchema,
   approvalGetHistoryInputSchema,
   approvalGetInputSchema,
@@ -28,11 +29,31 @@ describe("approvals schemas", () => {
     expect(approvalPermissionSchema.safeParse("admin").success).toBe(false);
   });
 
+  it("approvalActionKindSchema matches the user-wallet-only taxonomy", () => {
+    for (const kind of [
+      "read",
+      "local_write",
+      "schedule",
+      "approval_prepare",
+      "user_wallet_broadcast",
+      "external_post",
+      "destructive",
+    ]) {
+      expect(approvalActionKindSchema.safeParse(kind).success).toBe(true);
+    }
+
+    const removedRemoteSigningKind = ["provider", "action", "request"].join(
+      "_",
+    );
+    expect(approvalActionKindSchema.safeParse(removedRemoteSigningKind).success).toBe(
+      false,
+    );
+  });
+
   it("approvalSummaryDtoSchema parses a fully-populated row", () => {
-    // Puzzle 5 phase 2 added the `approval_intents` companion fields
+    // `approval_intents` companion fields are nullable for back-compat:
     // (actionKind, riskLevel, preview, expiresAt, decision, decisionReason,
-    // executionStatus). All nullable for back-compat with rows predating
-    // migration 024 — null here is the "no companion intent" case.
+    // executionStatus). Null here is the "no companion intent" case.
     const parsed = approvalSummaryDtoSchema.safeParse({
       id: "approval-1",
       sessionId: SESSION,
@@ -116,9 +137,9 @@ describe("approvals schemas", () => {
     expect(approvalActionInputSchema.safeParse({ id: "approval-1" }).success).toBe(
       true,
     );
-    // Phase 3: result schema gained `executionStatus`, `missionRunId`, and
-    // `cached` REQUIRED fields. The old payload shape is now invalid; the
-    // new fixture below pins the canonical approve path response.
+    // Approve/reject results require execution state and cache metadata.
+    // The old payload shape is now invalid; the fixture below pins the
+    // canonical approve path response.
     expect(
       approvalActionResultSchema.safeParse({
         id: "approval-1",
@@ -144,7 +165,7 @@ describe("approvals schemas", () => {
         message: "Rejected",
       }).success,
     ).toBe(true);
-    // Pre-phase-3 payload (missing new fields) must FAIL strict parse.
+    // Legacy payload missing required result fields must fail strict parse.
     expect(
       approvalActionResultSchema.safeParse({
         id: "approval-3",

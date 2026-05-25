@@ -206,7 +206,7 @@ describe("ApiKeysStep", () => {
     });
   });
 
-  it("'Skip optional' BLOCKS when Jupiter not configured (codex DRIFT)", async () => {
+  it("'Skip optional' blocks when Jupiter is not configured", async () => {
     mockUseEnvState.mockReturnValue(makeQueryResult(envState()));
     const { getByText, findByText } = renderWithQuery(
       <ApiKeysStep completedSteps={["keystore", "wallets"]} onAdvance={mockOnAdvance} flowMode="first-pass" />,
@@ -217,7 +217,7 @@ describe("ApiKeysStep", () => {
     expect(mockSetWizardMutate).not.toHaveBeenCalled();
   });
 
-  it("'Skip optional' BLOCKS when Polymarket is partial (codex DRIFT)", async () => {
+  it("'Skip optional' blocks when Polymarket configuration is partial", async () => {
     mockUseEnvState.mockReturnValue(
       makeQueryResult(envState({ jupiterConfigured: true, polymarketStatus: "partial" })),
     );
@@ -254,7 +254,7 @@ describe("ApiKeysStep", () => {
     expect(mockSetApiKeys).not.toHaveBeenCalled();
   });
 
-  it("'Save and continue' empty submit BLOCKS when Jupiter not configured (codex DRIFT turn 9)", async () => {
+  it("'Save and continue' empty submit blocks when Jupiter is not configured", async () => {
     mockUseEnvState.mockReturnValue(makeQueryResult(envState()));
     const { container, findByText } = renderWithQuery(
       <ApiKeysStep completedSteps={["keystore", "wallets"]} onAdvance={mockOnAdvance} flowMode="first-pass" />,
@@ -288,7 +288,7 @@ describe("ApiKeysStep", () => {
     expect(html).not.toContain("legacyapikey");
   });
 
-  it("back-edit mode renders the full form even when JUPITER configured (feature #7 Codex Q5)", () => {
+  it("back-edit mode renders the full form even when Jupiter is configured", () => {
     mockUseEnvState.mockReturnValue(
       makeQueryResult(envState({ jupiterConfigured: true, polymarketStatus: "missing" })),
     );
@@ -401,7 +401,7 @@ describe("ApiKeysStep", () => {
     ).toMatch(/Unlock Vex first/);
   });
 
-  it("'Save and continue' empty submit does NOT auto-advance when Jupiter missing (feature #7 Codex Q8)", async () => {
+  it("'Save and continue' empty submit does not auto-advance when Jupiter is missing", async () => {
     mockUseEnvState.mockReturnValue(makeQueryResult(envState()));
     const { container, findByText } = renderWithQuery(
       <ApiKeysStep completedSteps={["keystore", "wallets"]} onAdvance={mockOnAdvance} flowMode="first-pass" />,
