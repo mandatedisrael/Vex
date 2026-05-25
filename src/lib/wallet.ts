@@ -64,6 +64,7 @@ export {
 
 export {
   getPrimaryEvmAddress,
+  getPrimaryEvmEntry,
   getPrimarySolanaAddress,
   getWalletById,
   listWallets,

@@ -10,6 +10,7 @@ import { describe, it, expect } from "vitest";
 import { getAddress } from "viem";
 import { VexError, ErrorCodes } from "../../errors.js";
 import {
+  buildPolymarketVaultUpdates,
   normalizePolyAddress,
   parseCredentialMapEnv,
   serializeCredentialMap,
@@ -99,5 +100,47 @@ describe("serializeCredentialMap", () => {
   it("round-trips through parseCredentialMapEnv", () => {
     const map = { [ADDR_A_LC]: CREDS_A, [ADDR_B_LC]: CREDS_B };
     expect(parseCredentialMapEnv(serializeCredentialMap(map))).toEqual(map);
+  });
+});
+
+describe("buildPolymarketVaultUpdates (D1 — shared write rule)", () => {
+  const MAP_KEY = "POLYMARKET_CLOB_CREDENTIALS_BY_ADDRESS";
+
+  it("non-primary: writes ONLY the per-address map (no fixed keys)", () => {
+    const updates = buildPolymarketVaultUpdates({
+      currentMapEnv: undefined, address: ADDR_A_LC, creds: CREDS_A, isPrimary: false,
+    });
+    expect(Object.keys(updates)).toEqual([MAP_KEY]);
+    expect(JSON.parse(updates[MAP_KEY as keyof typeof updates]!)).toEqual({ [ADDR_A_LC]: CREDS_A });
+    expect(updates).not.toHaveProperty("POLYMARKET_API_KEY");
+  });
+
+  it("primary: writes the map AND the three fixed keys", () => {
+    const updates = buildPolymarketVaultUpdates({
+      currentMapEnv: undefined, address: ADDR_A_LC, creds: CREDS_A, isPrimary: true,
+    });
+    expect(JSON.parse(updates[MAP_KEY as keyof typeof updates]!)).toEqual({ [ADDR_A_LC]: CREDS_A });
+    expect(updates.POLYMARKET_API_KEY).toBe(CREDS_A.apiKey);
+    expect(updates.POLYMARKET_API_SECRET).toBe(CREDS_A.apiSecret);
+    expect(updates.POLYMARKET_PASSPHRASE).toBe(CREDS_A.passphrase);
+  });
+
+  it("merges into an existing map (preserves other wallets)", () => {
+    const current = JSON.stringify({ [ADDR_B_LC]: CREDS_B });
+    const updates = buildPolymarketVaultUpdates({
+      currentMapEnv: current, address: ADDR_A_LC, creds: CREDS_A, isPrimary: false,
+    });
+    expect(JSON.parse(updates[MAP_KEY as keyof typeof updates]!)).toEqual({
+      [ADDR_B_LC]: CREDS_B,
+      [ADDR_A_LC]: CREDS_A,
+    });
+  });
+
+  it("fails closed on a malformed current map", () => {
+    expect(() =>
+      buildPolymarketVaultUpdates({
+        currentMapEnv: "{bad json", address: ADDR_A_LC, creds: CREDS_A, isPrimary: false,
+      }),
+    ).toThrow();
   });
 });

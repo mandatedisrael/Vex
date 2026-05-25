@@ -18,3 +18,22 @@ export {
   type AcquiredPolymarketCredentials,
   type DeriveResult,
 } from "../tools/wallet/polymarket-credentials.js";
+
+// Per-wallet credential-map primitives (puzzle 5 B-UI). `buildPolymarketVaultUpdates`
+// is the SINGLE source of truth for which vault keys a Polymarket write touches
+// (map merge + primary-only fixed keys); the vex-app onboarding handler composes
+// it exactly like the CLI path so the rule cannot drift between clients.
+export {
+  buildPolymarketVaultUpdates,
+  parseCredentialMapEnv,
+  type StoredPolyCredentials,
+} from "../tools/polymarket/credential-map.js";
+
+// Vault secret key NAMES (not values) the vex-app handler needs to read the
+// current map env and write the legacy primary fallback keys.
+export {
+  ENV_POLYMARKET_API_KEY,
+  ENV_POLYMARKET_API_SECRET,
+  ENV_POLYMARKET_PASSPHRASE,
+  ENV_POLYMARKET_CLOB_CREDENTIALS_BY_ADDRESS,
+} from "../tools/polymarket/constants.js";

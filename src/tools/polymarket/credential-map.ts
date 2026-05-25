@@ -22,6 +22,13 @@
 import { z } from "zod";
 import { getAddress } from "viem";
 import { VexError, ErrorCodes } from "../../errors.js";
+import type { VaultSecretKey } from "../../lib/secret-keys.js";
+import {
+  ENV_POLYMARKET_API_KEY,
+  ENV_POLYMARKET_API_SECRET,
+  ENV_POLYMARKET_PASSPHRASE,
+  ENV_POLYMARKET_CLOB_CREDENTIALS_BY_ADDRESS,
+} from "./constants.js";
 
 /** One wallet's CLOB credentials, as stored in the map and consumed by auth. */
 export interface StoredPolyCredentials {
@@ -98,4 +105,41 @@ export function withCredentialEntry(
   creds: StoredPolyCredentials,
 ): CredentialMap {
   return { ...map, [normalizePolyAddress(address)]: creds };
+}
+
+/**
+ * Build the vault-secret updates for persisting one wallet's CLOB credentials —
+ * the SINGLE source of truth for "which keys get written" (puzzle 5 B-UI D1).
+ * Shared by the CLI/env path (`deriveAndSavePolymarketCredentials`) and the
+ * vex-app onboarding handler so the rule cannot drift between them:
+ *   - ALWAYS merge `creds` into the per-address map (preserving other wallets);
+ *   - for the PRIMARY wallet ONLY, ALSO refresh the three fixed legacy keys
+ *     (backward-compat read fallback + setup-tool visibility). Non-primary
+ *     wallets live in the map only.
+ *
+ * PURE: parse/merge/serialize only — never touches the keystore, the vault, or
+ * process.env. Callers persist the returned object with their own writer (CLI:
+ * writeSecretVaultSecrets; vex-app: writeUnlockedSecrets) and decide `isPrimary`.
+ * A malformed `currentMapEnv` throws via `parseCredentialMapEnv` (fail closed).
+ */
+export function buildPolymarketVaultUpdates(args: {
+  readonly currentMapEnv: string | undefined;
+  readonly address: string;
+  readonly creds: StoredPolyCredentials;
+  readonly isPrimary: boolean;
+}): Partial<Record<VaultSecretKey, string>> {
+  const nextMap = withCredentialEntry(
+    parseCredentialMapEnv(args.currentMapEnv),
+    args.address,
+    args.creds,
+  );
+  const updates: Partial<Record<VaultSecretKey, string>> = {
+    [ENV_POLYMARKET_CLOB_CREDENTIALS_BY_ADDRESS]: serializeCredentialMap(nextMap),
+  };
+  if (args.isPrimary) {
+    updates[ENV_POLYMARKET_API_KEY] = args.creds.apiKey;
+    updates[ENV_POLYMARKET_API_SECRET] = args.creds.apiSecret;
+    updates[ENV_POLYMARKET_PASSPHRASE] = args.creds.passphrase;
+  }
+  return updates;
 }

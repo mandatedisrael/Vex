@@ -51,23 +51,17 @@ import {
   stripManagedSecretsFromDotenvFile,
   writeSecretVaultSecrets,
 } from "../../lib/local-secret-vault.js";
-import { type VaultSecretKey } from "../../lib/secret-keys.js";
 import { requireKeystorePassword } from "../../utils/env.js";
 import { isRecord } from "../../utils/validation-helpers.js";
 import {
   CLOB_BASE_URL,
   CLOB_TIMEOUT_MS,
   POLYGON_CHAIN_ID,
-  ENV_POLYMARKET_API_KEY,
-  ENV_POLYMARKET_API_SECRET,
-  ENV_POLYMARKET_PASSPHRASE,
   ENV_POLYMARKET_CLOB_CREDENTIALS_BY_ADDRESS,
 } from "../polymarket/constants.js";
 import {
   type StoredPolyCredentials,
-  parseCredentialMapEnv,
-  serializeCredentialMap,
-  withCredentialEntry,
+  buildPolymarketVaultUpdates,
 } from "../polymarket/credential-map.js";
 
 // ── EIP-712 ClobAuth domain + types (from Polymarket docs) ─────────
@@ -248,30 +242,20 @@ export async function deriveAndSavePolymarketCredentials(
     passphrase: credentials.passphrase,
   };
 
-  // Merge into the per-wallet map (never drop other wallets' creds). Read the
-  // freshest in-process mirror from process.env.
-  const serializedMap = serializeCredentialMap(
-    withCredentialEntry(
-      parseCredentialMapEnv(process.env[ENV_POLYMARKET_CLOB_CREDENTIALS_BY_ADDRESS]),
-      address,
-      stored,
-    ),
-  );
-
-  // Primary wallet → also refresh the three fixed keys (legacy read fallback +
-  // setup-tool visibility). Non-primary wallets live in the map only.
+  // Primary wallet → the updates ALSO refresh the three fixed keys (legacy read
+  // fallback + setup-tool visibility). Non-primary wallets live in the map only.
   const primaryAddress = getPrimaryEvmAddress(cfg);
   const isPrimary =
     primaryAddress !== null && getAddress(primaryAddress) === getAddress(address);
 
-  const updates: Partial<Record<VaultSecretKey, string | null>> = {
-    [ENV_POLYMARKET_CLOB_CREDENTIALS_BY_ADDRESS]: serializedMap,
-  };
-  if (isPrimary) {
-    updates[ENV_POLYMARKET_API_KEY] = credentials.apiKey;
-    updates[ENV_POLYMARKET_API_SECRET] = credentials.secret;
-    updates[ENV_POLYMARKET_PASSPHRASE] = credentials.passphrase;
-  }
+  // Single source of truth for which vault keys to write (shared with the
+  // vex-app onboarding handler) — map merge + primary-only fixed keys.
+  const updates = buildPolymarketVaultUpdates({
+    currentMapEnv: process.env[ENV_POLYMARKET_CLOB_CREDENTIALS_BY_ADDRESS],
+    address,
+    creds: stored,
+    isPrimary,
+  });
 
   // Persistence — vault write + .env strip + same-process env apply.
   writeSecretVaultSecrets(
@@ -281,11 +265,9 @@ export async function deriveAndSavePolymarketCredentials(
   );
   stripManagedSecretsFromDotenvFile();
 
-  process.env[ENV_POLYMARKET_CLOB_CREDENTIALS_BY_ADDRESS] = serializedMap;
-  if (isPrimary) {
-    process.env[ENV_POLYMARKET_API_KEY] = credentials.apiKey;
-    process.env[ENV_POLYMARKET_API_SECRET] = credentials.secret;
-    process.env[ENV_POLYMARKET_PASSPHRASE] = credentials.passphrase;
+  // Mirror the written keys into this process so the new creds are usable now.
+  for (const [key, value] of Object.entries(updates)) {
+    if (value !== undefined) process.env[key] = value;
   }
 
   return {
