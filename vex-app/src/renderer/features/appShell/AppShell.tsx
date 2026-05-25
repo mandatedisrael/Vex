@@ -10,6 +10,7 @@ import { SessionCreator } from "./SessionCreator.js";
 import { SessionPanel } from "./SessionPanel.js";
 import { SessionsLibrary } from "./SessionsLibrary.js";
 import { SessionsList } from "./SessionsList.js";
+import { SettingsPanel } from "./SettingsPanel.js";
 
 export function AppShell(): JSX.Element {
   const [creatorOpen, setCreatorOpen] = useState<boolean>(false);
@@ -46,7 +47,13 @@ export function AppShell(): JSX.Element {
         <SessionsList onCreate={openCreator} />
 
         <section className="min-w-0 flex-1 pb-12">
-          {appShellView === "sessionsLibrary" ? <SessionsLibrary /> : <SessionPanel />}
+          {appShellView === "sessionsLibrary" ? (
+            <SessionsLibrary />
+          ) : appShellView === "settings" ? (
+            <SettingsPanel />
+          ) : (
+            <SessionPanel />
+          )}
         </section>
       </div>
 

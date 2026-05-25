@@ -20,7 +20,7 @@ import {
 } from "../../lib/api/sessions.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { SessionDeleteDialog } from "./SessionDeleteDialog.js";
-import { EditInfrastructureButton } from "./EditInfrastructureButton.js";
+import { SettingsButton } from "./SettingsButton.js";
 import { ReportIssueButton } from "./ReportIssueButton.js";
 import {
   SessionGroups,
@@ -302,7 +302,7 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
           sidebarOpen ? "items-center justify-between gap-2" : "flex-col gap-2 px-2",
         )}
       >
-        <EditInfrastructureButton compact={!sidebarOpen} />
+        <SettingsButton compact={!sidebarOpen} />
         <ReportIssueButton compact={!sidebarOpen} />
       </footer>
 

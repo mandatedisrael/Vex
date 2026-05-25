@@ -34,10 +34,11 @@ export type SessionModeFilter = "all" | "agent" | "mission";
 /**
  * Sub-view of the app shell panel area. `session` is the default chat/
  * welcome panel; `sessionsLibrary` is the dedicated "browse all sessions"
- * screen with custom scrollbar. NOT persisted — view selection is
+ * screen; `settings` is the post-onboarding settings screen (wallet
+ * management + Polymarket). NOT persisted — view selection is
  * launch-ephemeral, like `activeSessionId`.
  */
-export type AppShellView = "session" | "sessionsLibrary";
+export type AppShellView = "session" | "sessionsLibrary" | "settings";
 
 export interface UiLogEntry {
   readonly id: string;
