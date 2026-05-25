@@ -79,3 +79,38 @@ export type KnowledgeEntryDto = z.infer<typeof knowledgeEntryDtoSchema>;
 /** Result for `knowledge.list` — always an array (global store, no scope). */
 export const knowledgeListResultSchema = z.array(knowledgeEntryDtoSchema);
 export type KnowledgeListResult = z.infer<typeof knowledgeListResultSchema>;
+
+// ── Disable/archive mutation (stage 7-2b) ────────────────────────────────
+// The only user-settable transitions (engine `updateStatus` guards on
+// `status='active'` and is ONE-WAY — there is no re-activate path).
+
+export const knowledgeUpdatableStatusSchema = z.enum([
+  "invalidated",
+  "archived",
+]);
+export type KnowledgeUpdatableStatus = z.infer<
+  typeof knowledgeUpdatableStatusSchema
+>;
+
+export const knowledgeUpdateStatusInputSchema = z
+  .object({
+    id: z.number().int().positive(),
+    status: knowledgeUpdatableStatusSchema,
+    /** Optional audit note (reserved; the 7-2b UI does not yet capture one). */
+    reason: z.string().max(500).optional(),
+  })
+  .strict();
+export type KnowledgeUpdateStatusInput = z.infer<
+  typeof knowledgeUpdateStatusInputSchema
+>;
+
+/** Ack for `knowledge.updateStatus` — the entry id + its new status. */
+export const knowledgeUpdateStatusResultSchema = z
+  .object({
+    id: z.number().int().positive(),
+    status: knowledgeUpdatableStatusSchema,
+  })
+  .strict();
+export type KnowledgeUpdateStatusResult = z.infer<
+  typeof knowledgeUpdateStatusResultSchema
+>;

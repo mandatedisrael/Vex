@@ -150,6 +150,14 @@ export type VexErrorCode =
   | "approvals.already_resolved"
   | "approvals.run_terminated"
   | "approvals.dispatch_failed"
+  /**
+   * Stage 7-2b — knowledge disable/archive mutation
+   * (`knowledge.updateStatus`). `not_found` = entry gone; `invalid_state` =
+   * entry no longer active (already disabled/superseded). Both
+   * `retryable: false, userActionable: true`.
+   */
+  | "knowledge.not_found"
+  | "knowledge.invalid_state"
   | "internal.contract_violation"
   | "internal.cancelled"
   | "internal.unexpected";
@@ -236,6 +244,8 @@ export const VEX_ERROR_CODES = [
   "approvals.already_resolved",
   "approvals.run_terminated",
   "approvals.dispatch_failed",
+  "knowledge.not_found",
+  "knowledge.invalid_state",
   "internal.contract_violation",
   "internal.cancelled",
   "internal.unexpected",

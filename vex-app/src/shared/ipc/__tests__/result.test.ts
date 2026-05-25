@@ -70,6 +70,11 @@ describe("VEX_DOMAINS / VEX_ERROR_CODES bridge coverage", () => {
     }
   });
 
+  it("includes the knowledge mutation error codes (7-2b)", () => {
+    expect(VEX_ERROR_CODES).toContain("knowledge.not_found");
+    expect(VEX_ERROR_CODES).toContain("knowledge.invalid_state");
+  });
+
   it("does NOT add codes that no handler emits yet (closed union = public contract)", () => {
     // Codex review constraint: closed VexErrorCode union is a public
     // contract, not a parking lot. The renderer treats `feature_unavailable`

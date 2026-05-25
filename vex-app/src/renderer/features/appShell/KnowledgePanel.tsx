@@ -16,22 +16,32 @@
  * empty state when no session is active (and issue no session-scoped query).
  */
 
-import { useState, type JSX } from "react";
+import { useCallback, useState, type JSX } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
-import type { KnowledgeEntryDto, KnowledgeStatusDto } from "@shared/schemas/knowledge.js";
+import type {
+  KnowledgeEntryDto,
+  KnowledgeStatusDto,
+  KnowledgeUpdatableStatus,
+} from "@shared/schemas/knowledge.js";
 import type { SessionMemoryDto, MemoryStatsDto } from "@shared/schemas/memory.js";
 import type { CompactionHistoryItem } from "@shared/schemas/compaction.js";
 import { Button } from "../../components/ui/button.js";
 import { useUiStore } from "../../stores/uiStore.js";
-import { useKnowledgeList } from "../../lib/api/knowledge.js";
+import {
+  useKnowledgeList,
+  useUpdateKnowledgeStatus,
+} from "../../lib/api/knowledge.js";
 import { useMemoryStats, useSessionMemories } from "../../lib/api/memory.js";
 import { useCompactionHistory } from "../../lib/api/compaction.js";
+import { ConfirmDestructiveDialog } from "./ConfirmDestructiveDialog.js";
 
 const SECTION =
   "flex flex-col gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4";
 const PILL =
   "inline-flex items-center rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-text-secondary)]";
+const ACTION_BTN =
+  "rounded px-1.5 py-0.5 text-[10px] text-[var(--color-text-secondary)] hover:bg-white/[0.08] hover:text-foreground";
 
 export function KnowledgePanel(): JSX.Element {
   const setAppShellView = useUiStore((s) => s.setAppShellView);
@@ -118,10 +128,50 @@ const KNOWLEDGE_FILTERS: ReadonlyArray<{
   { value: "superseded", label: "Superseded" },
 ];
 
+interface PendingAction {
+  readonly entry: KnowledgeEntryDto;
+  readonly target: KnowledgeUpdatableStatus;
+}
+
+function describePending(pending: PendingAction | null): string {
+  if (pending === null) return "";
+  const what = `"${pending.entry.title}"`;
+  return pending.target === "invalidated"
+    ? `Mark ${what} as wrong or unsafe. It is removed from active recall. This is one-way — it can't be re-activated.`
+    : `Archive ${what} as no longer relevant. It is removed from active recall. This is one-way — it can't be re-activated.`;
+}
+
 function KnowledgeSection(): JSX.Element {
   const [status, setStatus] = useState<KnowledgeStatusDto | "all">("all");
   const [search, setSearch] = useState("");
+  const [pending, setPending] = useState<PendingAction | null>(null);
   const query = useKnowledgeList(status === "all" ? undefined : status);
+  const updateStatus = useUpdateKnowledgeStatus();
+
+  const onAction = useCallback(
+    (entry: KnowledgeEntryDto, target: KnowledgeUpdatableStatus): void => {
+      setPending({ entry, target });
+    },
+    [],
+  );
+
+  const confirm = useCallback((): void => {
+    if (pending === null) return;
+    updateStatus.mutate(
+      { id: pending.entry.id, status: pending.target },
+      { onSettled: () => setPending(null) },
+    );
+  }, [pending, updateStatus]);
+
+  // Surface a failed mutation (e.g. raced not_found / invalid_state) — the
+  // mutationFn resolves with `ok:false`, so check `data`; `isError` covers a
+  // thrown transport failure.
+  const mutationError =
+    updateStatus.data && !updateStatus.data.ok
+      ? updateStatus.data.error.message
+      : updateStatus.isError
+        ? "Unable to update knowledge."
+        : null;
 
   return (
     <section data-vex-section="knowledge" className={SECTION}>
@@ -130,7 +180,7 @@ function KnowledgeSection(): JSX.Element {
         <p className="mt-1 text-xs text-[var(--color-text-muted)]">
           Durable lessons the agent has learned (global, all sessions). Sources
           and statuses are shown so low-confidence entries are visible but
-          labeled.
+          labeled. Disabling an entry is one-way.
         </p>
       </div>
 
@@ -160,7 +210,28 @@ function KnowledgeSection(): JSX.Element {
         />
       </div>
 
-      <KnowledgeList query={query} search={search} />
+      {mutationError !== null ? <ErrorState message={mutationError} /> : null}
+
+      <KnowledgeList query={query} search={search} onAction={onAction} />
+
+      <ConfirmDestructiveDialog
+        open={pending !== null}
+        title={
+          pending?.target === "invalidated"
+            ? "Invalidate this knowledge?"
+            : "Archive this knowledge?"
+        }
+        description={describePending(pending)}
+        confirmLabel={
+          pending?.target === "invalidated" ? "Invalidate" : "Archive"
+        }
+        tone="destructive"
+        pending={updateStatus.isPending}
+        onConfirm={confirm}
+        onCancel={() => {
+          if (!updateStatus.isPending) setPending(null);
+        }}
+      />
     </section>
   );
 }
@@ -168,9 +239,14 @@ function KnowledgeSection(): JSX.Element {
 function KnowledgeList({
   query,
   search,
+  onAction,
 }: {
   readonly query: ReturnType<typeof useKnowledgeList>;
   readonly search: string;
+  readonly onAction: (
+    entry: KnowledgeEntryDto,
+    target: KnowledgeUpdatableStatus,
+  ) => void;
 }): JSX.Element {
   if (query.isLoading) return <Loading label="Loading knowledge…" />;
   const res = query.data;
@@ -197,13 +273,22 @@ function KnowledgeList({
   return (
     <ul className="flex flex-col gap-2">
       {items.map((k) => (
-        <KnowledgeRow key={k.id} entry={k} />
+        <KnowledgeRow key={k.id} entry={k} onAction={onAction} />
       ))}
     </ul>
   );
 }
 
-function KnowledgeRow({ entry }: { readonly entry: KnowledgeEntryDto }): JSX.Element {
+function KnowledgeRow({
+  entry,
+  onAction,
+}: {
+  readonly entry: KnowledgeEntryDto;
+  readonly onAction: (
+    entry: KnowledgeEntryDto,
+    target: KnowledgeUpdatableStatus,
+  ) => void;
+}): JSX.Element {
   return (
     <li
       data-vex-knowledge-id={entry.id}
@@ -235,7 +320,9 @@ function KnowledgeRow({ entry }: { readonly entry: KnowledgeEntryDto }): JSX.Ele
           {entry.summary}
         </p>
       ) : null}
-      {entry.tags.length > 0 || entry.sourceSession !== null ? (
+      {entry.tags.length > 0 ||
+      entry.sourceSession !== null ||
+      entry.status === "active" ? (
         <div className="mt-1 flex flex-wrap items-center gap-1">
           {entry.tags.map((t) => (
             <span
@@ -251,6 +338,26 @@ function KnowledgeRow({ entry }: { readonly entry: KnowledgeEntryDto }): JSX.Ele
               title={entry.sourceSession}
             >
               src {entry.sourceSession.slice(0, 8)}
+            </span>
+          ) : null}
+          {entry.status === "active" ? (
+            <span className="ml-auto flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => onAction(entry, "archived")}
+                aria-label={`Archive ${entry.title}`}
+                className={ACTION_BTN}
+              >
+                Archive
+              </button>
+              <button
+                type="button"
+                onClick={() => onAction(entry, "invalidated")}
+                aria-label={`Invalidate ${entry.title}`}
+                className={ACTION_BTN}
+              >
+                Invalidate
+              </button>
             </span>
           ) : null}
         </div>

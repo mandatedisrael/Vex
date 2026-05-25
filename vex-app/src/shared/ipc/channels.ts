@@ -201,6 +201,7 @@ export const CH = {
   // embeddings). Disable/archive mutation lands in 7-2b.
   knowledge: {
     list: "vex:knowledge:list",
+    updateStatus: "vex:knowledge:updateStatus",
   },
 
   // Memory — read-only per-session memory list + stats (stage 7-2a).

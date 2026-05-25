@@ -2,15 +2,22 @@ import type { Result } from "../../../ipc/result.js";
 import type {
   KnowledgeListInput,
   KnowledgeListResult,
+  KnowledgeUpdateStatusInput,
+  KnowledgeUpdateStatusResult,
 } from "../../../schemas/knowledge.js";
 
 /**
- * Knowledge management — read-only list of the global knowledge store
- * (agent integration stage 7-2a). Sanitized metadata only (no content_md /
- * source_refs / embeddings). Disable/archive mutation lands in 7-2b.
+ * Knowledge management (stage 7-2a read + 7-2b mutation).
+ *  - `list`: read-only sanitized list of the global knowledge store (no
+ *    content_md / source_refs / embeddings).
+ *  - `updateStatus`: disable/archive an active entry (one-way). User action;
+ *    confirmed in the renderer + audited in main.
  */
 export interface KnowledgeBridge {
   readonly list: (
     input: KnowledgeListInput,
   ) => Promise<Result<KnowledgeListResult>>;
+  readonly updateStatus: (
+    input: KnowledgeUpdateStatusInput,
+  ) => Promise<Result<KnowledgeUpdateStatusResult>>;
 }

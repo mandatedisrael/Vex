@@ -4,6 +4,8 @@ import {
   knowledgeEntryDtoSchema,
   knowledgeListInputSchema,
   knowledgeListResultSchema,
+  knowledgeUpdateStatusInputSchema,
+  knowledgeUpdateStatusResultSchema,
 } from "../knowledge.js";
 
 const ISO = "2026-05-21T10:00:00.000Z";
@@ -71,5 +73,58 @@ describe("knowledge schemas", () => {
   it("list result is an array (global store — never null)", () => {
     expect(knowledgeListResultSchema.safeParse([VALID]).success).toBe(true);
     expect(knowledgeListResultSchema.safeParse(null).success).toBe(false);
+  });
+});
+
+describe("knowledge updateStatus schemas (7-2b)", () => {
+  it("input accepts only archived|invalidated + bounds reason; rejects active/superseded/bad id", () => {
+    expect(
+      knowledgeUpdateStatusInputSchema.safeParse({ id: 1, status: "archived" })
+        .success,
+    ).toBe(true);
+    expect(
+      knowledgeUpdateStatusInputSchema.safeParse({
+        id: 1,
+        status: "invalidated",
+        reason: "noted",
+      }).success,
+    ).toBe(true);
+    expect(
+      knowledgeUpdateStatusInputSchema.safeParse({ id: 1, status: "active" })
+        .success,
+    ).toBe(false);
+    expect(
+      knowledgeUpdateStatusInputSchema.safeParse({ id: 1, status: "superseded" })
+        .success,
+    ).toBe(false);
+    expect(
+      knowledgeUpdateStatusInputSchema.safeParse({ id: 0, status: "archived" })
+        .success,
+    ).toBe(false);
+    expect(
+      knowledgeUpdateStatusInputSchema.safeParse({
+        id: 1,
+        status: "archived",
+        reason: "x".repeat(501),
+      }).success,
+    ).toBe(false);
+    expect(
+      knowledgeUpdateStatusInputSchema.safeParse({
+        id: 1,
+        status: "archived",
+        extra: 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("result is the id + new status (strict)", () => {
+    expect(
+      knowledgeUpdateStatusResultSchema.safeParse({ id: 1, status: "archived" })
+        .success,
+    ).toBe(true);
+    expect(
+      knowledgeUpdateStatusResultSchema.safeParse({ id: 1, status: "active" })
+        .success,
+    ).toBe(false);
   });
 });

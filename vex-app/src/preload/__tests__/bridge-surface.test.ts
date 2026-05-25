@@ -144,6 +144,7 @@ describe("preload bridge surface", () => {
       "CH.compaction.getStatus",
       "CH.compaction.listHistory",
       "CH.knowledge.list",
+      "CH.knowledge.updateStatus",
       "CH.memory.listSession",
       "CH.memory.getStats",
       "CH.sessions.getModel",

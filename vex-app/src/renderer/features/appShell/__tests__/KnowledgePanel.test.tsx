@@ -38,6 +38,7 @@ function ok<T>(data: T) {
 }
 
 const knowledgeListMock = vi.fn();
+const updateStatusMock = vi.fn();
 const listSessionMock = vi.fn();
 const getStatsMock = vi.fn();
 const listHistoryMock = vi.fn();
@@ -47,7 +48,7 @@ function setVex(): void {
     configurable: true,
     writable: true,
     value: {
-      knowledge: { list: knowledgeListMock },
+      knowledge: { list: knowledgeListMock, updateStatus: updateStatusMock },
       memory: { listSession: listSessionMock, getStats: getStatsMock },
       compaction: { listHistory: listHistoryMock },
     },
@@ -203,5 +204,83 @@ describe("KnowledgePanel", () => {
     render(createElement(KnowledgePanel), { wrapper: makeWrapper(freshClient()) });
     fireEvent.click(screen.getByRole("button", { name: /Back to chat/i }));
     expect(mockSetAppShellView).toHaveBeenCalledWith("session");
+  });
+
+  it("archives an active entry through the destructive confirm dialog (7-2b)", async () => {
+    knowledgeListMock.mockResolvedValue(
+      ok([
+        {
+          id: 1,
+          kind: "risk_rule",
+          title: "Avoid X",
+          summary: "s",
+          tags: [],
+          confidence: null,
+          status: "active",
+          source: "observed",
+          sourceSession: null,
+          pinned: false,
+          createdAt: ISO,
+          updatedAt: ISO,
+        },
+      ]),
+    );
+    updateStatusMock.mockResolvedValue(ok({ id: 1, status: "archived" }));
+    setVex();
+    render(createElement(KnowledgePanel), { wrapper: makeWrapper(freshClient()) });
+
+    await waitFor(() => {
+      expect(screen.getByText("Avoid X")).not.toBeNull();
+    });
+    // Row action opens the destructive confirm. `/re-activated/` is unique to
+    // the dialog copy (the section intro also mentions "one-way").
+    fireEvent.click(screen.getByRole("button", { name: "Archive Avoid X" }));
+    await waitFor(() => {
+      expect(screen.getByText(/re-activated/i)).not.toBeNull();
+    });
+    // jsdom does not implement <dialog>.showModal(), so the modal's buttons
+    // live in the hidden a11y tree — query with `hidden: true`.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Archive", hidden: true }),
+    );
+    await waitFor(() => {
+      expect(updateStatusMock).toHaveBeenCalledWith({
+        id: 1,
+        status: "archived",
+      });
+    });
+  });
+
+  it("shows no disable actions on non-active rows", async () => {
+    knowledgeListMock.mockResolvedValue(
+      ok([
+        {
+          id: 2,
+          kind: "k",
+          title: "Old Note",
+          summary: "s",
+          tags: [],
+          confidence: null,
+          status: "archived",
+          source: "observed",
+          sourceSession: null,
+          pinned: false,
+          createdAt: ISO,
+          updatedAt: ISO,
+        },
+      ]),
+    );
+    setVex();
+    render(createElement(KnowledgePanel), { wrapper: makeWrapper(freshClient()) });
+
+    await waitFor(() => {
+      expect(screen.getByText("Old Note")).not.toBeNull();
+    });
+    expect(
+      screen.queryByRole("button", { name: "Archive Old Note" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Invalidate Old Note" }),
+    ).toBeNull();
   });
 });
