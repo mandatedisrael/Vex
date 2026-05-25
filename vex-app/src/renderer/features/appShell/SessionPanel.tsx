@@ -17,6 +17,7 @@ import { useMemo } from "react";
 import type { JSX } from "react";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import { useTranscriptLiveSync } from "../../lib/api/messages.js";
+import { useUsageLiveSync } from "../../lib/api/usage.js";
 import { useSession } from "../../lib/api/sessions.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { MissionContractCard } from "./MissionContractCard.js";
@@ -31,6 +32,9 @@ export function SessionPanel(): JSX.Element {
   // effect — no UI surface here. Visible transcript UI lands in
   // puzzle 08 (chat panel).
   useTranscriptLiveSync(activeSessionId);
+  // Puzzle 06: keep the runtime bar's usage + context-window queries
+  // fresh after each turn (transcript-append event + 30s fallback poll).
+  useUsageLiveSync(activeSessionId);
   const detailQuery = useSession(activeSessionId);
 
   const activeSession = useMemo((): SessionListItem | null => {

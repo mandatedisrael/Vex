@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  contextWindowDtoSchema,
+  contextWindowResultSchema,
   lastTurnUsageResultSchema,
   sessionUsageTotalsDtoSchema,
   turnUsageDtoSchema,
@@ -99,5 +101,54 @@ describe("usage schemas", () => {
         createdAt: ISO,
       }).success,
     ).toBe(true);
+  });
+
+  it("contextWindowDtoSchema accepts a numeric limit and a null limit", () => {
+    expect(
+      contextWindowDtoSchema.safeParse({
+        sessionId: SESSION,
+        tokensUsed: 1234,
+        contextLimit: 128_000,
+      }).success,
+    ).toBe(true);
+    expect(
+      contextWindowDtoSchema.safeParse({
+        sessionId: SESSION,
+        tokensUsed: 0,
+        contextLimit: null,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("contextWindowDtoSchema rejects negative tokensUsed and a non-positive limit", () => {
+    expect(
+      contextWindowDtoSchema.safeParse({
+        sessionId: SESSION,
+        tokensUsed: -1,
+        contextLimit: 128_000,
+      }).success,
+    ).toBe(false);
+    expect(
+      contextWindowDtoSchema.safeParse({
+        sessionId: SESSION,
+        tokensUsed: 0,
+        contextLimit: 0,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("contextWindowDtoSchema rejects unknown keys (strict)", () => {
+    expect(
+      contextWindowDtoSchema.safeParse({
+        sessionId: SESSION,
+        tokensUsed: 1,
+        contextLimit: 1,
+        extra: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("contextWindowResultSchema accepts null (missing/deleted session)", () => {
+    expect(contextWindowResultSchema.safeParse(null).success).toBe(true);
   });
 });

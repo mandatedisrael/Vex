@@ -29,8 +29,6 @@ import type {
   SessionList,
   SessionListItem,
   SessionModelDto,
-  SessionSetModelInput,
-  SessionSetModelResult,
   SessionSetPinnedInput,
   SessionSetPinnedResult,
 } from "@shared/schemas/sessions.js";
@@ -172,15 +170,12 @@ export function useDeleteSession(): UseMutationResult<
   });
 }
 
-// ── Agent integration puzzle 1: per-session model picker ─────────────────
+// ── Global runtime model (read-only) ─────────────────────────────────────
 //
-// `useSessionModel` is read-only and resolves the global env default
-// (`AGENT_PROVIDER`/`AGENT_MODEL`). `useSetSessionModel` fail-closes
-// with `sessions.feature_unavailable` until puzzle 06 lands the
-// `sessions.model_id` migration + engine session context loader.
-//
-// No optimistic update for `useSetSessionModel`: a fail-closed mutation
-// must not seed the cache with a value the runtime can't honour yet.
+// `useSessionModel` reports the global model the engine resolves from
+// `AGENT_PROVIDER`/`AGENT_MODEL` (source: `"global_default"` vs.
+// `"unconfigured"`). Vex uses one global model for every session — there
+// is no per-session model write.
 
 const SESSION_MODEL_STALE_MS = 30_000;
 
@@ -197,15 +192,4 @@ export function useSessionModel(
   sessionId: string | null,
 ): UseQueryResult<Result<SessionModelDto>> {
   return useQuery(sessionModelOptions(sessionId ?? ""));
-}
-
-export function useSetSessionModel(): UseMutationResult<
-  Result<SessionSetModelResult>,
-  Error,
-  SessionSetModelInput
-> {
-  return useMutation({
-    mutationFn: (input) => window.vex.sessions.setModel(input),
-    retry: false,
-  });
 }

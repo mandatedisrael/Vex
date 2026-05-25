@@ -46,11 +46,11 @@ export type VexDomain =
   | "models"
   | "usage"
   /**
-   * Reserved for new sessions handlers (`sessions.getModel`,
-   * `sessions.setModel`). Existing sessions handlers
+   * Used by the read-only `sessions.getModel` handler (global runtime
+   * model resolution). Existing sessions handlers
    * (`vex:sessions:create|list|get|setPinned|delete`) deliberately keep
    * `domain: "internal"` as a historical marker — migrating them is a
-   * separate follow-up, not part of puzzle 1.
+   * separate follow-up.
    */
   | "sessions"
   /** Used by the preload boundary when input fails its own Zod schema before reaching main. */
@@ -101,8 +101,8 @@ export type VexErrorCode =
    * Agent integration puzzle 1 — per-domain `feature_unavailable` codes.
    * Emitted by fail-closed mutating handlers whose backing runtime lands
    * in a later puzzle (runtime control = 03, mission contract/commands =
-   * 04, approval queue runtime = 05, wallet scope/intents = 05/10,
-   * per-session model write = 06). These are `retryable: false,
+   * 04, approval queue runtime = 05, wallet scope/intents = 05/10). These
+   * are `retryable: false,
    * userActionable: true` so the renderer surfaces "not yet available"
    * without triggering an automatic bug report. Read-only handlers do
    * not return these codes — DB unavailability still maps to
@@ -113,7 +113,6 @@ export type VexErrorCode =
   | "approvals.feature_unavailable"
   | "wallets.feature_unavailable"
   | "wallets.invalid_selection"
-  | "sessions.feature_unavailable"
   /**
    * Puzzle 5 phase 3 — approve/reject runtime semantics. Surfaced when the
    * IPC handler observes a non-actionable state of the approval intent or
@@ -216,7 +215,6 @@ export const VEX_ERROR_CODES = [
   "approvals.feature_unavailable",
   "wallets.feature_unavailable",
   "wallets.invalid_selection",
-  "sessions.feature_unavailable",
   "approvals.expired",
   "approvals.already_resolved",
   "approvals.run_terminated",

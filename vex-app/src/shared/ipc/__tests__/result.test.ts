@@ -61,7 +61,6 @@ describe("VEX_DOMAINS / VEX_ERROR_CODES bridge coverage", () => {
       "mission.feature_unavailable",
       "approvals.feature_unavailable",
       "wallets.feature_unavailable",
-      "sessions.feature_unavailable",
     ] as const;
     for (const code of required) {
       expect(VEX_ERROR_CODES).toContain(code);
@@ -81,6 +80,9 @@ describe("VEX_DOMAINS / VEX_ERROR_CODES bridge coverage", () => {
       "mission.invalid_state",
       "mission.contract_violation",
       "approvals.invalid_state",
+      // Removed with the cancelled per-session model write (`setModel` was
+      // the only producer) — must not linger as dead public contract.
+      "sessions.feature_unavailable",
     ] as const;
     for (const code of forbidden) {
       expect(VEX_ERROR_CODES).not.toContain(code as never);

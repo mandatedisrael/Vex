@@ -8,15 +8,37 @@
 import { CH } from "@shared/ipc/channels.js";
 import type { Result } from "@shared/ipc/result.js";
 import {
+  contextWindowInputSchema,
+  contextWindowResultSchema,
   lastTurnUsageResultSchema,
   sessionUsageTotalsDtoSchema,
   usageInputSchema,
+  type ContextWindowResult,
   type LastTurnUsageResult,
   type SessionUsageTotalsDto,
 } from "@shared/schemas/usage.js";
-import { getLastTurn, getSessionTotals } from "../database/usage-db.js";
+import { AGENT_CONTEXT_LIMIT, parseAgentEnv } from "@vex-lib/agent-config.js";
+import {
+  getContextWindow,
+  getLastTurn,
+  getSessionTotals,
+} from "../database/usage-db.js";
 import { log } from "../logger/index.js";
 import { registerHandler } from "./register-handler.js";
+
+/**
+ * Resolve the effective global context limit the engine uses for
+ * pressure bands, via the shared `@vex-lib/agent-config` source of truth
+ * (no duplicated bounds/defaults here). Unset → engine default; valid →
+ * the configured value; invalid `AGENT_CONTEXT_LIMIT` → `null` (the
+ * engine would reject it, so we surface "unavailable" instead of faking
+ * the default).
+ */
+function resolveContextLimit(): number | null {
+  const parsed = parseAgentEnv(process.env);
+  const invalid = parsed.errors.some((e) => e.key === AGENT_CONTEXT_LIMIT.key);
+  return invalid ? null : parsed.value.contextLimit;
+}
 
 function registerGetSessionTotalsHandler(): () => void {
   return registerHandler({
@@ -68,9 +90,36 @@ function registerGetLastTurnHandler(): () => void {
   });
 }
 
+function registerGetContextWindowHandler(): () => void {
+  return registerHandler({
+    channel: CH.usage.getContextWindow,
+    domain: "usage",
+    inputSchema: contextWindowInputSchema,
+    outputSchema: contextWindowResultSchema,
+    handle: async (input, ctx): Promise<Result<ContextWindowResult>> => {
+      const contextLimit = resolveContextLimit();
+      const outcome = await getContextWindow(input.sessionId, contextLimit);
+      if (outcome.ok) {
+        log.info(
+          `[ipc:vex:usage:getContextWindow] ok sessionId=${input.sessionId} ` +
+            `present=${outcome.data !== null} limit=${contextLimit ?? "invalid"} ` +
+            `correlationId=${ctx.requestId}`,
+        );
+        return outcome;
+      }
+      log.info(
+        `[ipc:vex:usage:getContextWindow] errCode=${outcome.error.code} ` +
+          `correlationId=${ctx.requestId}`,
+      );
+      return outcome;
+    },
+  });
+}
+
 export function registerUsageHandlers(): ReadonlyArray<() => void> {
   return [
     registerGetSessionTotalsHandler(),
     registerGetLastTurnHandler(),
+    registerGetContextWindowHandler(),
   ];
 }

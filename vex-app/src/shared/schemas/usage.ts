@@ -1,9 +1,10 @@
 /**
  * Usage schemas — last-turn + session totals from the `usage_log` table.
  *
- * Renderer surfaces the model picker chip + a per-session totals modal.
- * Currency defaults to `USD`; legacy rows that predate the column carry
- * `null` provider/model so the DTO is `nullable` for both.
+ * Renderer surfaces the session runtime bar (global model + usage +
+ * context) and a per-session totals tooltip. Currency defaults to `USD`;
+ * legacy rows that predate the column carry `null` provider/model so the
+ * DTO is `nullable` for both.
  *
  * Field names match the canonical refs vocabulary in
  * `BUG-REPORTING.md §3` so Phase 2 BugReportSink can stamp refs without
@@ -75,3 +76,44 @@ export type UsageInput = z.infer<typeof usageInputSchema>;
  */
 export const lastTurnUsageResultSchema = turnUsageDtoSchema.nullable();
 export type LastTurnUsageResult = z.infer<typeof lastTurnUsageResultSchema>;
+
+/**
+ * Input for `usage.getContextWindow`. Session-scoped only — the context
+ * limit itself is global runtime config, not a per-session value.
+ */
+export const contextWindowInputSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+  })
+  .strict();
+export type ContextWindowInput = z.infer<typeof contextWindowInputSchema>;
+
+/**
+ * Context-window meter for a session: tokens consumed vs the global
+ * model context limit.
+ *
+ *  - `tokensUsed` mirrors the engine's `sessions.token_count` — the
+ *    prompt size of the most recent turn. It lags the live transcript by
+ *    one turn (the engine stamps it before the next turn runs), so the
+ *    renderer labels it as an approximate pressure indicator.
+ *  - `contextLimit` is the effective `AGENT_CONTEXT_LIMIT` the engine
+ *    uses for pressure bands. `null` when the configured value is invalid
+ *    (the engine would reject it) — the renderer then shows the token
+ *    count without a limit bar instead of a fabricated default.
+ */
+export const contextWindowDtoSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    tokensUsed: z.number().int().min(0),
+    contextLimit: z.number().int().positive().nullable(),
+  })
+  .strict();
+export type ContextWindowDto = z.infer<typeof contextWindowDtoSchema>;
+
+/**
+ * Result for `usage.getContextWindow` — `null` when the session is
+ * unknown, soft-deleted, or outside the app scope. No fabricated
+ * `0 / limit` meter for a session that does not exist.
+ */
+export const contextWindowResultSchema = contextWindowDtoSchema.nullable();
+export type ContextWindowResult = z.infer<typeof contextWindowResultSchema>;

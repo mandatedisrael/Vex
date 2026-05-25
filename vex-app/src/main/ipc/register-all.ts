@@ -31,7 +31,6 @@ import { registerSessionsDeleteHandler } from "./sessions/delete.js";
 import { registerSessionsGetHandler } from "./sessions/get.js";
 import { registerSessionsGetModelHandler } from "./sessions/get-model.js";
 import { registerSessionsListHandler } from "./sessions/list.js";
-import { registerSessionsSetModelHandler } from "./sessions/set-model.js";
 import { registerSessionsSetPinnedHandler } from "./sessions/set-pinned.js";
 import { registerSecretsHandlers } from "./secrets.js";
 import { registerSettingsHandlers } from "./settings.js";
@@ -68,9 +67,9 @@ export function registerAllIpcHandlers(): void {
   teardowns.push(registerSessionsDeleteHandler());
   // Agent integration puzzle 1: typed bridge surface for the chat panel,
   // runtime control, mission contract/commands, approvals, wallet scope,
-  // model picker, and usage meter. Read-only handlers serve real DB
+  // the global model, and usage meter. Read-only handlers serve real DB
   // data; mutating handlers fail-close per the per-domain code until
-  // the backing runtime ships in puzzles 03/04/05/06.
+  // the backing runtime ships in puzzles 03/04/05.
   teardowns.push(...registerMessagesHandlers());
   teardowns.push(...registerUsageHandlers());
   teardowns.push(...registerRuntimeHandlers());
@@ -79,7 +78,6 @@ export function registerAllIpcHandlers(): void {
   teardowns.push(...registerWalletsSessionHandlers());
   teardowns.push(...registerModelsHandlers());
   teardowns.push(registerSessionsGetModelHandler());
-  teardowns.push(registerSessionsSetModelHandler());
   teardowns.push(registerChatSubmitHandler());
   // Agent integration puzzle 2: engine -> renderer transcript event spine.
   // Subscribes the in-process transcript bus to the IPC broadcaster so

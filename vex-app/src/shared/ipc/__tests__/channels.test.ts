@@ -64,8 +64,8 @@ describe("CH / EV channel constants", () => {
     expect(typeof CH.wallets.listSessionWallets).toBe("string");
     expect(typeof CH.models.listAvailable).toBe("string");
     expect(typeof CH.usage.getSessionTotals).toBe("string");
+    expect(typeof CH.usage.getContextWindow).toBe("string");
     expect(typeof CH.sessions.getModel).toBe("string");
-    expect(typeof CH.sessions.setModel).toBe("string");
   });
 
   it("channels are unique (no duplicate values across namespaces)", () => {

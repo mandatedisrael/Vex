@@ -1,15 +1,15 @@
 /**
- * Models schemas — provider/model picker contract.
+ * Models schemas — global model resolution contract.
  *
- * Puzzle 1 returns a single "configured global default" derived from
+ * Vex uses a single global model for every session, derived from
  * `AGENT_PROVIDER` + `AGENT_MODEL` in the engine `.env` (loaded into
  * `process.env` after vault unlock). No network call, no OpenRouter
- * `/models` catalogue, no pricing/context claims — those land in
- * puzzle 06 along with the per-session model migration.
+ * `/models` catalogue, no pricing/context claims yet — a future
+ * catalogue fetch could enrich the option metadata.
  *
  * When the env vars are absent the read-only handler resolves to
  * `models: []` with `source: "unconfigured"`; it never errors. The UI
- * surfaces "Provider not configured" instead of an error toast.
+ * surfaces "Model not configured" instead of an error toast.
  */
 
 import { z } from "zod";
@@ -21,17 +21,16 @@ export const modelOptionDtoSchema = z
     displayName: z.string().min(1).max(200),
     /**
      * Renderer-side brand identifier used by `ModelBrandIcon` /
-     * `parseModelProvider`. Mapped from `providerId` in puzzle 1; the
-     * OpenRouter catalogue mapper in puzzle 06 may widen this.
+     * `parseModelProvider`. Mapped from `providerId`; a future OpenRouter
+     * catalogue mapper could widen this.
      */
     brand: z.string().min(1).max(64),
     /**
-     * Context length in tokens. `null` in puzzle 1 — env-derived
-     * defaults don't carry catalogue metadata and we deliberately
-     * avoid guessing.
+     * Context length in tokens. `null` today — env-derived defaults don't
+     * carry catalogue metadata and we deliberately avoid guessing.
      */
     contextLength: z.number().int().positive().nullable(),
-    /** USD per 1M input tokens. `null` in puzzle 1 (no catalogue fetch). */
+    /** USD per 1M input tokens. `null` today (no catalogue fetch). */
     pricingInputPerMillion: z.number().nonnegative().nullable(),
     pricingOutputPerMillion: z.number().nonnegative().nullable(),
   })
@@ -44,9 +43,10 @@ export type ModelsListAvailableInput = z.infer<
 >;
 
 /**
- * `source` tells the renderer where the list came from. Puzzle 1 only
+ * `source` tells the renderer where the list came from. Currently only
  * emits `"global_default"` (env-derived single option) or
- * `"unconfigured"` (empty list). Puzzle 06 may add `"openrouter"` etc.
+ * `"unconfigured"` (empty list). A future catalogue fetch could add
+ * provider-specific sources.
  */
 export const modelsListSourceSchema = z.enum([
   "global_default",

@@ -43,7 +43,9 @@ vi.mock("../db-config.js", () => ({
 
 vi.mock("../../logger/index.js", () => ({ log: mocks.log }));
 
-const { getLastTurn, getSessionTotals } = await import("../usage-db.js");
+const { getContextWindow, getLastTurn, getSessionTotals } = await import(
+  "../usage-db.js"
+);
 
 const SESSION = "00000000-0000-4000-8000-00000000dddd";
 
@@ -169,5 +171,34 @@ describe("usage-db mapper", () => {
     expect(result.data.cachedTokens).toBe(0);
     expect(result.data.reasoningTokens).toBe(5);
     expect(result.data.cost).toBeCloseTo(0.001, 6);
+  });
+
+  it("getContextWindow returns null when the session row is missing/deleted/out-of-scope", async () => {
+    mocks.query.mockResolvedValueOnce({ rows: [] });
+    const result = await getContextWindow(SESSION, 128_000);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toBeNull();
+  });
+
+  it("getContextWindow maps token_count and passes the limit through", async () => {
+    mocks.query.mockResolvedValueOnce({ rows: [{ token_count: "4096" }] });
+    const result = await getContextWindow(SESSION, 128_000);
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.data === null) return;
+    expect(result.data).toEqual({
+      sessionId: SESSION,
+      tokensUsed: 4096,
+      contextLimit: 128_000,
+    });
+  });
+
+  it("getContextWindow carries a null limit through (invalid config)", async () => {
+    mocks.query.mockResolvedValueOnce({ rows: [{ token_count: 0 }] });
+    const result = await getContextWindow(SESSION, null);
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.data === null) return;
+    expect(result.data.contextLimit).toBeNull();
+    expect(result.data.tokensUsed).toBe(0);
   });
 });

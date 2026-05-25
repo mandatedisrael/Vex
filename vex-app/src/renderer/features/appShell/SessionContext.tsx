@@ -12,6 +12,7 @@ import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import { AiChat01Icon, Target02Icon } from "@hugeicons/core-free-icons";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import { DotmHex3 } from "../../components/ui/dotm-hex-3.js";
+import { SessionRuntimeBar } from "./SessionRuntimeBar.js";
 import { getSessionTitle } from "./sessionListModel.js";
 
 export interface SessionContextProps {
@@ -62,18 +63,21 @@ export function SessionContext({
       activeSession.mode === "mission" ? Target02Icon : AiChat01Icon;
     const title = getSessionTitle(activeSession);
     return (
-      <div className="mt-7 flex max-w-[620px] flex-wrap items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3 py-2 text-xs text-[var(--color-text-secondary)] backdrop-blur-xl">
-        <span className="flex h-8 w-8 items-center justify-center text-[#8da5ff]">
-          <HugeiconsIcon icon={icon} size={16} aria-hidden />
-        </span>
-        <span className="min-w-[180px] flex-1 truncate text-sm text-foreground">
-          {title}
-        </span>
-        <ContextPill>{activeSession.mode}</ContextPill>
-        <ContextPill>{activeSession.permission}</ContextPill>
-        {activeSession.missionStatus !== null ? (
-          <ContextPill>{activeSession.missionStatus}</ContextPill>
-        ) : null}
+      <div className="mt-7 flex max-w-[620px] flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3 py-2 text-xs text-[var(--color-text-secondary)] backdrop-blur-xl">
+          <span className="flex h-8 w-8 items-center justify-center text-[#8da5ff]">
+            <HugeiconsIcon icon={icon} size={16} aria-hidden />
+          </span>
+          <span className="min-w-[180px] flex-1 truncate text-sm text-foreground">
+            {title}
+          </span>
+          <ContextPill>{activeSession.mode}</ContextPill>
+          <ContextPill>{activeSession.permission}</ContextPill>
+          {activeSession.missionStatus !== null ? (
+            <ContextPill>{activeSession.missionStatus}</ContextPill>
+          ) : null}
+        </div>
+        <SessionRuntimeBar sessionId={activeSession.id} />
       </div>
     );
   }

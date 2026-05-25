@@ -5,9 +5,9 @@ import type {
 } from "../../../schemas/models.js";
 
 /**
- * Provider/model catalogue. Puzzle 1 returns the configured global
- * default from env (single option or empty); puzzle 06 adds the
- * OpenRouter `/models` fetch + per-session model migration.
+ * Global model catalogue. Returns the configured global default from env
+ * (single option or empty). A future OpenRouter `/models` fetch could
+ * enrich the option metadata (pricing, context length).
  */
 export interface ModelsBridge {
   readonly listAvailable: (

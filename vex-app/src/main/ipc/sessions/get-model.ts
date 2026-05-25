@@ -1,12 +1,12 @@
 /**
- * `vex.sessions.getModel` — resolve per-session model.
+ * `vex.sessions.getModel` — resolve the global runtime model for a
+ * session.
  *
- * Puzzle 1 always resolves to the global env default. `AGENT_PROVIDER`
- * + `AGENT_MODEL` from `process.env` (loaded after vault unlock by the
- * existing onboarding flow) are the only sources; when either is
- * absent we return `source: "unconfigured"`. The `sessions.model_id`
- * column lands in puzzle 06 — at that point the resolver will check
- * the DB row first and only fall back to env.
+ * Vex uses one global model for every session. `AGENT_PROVIDER` +
+ * `AGENT_MODEL` from `process.env` (loaded after vault unlock by the
+ * onboarding flow) are the only sources; when either is absent we
+ * return `source: "unconfigured"`. There is no per-session model write
+ * — the chat header reads this to display the active model.
  */
 
 import { CH } from "@shared/ipc/channels.js";

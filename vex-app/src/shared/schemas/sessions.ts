@@ -209,25 +209,20 @@ export const sessionDeleteResultSchema = z
   .strict();
 export type SessionDeleteResult = z.infer<typeof sessionDeleteResultSchema>;
 
-// ── Agent integration puzzle 1: per-session model contract ───────────────
+// ── Global runtime model resolution ──────────────────────────────────────
 //
-// `sessions.model_id` column does NOT exist yet — puzzle 06 adds the
-// migration. Puzzle 1 ships the contract so the renderer model picker
-// can wire end-to-end now and so the read-only handler can resolve the
-// global default without faking DB state.
+// Vex uses a single global model for every session, resolved by the
+// engine from `AGENT_PROVIDER`/`AGENT_MODEL`. There is no per-session
+// model: `sessions.getModel` is read-only and reports the resolved
+// global model so the chat header can show it.
 //
-// `source` is the canonical discriminator: `"global_default"` means
-// the resolver fell back to `AGENT_PROVIDER`/`AGENT_MODEL` env;
-// `"unconfigured"` means neither a per-session value nor a global
-// default is set (renderer surfaces "Provider not configured"). The
-// `"explicit"` variant is reserved for puzzle 06 once `sessions.model_id`
-// lands — including it here keeps the type closed against silent
-// migration drift.
+// `source` discriminates the two real states: `"global_default"` means
+// the resolver read `AGENT_PROVIDER`/`AGENT_MODEL`; `"unconfigured"`
+// means neither is set (renderer surfaces "Model not configured").
 
 export const sessionModelSourceSchema = z.enum([
   "global_default",
   "unconfigured",
-  "explicit",
 ]);
 export type SessionModelSource = z.infer<typeof sessionModelSourceSchema>;
 
@@ -240,9 +235,9 @@ export const sessionModelDtoSchema = z
     modelId: z.string().nullable(),
     source: sessionModelSourceSchema,
     /**
-     * Per-session override timestamp. Always `null` in puzzle 1 (no DB
-     * column yet); puzzle 06 will populate it when the user picks a
-     * model in the chat header.
+     * Always `null` — the model is global runtime config, not a
+     * per-session override, so there is no per-session update timestamp.
+     * Kept on the DTO for a stable shape the chat header can render.
      */
     updatedAt: z.string().datetime({ offset: true }).nullable(),
   })
@@ -255,26 +250,3 @@ export const sessionGetModelInputSchema = z
   })
   .strict();
 export type SessionGetModelInput = z.infer<typeof sessionGetModelInputSchema>;
-
-export const sessionSetModelInputSchema = z
-  .object({
-    sessionId: z.string().uuid(),
-    /** Provider-qualified model identifier (e.g. `"openrouter/anthropic/claude-opus-4.7"`). */
-    modelId: z.string().min(1).max(200),
-  })
-  .strict();
-export type SessionSetModelInput = z.infer<typeof sessionSetModelInputSchema>;
-
-/**
- * Future-shape contract for `sessions.setModel`. Puzzle 1 fail-closes
- * with `sessions.feature_unavailable`; puzzle 06 fills the body.
- */
-export const sessionSetModelResultSchema = z
-  .object({
-    sessionId: z.string().uuid(),
-    modelId: z.string().min(1).max(200),
-    status: z.enum(["updated", "unchanged", "unavailable"]),
-    message: z.string(),
-  })
-  .strict();
-export type SessionSetModelResult = z.infer<typeof sessionSetModelResultSchema>;

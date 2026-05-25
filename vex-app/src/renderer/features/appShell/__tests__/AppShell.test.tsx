@@ -59,6 +59,15 @@ vi.mock("@thesvg/react", () => ({
   Postgresql: () => null,
 }));
 
+// SessionContext now mounts SessionRuntimeBar → ModelBrandIcon, which
+// statically imports ~20 brand icons from "@thesvg/react". Mock the
+// component so this suite's partial @thesvg mock (AppShell.tsx's own
+// icons) stays sufficient and the runtime bar's model-name path is
+// isolated from the icon lib.
+vi.mock("../../wizard/steps/provider/ModelBrandIcon.js", () => ({
+  ModelBrandIcon: () => null,
+}));
+
 const { AppShell } = await import("../AppShell.js");
 
 const sessionsListMock = vi.fn<() => Promise<Result<readonly SessionListItem[]>>>();

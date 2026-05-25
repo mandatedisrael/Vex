@@ -9,8 +9,6 @@ import type {
   SessionList,
   SessionListItem,
   SessionModelDto,
-  SessionSetModelInput,
-  SessionSetModelResult,
   SessionSetPinnedInput,
   SessionSetPinnedResult,
 } from "../../../schemas/sessions.js";
@@ -40,20 +38,12 @@ export interface SessionsBridge {
     input: SessionDeleteInput
   ) => Promise<Result<SessionDeleteResult>>;
   /**
-   * Resolve the per-session model. Puzzle 1 returns the global env
-   * default (`AGENT_PROVIDER`/`AGENT_MODEL`) with `source:
-   * "global_default" | "unconfigured"` — the `sessions.model_id`
-   * column lands in puzzle 06.
+   * Resolve the global runtime model for the session — `source:
+   * "global_default"` (from `AGENT_PROVIDER`/`AGENT_MODEL`) or
+   * `"unconfigured"`. Vex uses one global model; there is no
+   * per-session model write.
    */
   readonly getModel: (
     input: SessionGetModelInput
   ) => Promise<Result<SessionModelDto>>;
-  /**
-   * Persist a per-session model choice. Fail-closed with
-   * `sessions.feature_unavailable` until puzzle 06 adds the
-   * migration + engine context loader.
-   */
-  readonly setModel: (
-    input: SessionSetModelInput
-  ) => Promise<Result<SessionSetModelResult>>;
 }

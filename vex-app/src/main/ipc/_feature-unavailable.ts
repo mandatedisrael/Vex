@@ -25,15 +25,13 @@ export type FeatureUnavailableDomain =
   | "runtime"
   | "mission"
   | "approvals"
-  | "wallets"
-  | "sessions";
+  | "wallets";
 
 const CODE_BY_DOMAIN: Readonly<Record<FeatureUnavailableDomain, VexErrorCode>> = {
   runtime: "runtime.feature_unavailable",
   mission: "mission.feature_unavailable",
   approvals: "approvals.feature_unavailable",
   wallets: "wallets.feature_unavailable",
-  sessions: "sessions.feature_unavailable",
 };
 
 export interface FeatureUnavailableArgs {

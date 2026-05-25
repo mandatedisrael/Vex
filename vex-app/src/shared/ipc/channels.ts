@@ -84,14 +84,13 @@ export const CH = {
     setPinned: "vex:sessions:setPinned",
     delete: "vex:sessions:delete",
     /**
-     * Agent integration puzzle 1 — per-session model contract. `getModel`
-     * is read-only and returns the resolved source (global default vs.
-     * unconfigured) without touching DB columns that don't exist yet.
-     * `setModel` fail-closes with `sessions.feature_unavailable` until
-     * puzzle 06 adds the `sessions.model_id` migration.
+     * Global runtime model resolution for a session. `getModel` is
+     * read-only and reports the model the engine resolves from
+     * `AGENT_PROVIDER`/`AGENT_MODEL` (source: global default vs.
+     * unconfigured). Vex uses one global model for every session — there
+     * is no per-session model write.
      */
     getModel: "vex:sessions:getModel",
-    setModel: "vex:sessions:setModel",
   },
 
   // Chat — operator text routed to agent or mission setup/run.
@@ -169,20 +168,23 @@ export const CH = {
     cancelPreparedIntent: "vex:wallets:cancelPreparedIntent",
   },
 
-  // Models — provider/model picker. Puzzle 1 returns a single "configured
-  // global default" derived from `AGENT_PROVIDER`/`AGENT_MODEL` in env;
-  // OpenRouter `/models` catalogue arrives in puzzle 06. No network call
-  // and no pricing/context claims in puzzle 1.
+  // Models — global model resolution. Returns a single "configured
+  // global default" derived from `AGENT_PROVIDER`/`AGENT_MODEL` in env.
+  // No network call and no pricing/context claims; a future OpenRouter
+  // `/models` catalogue fetch could enrich the option metadata.
   models: {
     listAvailable: "vex:models:listAvailable",
   },
 
   // Usage — last-turn + session totals from `usage_log`. Currency
   // defaults to USD; provider/model columns from the DB row pass through
-  // as `nullable` for older sessions.
+  // as `nullable` for older sessions. `getContextWindow` projects the
+  // session's `token_count` against the global `AGENT_CONTEXT_LIMIT` for
+  // the context meter (null result when the session is missing/deleted).
   usage: {
     getSessionTotals: "vex:usage:getSessionTotals",
     getLastTurn: "vex:usage:getLastTurn",
+    getContextWindow: "vex:usage:getContextWindow",
   },
 
   // Settings — read-only Phase 1 (Phase 2 dodaje setters)

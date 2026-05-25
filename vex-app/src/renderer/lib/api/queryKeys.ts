@@ -67,7 +67,24 @@ export const usageKeys = {
     ["usage", "sessionTotals", sessionId, { currency }] as const,
   lastTurn: (sessionId: string, currency: string) =>
     ["usage", "lastTurn", sessionId, { currency }] as const,
+  contextWindow: (sessionId: string) =>
+    ["usage", "contextWindow", sessionId] as const,
 };
+
+/**
+ * Predicate for invalidating every usage query of one session at once.
+ * All `usageKeys` factories intentionally keep `sessionId` at index 2
+ * (`["usage", <kind>, sessionId, ...]`), so the live-sync hook and the
+ * chat-submit success handler can target one session without
+ * enumerating each kind/currency variant. Named here so the positional
+ * contract is stated once.
+ */
+export function isUsageQueryForSession(
+  queryKey: readonly unknown[],
+  sessionId: string,
+): boolean {
+  return queryKey[0] === "usage" && queryKey[2] === sessionId;
+}
 
 export const runtimeKeys = {
   all: ["runtime"] as const,

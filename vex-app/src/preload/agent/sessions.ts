@@ -4,7 +4,6 @@ import {
   sessionDeleteInputSchema,
   sessionGetInputSchema,
   sessionGetModelInputSchema,
-  sessionSetModelInputSchema,
   sessionSetPinnedInputSchema,
 } from "../../shared/schemas/sessions.js";
 import type {
@@ -12,7 +11,6 @@ import type {
   SessionDeleteInput,
   SessionGetInput,
   SessionGetModelInput,
-  SessionSetModelInput,
   SessionSetPinnedInput,
 } from "../../shared/schemas/sessions.js";
 import type { SessionsBridge } from "../../shared/types/bridge/agent/sessions.js";
@@ -47,13 +45,6 @@ export const sessions = {
       CH.sessions.getModel,
       input,
       sessionGetModelInputSchema
-    );
-  },
-  setModel(input: SessionSetModelInput) {
-    return invokeWithSchema(
-      CH.sessions.setModel,
-      input,
-      sessionSetModelInputSchema
     );
   },
 } satisfies SessionsBridge;

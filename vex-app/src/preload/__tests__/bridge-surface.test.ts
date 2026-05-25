@@ -140,8 +140,8 @@ describe("preload bridge surface", () => {
       "CH.models.listAvailable",
       "CH.usage.getSessionTotals",
       "CH.usage.getLastTurn",
+      "CH.usage.getContextWindow",
       "CH.sessions.getModel",
-      "CH.sessions.setModel",
     ];
     const corpus = PRELOAD_FILES.map((f) => readFileSync(f, "utf8")).join("\n");
     for (const channel of expected) {

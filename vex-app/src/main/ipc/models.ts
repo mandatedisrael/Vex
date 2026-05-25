@@ -1,12 +1,11 @@
 /**
  * Models IPC handler — read-only "configured global default".
  *
- * Puzzle 1 reads `AGENT_PROVIDER` + `AGENT_MODEL` from `process.env`
- * (populated after vault unlock per existing onboarding flow) and
- * returns a single-option list. No network call, no OpenRouter
- * `/models` catalogue, no pricing/context claims. Pricing + context
- * length + brand catalogue land in puzzle 06 alongside the per-session
- * model migration.
+ * Reads `AGENT_PROVIDER` + `AGENT_MODEL` from `process.env` (populated
+ * after vault unlock per the onboarding flow) and returns a single-option
+ * list for the one global model every session uses. No network call, no
+ * OpenRouter `/models` catalogue, no pricing/context claims; a future
+ * catalogue fetch could enrich pricing + context length + brand.
  *
  * When the env vars are missing the handler returns
  * `{source: "unconfigured", models: [], fetchedAt: null}` — empty list,

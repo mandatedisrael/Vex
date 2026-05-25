@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   // usage-db
   getSessionTotals: vi.fn(),
   getLastTurn: vi.fn(),
+  getContextWindow: vi.fn(),
   // mission-runs-db
   getActiveRunForSession: vi.fn(),
   // approvals-db
@@ -62,6 +63,7 @@ vi.mock("../../database/messages-db.js", () => ({
 vi.mock("../../database/usage-db.js", () => ({
   getSessionTotals: mocks.getSessionTotals,
   getLastTurn: mocks.getLastTurn,
+  getContextWindow: mocks.getContextWindow,
 }));
 
 vi.mock("../../database/mission-runs-db.js", () => ({
@@ -88,7 +90,6 @@ const { registerApprovalsHandlers } = await import("../approvals.js");
 const { registerWalletsSessionHandlers } = await import("../wallets-session.js");
 const { registerModelsHandlers } = await import("../models.js");
 const { registerSessionsGetModelHandler } = await import("../sessions/get-model.js");
-const { registerSessionsSetModelHandler } = await import("../sessions/set-model.js");
 const { CH } = await import("@shared/ipc/channels.js");
 
 const trustedSender = createTrustedSender({ sender: createTestWebContents() });
@@ -116,13 +117,13 @@ beforeEach(() => {
   registerWalletsSessionHandlers();
   registerModelsHandlers();
   registerSessionsGetModelHandler();
-  registerSessionsSetModelHandler();
 });
 
 afterEach(() => {
   handlers.clear();
   delete process.env.AGENT_PROVIDER;
   delete process.env.AGENT_MODEL;
+  delete process.env.AGENT_CONTEXT_LIMIT;
 });
 
 type ResultShape = { ok: boolean; data?: unknown; error?: { code: string; domain: string } };
@@ -215,6 +216,38 @@ describe("usage handlers", () => {
 
   it("getLastTurn rejects payload without sessionId", async () => {
     const result = await call(CH.usage.getLastTurn, { currency: "USD" });
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation.invalid_input");
+  });
+
+  it("getContextWindow passes the resolved env limit to the db helper", async () => {
+    process.env.AGENT_CONTEXT_LIMIT = "200000";
+    mocks.getContextWindow.mockResolvedValueOnce({
+      ok: true,
+      data: { sessionId: SESSION, tokensUsed: 1234, contextLimit: 200000 },
+    });
+    const result = await call(CH.usage.getContextWindow, { sessionId: SESSION });
+    expect(result.ok).toBe(true);
+    expect(mocks.getContextWindow).toHaveBeenCalledWith(SESSION, 200000);
+  });
+
+  it("getContextWindow passes a null limit when AGENT_CONTEXT_LIMIT is invalid (no faked default)", async () => {
+    process.env.AGENT_CONTEXT_LIMIT = "not-a-number";
+    mocks.getContextWindow.mockResolvedValueOnce({ ok: true, data: null });
+    const result = await call(CH.usage.getContextWindow, { sessionId: SESSION });
+    expect(result.ok).toBe(true);
+    expect(mocks.getContextWindow).toHaveBeenCalledWith(SESSION, null);
+  });
+
+  it("getContextWindow returns a null result for a missing/deleted session", async () => {
+    mocks.getContextWindow.mockResolvedValueOnce({ ok: true, data: null });
+    const result = await call(CH.usage.getContextWindow, { sessionId: SESSION });
+    expect(result.ok).toBe(true);
+    expect(result.data).toBeNull();
+  });
+
+  it("getContextWindow rejects a non-uuid sessionId", async () => {
+    const result = await call(CH.usage.getContextWindow, { sessionId: "nope" });
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation.invalid_input");
   });
@@ -394,7 +427,7 @@ describe("DB helper errors preserve intended VexError shape", () => {
   });
 });
 
-describe("sessions.getModel / setModel handlers", () => {
+describe("sessions.getModel handler", () => {
   it("getModel returns global_default when env present", async () => {
     process.env.AGENT_PROVIDER = "openrouter";
     process.env.AGENT_MODEL = "anthropic/claude-opus-4.7";
@@ -409,14 +442,5 @@ describe("sessions.getModel / setModel handlers", () => {
     const result = await call(CH.sessions.getModel, { sessionId: SESSION });
     expect(result.ok).toBe(true);
     expect((result.data as { source: string }).source).toBe("unconfigured");
-  });
-
-  it("setModel fails closed with sessions.feature_unavailable", async () => {
-    const result = await call(CH.sessions.setModel, {
-      sessionId: SESSION,
-      modelId: "anthropic/claude-opus-4.7",
-    });
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("sessions.feature_unavailable");
   });
 });

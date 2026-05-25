@@ -17,10 +17,12 @@ import { Client, type ClientConfig } from "pg";
 import { err, ok, type Result, type VexError } from "@shared/ipc/result.js";
 import {
   USAGE_DEFAULT_CURRENCY,
+  type ContextWindowResult,
   type LastTurnUsageResult,
   type SessionUsageTotalsDto,
   type TurnUsageDto,
 } from "@shared/schemas/usage.js";
+import { VEX_APP_SESSION_SCOPE } from "@shared/schemas/sessions.js";
 import { buildPoolConfig } from "./db-config.js";
 import { log } from "../logger/index.js";
 
@@ -229,6 +231,45 @@ export async function getLastTurn(
       return ok(toTurnDto(row));
     } catch (cause) {
       return dbError("getLastTurn query failed", cause);
+    }
+  });
+}
+
+/**
+ * Context-window projection for the meter. Reads the session's
+ * `token_count` from the `sessions` table — a usage-meter read over a
+ * sessions column, deliberately app-scoped (`scope` + `deleted_at IS
+ * NULL`, mirroring `sessions-db.getSessionById`) so an unknown,
+ * soft-deleted, or foreign-scope id resolves to `null` instead of a
+ * fabricated `0 / limit` meter.
+ *
+ * `contextLimit` is resolved by the caller from the global
+ * `AGENT_CONTEXT_LIMIT` and passed through unchanged (or `null` when the
+ * configured value is invalid).
+ */
+export async function getContextWindow(
+  sessionId: string,
+  contextLimit: number | null,
+): Promise<Result<ContextWindowResult, VexError>> {
+  return withClient(async (client) => {
+    try {
+      const result = await client.query<{ token_count: number | string | null }>(
+        `SELECT token_count
+           FROM sessions
+          WHERE id = $1
+            AND scope = $2
+            AND deleted_at IS NULL`,
+        [sessionId, VEX_APP_SESSION_SCOPE],
+      );
+      const row = result.rows[0];
+      if (!row) return ok(null);
+      return ok({
+        sessionId,
+        tokensUsed: toInt(row.token_count),
+        contextLimit,
+      });
+    } catch (cause) {
+      return dbError("getContextWindow query failed", cause);
     }
   });
 }
