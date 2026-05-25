@@ -2,7 +2,7 @@
  * Session runtime bar — model + usage + context, shown under the session
  * context strip (agent integration puzzle 06).
  *
- * Three independent facts, each self-gating on ITS OWN data (NOT on model
+ * Four independent facts, each self-gating on ITS OWN data (NOT on model
  * configuration — usage rows + token_count persist across config changes,
  * so a currently-unconfigured model must not hide historical usage):
  *
@@ -14,9 +14,15 @@
  *  - **context**: tokens used vs the global limit. `null` result (missing
  *    /deleted session) → no meter; `null` limit (invalid config) → token
  *    count without a bar.
+ *  - **compaction** (stage 7-1): Track-2 worker status — "compacting" /
+ *    "queued" / "failed", or hidden when nothing is in flight. The chip
+ *    names the remote (OpenRouter, redacted) path in its accessible label,
+ *    since the worker is enabled by default.
  *
- * All four reads are TanStack queries kept fresh by `useUsageLiveSync`
- * (mounted in `SessionPanel`) + the chat-submit success invalidation.
+ * The model/usage/context reads are kept fresh by `useUsageLiveSync`
+ * (mounted in `SessionPanel`) + the chat-submit success invalidation;
+ * compaction has its own poll + `useCompactionLiveSync` (mounted here,
+ * since background Track-2 completion fires no transcript event).
  */
 
 import type { JSX } from "react";
@@ -26,11 +32,16 @@ import type {
   SessionUsageTotalsDto,
   TurnUsageDto,
 } from "@shared/schemas/usage.js";
+import type { CompactionStatusDto } from "@shared/schemas/compaction.js";
 import {
   useContextWindow,
   useLastTurnUsage,
   useSessionUsageTotals,
 } from "../../lib/api/usage.js";
+import {
+  useCompactionLiveSync,
+  useCompactionStatus,
+} from "../../lib/api/compaction.js";
 import { useSessionModel } from "../../lib/api/sessions.js";
 import { ModelBrandIcon } from "../wizard/steps/provider/ModelBrandIcon.js";
 
@@ -41,15 +52,21 @@ export interface SessionRuntimeBarProps {
 export function SessionRuntimeBar({
   sessionId,
 }: SessionRuntimeBarProps): JSX.Element {
+  useCompactionLiveSync(sessionId);
+
   const modelQuery = useSessionModel(sessionId);
   const lastTurnQuery = useLastTurnUsage(sessionId);
   const totalsQuery = useSessionUsageTotals(sessionId);
   const contextQuery = useContextWindow(sessionId);
+  const compactionQuery = useCompactionStatus(sessionId);
 
   const model = modelQuery.data?.ok ? modelQuery.data.data : null;
   const lastTurn = lastTurnQuery.data?.ok ? lastTurnQuery.data.data : null;
   const totals = totalsQuery.data?.ok ? totalsQuery.data.data : null;
   const context = contextQuery.data?.ok ? contextQuery.data.data : null;
+  const compaction = compactionQuery.data?.ok
+    ? compactionQuery.data.data
+    : null;
 
   return (
     <div
@@ -59,6 +76,7 @@ export function SessionRuntimeBar({
       <ModelIndicator model={model} />
       <UsageChip lastTurn={lastTurn} totals={totals} />
       <ContextMeter context={context} />
+      <CompactionChip status={compaction} />
     </div>
   );
 }
@@ -209,6 +227,54 @@ function ContextMeter({
         />
       </span>
       <span>{pct}%</span>
+    </span>
+  );
+}
+
+const COMPACTION_REMOTE_NOTE =
+  "Builds session memory from older messages via your OpenRouter model; " +
+  "the transcript is redacted before it is sent.";
+
+function CompactionChip({
+  status,
+}: {
+  readonly status: CompactionStatusDto | null;
+}): JSX.Element | null {
+  // `null` = session missing/deleted/out-of-scope → no chip.
+  if (status === null) return null;
+
+  const running = status.latest?.status === "running";
+  const active = status.activeCount > 0;
+
+  let label: string;
+  let state: "running" | "queued" | "failed";
+  if (active) {
+    label = running ? "Compacting…" : "Compaction queued";
+    state = running ? "running" : "queued";
+  } else if (status.latest?.status === "permanently_failed") {
+    label = "Compaction failed";
+    state = "failed";
+  } else {
+    // Nothing in flight and no terminal failure → keep the bar uncluttered.
+    return null;
+  }
+
+  // The remote-path note lives in `aria-label` (NOT title-only) so it is
+  // accessible without hover; `title` mirrors it for sighted pointer users.
+  // Full remote diagnostics land in stage 7-4.
+  return (
+    <span
+      data-vex-area="session-compaction-chip"
+      data-state={state}
+      className={`${PILL} ${
+        state === "failed"
+          ? "text-[#f0a0a0]"
+          : "text-[var(--color-text-muted)]"
+      }`}
+      title={`${label} · ${COMPACTION_REMOTE_NOTE}`}
+      aria-label={`Compaction status: ${label}. ${COMPACTION_REMOTE_NOTE}`}
+    >
+      {label}
     </span>
   );
 }

@@ -29,6 +29,8 @@ import {
 import { registerAllIpcHandlers } from "./ipc/register-all.js";
 import { cleanupOnBoot, cleanupOnQuit } from "./lifecycle/secret-cleanup.js";
 import { globalCleanup } from "./lifecycle/cleanup-registry.js";
+import { makeOrderedQuitCleanup } from "./lifecycle/ordered-quit-cleanup.js";
+import { setupCompactWorker } from "./agent/compact-worker.js";
 import { lockSecretSession } from "./secrets/session.js";
 import { createMainWindow } from "./windows/main-window.js";
 import { installMinimalMenu } from "./menu.js";
@@ -116,10 +118,19 @@ app.whenReady().then(async () => {
   // 6. IPC surface
   registerAllIpcHandlers();
 
-  // 6a. Register lifecycle-driven cleanup. cleanupOnQuit will run inside
-  // the will-quit hook via globalCleanup; cleanupOnBoot runs once now to
-  // sweep orphaned transient secrets from a prior crashed session.
-  globalCleanup.add(() => cleanupOnQuit());
+  // 6a. Agent integration stage 7-1: own the Track-2 compaction worker so
+  // enqueued compact_jobs process into session memory. Enabled by default,
+  // but idle until the vault injects OPENROUTER_API_KEY (the executor's own
+  // provider gate) and the compact_jobs schema is ready (supervisor probe).
+  // Started AFTER registerAllIpcHandlers so the agent bridges already exist.
+  const stopCompactWorker = setupCompactWorker();
+
+  // 6b. Register lifecycle-driven cleanup. The compaction worker must drain
+  // its in-flight job BEFORE cleanupOnQuit stops Compose/Postgres — and
+  // globalCleanup runs tasks concurrently, so makeOrderedQuitCleanup
+  // sequences stop() -> cleanupOnQuit in one ordered task. cleanupOnBoot
+  // runs once now to sweep orphaned transient secrets from a prior crash.
+  globalCleanup.add(makeOrderedQuitCleanup(stopCompactWorker, cleanupOnQuit));
   void cleanupOnBoot().catch((err) => {
     log.error("[main] cleanupOnBoot failed", err);
   });

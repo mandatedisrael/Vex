@@ -65,6 +65,7 @@ describe("CH / EV channel constants", () => {
     expect(typeof CH.models.listAvailable).toBe("string");
     expect(typeof CH.usage.getSessionTotals).toBe("string");
     expect(typeof CH.usage.getContextWindow).toBe("string");
+    expect(typeof CH.compaction.getStatus).toBe("string");
     expect(typeof CH.sessions.getModel).toBe("string");
   });
 

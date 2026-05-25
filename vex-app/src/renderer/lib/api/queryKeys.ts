@@ -86,6 +86,15 @@ export function isUsageQueryForSession(
   return queryKey[0] === "usage" && queryKey[2] === sessionId;
 }
 
+/**
+ * Compaction status (stage 7-1) — one read per session. Drives the Track-2
+ * worker chip in the runtime bar (queued / compacting / failed).
+ */
+export const compactionKeys = {
+  all: ["compaction"] as const,
+  status: (sessionId: string) => ["compaction", "status", sessionId] as const,
+};
+
 export const runtimeKeys = {
   all: ["runtime"] as const,
   state: (sessionId: string) => ["runtime", "state", sessionId] as const,

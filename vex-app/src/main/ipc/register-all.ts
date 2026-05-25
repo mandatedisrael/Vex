@@ -11,6 +11,7 @@ import { registerApprovalsHandlers } from "./approvals.js";
 import { registerCancelHandler } from "./cancel.js";
 import { registerCapabilitiesHandler } from "./capabilities.js";
 import { registerChatSubmitHandler } from "./chat.js";
+import { registerCompactionHandlers } from "./compaction.js";
 import { registerDatabaseHandlers } from "./database.js";
 import { registerDockerHandlers } from "./docker.js";
 import { registerMessagesHandlers } from "./messages.js";
@@ -72,6 +73,10 @@ export function registerAllIpcHandlers(): void {
   // the backing runtime ships in puzzles 03/04/05.
   teardowns.push(...registerMessagesHandlers());
   teardowns.push(...registerUsageHandlers());
+  // Agent integration stage 7-1: read-only Track-2 compaction status for the
+  // runtime bar. The Track-2 executor itself is owned by main and started in
+  // `index.ts` (see `setupCompactWorker`), not here.
+  teardowns.push(...registerCompactionHandlers());
   teardowns.push(...registerRuntimeHandlers());
   teardowns.push(...registerMissionHandlers());
   teardowns.push(...registerApprovalsHandlers());

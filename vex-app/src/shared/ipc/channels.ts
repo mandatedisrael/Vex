@@ -187,6 +187,15 @@ export const CH = {
     getContextWindow: "vex:usage:getContextWindow",
   },
 
+  // Compaction — read-only Track-2 worker status for the runtime bar
+  // (agent integration stage 7-1). `getStatus` projects the session's
+  // latest `compact_jobs` row + active job count (app-scoped). The Track-2
+  // executor itself is owned by Electron main; this is purely a status read
+  // (null when the session is missing/deleted/out-of-scope).
+  compaction: {
+    getStatus: "vex:compaction:getStatus",
+  },
+
   // Settings — read-only Phase 1 (Phase 2 dodaje setters)
   settings: {
     getPreferences: "vex:settings:getPreferences",

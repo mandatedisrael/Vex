@@ -141,6 +141,7 @@ describe("preload bridge surface", () => {
       "CH.usage.getSessionTotals",
       "CH.usage.getLastTurn",
       "CH.usage.getContextWindow",
+      "CH.compaction.getStatus",
       "CH.sessions.getModel",
     ];
     const corpus = PRELOAD_FILES.map((f) => readFileSync(f, "utf8")).join("\n");

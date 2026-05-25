@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   getSessionTotals: vi.fn(),
   getLastTurn: vi.fn(),
   getContextWindow: vi.fn(),
+  // compaction-db
+  getCompactionStatus: vi.fn(),
   // mission-runs-db
   getActiveRunForSession: vi.fn(),
   // approvals-db
@@ -66,6 +68,11 @@ vi.mock("../../database/usage-db.js", () => ({
   getContextWindow: mocks.getContextWindow,
 }));
 
+vi.mock("../../database/compaction-db.js", () => ({
+  getCompactionStatus: mocks.getCompactionStatus,
+  probeCompactJobsReady: vi.fn(),
+}));
+
 vi.mock("../../database/mission-runs-db.js", () => ({
   getActiveRunForSession: mocks.getActiveRunForSession,
 }));
@@ -84,6 +91,7 @@ vi.mock("../../logger/index.js", () => ({ log: mocks.log }));
 
 const { registerMessagesHandlers } = await import("../messages.js");
 const { registerUsageHandlers } = await import("../usage.js");
+const { registerCompactionHandlers } = await import("../compaction.js");
 const { registerRuntimeHandlers } = await import("../runtime.js");
 const { registerMissionHandlers } = await import("../mission.js");
 const { registerApprovalsHandlers } = await import("../approvals.js");
@@ -111,6 +119,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   registerMessagesHandlers();
   registerUsageHandlers();
+  registerCompactionHandlers();
   registerRuntimeHandlers();
   registerMissionHandlers();
   registerApprovalsHandlers();
@@ -250,6 +259,58 @@ describe("usage handlers", () => {
     const result = await call(CH.usage.getContextWindow, { sessionId: "nope" });
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation.invalid_input");
+  });
+});
+
+describe("compaction handler", () => {
+  it("getStatus returns the mapped status DTO", async () => {
+    mocks.getCompactionStatus.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        sessionId: SESSION,
+        latest: {
+          status: "running",
+          checkpointGeneration: 2,
+          updatedAt: "2026-05-21T10:00:00.000Z",
+        },
+        activeCount: 1,
+      },
+    });
+    const result = await call(CH.compaction.getStatus, { sessionId: SESSION });
+    expect(result.ok).toBe(true);
+    expect(mocks.getCompactionStatus).toHaveBeenCalledWith(SESSION);
+  });
+
+  it("getStatus returns a null result for a missing/foreign-scope session", async () => {
+    mocks.getCompactionStatus.mockResolvedValueOnce({ ok: true, data: null });
+    const result = await call(CH.compaction.getStatus, { sessionId: SESSION });
+    expect(result.ok).toBe(true);
+    expect(result.data).toBeNull();
+  });
+
+  it("getStatus rejects a non-uuid sessionId", async () => {
+    const result = await call(CH.compaction.getStatus, { sessionId: "nope" });
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation.invalid_input");
+  });
+
+  it("preserves a compaction-domain DB error (not downgraded)", async () => {
+    mocks.getCompactionStatus.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: "internal.unexpected",
+        domain: "compaction",
+        message: "Unable to load compaction status.",
+        retryable: true,
+        userActionable: false,
+        redacted: true,
+      },
+    });
+    const result = await call(CH.compaction.getStatus, { sessionId: SESSION });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error?.code).toBe("internal.unexpected");
+    expect(result.error?.domain).toBe("compaction");
   });
 });
 

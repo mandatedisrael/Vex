@@ -36,7 +36,7 @@ describe("Result helpers", () => {
 });
 
 describe("VEX_DOMAINS / VEX_ERROR_CODES bridge coverage", () => {
-  it("includes the seven new bridge domains + the sessions domain", () => {
+  it("includes the agent-integration bridge domains + the sessions domain", () => {
     // Closed-union exhaustiveness assertion at the bottom of result.ts
     // already prevents the union from drifting from the runtime array.
     // This runtime check gives a readable error when grepping CI logs.
@@ -48,6 +48,7 @@ describe("VEX_DOMAINS / VEX_ERROR_CODES bridge coverage", () => {
       "wallets",
       "models",
       "usage",
+      "compaction",
       "sessions",
     ] as const;
     for (const domain of required) {

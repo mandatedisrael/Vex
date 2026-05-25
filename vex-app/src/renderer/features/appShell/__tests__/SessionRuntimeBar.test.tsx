@@ -33,6 +33,9 @@ interface VexStub {
   readonly getLastTurn: ReturnType<typeof vi.fn>;
   readonly getSessionTotals: ReturnType<typeof vi.fn>;
   readonly getContextWindow: ReturnType<typeof vi.fn>;
+  // Optional — defaults to a hidden chip (`ok(null)`) so the existing
+  // model/usage/context tests stay unaffected by the stage 7-1 chip.
+  readonly getCompactionStatus?: ReturnType<typeof vi.fn>;
 }
 
 function setVex(stub: VexStub): void {
@@ -45,6 +48,14 @@ function setVex(stub: VexStub): void {
         getLastTurn: stub.getLastTurn,
         getSessionTotals: stub.getSessionTotals,
         getContextWindow: stub.getContextWindow,
+      },
+      compaction: {
+        getStatus:
+          stub.getCompactionStatus ?? vi.fn().mockResolvedValue(ok(null)),
+      },
+      engine: {
+        // useCompactionLiveSync subscribes here; noop unsubscribe.
+        onTranscriptAppend: () => () => {},
       },
     },
   });
@@ -211,5 +222,145 @@ describe("SessionRuntimeBar", () => {
       expect(meter).not.toBeNull();
       expect(meter?.textContent).not.toContain("%");
     });
+  });
+});
+
+describe("SessionRuntimeBar — compaction chip (stage 7-1)", () => {
+  function compactionStub(
+    getCompactionStatus: ReturnType<typeof vi.fn>,
+  ): VexStub {
+    return {
+      getModel: vi.fn().mockResolvedValue(ok(MODEL_CONFIGURED)),
+      getLastTurn: vi.fn().mockResolvedValue(ok(null)),
+      getSessionTotals: vi.fn().mockResolvedValue(ok(totals(0, null))),
+      getContextWindow: vi.fn().mockResolvedValue(ok(null)),
+      getCompactionStatus,
+    };
+  }
+
+  function status(
+    latest:
+      | { status: string; checkpointGeneration: number; updatedAt: string }
+      | null,
+    activeCount: number,
+  ) {
+    return { sessionId: SESSION, latest, activeCount };
+  }
+
+  it("shows 'Compacting…' with an accessible remote-path note while running", async () => {
+    setVex(
+      compactionStub(
+        vi
+          .fn()
+          .mockResolvedValue(
+            ok(
+              status(
+                { status: "running", checkpointGeneration: 3, updatedAt: ISO },
+                1,
+              ),
+            ),
+          ),
+      ),
+    );
+    const { container } = render(
+      createElement(SessionRuntimeBar, { sessionId: SESSION }),
+      { wrapper: makeWrapper(freshClient()) },
+    );
+    await waitFor(() => {
+      const chip = container.querySelector(
+        '[data-vex-area="session-compaction-chip"][data-state="running"]',
+      );
+      expect(chip).not.toBeNull();
+      expect(chip?.textContent).toContain("Compacting");
+      // Remote-path note lives on aria-label (not title-only) — accessible.
+      expect(chip?.getAttribute("aria-label")).toContain("OpenRouter");
+    });
+  });
+
+  it("shows 'Compaction queued' when a job is pending", async () => {
+    setVex(
+      compactionStub(
+        vi
+          .fn()
+          .mockResolvedValue(
+            ok(
+              status(
+                { status: "pending", checkpointGeneration: 1, updatedAt: ISO },
+                2,
+              ),
+            ),
+          ),
+      ),
+    );
+    const { container } = render(
+      createElement(SessionRuntimeBar, { sessionId: SESSION }),
+      { wrapper: makeWrapper(freshClient()) },
+    );
+    await waitFor(() => {
+      const chip = container.querySelector(
+        '[data-vex-area="session-compaction-chip"][data-state="queued"]',
+      );
+      expect(chip).not.toBeNull();
+      expect(chip?.textContent).toContain("queued");
+    });
+  });
+
+  it("shows 'Compaction failed' for a terminal failure with nothing active", async () => {
+    setVex(
+      compactionStub(
+        vi.fn().mockResolvedValue(
+          ok(
+            status(
+              {
+                status: "permanently_failed",
+                checkpointGeneration: 1,
+                updatedAt: ISO,
+              },
+              0,
+            ),
+          ),
+        ),
+      ),
+    );
+    const { container } = render(
+      createElement(SessionRuntimeBar, { sessionId: SESSION }),
+      { wrapper: makeWrapper(freshClient()) },
+    );
+    await waitFor(() => {
+      expect(
+        container.querySelector(
+          '[data-vex-area="session-compaction-chip"][data-state="failed"]',
+        ),
+      ).not.toBeNull();
+    });
+  });
+
+  it("hides the chip when the latest job completed and nothing is active", async () => {
+    setVex(
+      compactionStub(
+        vi
+          .fn()
+          .mockResolvedValue(
+            ok(
+              status(
+                { status: "completed", checkpointGeneration: 1, updatedAt: ISO },
+                0,
+              ),
+            ),
+          ),
+      ),
+    );
+    const { container } = render(
+      createElement(SessionRuntimeBar, { sessionId: SESSION }),
+      { wrapper: makeWrapper(freshClient()) },
+    );
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-vex-area="session-model-indicator"]'),
+      ).not.toBeNull();
+    });
+    expect(
+      container.querySelector('[data-vex-area="session-compaction-chip"]'),
+    ).toBeNull();
   });
 });

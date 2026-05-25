@@ -46,6 +46,14 @@ export type VexDomain =
   | "models"
   | "usage"
   /**
+   * Agent integration stage 7-1 — read-only `compaction.getStatus`
+   * (Track-2 worker job status for the runtime bar). Electron main owns
+   * the executor; this domain is purely the status read surface. DB
+   * unavailability maps to `internal.unexpected` like the other read
+   * domains (no `compaction.feature_unavailable` — there is no mutation).
+   */
+  | "compaction"
+  /**
    * Used by the read-only `sessions.getModel` handler (global runtime
    * model resolution). Existing sessions handlers
    * (`vex:sessions:create|list|get|setPinned|delete`) deliberately keep
@@ -249,6 +257,7 @@ export const VEX_DOMAINS = [
   "wallets",
   "models",
   "usage",
+  "compaction",
   "sessions",
   "preload",
   "internal",
