@@ -7,7 +7,7 @@
  * history render from their DTOs.
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
@@ -42,6 +42,7 @@ const updateStatusMock = vi.fn();
 const listSessionMock = vi.fn();
 const getStatsMock = vi.fn();
 const listHistoryMock = vi.fn();
+const modelsListMock = vi.fn();
 
 function setVex(): void {
   Object.defineProperty(window, "vex", {
@@ -51,6 +52,7 @@ function setVex(): void {
       knowledge: { list: knowledgeListMock, updateStatus: updateStatusMock },
       memory: { listSession: listSessionMock, getStats: getStatsMock },
       compaction: { listHistory: listHistoryMock },
+      models: { listAvailable: modelsListMock },
     },
   });
 }
@@ -70,6 +72,14 @@ afterEach(() => {
   uiState.activeSessionId = null;
   // @ts-expect-error — test cleanup
   delete window.vex;
+});
+
+beforeEach(() => {
+  // Default: no model configured → the privacy section shows its idle copy.
+  // Tests that exercise the configured path override this.
+  modelsListMock.mockResolvedValue(
+    ok({ source: "unconfigured", models: [], fetchedAt: null }),
+  );
 });
 
 describe("KnowledgePanel", () => {
@@ -282,5 +292,62 @@ describe("KnowledgePanel", () => {
     expect(
       screen.queryByRole("button", { name: "Invalidate Old Note" }),
     ).toBeNull();
+  });
+
+  it("explains the Track-2 remote path and names the configured model (7-4)", async () => {
+    knowledgeListMock.mockResolvedValue(ok([]));
+    modelsListMock.mockResolvedValue(
+      ok({
+        source: "global_default",
+        models: [
+          {
+            providerId: "openrouter",
+            modelId: "anthropic/claude-opus-4-7",
+            displayName: "Claude Opus 4.7",
+            brand: "anthropic",
+            contextLength: null,
+            pricingInputPerMillion: null,
+            pricingOutputPerMillion: null,
+          },
+        ],
+        fetchedAt: null,
+      }),
+    );
+    setVex();
+    render(createElement(KnowledgePanel), { wrapper: makeWrapper(freshClient()) });
+
+    // Live model — the same AGENT_MODEL the chunker calls — named via OpenRouter.
+    await waitFor(() => {
+      expect(screen.getByText("anthropic/claude-opus-4-7")).not.toBeNull();
+    });
+    expect(screen.getByText(/via OpenRouter/i)).not.toBeNull();
+    // Redaction disclosure: exact tiers, and the no-unredacted-payloads claim.
+    // The copy must NOT imply zero transcript-derived text leaves the machine.
+    expect(screen.getByText(/wallet seeds, private keys/i)).not.toBeNull();
+    // A redacted transcript copy IS sent — the disclosure must not imply
+    // that nothing transcript-derived leaves the machine. The emphasized
+    // word lives in its own span; the surrounding phrase is contiguous.
+    expect(screen.getByText("redacted")).not.toBeNull();
+    expect(
+      screen.getByText(/copy of that archived transcript/i),
+    ).not.toBeNull();
+    expect(
+      screen.getByText(/never include unredacted memory payloads/i),
+    ).not.toBeNull();
+  });
+
+  it("shows the memory builder as idle when no model is configured (7-4)", async () => {
+    knowledgeListMock.mockResolvedValue(ok([]));
+    modelsListMock.mockResolvedValue(
+      ok({ source: "unconfigured", models: [], fetchedAt: null }),
+    );
+    setVex();
+    render(createElement(KnowledgePanel), { wrapper: makeWrapper(freshClient()) });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/idle until an OpenRouter model is configured/i),
+      ).not.toBeNull();
+    });
   });
 });
