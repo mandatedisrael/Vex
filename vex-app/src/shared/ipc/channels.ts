@@ -268,12 +268,18 @@ export const EV = {
    *    a signal; renderer invalidates the session's runtime state
    *    query. Lease metadata is bounded to `leaseActive` +
    *    `leaseExpiresAt` — owner IDs are internal runtime state.
+   *  - `streamDelta` (puzzle 09) fires once per provider chunk during a
+   *    turn as an EPHEMERAL, sanitized preview (token text, tool-call
+   *    status WITHOUT raw args, usage, done, error). The renderer replaces
+   *    it with the persisted message DTO on `transcriptAppend`.
    *
-   * DB remains source of truth for both.
+   * DB remains source of truth for all three — events are refresh/preview
+   * signals, never canonical state.
    */
   engine: {
     transcriptAppend: "vex:event:engine:transcriptAppend",
     controlState: "vex:event:engine:controlState",
+    streamDelta: "vex:event:engine:streamDelta",
   },
 } as const;
 

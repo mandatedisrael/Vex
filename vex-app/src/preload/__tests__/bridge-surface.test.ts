@@ -166,4 +166,15 @@ describe("preload bridge surface", () => {
       "onTranscriptAppend not exposed by the preload composer",
     ).toContain("onTranscriptAppend");
   });
+
+  it("exposes EV.engine.streamDelta and the stream bridge method", () => {
+    const corpus = PRELOAD_FILES.map((f) => readFileSync(f, "utf8")).join("\n");
+    expect(corpus, "EV.engine.streamDelta not referenced in preload").toContain(
+      "EV.engine.streamDelta",
+    );
+    expect(
+      corpus,
+      "onStreamDelta not exposed by the preload composer",
+    ).toContain("onStreamDelta");
+  });
 });

@@ -56,6 +56,15 @@ describe("CH / EV channel constants", () => {
     expect(EV.engine.transcriptAppend).toMatch(EVENT_PATTERN);
   });
 
+  it("ships EV.engine.streamDelta with the canonical channel name", () => {
+    // `setupStreamBridge` (in `main/agent/stream-bridge.ts`) publishes the
+    // ephemeral, sanitized token/tool/usage preview here. The renderer
+    // subscribes via `window.vex.engine.onStreamDelta`, which re-validates
+    // through `streamDeltaEventSchema` before invoking the callback.
+    expect(EV.engine.streamDelta).toBe("vex:event:engine:streamDelta");
+    expect(EV.engine.streamDelta).toMatch(EVENT_PATTERN);
+  });
+
   it("CH.messages/runtime/mission/approvals/wallets/models/usage namespaces exist", () => {
     expect(typeof CH.messages.getTail).toBe("string");
     expect(typeof CH.runtime.getState).toBe("string");

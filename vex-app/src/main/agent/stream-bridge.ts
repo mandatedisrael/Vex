@@ -1,0 +1,146 @@
+/**
+ * Engine -> renderer stream-delta bridge (Stage 9-2).
+ *
+ * Subscribes to the in-process `streamDeltaBus` (canonical engine spine in
+ * `src/vex-agent/engine/events/stream-bus.ts`, added in 9-1) and broadcasts an
+ * EPHEMERAL, SANITIZED preview to every BrowserWindow on
+ * `EV.engine.streamDelta`.
+ *
+ * Unlike `transcript-bridge` (a pass-through validate), this bridge MAPS the
+ * engine event into the renderer-facing shape BEFORE validating, because the
+ * boundary must sanitize:
+ *  - `tool_call` deltas: the raw incremental-args fragment (`argsDelta`) is
+ *    DROPPED. Mid-stream JSON fragments cannot be safely redacted; the
+ *    canonical redacted args arrive later via the persisted `tool_call` DTO.
+ *  - `error` deltas: the raw provider message is replaced with a safe generic
+ *    (`"Stream error"`); only the numeric `code` is preserved.
+ *
+ * The mapper is fail-closed + non-throwing: malformed engine input maps to
+ * `null` (or, if it throws, is caught) and is dropped + logged — it never
+ * reaches preload. After mapping, the strict shared schema re-validates
+ * (defense-in-depth; the preload subscriber re-validates again as a third
+ * layer). The DB transcript stays the source of truth; deltas are preview only.
+ *
+ * Import discipline: the bus + engine type are imported DIRECTLY from
+ * `stream-bus.js`, NOT the `engine/events/index.js` barrel (which would pull
+ * the DB client into the main-process graph at bridge-setup time).
+ */
+
+import { EV } from "@shared/ipc/channels.js";
+import {
+  STREAM_DELTA_EVENT_TYPE,
+  streamDeltaEventSchema,
+  type StreamDeltaEvent as RendererStreamDeltaEvent,
+} from "@shared/schemas/stream.js";
+import {
+  streamDeltaBus,
+  type StreamDeltaEvent as EngineStreamDeltaEvent,
+} from "@vex-agent/engine/events/stream-bus.js";
+import { broadcastToAllWindows } from "../lifecycle/broadcast.js";
+import { log } from "../logger/index.js";
+
+/** Renderer-facing replacement for any provider-supplied error text. */
+const SAFE_STREAM_ERROR_MESSAGE = "Stream error";
+
+/**
+ * Map a raw engine stream delta to the sanitized renderer shape. Returns
+ * `null` for anything it cannot safely map (null/missing/unknown delta) so the
+ * caller drops it. Pure + defensive — treats the input as untrusted, never
+ * forwards `argsDelta`, and never forwards raw provider error text.
+ */
+export function toRendererStreamDelta(
+  event: EngineStreamDeltaEvent,
+): RendererStreamDeltaEvent | null {
+  // Defensive: the bus is typed, but this bridge is the trust boundary.
+  // A missing/null delta maps to null (dropped); a null `event` throws on
+  // this read and is caught by the caller's try/catch.
+  const delta = event.delta as EngineStreamDeltaEvent["delta"] | null | undefined;
+  if (delta == null) {
+    return null;
+  }
+
+  let payload: RendererStreamDeltaEvent["delta"];
+  switch (delta.kind) {
+    case "text":
+      payload = { kind: "text", text: delta.text };
+      break;
+    case "reasoning":
+      payload = { kind: "reasoning", text: delta.text };
+      break;
+    case "tool_call":
+      // argsDelta intentionally dropped (sanitization-by-omission).
+      payload = {
+        kind: "tool_call",
+        toolCallIndex: delta.toolCallIndex,
+        toolCallId: delta.toolCallId,
+        toolCallName: delta.toolCallName,
+      };
+      break;
+    case "usage":
+      payload = { kind: "usage", usage: delta.usage };
+      break;
+    case "done":
+      payload = { kind: "done" };
+      break;
+    case "error":
+      // Raw provider text is NOT trusted at the boundary — replace it.
+      payload = {
+        kind: "error",
+        message: SAFE_STREAM_ERROR_MESSAGE,
+        code: delta.code ?? null,
+      };
+      break;
+    default:
+      return null;
+  }
+
+  return {
+    type: STREAM_DELTA_EVENT_TYPE,
+    sessionId: event.sessionId,
+    streamId: event.streamId,
+    sequence: event.sequence,
+    deltaType: payload.kind,
+    delta: payload,
+    createdAt: event.createdAt,
+    correlationId: event.correlationId,
+  };
+}
+
+/**
+ * Subscribe the stream bus to the IPC broadcaster. Returns the teardown
+ * callback — caller pushes it into `globalCleanup` so app quit / reload
+ * removes the listener cleanly.
+ */
+export function setupStreamBridge(): () => void {
+  const off = streamDeltaBus.subscribe((event) => {
+    let mapped: RendererStreamDeltaEvent | null;
+    try {
+      mapped = toRendererStreamDelta(event);
+    } catch (err) {
+      // Fail-closed: a malformed engine event must never crash the bridge.
+      log.warn("[agent:stream-bridge] mapper threw on engine.stream.delta", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+    if (mapped === null) {
+      log.warn("[agent:stream-bridge] dropped unmappable engine.stream.delta");
+      return;
+    }
+
+    const parsed = streamDeltaEventSchema.safeParse(mapped);
+    if (!parsed.success) {
+      // Structured + payload-free log (no delta content leak).
+      log.warn("[agent:stream-bridge] dropped invalid engine.streamDelta payload", {
+        issues: parsed.error.issues,
+      });
+      return;
+    }
+
+    broadcastToAllWindows(EV.engine.streamDelta, parsed.data);
+  });
+
+  return () => {
+    off();
+  };
+}
