@@ -1,15 +1,15 @@
 /**
- * SessionTranscript render tests (stage 8-1).
+ * SessionTranscript render tests (stage 8-1 + 8-2b).
  *
- * Verifies: the tail renders one row per message with the right
- * `data-vex-message-role`; tool name + system notice text show; the empty and
- * handler-error (`Result.ok === false`) states render; and — the security
- * guarantee for 8-1 — message content is printed as a literal text node, never
- * parsed as HTML (no injected element, only the Vex avatar `<img>`).
+ * Drives the real `useTranscriptInfinite` path through a mocked
+ * `window.vex.messages.list` (cursor-based) + a live QueryClient. Verifies:
+ * newest-page render with role selectors; content stays literal (never HTML);
+ * empty + initial-error states; load-older on scroll-to-top; and an
+ * older-page failure that keeps loaded messages and shows a top banner.
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
 import type {
@@ -21,7 +21,7 @@ import { SessionTranscript } from "../SessionTranscript.js";
 
 const SESSION = "00000000-0000-4000-8000-0000000000aa";
 const ISO = "2026-05-26T10:00:00.000Z";
-const getTailMock = vi.fn();
+const listMock = vi.fn();
 
 function ok<T>(data: T) {
   return { ok: true as const, data };
@@ -46,11 +46,32 @@ function msg(p: {
   };
 }
 
+function page(items: SessionMessageDto[], nextCursorId: number | null) {
+  return ok({
+    items,
+    nextCursor: nextCursorId === null ? null : { createdAt: ISO, id: nextCursorId },
+    hasMore: nextCursorId !== null,
+  });
+}
+
+const failure = {
+  ok: false as const,
+  error: {
+    code: "internal.unexpected",
+    domain: "data",
+    message: "DB is down",
+    retryable: true,
+    userActionable: true,
+    redacted: true,
+    correlationId: "c",
+  },
+};
+
 function setVex(): void {
   Object.defineProperty(window, "vex", {
     configurable: true,
     writable: true,
-    value: { messages: { getTail: getTailMock } },
+    value: { messages: { list: listMock } },
   });
 }
 
@@ -64,6 +85,12 @@ function freshClient(): QueryClient {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
+function getScroller(container: HTMLElement): HTMLElement {
+  const el = container.querySelector('[data-vex-area="chat-transcript"]');
+  if (el === null) throw new Error("transcript scroller not found");
+  return el as HTMLElement;
+}
+
 afterEach(() => {
   vi.clearAllMocks();
   // @ts-expect-error — test cleanup
@@ -71,11 +98,11 @@ afterEach(() => {
 });
 
 describe("SessionTranscript", () => {
-  it("renders each role and never parses message content as HTML", async () => {
+  it("renders the newest page rows and never parses content as HTML", async () => {
     const injected = '<img src=x onerror="alert(1)"> **not bold**';
-    getTailMock.mockResolvedValue(
-      ok({
-        items: [
+    listMock.mockResolvedValue(
+      page(
+        [
           msg({ id: 1, role: "user", kind: "text", content: "hello vex" }),
           msg({ id: 2, role: "assistant", kind: "text", content: injected }),
           msg({
@@ -92,9 +119,8 @@ describe("SessionTranscript", () => {
             content: "context compacted",
           }),
         ],
-        nextCursor: null,
-        hasMore: false,
-      }),
+        null,
+      ),
     );
     setVex();
     const { container } = render(
@@ -115,17 +141,18 @@ describe("SessionTranscript", () => {
     ).not.toBeNull();
     expect(screen.getByText("swap")).not.toBeNull();
     expect(screen.getByText("context compacted")).not.toBeNull();
-    // The injected markup is shown verbatim — no element is created from it.
     expect(screen.getByText(/onerror="alert\(1\)"/)).not.toBeNull();
     expect(container.querySelector("img[onerror]")).toBeNull();
-    // The only image is the Vex avatar on the assistant row.
     expect(container.querySelector('img[src="/vex.jpg"]')).not.toBeNull();
+    expect(listMock).toHaveBeenCalledWith({
+      sessionId: SESSION,
+      cursor: null,
+      limit: 50,
+    });
   });
 
   it("shows the empty state when there are no messages", async () => {
-    getTailMock.mockResolvedValue(
-      ok({ items: [], nextCursor: null, hasMore: false }),
-    );
+    listMock.mockResolvedValue(page([], null));
     setVex();
     render(createElement(SessionTranscript, { sessionId: SESSION }), {
       wrapper: makeWrapper(freshClient()),
@@ -135,19 +162,8 @@ describe("SessionTranscript", () => {
     });
   });
 
-  it("surfaces a handler error (Result.ok === false) as an alert", async () => {
-    getTailMock.mockResolvedValue({
-      ok: false,
-      error: {
-        code: "internal.unexpected",
-        domain: "data",
-        message: "DB is down",
-        retryable: true,
-        userActionable: true,
-        redacted: true,
-        correlationId: "c",
-      },
-    });
+  it("surfaces an initial-page failure as an alert", async () => {
+    listMock.mockResolvedValue(failure);
     setVex();
     render(createElement(SessionTranscript, { sessionId: SESSION }), {
       wrapper: makeWrapper(freshClient()),
@@ -156,5 +172,104 @@ describe("SessionTranscript", () => {
       expect(screen.getByText("DB is down")).not.toBeNull();
     });
     expect(screen.getByRole("alert")).not.toBeNull();
+  });
+
+  it("loads an older page when scrolled to the top", async () => {
+    listMock.mockImplementation((input: { readonly cursor: unknown }) =>
+      Promise.resolve(
+        input.cursor === null
+          ? page([msg({ id: 3, role: "user", kind: "text", content: "newest" })], 3)
+          : page([msg({ id: 1, role: "user", kind: "text", content: "oldest" })], null),
+      ),
+    );
+    setVex();
+    const { container } = render(
+      createElement(SessionTranscript, { sessionId: SESSION }),
+      { wrapper: makeWrapper(freshClient()) },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("newest")).not.toBeNull();
+    });
+    fireEvent.scroll(getScroller(container));
+    await waitFor(() => {
+      expect(screen.getByText("oldest")).not.toBeNull();
+    });
+    expect(screen.getByText("newest")).not.toBeNull();
+  });
+
+  it("keeps loaded messages and shows a banner when an older page fails", async () => {
+    listMock.mockImplementation((input: { readonly cursor: unknown }) =>
+      Promise.resolve(
+        input.cursor === null
+          ? page([msg({ id: 3, role: "user", kind: "text", content: "newest" })], 3)
+          : failure,
+      ),
+    );
+    setVex();
+    const { container } = render(
+      createElement(SessionTranscript, { sessionId: SESSION }),
+      { wrapper: makeWrapper(freshClient()) },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("newest")).not.toBeNull();
+    });
+    fireEvent.scroll(getScroller(container));
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn't load older messages/i)).not.toBeNull();
+    });
+    expect(screen.getByText("newest")).not.toBeNull();
+  });
+
+  it("does not wedge after an older-page failure: a later new message still bottom-follows", async () => {
+    let withExtra = false;
+    listMock.mockImplementation((input: { readonly cursor: unknown }) => {
+      if (input.cursor !== null) return Promise.resolve(failure); // older fails
+      const items = withExtra
+        ? [
+            msg({ id: 3, role: "user", kind: "text", content: "newest" }),
+            msg({ id: 4, role: "user", kind: "text", content: "newer" }),
+          ]
+        : [msg({ id: 3, role: "user", kind: "text", content: "newest" })];
+      return Promise.resolve(page(items, 3)); // hasMore → load-older is offered
+    });
+    setVex();
+    const client = freshClient();
+    const { container } = render(
+      createElement(SessionTranscript, { sessionId: SESSION }),
+      { wrapper: makeWrapper(client) },
+    );
+    await waitFor(() => {
+      expect(screen.getByText("newest")).not.toBeNull();
+    });
+
+    const scroller = getScroller(container);
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 200 });
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 500 });
+
+    // Scroll to the top → older fetch fails → banner; the anchor must clear.
+    scroller.scrollTop = 0;
+    fireEvent.scroll(scroller);
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn't load older messages/i)).not.toBeNull();
+    });
+
+    // User scrolls back to the bottom → re-pinned (500 - 300 - 200 = 0 < 48).
+    scroller.scrollTop = 300;
+    fireEvent.scroll(scroller);
+
+    // A new newest message arrives via a live refetch; the list grows taller.
+    withExtra = true;
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 700 });
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ["messages", SESSION] });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("newer")).not.toBeNull();
+    });
+
+    // Bottom-follow ran (a stale anchor would have blocked it) → scrolled to 700.
+    expect(scroller.scrollTop).toBe(700);
   });
 });

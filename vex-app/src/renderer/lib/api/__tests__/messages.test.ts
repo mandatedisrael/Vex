@@ -1,13 +1,12 @@
 /**
- * Tests for the live transcript sync hook (agent integration puzzle 02).
- *
- * Verifies:
- *  - subscribe + setInterval wiring on mount;
- *  - invalidation prefix matches `messagesKeys.forSession(sessionId)`
- *    and reaches BOTH `useMessageTail(s, 50)` and `useMessageTail(s, 100)`
- *    so the puzzle-02 re-key works as designed;
- *  - mismatched sessionId payloads are ignored;
- *  - unmount unsubscribes + clears the interval.
+ * Tests for the transcript query layer (agent integration puzzle 02 + stage
+ * 8-2b):
+ *  - `useTranscriptLiveSync`: subscribe + setInterval wiring on mount; the
+ *    invalidation prefix `messagesKeys.forSession(s)` reaches the infinite
+ *    transcript key (any limit); mismatched sessionId payloads are ignored;
+ *    unmount unsubscribes + clears the interval;
+ *  - `flattenTranscriptPages`: chronological order + dedupe + skip-failed;
+ *  - `getTranscriptNextPageParam`: more / none / page-cap / failed.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,10 +16,15 @@ import type { ReactNode } from "react";
 import { createElement } from "react";
 
 import {
+  flattenTranscriptPages,
+  getTranscriptNextPageParam,
+  MAX_TRANSCRIPT_PAGES,
   useTranscriptLiveSync,
   TRANSCRIPT_LIVE_FALLBACK_POLL_MS,
 } from "../messages.js";
 import { messagesKeys } from "../queryKeys.js";
+import type { Result } from "@shared/ipc/result.js";
+import type { MessagePage, SessionMessageDto } from "@shared/schemas/messages.js";
 
 type TranscriptListener = (event: {
   type: string;
@@ -155,20 +159,104 @@ describe("useTranscriptLiveSync", () => {
     expect(invalidateSpy).toHaveBeenCalledTimes(2);
   });
 
-  it("prefix invalidation reaches every active variant for the same session", () => {
-    // This test pins the puzzle-02 re-key: `messagesKeys.forSession(s)`
-    // must match `tail(s, 50)`, `tail(s, 100)`, `list(s, 50, null)`, and
-    // `around(s, ..., before, after)` — all under the
-    // `["messages", sessionId]` prefix.
-    const tail50 = messagesKeys.tail(SESSION_A, 50);
-    const tail100 = messagesKeys.tail(SESSION_A, 100);
-    const list = messagesKeys.list(SESSION_A, 50, null);
-    const around = messagesKeys.around(SESSION_A, 5, 3, 3);
+  it("prefix invalidation reaches the infinite transcript query for the same session", () => {
+    // `messagesKeys.forSession(s)` must be a prefix of the infinite transcript
+    // key (any limit) so a `transcriptAppend` invalidation reaches it under
+    // `["messages", sessionId]`.
+    const infinite50 = messagesKeys.infinite(SESSION_A, 50);
+    const infinite100 = messagesKeys.infinite(SESSION_A, 100);
     const prefix = messagesKeys.forSession(SESSION_A);
 
-    expect(tail50.slice(0, prefix.length)).toEqual(prefix);
-    expect(tail100.slice(0, prefix.length)).toEqual(prefix);
-    expect(list.slice(0, prefix.length)).toEqual(prefix);
-    expect(around.slice(0, prefix.length)).toEqual(prefix);
+    expect(infinite50.slice(0, prefix.length)).toEqual(prefix);
+    expect(infinite100.slice(0, prefix.length)).toEqual(prefix);
+  });
+});
+
+const ISO = "2026-05-26T10:00:00.000Z";
+
+function msg(id: number): SessionMessageDto {
+  return {
+    id,
+    sessionId: SESSION_A,
+    role: "assistant",
+    kind: "text",
+    content: `m${id}`,
+    createdAt: ISO,
+    toolCallId: null,
+    toolName: null,
+  };
+}
+
+function okPage(
+  items: SessionMessageDto[],
+  nextCursorId: number | null,
+): Result<MessagePage> {
+  return {
+    ok: true,
+    data: {
+      items,
+      nextCursor: nextCursorId === null ? null : { createdAt: ISO, id: nextCursorId },
+      hasMore: nextCursorId !== null,
+    },
+  };
+}
+
+const errPage: Result<MessagePage> = {
+  ok: false,
+  error: {
+    code: "internal.unexpected",
+    domain: "data",
+    message: "boom",
+    retryable: true,
+    userActionable: true,
+    redacted: true,
+    correlationId: "c",
+  },
+};
+
+describe("flattenTranscriptPages", () => {
+  it("returns chronological oldest→newest across pages (page 0 is newest)", () => {
+    const page0 = okPage([msg(3), msg(4)], 2); // newest page
+    const page1 = okPage([msg(1), msg(2)], null); // older page
+    expect(flattenTranscriptPages([page0, page1]).map((m) => m.id)).toEqual([
+      1, 2, 3, 4,
+    ]);
+  });
+
+  it("de-duplicates ids that overlap across pages", () => {
+    const page0 = okPage([msg(2), msg(3)], 2);
+    const page1 = okPage([msg(1), msg(2)], null);
+    expect(flattenTranscriptPages([page0, page1]).map((m) => m.id)).toEqual([
+      1, 2, 3,
+    ]);
+  });
+
+  it("skips failed pages without throwing", () => {
+    expect(flattenTranscriptPages([okPage([msg(2)], 1), errPage]).map((m) => m.id)).toEqual([
+      2,
+    ]);
+  });
+});
+
+describe("getTranscriptNextPageParam", () => {
+  it("returns the next cursor when there is older history under the cap", () => {
+    expect(getTranscriptNextPageParam(okPage([msg(1)], 1), 1)).toEqual({
+      createdAt: ISO,
+      id: 1,
+    });
+  });
+
+  it("stops when the page has no older history", () => {
+    expect(getTranscriptNextPageParam(okPage([msg(1)], null), 1)).toBeUndefined();
+  });
+
+  it("stops at the page cap", () => {
+    expect(
+      getTranscriptNextPageParam(okPage([msg(1)], 1), MAX_TRANSCRIPT_PAGES),
+    ).toBeUndefined();
+  });
+
+  it("stops on a failed page", () => {
+    expect(getTranscriptNextPageParam(errPage, 1)).toBeUndefined();
   });
 });

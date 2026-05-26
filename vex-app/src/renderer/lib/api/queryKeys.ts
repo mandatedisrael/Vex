@@ -42,23 +42,18 @@ export const onboardingKeys = {
 export const messagesKeys = {
   all: ["messages"] as const,
   /**
-   * Prefix for every messages query of a session. Used as the
-   * invalidation target on `engine.transcriptAppend` so any active
-   * variant (tail with any limit, list with any cursor, around with any
-   * window) refetches in one call.
+   * Prefix for every messages query of a session. Used as the invalidation
+   * target on `engine.transcriptAppend` so the active transcript query
+   * refetches in one call.
    */
   forSession: (sessionId: string) => ["messages", sessionId] as const,
-  tail: (sessionId: string, limit: number) =>
-    ["messages", sessionId, "tail", { limit }] as const,
-  list: (sessionId: string, limit: number, cursorId: number | null) =>
-    ["messages", sessionId, "list", { limit, cursorId }] as const,
-  around: (
-    sessionId: string,
-    messageId: number,
-    before: number,
-    after: number,
-  ) =>
-    ["messages", sessionId, "around", messageId, { before, after }] as const,
+  /**
+   * Infinite transcript query (stage 8-2b) — newest page first, paging older
+   * via cursor. Kept under the `forSession` prefix so a `transcriptAppend`
+   * invalidation refetches it.
+   */
+  infinite: (sessionId: string, limit: number) =>
+    ["messages", sessionId, "infinite", { limit }] as const,
 };
 
 export const usageKeys = {

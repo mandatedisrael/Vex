@@ -1,135 +1,110 @@
 /**
- * Messages TanStack Query hooks (agent integration puzzle 1) + live
- * transcript sync hook (puzzle 02).
+ * Transcript TanStack Query hooks (agent integration puzzle 02 + stage
+ * 8-1/8-2b).
  *
- * The transcript reads are read-only: renderer pulls paginated pages
- * through `window.vex.messages.*`. Puzzle 02 adds the event spine —
- * `useTranscriptLiveSync` subscribes to `EV.engine.transcriptAppend`,
- * invalidates the session's TanStack query prefix on a matching event,
- * and runs a 30s fallback poll so a missed event still surfaces.
+ * The transcript is read-only and paginated. `useTranscriptInfinite` pages
+ * backward through `window.vex.messages.list`: page 0 is the newest tail
+ * (`cursor: null`), each subsequent page is older (`cursor = prev.nextCursor`).
+ * `useTranscriptLiveSync` invalidates the session's query prefix on
+ * `EV.engine.transcriptAppend` (+ a 30s fallback poll) so the infinite query
+ * refetches; DB stays the source of truth.
  */
 
 import { useEffect } from "react";
 import {
-  queryOptions,
-  useQuery,
+  useInfiniteQuery,
   useQueryClient,
-  type UseQueryResult,
+  type InfiniteData,
+  type UseInfiniteQueryResult,
 } from "@tanstack/react-query";
 import type { Result } from "@shared/ipc/result.js";
 import type {
   MessageCursor,
   MessagePage,
-  MessagesGetAroundInput,
-  MessagesGetTailInput,
-  MessagesListInput,
+  SessionMessageDto,
 } from "@shared/schemas/messages.js";
 import { messagesKeys } from "./queryKeys.js";
 
 const DEFAULT_LIMIT = 50;
 const STALE_MS = 5_000;
 
-function tailOptions(input: MessagesGetTailInput) {
-  return queryOptions({
-    queryKey: messagesKeys.tail(input.sessionId, input.limit),
-    queryFn: () => window.vex.messages.getTail(input),
-    staleTime: STALE_MS,
-    enabled: input.sessionId.length > 0,
-  });
-}
+/**
+ * Max accumulated pages while load-older has no virtualization (stage 8-2b).
+ * Bounds the chat DOM per the Vex performance rule (chats are bounded or
+ * virtualized); stage 8-2c (virtualization) lifts this.
+ */
+export const MAX_TRANSCRIPT_PAGES = 10;
 
-function listOptions(input: MessagesListInput) {
-  return queryOptions({
-    queryKey: messagesKeys.list(
-      input.sessionId,
-      input.limit,
-      input.cursor === null ? null : input.cursor.id,
-    ),
-    queryFn: () => window.vex.messages.list(input),
-    staleTime: STALE_MS,
-    enabled: input.sessionId.length > 0,
-  });
-}
-
-function aroundOptions(input: MessagesGetAroundInput) {
-  return queryOptions({
-    queryKey: messagesKeys.around(
-      input.sessionId,
-      input.messageId,
-      input.before,
-      input.after,
-    ),
-    queryFn: () => window.vex.messages.getAround(input),
-    staleTime: STALE_MS,
-    enabled: input.sessionId.length > 0 && input.messageId > 0,
-  });
-}
-
-export function useMessageTail(
-  sessionId: string | null,
-  limit: number = DEFAULT_LIMIT,
-): UseQueryResult<Result<MessagePage>> {
-  return useQuery(
-    tailOptions({
-      sessionId: sessionId ?? "",
-      limit,
-    }),
-  );
-}
-
-export function useMessageList(
-  sessionId: string | null,
-  cursor: MessageCursor | null,
-  limit: number = DEFAULT_LIMIT,
-): UseQueryResult<Result<MessagePage>> {
-  return useQuery(
-    listOptions({
-      sessionId: sessionId ?? "",
-      cursor,
-      limit,
-    }),
-  );
-}
-
-export function useMessageAround(
-  sessionId: string | null,
-  messageId: number | null,
-  before: number,
-  after: number,
-): UseQueryResult<Result<MessagePage>> {
-  return useQuery(
-    aroundOptions({
-      sessionId: sessionId ?? "",
-      messageId: messageId ?? 0,
-      before,
-      after,
-    }),
-  );
+/**
+ * Next cursor for the infinite transcript query. `undefined` stops paging —
+ * when the last page failed, has no older history, or the page cap is hit.
+ */
+export function getTranscriptNextPageParam(
+  lastPage: Result<MessagePage>,
+  pageCount: number,
+): MessageCursor | undefined {
+  if (pageCount >= MAX_TRANSCRIPT_PAGES) return undefined;
+  if (!lastPage.ok) return undefined;
+  return lastPage.data.hasMore && lastPage.data.nextCursor !== null
+    ? lastPage.data.nextCursor
+    : undefined;
 }
 
 /**
- * 30s fallback invalidation cadence used when the in-process bus event
- * is missed (engine writer outside main, dropped IPC payload, etc.).
- * Exported for tests.
+ * Flatten infinite-query pages (page 0 = newest) into one chronological
+ * oldest→newest list, de-duplicated by message id. Dedupe guards the rare
+ * cross-page overlap a live refetch can introduce; `ok:false` pages contribute
+ * nothing (the component surfaces the error separately).
+ */
+export function flattenTranscriptPages(
+  pages: readonly Result<MessagePage>[],
+): SessionMessageDto[] {
+  const seen = new Set<number>();
+  const out: SessionMessageDto[] = [];
+  for (const page of [...pages].reverse()) {
+    if (!page.ok) continue;
+    for (const message of page.data.items) {
+      if (seen.has(message.id)) continue;
+      seen.add(message.id);
+      out.push(message);
+    }
+  }
+  return out;
+}
+
+export function useTranscriptInfinite(
+  sessionId: string | null,
+  limit: number = DEFAULT_LIMIT,
+): UseInfiniteQueryResult<
+  InfiniteData<Result<MessagePage>, MessageCursor | null>
+> {
+  const id = sessionId ?? "";
+  return useInfiniteQuery({
+    queryKey: messagesKeys.infinite(id, limit),
+    queryFn: ({ pageParam }) =>
+      window.vex.messages.list({ sessionId: id, cursor: pageParam, limit }),
+    initialPageParam: null as MessageCursor | null,
+    getNextPageParam: (lastPage, allPages) =>
+      getTranscriptNextPageParam(lastPage, allPages.length),
+    staleTime: STALE_MS,
+    enabled: id.length > 0,
+  });
+}
+
+/**
+ * 30s fallback invalidation cadence used when the in-process bus event is
+ * missed (engine writer outside main, dropped IPC payload, etc.). Exported
+ * for tests.
  */
 export const TRANSCRIPT_LIVE_FALLBACK_POLL_MS = 30_000;
 
 /**
  * Subscribe the active session to the engine transcript event spine.
  *
- * Two refresh layers (codex review constraint #2):
- *  - **event-driven**: matching `EV.engine.transcriptAppend` payload
- *    invalidates `messagesKeys.forSession(sessionId)` so every active
- *    `useMessageTail` / `useMessageList` / `useMessageAround` for that
- *    session refetches at once;
- *  - **30s fallback poll**: `staleTime: 5s` only marks cache as stale;
- *    it does NOT trigger a refetch on its own. A missed event in an
- *    active, focused window could otherwise leave the UI stuck. The
- *    interval invalidation re-uses the same prefix so the cost is one
- *    `invalidateQueries` call per 30s while the session is active.
- *
- * Hook is a pure side effect — no render output. Mount once per active
- * session (puzzle 02 mounts it in `SessionPanel`).
+ * Two refresh layers: event-driven invalidation of
+ * `messagesKeys.forSession(sessionId)` (so the infinite query refetches), plus
+ * a 30s fallback poll for missed events. Pure side effect — no render output.
+ * Mount once per active session (`SessionPanel`).
  */
 export function useTranscriptLiveSync(sessionId: string | null): void {
   const queryClient = useQueryClient();
