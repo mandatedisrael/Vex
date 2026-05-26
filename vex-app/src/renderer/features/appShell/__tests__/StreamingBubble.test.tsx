@@ -40,11 +40,15 @@ describe("StreamingBubble", () => {
     expect(link?.closest('[aria-hidden="true"]')).toBeNull();
   });
 
-  it("shows a tool hint when there is no text yet", () => {
-    render(
+  it("shows a preparing indicator with the tool name + icon when there is no text yet", () => {
+    const { container } = render(
       createElement(StreamingBubble, { preview: preview({ text: "", toolName: "swap" }) }),
     );
-    expect(screen.getByText(/Calling swap/)).not.toBeNull();
+    const hint = container.querySelector('[data-vex-tool-state="preparing"]');
+    expect(hint).not.toBeNull();
+    expect(hint?.textContent).toContain("swap");
+    // Decorative wrench icon renders as an <svg>.
+    expect(hint?.querySelector("svg")).not.toBeNull();
   });
 
   it("shows a safe generic error line and never the raw text on error phase", () => {

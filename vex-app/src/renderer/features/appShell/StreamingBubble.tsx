@@ -16,6 +16,8 @@
  */
 
 import type { JSX } from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Wrench01Icon } from "@hugeicons/core-free-icons";
 import type { StreamPreview } from "../../stores/streamStore.js";
 import { MarkdownContent } from "../../lib/markdown/MarkdownContent.js";
 import { DotmHex3 } from "../../components/ui/dotm-hex-3.js";
@@ -61,7 +63,11 @@ export function StreamingBubble({
           {preview.phase === "error" ? (
             <span className="text-[#f0a0a0]">Stream error</span>
           ) : showToolHint ? (
-            <span className="text-[var(--color-text-muted)]">
+            <span
+              data-vex-tool-state="preparing"
+              className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[var(--color-text-muted)]"
+            >
+              <HugeiconsIcon icon={Wrench01Icon} size={13} aria-hidden />
               Calling {preview.toolName}…
             </span>
           ) : (
