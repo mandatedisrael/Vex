@@ -79,6 +79,14 @@ export default defineConfig(({ command }) => ({
     __VEX_APP_VERSION__: JSON.stringify(pkg.version),
   },
 
+  // Pre-bundle renderer deps that the dev server should optimize BEFORE it
+  // reports ready, so the first client (Electron) doesn't hit the page mid
+  // re-optimize and abort the initial loadURL. `marked` (stage 8-2a markdown)
+  // triggered exactly this cold-start optimizer race.
+  optimizeDeps: {
+    include: ["marked"],
+  },
+
   plugins: [
     react(),
     tailwindcss(),
