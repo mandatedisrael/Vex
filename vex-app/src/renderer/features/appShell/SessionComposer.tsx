@@ -45,7 +45,9 @@ import {
 } from "./composer-helpers.js";
 import { parseSlashCommand } from "./slash/parser.js";
 import { useSlashCommandDispatch } from "./slash/dispatch.js";
+import { useSlashMenu } from "./slash/use-slash-menu.js";
 import type { SlashCommand } from "./slash/types.js";
+import { SlashCommandMenu } from "./SlashCommandMenu.js";
 
 interface QuickAction {
   readonly label: string;
@@ -124,6 +126,7 @@ export function SessionComposer({
     null,
   );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const slashMenu = useSlashMenu({ draft, setDraft, textareaRef });
 
   useLayoutEffect((): void => {
     const el = textareaRef.current;
@@ -221,10 +224,20 @@ export function SessionComposer({
 
   return (
     <>
+      <div className="relative mt-6">
+        <SlashCommandMenu
+          open={slashMenu.open}
+          items={slashMenu.items}
+          activeIndex={slashMenu.activeIndex}
+          listboxId={slashMenu.listboxId}
+          getOptionId={slashMenu.getOptionId}
+          onSelect={slashMenu.select}
+          onActivate={slashMenu.setActiveIndex}
+        />
       <form
         onSubmit={onSubmit}
         data-vex-area="chat-composer"
-        className="mt-6 overflow-hidden rounded-3xl border border-[#3275f8]/38 bg-[#061026]/66 shadow-[0_0_54px_rgba(30,78,210,0.16)] backdrop-blur-2xl"
+        className="overflow-hidden rounded-3xl border border-[#3275f8]/38 bg-[#061026]/66 shadow-[0_0_54px_rgba(30,78,210,0.16)] backdrop-blur-2xl"
       >
         <textarea
           ref={textareaRef}
@@ -233,9 +246,14 @@ export function SessionComposer({
             setDraft(event.target.value);
             setNotice(null);
           }}
+          onKeyDown={slashMenu.handleKeyDown}
           rows={1}
           placeholder={placeholderFor(activeSession)}
           aria-label="Session draft"
+          aria-autocomplete="list"
+          aria-expanded={slashMenu.open}
+          aria-controls={slashMenu.open ? slashMenu.listboxId : undefined}
+          aria-activedescendant={slashMenu.activeOptionId}
           className={cn(
             "block w-full resize-none overflow-y-auto bg-transparent px-5 pt-3.5 pb-2 text-base leading-7 text-foreground outline-none",
             "min-h-[52px] max-h-[200px]",
@@ -268,6 +286,7 @@ export function SessionComposer({
           </button>
         </div>
       </form>
+      </div>
 
       {notice !== null ? (
         <p
