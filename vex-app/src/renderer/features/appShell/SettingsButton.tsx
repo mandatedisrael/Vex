@@ -1,9 +1,8 @@
 /**
- * Sidebar button — opens the in-app Settings screen (wallet management +
- * Polymarket auto-setup). The full setup wizard (master password,
- * provider, embedding, etc.) is reachable from INSIDE Settings via
- * "Re-run setup wizard"; this entry no longer jumps straight into the
- * wizard, so the sidebar has a single Settings affordance.
+ * Sidebar button — opens the onboarding/setup wizard in reconfigure mode
+ * (master password, wallets, provider, embedding, …). Wallet management
+ * lives inside that wizard (Review → Wallets, which always shows the full
+ * management UI in back-edit), so there is no separate in-app settings card.
  */
 
 import { useCallback } from "react";
@@ -19,10 +18,10 @@ interface SettingsButtonProps {
 export function SettingsButton({
   compact = false,
 }: SettingsButtonProps): JSX.Element {
-  const setAppShellView = useUiStore((s) => s.setAppShellView);
+  const openWizard = useUiStore((s) => s.openWizard);
   const onClick = useCallback((): void => {
-    setAppShellView("settings");
-  }, [setAppShellView]);
+    openWizard("reconfigure");
+  }, [openWizard]);
   return (
     <Button
       variant="ghost"

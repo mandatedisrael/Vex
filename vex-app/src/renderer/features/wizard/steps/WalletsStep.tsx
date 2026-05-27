@@ -7,17 +7,16 @@
  * next to the labels — the same brand vocabulary we use elsewhere in
  * the onboarding aesthetic, and they cost almost nothing visually.
  *
- * Skip-to-continue logic: when both chains have a wallet (either
- * persisted from a previous session via `envState.walletStatus.{evm,solana}`
- * being "present", OR set in-session via `lastGenerated`), render a
- * summary panel with both addresses and a Continue button. Otherwise
- * render the Tabs UI.
+ * Skip-to-continue logic: in the forward setup flow, when both chains have a
+ * wallet, render a summary panel + Continue. Otherwise render the Tabs
+ * management UI. In `back-edit` (reconfigure from Review) the Tabs UI is
+ * ALWAYS shown — even when both wallets exist — so the user can
+ * add/import/manage wallets post-onboarding, with a "Return to review" button.
  *
- * Address display sources (in order):
- *  1. `lastGenerated[chain]`  — freshest (just generated/imported/restored
- *     in this session)
- *  2. `envState.walletAddresses[chain]` — cross-session (loaded from
- *     `config.json` by the env-state probe)
+ * Address source: `lastGenerated[chain]` (in-session
+ * flip) → wallet inventory primary (`useAvailableWallets`) → legacy
+ * `envState.walletAddresses[chain]` fallback. The inventory is authoritative;
+ * legacy addresses are NOT written in the multi-wallet config model.
  *
  * Per codex turn 8 RED #1, raw private keys never enter React state /
  * Zustand / TanStack cache. The import flow is implemented inside
@@ -40,6 +39,7 @@ import {
 } from "../../../components/ui/tabs.js";
 import { AddressDisplay } from "../../../components/common/AddressDisplay.js";
 import { useEnvState } from "../../../lib/api/onboarding.js";
+import { useAvailableWallets } from "../../../lib/api/wallet-inventory.js";
 import {
   useStepAdvance,
   type WizardFlowMode,
@@ -68,6 +68,7 @@ export function WalletsStep({
   flowMode,
 }: WalletsStepProps): JSX.Element {
   const envQuery = useEnvState();
+  const availableWallets = useAvailableWallets();
   const stepAdvance = useStepAdvance();
 
   const [lastGenerated, setLastGenerated] = useState<ChainState>({});
@@ -75,10 +76,20 @@ export function WalletsStep({
   const [advanceError, setAdvanceError] = useState<string | null>(null);
 
   const envData = envQuery.data?.ok === true ? envQuery.data.data : null;
+  const inventory =
+    availableWallets.data?.ok === true
+      ? availableWallets.data.data
+      : { evm: [], solana: [] };
   const evmAddress =
-    lastGenerated.evm ?? envData?.walletAddresses?.evm ?? null;
+    lastGenerated.evm ??
+    inventory.evm[0]?.address ??
+    envData?.walletAddresses?.evm ??
+    null;
   const solanaAddress =
-    lastGenerated.solana ?? envData?.walletAddresses?.solana ?? null;
+    lastGenerated.solana ??
+    inventory.solana[0]?.address ??
+    envData?.walletAddresses?.solana ??
+    null;
 
   const evmReady =
     evmAddress !== null || envData?.walletStatus.evm === "present";
@@ -112,7 +123,7 @@ export function WalletsStep({
 
   const meta = WIZARD_STEP_META.wallets;
 
-  if (envQuery.isLoading) {
+  if (envQuery.isLoading || availableWallets.isLoading) {
     return (
       <WizardStepPanel
         panelDataAttr={{ kind: "wallets", value: "loading" }}
@@ -134,7 +145,47 @@ export function WalletsStep({
     );
   }
 
-  if (bothReady) {
+  // Inventory failed to load but wallets are known to exist (walletStatus
+  // present) and we have no address from any source → do NOT fall through to
+  // the empty setup menu (which would hide existing wallets). Surface an error.
+  const inventoryFailed =
+    availableWallets.data !== undefined && availableWallets.data.ok === false;
+  const walletsExist =
+    envData?.walletStatus.evm === "present" ||
+    envData?.walletStatus.solana === "present";
+  if (
+    inventoryFailed &&
+    walletsExist &&
+    evmAddress === null &&
+    solanaAddress === null
+  ) {
+    return (
+      <WizardStepPanel
+        panelDataAttr={{ kind: "wallets", value: "setup" }}
+        icon={meta.icon}
+        title="Couldn't load wallets"
+        description="Your wallets exist but couldn't be loaded right now."
+        footer={
+          flowMode === "back-edit" ? (
+            <Button
+              onClick={() => {
+                void advanceToApiKeys();
+              }}
+              disabled={stepAdvance.isPending}
+            >
+              Return to review
+            </Button>
+          ) : null
+        }
+      >
+        <p className="text-sm text-[var(--color-danger)]" role="alert">
+          Couldn&apos;t load your wallets. Close and reopen settings, or retry.
+        </p>
+      </WizardStepPanel>
+    );
+  }
+
+  if (bothReady && flowMode !== "back-edit") {
     return (
       <WizardStepPanel
         panelDataAttr={{ kind: "wallets", value: "ready" }}
@@ -204,9 +255,20 @@ export function WalletsStep({
     <WizardStepPanel
       panelDataAttr={{ kind: "wallets", value: "setup" }}
       icon={meta.icon}
-      title="Set up wallets"
+      title={flowMode === "back-edit" ? "Manage wallets" : "Set up wallets"}
       description="Vex needs both an EVM wallet (Ethereum + L2s) and a Solana wallet. Generate fresh keys, import existing ones, or restore from a backup keystore file. Each chain is encrypted with the master password from Step 1."
-      footer={null}
+      footer={
+        flowMode === "back-edit" ? (
+          <Button
+            onClick={() => {
+              void advanceToApiKeys();
+            }}
+            disabled={stepAdvance.isPending}
+          >
+            {stepAdvance.isPending ? "Returning…" : "Return to review"}
+          </Button>
+        ) : null
+      }
     >
       <Tabs defaultValue="evm">
         <TabsList>
@@ -240,6 +302,11 @@ export function WalletsStep({
         <div className="mt-4 border-t border-white/[0.08] pt-4">
           <ExportAllWallets />
         </div>
+      ) : null}
+      {advanceError !== null ? (
+        <p className="mt-3 text-sm text-[var(--color-danger)]" role="alert">
+          {advanceError}
+        </p>
       ) : null}
     </WizardStepPanel>
   );

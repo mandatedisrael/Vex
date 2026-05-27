@@ -35,6 +35,7 @@ import type {
   WizardState,
   WizardStepId,
 } from "@shared/schemas/wizard.js";
+import type { WizardFlowMode } from "../../../../lib/api/wizard.js";
 
 const mockUseEnvState = vi.fn();
 const mockGenerateMutate = vi.fn();
@@ -137,7 +138,8 @@ vi.mock("../../../../lib/api/wallet-inventory.js", () => ({
 const { WalletsStep } = await import("../WalletsStep.js");
 
 function renderStep(
-  completedSteps: ReadonlyArray<WizardStepId> = ["keystore"]
+  completedSteps: ReadonlyArray<WizardStepId> = ["keystore"],
+  flowMode: WizardFlowMode = "first-pass"
 ): ReturnType<typeof render> {
   const qc = new QueryClient({
     defaultOptions: {
@@ -147,7 +149,7 @@ function renderStep(
   });
   return render(
     <QueryClientProvider client={qc}>
-      <WalletsStep completedSteps={completedSteps} onAdvance={mockOnAdvance} flowMode="first-pass" />
+      <WalletsStep completedSteps={completedSteps} onAdvance={mockOnAdvance} flowMode={flowMode} />
     </QueryClientProvider>
   );
 }
@@ -418,5 +420,40 @@ describe("WalletsStep", () => {
     expect(queryByText(/Wallets configured/i)).toBeNull();
     // Setup card with tabs is rendered.
     expect(getByRole("tab", { name: /EVM/i })).toBeTruthy();
+  });
+
+  it("back-edit + both wallets present (legacy addresses null) shows inventory-sourced management + Return to review", () => {
+    // walletStatus present but NO walletAddresses (multi-wallet config model:
+    // legacy addresses are not written). Inventory is the source of truth.
+    mockUseEnvState.mockReturnValue(
+      envQueryFor({ evm: "present", solana: "present" })
+    );
+    mockUseAvailableWallets.mockReturnValue({
+      data: {
+        ok: true,
+        data: {
+          evm: [{ id: "evm-1", address: evmAddress, label: "EVM 1" }],
+          solana: [{ id: "sol-1", address: solanaAddress, label: "Solana 1" }],
+        },
+      },
+      isLoading: false,
+      isError: false,
+      isSuccess: true,
+    });
+    const view = renderStep(["keystore"], "back-edit");
+
+    // NOT the skip/summary card — back-edit always shows full management.
+    expect(view.queryByText(/Wallets configured/i)).toBeNull();
+    // EVM resolved from inventory → ChainActions renders the configured view
+    // (existing wallet) with the "Add another" affordance from WalletInventoryPanel.
+    const configuredEl = view.container.querySelector(
+      '[data-vex-wallet-state="configured"][data-vex-wallet-chain="evm"]'
+    );
+    expect(configuredEl).not.toBeNull();
+    expect(view.getByText(/Add another/i)).toBeTruthy();
+    // Back-edit return affordance (the Tabs path footer).
+    expect(
+      view.getByRole("button", { name: /Return to review/i })
+    ).toBeTruthy();
   });
 });

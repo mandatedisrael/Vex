@@ -9,7 +9,6 @@ import { SessionCreator } from "./SessionCreator.js";
 import { SessionPanel } from "./SessionPanel.js";
 import { SessionsLibrary } from "./SessionsLibrary.js";
 import { SessionsList } from "./SessionsList.js";
-import { SettingsPanel } from "./SettingsPanel.js";
 import { KnowledgePanel } from "./KnowledgePanel.js";
 
 export function AppShell(): JSX.Element {
@@ -50,8 +49,6 @@ export function AppShell(): JSX.Element {
         <section className="min-w-0 flex-1 pb-12">
           {appShellView === "sessionsLibrary" ? (
             <SessionsLibrary />
-          ) : appShellView === "settings" ? (
-            <SettingsPanel />
           ) : appShellView === "knowledge" ? (
             <KnowledgePanel />
           ) : (

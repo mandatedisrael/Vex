@@ -1,6 +1,6 @@
 /**
- * Knowledge & Memory management panel — a read-only AppShell sub-view
- * (mirrors SettingsPanel). A thin composer over four sections, each in its own
+ * Knowledge & Memory management panel — a read-only AppShell sub-view.
+ * A thin composer over four sections, each in its own
  * module so every file stays under the 400-line budget:
  *
  *  1. **Knowledge** (7-2a/7-2b) — `KnowledgeSection.tsx`

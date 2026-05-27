@@ -34,14 +34,13 @@ export type SessionModeFilter = "all" | "agent" | "mission";
 /**
  * Sub-view of the app shell panel area. `session` is the default chat/
  * welcome panel; `sessionsLibrary` is the dedicated "browse all sessions"
- * screen; `settings` is the post-onboarding settings screen (wallet
- * management + Polymarket). NOT persisted — view selection is
- * launch-ephemeral, like `activeSessionId`.
+ * screen; `knowledge` is the read-only knowledge + session-memory panel.
+ * Settings is NOT a sub-view — the Settings button opens the onboarding
+ * wizard (reconfigure). NOT persisted — launch-ephemeral, like activeSessionId.
  */
 export type AppShellView =
   | "session"
   | "sessionsLibrary"
-  | "settings"
   // Read-only knowledge + session-memory management panel (stage 7-2a).
   | "knowledge";
 
