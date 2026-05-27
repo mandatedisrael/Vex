@@ -43,6 +43,7 @@ const PAUSED_ERROR_TEXT =
 export async function routeUserMessage(
   sessionId: string,
   userInput: string,
+  signal?: AbortSignal,
 ): Promise<TurnResult> {
   const cancelled = await loopWakeRepo.cancelForSession(sessionId, "user_preempt");
   if (cancelled > 0) {
@@ -105,14 +106,18 @@ export async function routeUserMessage(
     return processMissionSetupTurn(sessionId, userInput);
   }
 
-  return processAgentTurn(sessionId, userInput);
+  // Chat/agent turn — the only path that honours the chat-turn "stop
+  // generating" signal (9-5a). Mission resume/interrupt/setup branches above
+  // ignore it.
+  return processAgentTurn(sessionId, userInput, signal);
 }
 
 export async function submitOperatorInstruction(
   sessionId: string,
   userInput: string,
+  signal?: AbortSignal,
 ): Promise<TurnResult> {
-  return routeUserMessage(sessionId, userInput);
+  return routeUserMessage(sessionId, userInput, signal);
 }
 
 async function resumeMissionRunWithPreempt(

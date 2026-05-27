@@ -33,11 +33,18 @@ function providerFrom(
   } as unknown as InferenceProvider;
 }
 
-function run(
+async function run(
   chunks: StreamChunk[],
   onDelta?: (chunk: StreamChunk, sequence: number) => void,
 ): Promise<InferenceResponse> {
-  return runStreamingInference(providerFrom(fromChunks(chunks)), MSGS, TOOLS, CFG, { onDelta });
+  const result = await runStreamingInference(
+    providerFrom(fromChunks(chunks)),
+    MSGS,
+    TOOLS,
+    CFG,
+    { onDelta },
+  );
+  return result.response;
 }
 
 describe("runStreamingInference — accumulation equivalence", () => {
@@ -233,7 +240,9 @@ describe("runStreamingInference — fallback to chatCompletion", () => {
     const chatCompletion = vi.fn().mockResolvedValue(FALLBACK);
     const provider = { id: "fake", chatCompletion } as unknown as InferenceProvider;
     const res = await runStreamingInference(provider, MSGS, TOOLS, CFG);
-    expect(res).toBe(FALLBACK);
+    expect(res.response).toBe(FALLBACK);
+    expect(res.aborted).toBe(false);
+    expect(res.usageObserved).toBe(true);
     expect(chatCompletion).toHaveBeenCalledTimes(1);
   });
 
@@ -245,7 +254,9 @@ describe("runStreamingInference — fallback to chatCompletion", () => {
       chatCompletion,
     } as unknown as InferenceProvider;
     const res = await runStreamingInference(provider, MSGS, TOOLS, CFG);
-    expect(res).toBe(FALLBACK);
+    expect(res.response).toBe(FALLBACK);
+    expect(res.aborted).toBe(false);
+    expect(res.usageObserved).toBe(true);
     expect(chatCompletion).toHaveBeenCalledTimes(1);
   });
 
@@ -255,7 +266,110 @@ describe("runStreamingInference — fallback to chatCompletion", () => {
       throw new Error("setup failed");
     }, chatCompletion);
     const res = await runStreamingInference(provider, MSGS, TOOLS, CFG);
-    expect(res).toBe(FALLBACK);
+    expect(res.response).toBe(FALLBACK);
+    expect(res.aborted).toBe(false);
+    expect(res.usageObserved).toBe(true);
     expect(chatCompletion).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("runStreamingInference — abort (9-5a)", () => {
+  it("mid-stream abort returns the partial response, aborted=true, no fallback", async () => {
+    const controller = new AbortController();
+    const chatCompletion = vi.fn();
+    const provider = providerFrom(async function* (): AsyncGenerator<StreamChunk> {
+      yield { type: "content", text: "par" };
+      yield { type: "content", text: "tial" };
+      controller.abort();
+      yield { type: "content", text: "DROPPED" };
+    }, chatCompletion);
+    const res = await runStreamingInference(provider, MSGS, TOOLS, CFG, {
+      signal: controller.signal,
+    });
+    expect(res.aborted).toBe(true);
+    expect(res.response.content).toBe("partial");
+    expect(chatCompletion).not.toHaveBeenCalled();
+  });
+
+  it("an abort surfacing as a thrown rejection still returns the partial (no rethrow/fallback)", async () => {
+    const controller = new AbortController();
+    const chatCompletion = vi.fn();
+    const provider = providerFrom(async function* (): AsyncGenerator<StreamChunk> {
+      yield { type: "content", text: "partial" };
+      controller.abort();
+      throw new Error("aborted fetch");
+    }, chatCompletion);
+    const res = await runStreamingInference(provider, MSGS, TOOLS, CFG, {
+      signal: controller.signal,
+    });
+    expect(res.aborted).toBe(true);
+    expect(res.response.content).toBe("partial");
+    expect(chatCompletion).not.toHaveBeenCalled();
+  });
+
+  it("a pre-aborted signal returns an empty partial without calling the provider or falling back", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const stream = vi.fn();
+    const chatCompletion = vi.fn();
+    const provider = {
+      id: "fake",
+      chatCompletionStream: stream,
+      chatCompletion,
+    } as unknown as InferenceProvider;
+    const res = await runStreamingInference(provider, MSGS, TOOLS, CFG, {
+      signal: controller.signal,
+    });
+    expect(res.aborted).toBe(true);
+    expect(res.response.content).toBe("");
+    expect(res.usageObserved).toBe(false);
+    expect(stream).not.toHaveBeenCalled();
+    expect(chatCompletion).not.toHaveBeenCalled();
+  });
+
+  it("a stream that completes normally is NOT aborted even if the signal flips afterward", async () => {
+    const controller = new AbortController();
+    const res = await runStreamingInference(
+      providerFrom(
+        fromChunks([
+          { type: "content", text: "done text" },
+          { type: "usage", usage: USAGE },
+          { type: "done" },
+        ]),
+      ),
+      MSGS,
+      TOOLS,
+      CFG,
+      { signal: controller.signal },
+    );
+    controller.abort(); // flips AFTER the stream already exhausted
+    expect(res.aborted).toBe(false);
+    expect(res.response.content).toBe("done text");
+  });
+
+  it("usageObserved reflects whether a usage chunk arrived", async () => {
+    const withUsage = await runStreamingInference(
+      providerFrom(
+        fromChunks([
+          { type: "content", text: "x" },
+          { type: "usage", usage: USAGE },
+          { type: "done" },
+        ]),
+      ),
+      MSGS,
+      TOOLS,
+      CFG,
+      {},
+    );
+    expect(withUsage.usageObserved).toBe(true);
+
+    const withoutUsage = await runStreamingInference(
+      providerFrom(fromChunks([{ type: "content", text: "x" }, { type: "done" }])),
+      MSGS,
+      TOOLS,
+      CFG,
+      {},
+    );
+    expect(withoutUsage.usageObserved).toBe(false);
   });
 });

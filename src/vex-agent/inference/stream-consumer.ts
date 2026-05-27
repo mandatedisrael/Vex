@@ -1,5 +1,5 @@
 /**
- * Stream consumer (Stage 9-1) — provider-agnostic.
+ * Stream consumer (Stage 9-1, abort-aware in 9-5a) — provider-agnostic.
  *
  * Consumes an `InferenceProvider.chatCompletionStream` async generator,
  * accumulating the SAME `InferenceResponse` that `chatCompletion` would
@@ -7,20 +7,19 @@
  * invoking `onDelta(chunk, sequence)` once per provider chunk so callers can
  * mirror the stream onto the engine `streamDeltaBus`.
  *
- * Assembly happens on GENERATOR EXHAUSTION, not on the `done` chunk — `done`
- * is informational, so trailing chunks (e.g. a usage chunk emitted after the
- * finish reason) and repeated `done` chunks are never lost.
+ * Assembly happens on GENERATOR EXHAUSTION (or abort break), not on the `done`
+ * chunk — `done` is informational, so trailing chunks (e.g. a usage chunk
+ * emitted after the finish reason) and repeated `done` chunks are never lost.
  *
- * Fallback (streaming is the default path):
- *  - provider has no stream method / it returns a non-async-iterable / it
- *    throws BEFORE yielding any chunk → fall back to buffered `chatCompletion`
- *    so a provider that cannot stream still completes the turn;
- *  - a provider-reported `error` chunk is NOT a setup failure — it is emitted
- *    as a delta and then thrown (never falls back), even if it is first;
- *  - any throw AFTER at least one observed chunk is re-thrown (no double
- *    inference call).
- * Every fallback logs a structured `inference.stream.fallback` warning so real
- * streaming breakage stays diagnosable instead of being silently masked.
+ * Returns explicit facts captured AT stream exit — `aborted` and
+ * `usageObserved` — so the caller never has to re-inspect the live signal
+ * (which could flip AFTER a turn completes and misclassify it; Stage 9-5a).
+ *
+ * Cancellation (9-5a): when `options.signal` aborts, the loop breaks (or the
+ * SDK throws), we set `aborted = true`, and return the PARTIAL response. Abort
+ * is NEVER a fallback: a pre-aborted signal short-circuits before every
+ * `chatCompletion` fallback branch. Distinct from a provider error (rethrown)
+ * and a setup failure before any chunk (buffered fallback).
  */
 
 import type {
@@ -41,15 +40,31 @@ const ZERO_USAGE: InferenceUsage = {
   totalTokens: 0,
 };
 
+/** Result of one streaming inference, with facts captured at stream exit. */
+export interface StreamingInferenceResult {
+  readonly response: InferenceResponse;
+  /** True iff the stream was stopped because `options.signal` aborted. */
+  readonly aborted: boolean;
+  /** True iff a provider `usage` chunk was consumed before exit. */
+  readonly usageObserved: boolean;
+}
+
 export interface RunStreamingInferenceOptions {
   /** Invoked once per provider chunk, in order, with a monotonic sequence. */
   readonly onDelta?: (chunk: StreamChunk, sequence: number) => void;
+  /** Aborts the in-flight inference stream (chat-turn "stop generating"). */
+  readonly signal?: AbortSignal;
 }
 
 interface ToolCallAccumulator {
   id: string;
   name: string;
   argsBuffer: string;
+}
+
+/** Fresh empty response for the abort-before-any-content case. */
+function emptyResponse(): InferenceResponse {
+  return { content: "", toolCalls: null, usage: { ...ZERO_USAGE }, reasoning: null };
 }
 
 function isAsyncIterable(value: unknown): value is AsyncIterable<StreamChunk> {
@@ -64,7 +79,8 @@ function isAsyncIterable(value: unknown): value is AsyncIterable<StreamChunk> {
  * Assemble parsed tool calls in numeric `toolCallIndex` order (NOT Map
  * insertion order). Malformed args warn + skip, mirroring
  * `parseNonStreamingResponse`; if every call is malformed the caller falls
- * through to text semantics.
+ * through to text semantics. (On abort, an in-flight call's truncated JSON
+ * fails to parse and is dropped here — partial tool calls are never assembled.)
  */
 function assembleToolCalls(
   accumulator: Map<number, ToolCallAccumulator>,
@@ -103,10 +119,20 @@ function safeOnDelta(
   }
 }
 
+/** Wrap a buffered fallback completion in the streaming result shape. */
+async function bufferedFallback(
+  provider: InferenceProvider,
+  messages: ProviderMessage[],
+  tools: ToolDefinition[],
+  config: InferenceConfig,
+): Promise<StreamingInferenceResult> {
+  const response = await provider.chatCompletion(messages, tools, config);
+  return { response, aborted: false, usageObserved: true };
+}
+
 /**
- * Run inference via the streaming provider path, accumulating a
- * `chatCompletion`-equivalent `InferenceResponse`. See module doc for the
- * fallback + assembly contract.
+ * Run inference via the streaming provider path. See module doc for the
+ * fallback / abort / assembly contract.
  */
 export async function runStreamingInference(
   provider: InferenceProvider,
@@ -114,39 +140,55 @@ export async function runStreamingInference(
   tools: ToolDefinition[],
   config: InferenceConfig,
   options: RunStreamingInferenceOptions = {},
-): Promise<InferenceResponse> {
-  const { onDelta } = options;
+): Promise<StreamingInferenceResult> {
+  const { onDelta, signal } = options;
+
+  // Pre-aborted → no inference at all; empty partial, never a fallback.
+  if (signal?.aborted) {
+    return { response: emptyResponse(), aborted: true, usageObserved: false };
+  }
 
   if (typeof provider.chatCompletionStream !== "function") {
+    if (signal?.aborted) {
+      return { response: emptyResponse(), aborted: true, usageObserved: false };
+    }
     logger.warn("inference.stream.fallback", {
       reason: "no_stream_method",
       provider: provider.id,
     });
-    return provider.chatCompletion(messages, tools, config);
+    return bufferedFallback(provider, messages, tools, config);
   }
 
   let stream: AsyncIterable<StreamChunk>;
   try {
-    const candidate = provider.chatCompletionStream(messages, tools, config);
+    const candidate = provider.chatCompletionStream(messages, tools, config, signal);
     if (!isAsyncIterable(candidate)) {
+      if (signal?.aborted) {
+        return { response: emptyResponse(), aborted: true, usageObserved: false };
+      }
       logger.warn("inference.stream.fallback", {
         reason: "not_async_iterable",
         provider: provider.id,
       });
-      return provider.chatCompletion(messages, tools, config);
+      return bufferedFallback(provider, messages, tools, config);
     }
     stream = candidate;
   } catch (err) {
+    if (signal?.aborted) {
+      return { response: emptyResponse(), aborted: true, usageObserved: false };
+    }
     logger.warn("inference.stream.fallback", {
       reason: "setup_threw",
       provider: provider.id,
       error: err instanceof Error ? err.message : String(err),
     });
-    return provider.chatCompletion(messages, tools, config);
+    return bufferedFallback(provider, messages, tools, config);
   }
 
   let sequence = 0;
   let observedAnyChunk = false;
+  let aborted = false;
+  let usageObserved = false;
   let contentSeen = false;
   let contentBuffer = "";
   let reasoningSeen = false;
@@ -156,6 +198,13 @@ export async function runStreamingInference(
 
   try {
     for await (const chunk of stream) {
+      // Check BEFORE processing so the abort is captured the moment it is
+      // observed (race-free: the caller acts on `aborted`, not a later
+      // signal read). An in-flight chunk at abort time is dropped.
+      if (signal?.aborted) {
+        aborted = true;
+        break;
+      }
       observedAnyChunk = true;
       safeOnDelta(onDelta, chunk, sequence++);
 
@@ -181,7 +230,10 @@ export async function runStreamingInference(
           break;
         }
         case "usage":
-          if (chunk.usage) usage = chunk.usage;
+          if (chunk.usage) {
+            usage = chunk.usage;
+            usageObserved = true;
+          }
           break;
         case "error":
           // Provider-reported error: the delta is already emitted above.
@@ -193,39 +245,44 @@ export async function runStreamingInference(
       }
     }
   } catch (err) {
-    if (!observedAnyChunk) {
-      // The generator rejected before yielding anything — treat as a setup
-      // failure and complete the turn via the buffered path.
+    if (signal?.aborted) {
+      // The abort manifested as a thrown rejection (SDK cancelled the fetch).
+      // Intentional — return the partial, never rethrow or fall back.
+      aborted = true;
+    } else if (!observedAnyChunk) {
+      // Generator rejected before yielding anything → buffered fallback.
       logger.warn("inference.stream.fallback", {
         reason: "threw_before_first_chunk",
         provider: provider.id,
         error: err instanceof Error ? err.message : String(err),
       });
-      return provider.chatCompletion(messages, tools, config);
+      return bufferedFallback(provider, messages, tools, config);
+    } else {
+      throw err;
     }
-    throw err;
   }
 
   const resolvedUsage = usage ?? ZERO_USAGE;
   const reasoning = reasoningSeen ? reasoningBuffer : null;
   const toolCalls = assembleToolCalls(toolCallAccumulator);
 
-  if (toolCalls.length > 0) {
-    // Tool path — content is null when the model emitted no text alongside
-    // the tool calls (parity with `parseNonStreamingResponse`).
-    return {
-      content: contentSeen ? contentBuffer : null,
-      toolCalls,
-      usage: resolvedUsage,
-      reasoning,
-    };
-  }
+  const response: InferenceResponse =
+    toolCalls.length > 0
+      ? {
+          // Tool path — content is null when no text accompanied the calls
+          // (parity with `parseNonStreamingResponse`).
+          content: contentSeen ? contentBuffer : null,
+          toolCalls,
+          usage: resolvedUsage,
+          reasoning,
+        }
+      : {
+          // Text path — content defaults to "" when no content delta arrived.
+          content: contentBuffer,
+          toolCalls: null,
+          usage: resolvedUsage,
+          reasoning,
+        };
 
-  // Text path — content defaults to "" when no content delta arrived.
-  return {
-    content: contentBuffer,
-    toolCalls: null,
-    usage: resolvedUsage,
-    reasoning,
-  };
+  return { response, aborted, usageObserved };
 }

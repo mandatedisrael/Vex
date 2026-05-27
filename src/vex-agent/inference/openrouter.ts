@@ -210,14 +210,19 @@ export class OpenRouterProvider implements InferenceProvider {
     messages: ProviderMessage[],
     tools: ToolDefinition[],
     config: InferenceConfig,
+    signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
     const params = buildOpenRouterParams(messages, tools, config, true);
 
     let stream: EventStream<ChatStreamChunk>;
     try {
-      stream = await this.client.chat.send({
-        chatRequest: { ...params, stream: true },
-      }) as EventStream<ChatStreamChunk>;
+      // `signal` is a flattened RequestInit field on the SDK's RequestOptions
+      // (takes precedence over the client timeout); it cancels the fetch so a
+      // chat-turn "stop generating" tears down the HTTP stream (Stage 9-5a).
+      stream = await this.client.chat.send(
+        { chatRequest: { ...params, stream: true } },
+        signal ? { signal } : undefined,
+      ) as EventStream<ChatStreamChunk>;
     } catch (err) {
       throw normalizeOpenRouterError(err, "streaming chat completion");
     }

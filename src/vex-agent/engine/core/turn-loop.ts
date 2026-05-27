@@ -28,7 +28,7 @@ import type { EngineContext, StopReason } from "../types.js";
 import type { InferenceProvider, InferenceConfig, ToolDefinition } from "@vex-agent/inference/types.js";
 import type { Message } from "@vex-agent/db/repos/messages.js";
 import type { PromptStackOptions } from "../prompts/index.js";
-import { executeTurn } from "./turn.js";
+import { executeTurn, saveAssistantMessage } from "./turn.js";
 import { type ContextUsageBand } from "./context-band.js";
 import {
   appendPendingOperatorInstructions,
@@ -85,6 +85,11 @@ export async function runTurnLoop(
   loopConfig: TurnLoopConfig,
   promptOptions: PromptStackOptions = {},
   abortSignal?: AbortSignal,
+  // Chat-turn "stop generating" (9-5a): cancels the in-flight streaming
+  // inference + persists partial text. Distinct from `abortSignal` (the
+  // mission/subagent boundary stop) — only the chat ingress passes this, so
+  // mission/subagent callers are behaviour-preserving.
+  inferenceAbortSignal?: AbortSignal,
 ): Promise<TurnLoopResult> {
   let lastText: string | null = null;
   let totalToolCalls = 0;
@@ -244,13 +249,32 @@ export async function runTurnLoop(
     postCompactBridgeRemaining = stack.nextPostCompactBridgeRemaining;
 
     // Execute turn (no save yet — deferred save lives in tool-batch helper).
+    // `inferenceAbortSignal` (chat-turn only) lets the streaming inference be
+    // cancelled mid-response; mission/subagent callers leave it undefined.
     const turnResult = await executeTurn(
       context, liveMessages, currentSummary, provider, config, stack.tools, stack.promptOptions,
+      inferenceAbortSignal,
     );
     currentTokenCount = turnResult.promptTokens;
     observeBand(currentTokenCount, "post_turn_text");
 
     if (abortSignal?.aborted) {
+      stopReason = "user_stopped";
+      break;
+    }
+
+    // Chat-turn "stop generating" (9-5a): the consumer CAPTURED the abort at
+    // stream exit, so this is race-free — a turn that merely completed as the
+    // user clicked stop has `inferenceAborted=false` and falls through to the
+    // normal path. On a real abort, persist the partial text as a `chat_stopped`
+    // row (partial tool calls were already dropped by the consumer) so the
+    // ephemeral preview is replaced by a durable row.
+    if (turnResult.inferenceAborted) {
+      if (turnResult.content) {
+        await saveAssistantMessage(context.sessionId, turnResult.content, null, {
+          stopped: true,
+        });
+      }
       stopReason = "user_stopped";
       break;
     }

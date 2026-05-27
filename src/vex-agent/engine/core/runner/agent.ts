@@ -29,6 +29,7 @@ import { toToolDefinitions, DEFAULT_LOOP_CONFIG } from "./shared.js";
 export async function processAgentTurn(
   sessionId: string,
   userInput: string,
+  signal?: AbortSignal,
 ): Promise<TurnResult> {
   logger.info("engine.agent.turn", { sessionId });
 
@@ -107,6 +108,9 @@ export async function processAgentTurn(
     config,
     tools,
     loopConfig,
+    {}, // promptOptions (default)
+    undefined, // abortSignal — chat turns have no mission-boundary controller
+    signal, // inferenceAbortSignal (9-5a) — chat-turn "stop generating"
   );
 
     return {

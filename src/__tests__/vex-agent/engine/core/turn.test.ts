@@ -225,6 +225,44 @@ describe("turn", () => {
     }
   });
 
+  it("aborts before any usage chunk: skips usage logging + token count, flags inferenceAborted (9-5a)", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const provider = makeStreamingProvider([{ type: "content", text: "x" }]);
+    const result = await executeTurn(
+      makeContext(), [], null, provider as any, makeConfig() as any, [], {}, controller.signal,
+    );
+
+    expect(result.inferenceAborted).toBe(true);
+    expect(result.usageObserved).toBe(false);
+    // No zero usage row, no token_count reset (context pressure preserved).
+    expect(mockLogUsage).not.toHaveBeenCalled();
+    expect(mockUpdateTokenCount).not.toHaveBeenCalled();
+  });
+
+  it("aborts after a usage chunk: still logs usage + partial content (9-5a)", async () => {
+    const controller = new AbortController();
+    const provider = {
+      id: "fake",
+      chatCompletionStream: async function* (): AsyncGenerator<StreamChunk> {
+        yield { type: "content", text: "partial" };
+        yield { type: "usage", usage: { promptTokens: 1000, completionTokens: 200, totalTokens: 1200 } };
+        controller.abort();
+        yield { type: "content", text: "DROPPED" };
+      },
+      chatCompletionSimple: vi.fn(),
+      calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD" }),
+    };
+    const result = await executeTurn(
+      makeContext(), [], null, provider as any, makeConfig() as any, [], {}, controller.signal,
+    );
+
+    expect(result.inferenceAborted).toBe(true);
+    expect(result.content).toBe("partial");
+    expect(result.usageObserved).toBe(true);
+    expect(mockLogUsage).toHaveBeenCalled();
+  });
+
   // PR2 cutover: the legacy `[Session episode recall]` block + the
   // `recallTopK`-driven auto-injection are removed. Per-session narrative
   // memory is now agent-driven via `memory_recall`; the system-prompt-side

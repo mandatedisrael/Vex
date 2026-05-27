@@ -39,6 +39,14 @@ export interface SingleTurnResult {
   toolCalls: ParsedToolCall[] | null;
   /** Token usage from this request. */
   promptTokens: number;
+  /**
+   * True iff the streaming inference was stopped by `signal` (Stage 9-5a).
+   * Captured at stream exit — the turn-loop acts on this, never on the live
+   * signal (which could flip after a turn completes).
+   */
+  inferenceAborted: boolean;
+  /** True iff a provider usage chunk was observed before the stream exited. */
+  usageObserved: boolean;
 }
 
 /**
@@ -63,6 +71,7 @@ export async function executeTurn(
   config: InferenceConfig,
   tools: ToolDefinition[],
   promptOptions: PromptStackOptions = {},
+  signal?: AbortSignal,
 ): Promise<SingleTurnResult> {
   // Pre-fetch Active Knowledge inputs (hot context entries + known kinds taxonomy
   // + active count for the state banner). All four queries are indexed and cheap;
@@ -138,13 +147,20 @@ export async function executeTurn(
   // the deferred save in turn-loop. Emission is best-effort and never throws
   // into the turn (the bus + onDelta both isolate listener errors).
   const streamId = randomUUID();
-  const response = await runStreamingInference(provider, repair.messages, tools, config, {
-    onDelta: (chunk, sequence) => {
-      streamDeltaBus.emit(
-        toStreamDeltaEvent(context.sessionId, streamId, sequence, chunk),
-      );
+  const { response, aborted, usageObserved } = await runStreamingInference(
+    provider,
+    repair.messages,
+    tools,
+    config,
+    {
+      signal,
+      onDelta: (chunk, sequence) => {
+        streamDeltaBus.emit(
+          toStreamDeltaEvent(context.sessionId, streamId, sequence, chunk),
+        );
+      },
     },
-  });
+  );
 
   // Log usage + update token count
   // NOTE: assistant message is NOT saved here — turn-loop handles deferred save
@@ -152,26 +168,35 @@ export async function executeTurn(
   const promptTokens = response.usage.promptTokens ?? 0;
   const completionTokens = response.usage.completionTokens ?? 0;
 
+  // Skip usage logging + token_count update ONLY when the stream was aborted
+  // before any usage chunk arrived — otherwise a zero usage row would be written
+  // and sessions.token_count reset to 0, wrecking context-pressure tracking
+  // (Stage 9-5a). A normal turn, or an abort that already saw usage, records it.
+  //
   // token_count = SET, not accumulate. Stores the latest prompt size (total tokens
   // sent to provider including system prompt + messages). Used by checkpoint to
   // evaluate context window pressure: shouldCheckpoint(tokenCount, contextLimit).
-  await usageRepo.logUsage(context.sessionId, {
-    promptTokens,
-    completionTokens,
-    cachedTokens: response.usage.cachedTokens ?? 0,
-    reasoningTokens: response.usage.reasoningTokens ?? 0,
-    cost: provider.calculateCost(response.usage, config).totalCost,
-    provider: config.provider,
-    model: config.model,
-    currency: provider.calculateCost(response.usage, config).currency,
-  });
-
-  await sessionsRepo.updateTokenCount(context.sessionId, promptTokens);
+  if (!(aborted && !usageObserved)) {
+    const cost = provider.calculateCost(response.usage, config);
+    await usageRepo.logUsage(context.sessionId, {
+      promptTokens,
+      completionTokens,
+      cachedTokens: response.usage.cachedTokens ?? 0,
+      reasoningTokens: response.usage.reasoningTokens ?? 0,
+      cost: cost.totalCost,
+      provider: config.provider,
+      model: config.model,
+      currency: cost.currency,
+    });
+    await sessionsRepo.updateTokenCount(context.sessionId, promptTokens);
+  }
 
   return {
     content: response.content,
     toolCalls: response.toolCalls,
     promptTokens,
+    inferenceAborted: aborted,
+    usageObserved,
   };
 }
 
@@ -234,6 +259,7 @@ export async function saveAssistantMessage(
   sessionId: string,
   content: string | null,
   toolCalls: ParsedToolCall[] | null,
+  opts?: { readonly stopped?: boolean },
 ): Promise<void> {
   const hasContent = content !== null && content !== undefined;
   const hasToolCalls = toolCalls !== null && toolCalls !== undefined && toolCalls.length > 0;
@@ -242,7 +268,10 @@ export async function saveAssistantMessage(
 
   const metadata: MessageMetadata = {
     source: "assistant",
-    messageType: "chat",
+    // 9-5a: a chat turn stopped mid-stream persists its partial text as
+    // `chat_stopped`, so the ephemeral streamed preview is replaced by a
+    // durable row. Renderer mapping/badge for this type lands in 9-5b.
+    messageType: opts?.stopped === true ? "chat_stopped" : "chat",
     visibility: "user",
   };
 

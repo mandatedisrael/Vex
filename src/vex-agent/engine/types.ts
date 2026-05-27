@@ -161,6 +161,8 @@ export type MessageSource =
 
 export type MessageType =
   | "chat"
+  /** A chat turn whose streaming was stopped mid-response (Stage 9-5a). */
+  | "chat_stopped"
   | "mission_setup"
   | "mission_summary"
   | "mission_recovered"

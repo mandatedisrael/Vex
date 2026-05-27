@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ToolDefinition } from "@vex-agent/inference/types.js";
+import type { StreamChunk, ToolDefinition } from "@vex-agent/inference/types.js";
 import type { ContextUsageBand } from "@vex-agent/engine/core/context-band.js";
 
 // ── Mocks ─────────────────────────────────────────────────────
@@ -39,6 +39,10 @@ vi.mock("@vex-agent/engine/events/index.js", () => ({
   appendMessage: (...a: unknown[]) => mockAddMessage(...a),
   appendEngineMessage: (...a: unknown[]) => mockAddEngineMessage(...a),
   emitTranscriptAppend: vi.fn(),
+  // 9-5a: executeTurn emits stream deltas through this barrel. Stub the bus so
+  // a streaming provider used in these tests doesn't crash on `emit`.
+  streamDeltaBus: { emit: vi.fn(), subscribe: vi.fn(), size: vi.fn(), clear: vi.fn() },
+  toStreamDeltaEvent: vi.fn(),
 }));
 
 vi.mock("@vex-agent/db/repos/mission-runs.js", () => ({
@@ -256,6 +260,17 @@ describe("turn-loop", () => {
     };
   }
 
+  // 9-5a: a provider whose stream the consumer can abort. `chatCompletion` is
+  // present (so a non-streaming fallback would be visible) but must NOT be
+  // called when streaming aborts.
+  function makeStreamingProvider(stream: () => AsyncGenerator<StreamChunk>) {
+    return {
+      chatCompletionStream: stream,
+      chatCompletion: vi.fn(),
+      calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD" }),
+    };
+  }
+
   function makeConfig() {
     return {
       provider: "openrouter",
@@ -322,6 +337,51 @@ describe("turn-loop", () => {
         sourceSurface: "vex_agent",
         sourceSession: "session-1",
       });
+    });
+
+    it("chat-turn inferenceAbortSignal aborts the stream + persists partial text as chat_stopped (9-5a)", async () => {
+      const controller = new AbortController();
+      const provider = makeStreamingProvider(async function* (): AsyncGenerator<StreamChunk> {
+        yield { type: "content", text: "par" };
+        yield { type: "content", text: "tial" };
+        controller.abort();
+        yield { type: "content", text: "DROPPED" };
+      });
+      const result = await runTurnLoop(
+        makeContext(), [], null, 0, provider as any, makeConfig() as any, [],
+        defaultLoopConfig,
+        {}, undefined, controller.signal, // promptOptions, abortSignal, inferenceAbortSignal
+      );
+
+      expect(result.stopReason).toBe("user_stopped");
+      // Partial text persisted as chat_stopped via appendMessage (mocked).
+      const stopped = mockAddMessage.mock.calls.find(
+        (c) => (c[2] as { messageType?: string } | undefined)?.messageType === "chat_stopped",
+      );
+      expect(stopped).toBeDefined();
+      expect((stopped![1] as { content: string }).content).toBe("partial");
+      // Aborted stream must NOT fall back to the buffered path.
+      expect(provider.chatCompletion).not.toHaveBeenCalled();
+    });
+
+    it("boundary abortSignal (mission/subagent shape) does NOT persist a chat_stopped partial (9-5a regression)", async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const provider = makeProvider([{ content: "unused" }]);
+      const result = await runTurnLoop(
+        makeContext(), [], null, 0, provider as any, makeConfig() as any, [],
+        defaultLoopConfig,
+        {}, controller.signal, // abortSignal set; inferenceAbortSignal omitted
+      );
+
+      // Boundary stop short-circuits at the iteration-entry guard: no inference,
+      // no partial chat_stopped persistence (that is chat-turn-only).
+      expect(result.stopReason).toBe("user_stopped");
+      const stopped = mockAddMessage.mock.calls.find(
+        (c) => (c[2] as { messageType?: string } | undefined)?.messageType === "chat_stopped",
+      );
+      expect(stopped).toBeUndefined();
+      expect(provider.chatCompletion).not.toHaveBeenCalled();
     });
   });
 

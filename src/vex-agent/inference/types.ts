@@ -213,11 +213,15 @@ export interface InferenceProvider {
   /**
    * Streaming chat completion with tool calling.
    * Used by: UI chat (text deltas + tool call deltas).
+   *
+   * `signal` (Stage 9-5a) cancels the in-flight HTTP stream for chat-turn
+   * "stop generating". When omitted, the stream runs to completion as before.
    */
   chatCompletionStream(
     messages: ProviderMessage[],
     tools: ToolDefinition[],
     config: InferenceConfig,
+    signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk>;
 
   /**

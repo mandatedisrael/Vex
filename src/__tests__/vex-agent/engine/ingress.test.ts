@@ -245,6 +245,7 @@ describe("ingress.routeUserMessage", () => {
     const result = await routeUserMessage("s1", "hi");
 
     expect(result).toBe(agentResult);
-    expect(mockProcessAgentTurn).toHaveBeenCalledWith("s1", "hi");
+    // 9-5a threads the chat-turn stop signal (undefined here) to the agent turn.
+    expect(mockProcessAgentTurn).toHaveBeenCalledWith("s1", "hi", undefined);
   });
 });
