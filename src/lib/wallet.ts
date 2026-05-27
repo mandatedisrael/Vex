@@ -63,6 +63,7 @@ export {
 } from "../config/store.js";
 
 export {
+  decryptExportSecret,
   getPrimaryEvmAddress,
   getPrimaryEvmEntry,
   getPrimarySolanaAddress,

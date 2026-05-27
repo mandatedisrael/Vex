@@ -17,10 +17,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import * as React from "react";
 import type { Result } from "@shared/ipc/result.js";
 
 interface ExportPrivateKeyInput {
   readonly chain: "evm" | "solana";
+  readonly walletId: string;
   readonly password: string;
   readonly riskAcknowledged: true;
 }
@@ -38,6 +40,26 @@ const mockExport =
   >();
 const mockOnClose = vi.fn();
 
+// Stub the wallet picker: report a chain-appropriate selection on mount so the
+// modal's submit gate (`selected !== null`) is satisfied. The picker's own
+// behaviour (inventory, default-primary, stale heal) is covered in
+// ExportWalletPicker.test.tsx.
+vi.mock("../ExportWalletPicker.js", () => ({
+  ExportWalletPicker: (props: {
+    chain: "evm" | "solana";
+    onSelect: (s: { walletId: string; address: string } | null) => void;
+  }) => {
+    React.useEffect(() => {
+      props.onSelect(
+        props.chain === "solana"
+          ? { walletId: "sol_test", address: "SoLtestaddrAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" }
+          : { walletId: "evm_test", address: "0xtestaddress000000000000000000000000000000" },
+      );
+    }, [props.chain, props.onSelect]);
+    return null;
+  },
+}));
+
 const { ExportPrivateKeyModal } = await import("../ExportPrivateKeyModal.js");
 
 const VALID_PASSWORD = "valid-password-12";
@@ -45,14 +67,12 @@ const VALID_PASSWORD = "valid-password-12";
 function renderModal(
   props?: Partial<{
     chain: "evm" | "solana";
-    walletAddress: string;
     onClose: () => void;
   }>,
 ): ReturnType<typeof render> {
   return render(
     <ExportPrivateKeyModal
       chain={props?.chain ?? "evm"}
-      walletAddress={props?.walletAddress ?? "0x1234567890abcdef1234567890abcdef12345678"}
       onClose={props?.onClose ?? mockOnClose}
     />,
   );
@@ -153,7 +173,7 @@ describe("ExportPrivateKeyModal", () => {
     expect(submit.disabled).toBe(false);
   });
 
-  it("calls window.vex.wallet.exportPrivateKey with chain, password, riskAcknowledged: true", async () => {
+  it("calls window.vex.wallet.exportPrivateKey with chain, walletId, password, riskAcknowledged: true", async () => {
     mockExport.mockResolvedValue({
       ok: true,
       data: {
@@ -170,6 +190,7 @@ describe("ExportPrivateKeyModal", () => {
     await waitFor(() => {
       expect(mockExport).toHaveBeenCalledWith({
         chain: "evm",
+        walletId: "evm_test",
         password: VALID_PASSWORD,
         riskAcknowledged: true,
       });

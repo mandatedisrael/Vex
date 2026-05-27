@@ -251,4 +251,71 @@ describe("wallet inventory (stage 1)", () => {
       expect(manifestRaw).not.toContain("ciphertext");
     });
   });
+
+  describe("decryptExportSecret (sudo export)", () => {
+    it("EVM: returns the hex private key and verifies it derives the recorded address", () => {
+      const e = importEvmWalletEntry(KEY_A);
+      const out = inv.decryptExportSecret({ family: "evm", entry: e, password: TEST_PASSWORD });
+      expect(out.format).toBe("hex");
+      expect(out.secret.toLowerCase()).toBe(KEY_A.toLowerCase());
+    });
+
+    it("EVM: fails closed (SIGNER_MISMATCH) when the decrypted key does not derive the recorded address", () => {
+      // Record address(KEY_A) as the legacy primary but write a keystore that
+      // actually holds KEY_B → the export verify must reject before returning.
+      inv.registerPrimaryLegacyWallet("evm", privateKeyToAddress(KEY_A as `0x${string}`));
+      saveKeystore(encryptPrivateKey(KEY_B, TEST_PASSWORD));
+      const [legacy] = loadConfig().wallet.evm;
+      if (!legacy) throw new Error("expected a legacy EVM entry");
+      expect(
+        codeOf(() => inv.decryptExportSecret({ family: "evm", entry: legacy, password: TEST_PASSWORD })),
+      ).toBe(ErrorCodes.SIGNER_MISMATCH);
+    });
+
+    it("EVM: fails closed (KEYSTORE_NOT_FOUND) when the keystore file is missing", () => {
+      const e = createEvmWalletEntry();
+      rmSync(inv.derivePath("evm", e));
+      expect(
+        codeOf(() => inv.decryptExportSecret({ family: "evm", entry: e, password: TEST_PASSWORD })),
+      ).toBe(ErrorCodes.KEYSTORE_NOT_FOUND);
+    });
+
+    it("EVM: throws on the wrong password (decrypt failure, never returns a bogus secret)", () => {
+      const e = importEvmWalletEntry(KEY_A);
+      expect(() =>
+        inv.decryptExportSecret({ family: "evm", entry: e, password: "wrong-password-xx" }),
+      ).toThrow();
+    });
+
+    it("Solana: returns a base58 secret and verifies it derives the recorded address", () => {
+      const e = createSolanaWalletEntry();
+      const out = inv.decryptExportSecret({ family: "solana", entry: e, password: TEST_PASSWORD });
+      expect(out.format).toBe("base58");
+      expect(typeof out.secret).toBe("string");
+      expect(out.secret.length).toBeGreaterThan(0);
+    });
+
+    it("Solana: fails closed (KHALANI_SOLANA_KEYSTORE_NOT_FOUND) when the keystore file is missing", () => {
+      const e = createSolanaWalletEntry();
+      rmSync(inv.derivePath("solana", e));
+      expect(
+        codeOf(() => inv.decryptExportSecret({ family: "solana", entry: e, password: TEST_PASSWORD })),
+      ).toBe(ErrorCodes.KHALANI_SOLANA_KEYSTORE_NOT_FOUND);
+    });
+
+    it("Solana: fails closed (SIGNER_MISMATCH) when the keystore holds a different wallet's key", () => {
+      const e1 = createSolanaWalletEntry();
+      const e2 = createSolanaWalletEntry();
+      // Overwrite e1's keystore with e2's encrypted key → decrypt yields e2's
+      // address, which no longer matches e1's recorded address.
+      writeFileSync(
+        inv.derivePath("solana", e1),
+        readFileSync(inv.derivePath("solana", e2), "utf-8"),
+        "utf-8",
+      );
+      expect(
+        codeOf(() => inv.decryptExportSecret({ family: "solana", entry: e1, password: TEST_PASSWORD })),
+      ).toBe(ErrorCodes.SIGNER_MISMATCH);
+    });
+  });
 });

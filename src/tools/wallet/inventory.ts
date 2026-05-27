@@ -29,7 +29,11 @@ import { VexError, ErrorCodes } from "../../errors.js";
 import { requireKeystorePassword } from "../../utils/env.js";
 import type { ChainFamily } from "../khalani/types.js";
 import { decryptPrivateKey, loadKeystoreFile } from "./keystore.js";
-import { decryptSolanaSecretKey } from "./solana-keystore.js";
+import {
+  decryptSolanaSecretKey,
+  deriveSolanaAddress,
+  encodeSolanaSecretKey,
+} from "./solana-keystore.js";
 
 /** Config-side family key. Distinct from `ChainFamily` ("eip155"|"solana"). */
 export type InventoryFamily = "evm" | "solana";
@@ -161,6 +165,61 @@ export function loadEvmKey(entry: WalletInventoryEntry): { address: Address; pri
     );
   }
   return { address: recorded, privateKey };
+}
+
+/**
+ * Sudo-export decrypt path: decrypt a SPECIFIC inventory entry's key with a
+ * CALLER-SUPPLIED password (NOT the session secret), verify the decrypted key
+ * derives the recorded `entry.address` (fail-CLOSED on mismatch), and return
+ * the clipboard-ready secret + format. The app's wallet-export IPC handler is
+ * the only caller; it owns throttle / vault re-auth / clipboard lease / audit.
+ * Solana plaintext bytes are zeroized after encoding (and on the mismatch
+ * throw) so the raw key buffer does not linger.
+ */
+export function decryptExportSecret(args: {
+  readonly family: InventoryFamily;
+  readonly entry: WalletInventoryEntry;
+  readonly password: string;
+}): { readonly secret: string; readonly format: "hex" | "base58" } {
+  const { family, entry, password } = args;
+  const keystore = loadKeystoreFile(derivePath(family, entry));
+  if (!keystore) {
+    throw new VexError(
+      family === "solana"
+        ? ErrorCodes.KHALANI_SOLANA_KEYSTORE_NOT_FOUND
+        : ErrorCodes.KEYSTORE_NOT_FOUND,
+      "Keystore not found for the selected wallet.",
+      "Re-import the wallet or restore from backup.",
+    );
+  }
+  if (family === "evm") {
+    const privateKey = decryptPrivateKey(keystore, password);
+    if (
+      !walletAddressesEqual("evm", privateKeyToAddress(privateKey), entry.address)
+    ) {
+      throw new VexError(
+        ErrorCodes.SIGNER_MISMATCH,
+        "Decrypted EVM key does not match the recorded wallet address.",
+        "Re-import the wallet or restore from backup.",
+      );
+    }
+    return { secret: privateKey, format: "hex" };
+  }
+  const secretKey = decryptSolanaSecretKey(keystore, password);
+  try {
+    if (
+      !walletAddressesEqual("solana", deriveSolanaAddress(secretKey), entry.address)
+    ) {
+      throw new VexError(
+        ErrorCodes.SIGNER_MISMATCH,
+        "Decrypted Solana key does not match the recorded wallet address.",
+        "Re-import the wallet or restore from backup.",
+      );
+    }
+    return { secret: encodeSolanaSecretKey(secretKey), format: "base58" };
+  } finally {
+    secretKey.fill(0);
+  }
 }
 
 // ── Writes ─────────────────────────────────────────────────────────────────

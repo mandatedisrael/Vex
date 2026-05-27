@@ -312,7 +312,6 @@ export function ReviewStep({
       {exportingChain !== null ? (
         <ExportPrivateKeyModal
           chain={exportingChain}
-          walletAddress={env.walletAddresses?.[exportingChain] ?? ""}
           onClose={() => setExportingChain(null)}
         />
       ) : null}

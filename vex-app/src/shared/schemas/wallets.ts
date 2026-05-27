@@ -169,6 +169,13 @@ export type WalletOpenBackupFolderResult = z.infer<typeof walletOpenBackupFolder
 export const walletExportPrivateKeyInputSchema = z
   .object({
     chain: chainSchema,
+    /**
+     * Which wallet to export (multi-wallet, up to 3/family). Main is the
+     * authority: it resolves this id → inventory entry → keystore path and
+     * verifies the decrypted key derives the recorded address. The renderer
+     * NEVER sends the address as authority.
+     */
+    walletId: z.string().min(1).max(128),
     password: z.string().min(PASSWORD_MIN_LENGTH),
     riskAcknowledged: z.literal(true),
   })

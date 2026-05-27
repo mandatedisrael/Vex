@@ -2,9 +2,13 @@
  * Tests for the vex.wallet.exportPrivateKey IPC handler.
  *
  * Mocks: electron (ipcMain + clipboard), secrets/session, export-throttle,
- * verifySecretVaultPassword, engine keystore loaders, lifecycle/cleanup
- * registry, logger. Exercises the full handler control flow without
- * touching real keystores, the vault file, or the actual OS clipboard.
+ * verifySecretVaultPassword, the engine wallet inventory + export helper
+ * (`getWalletById` + `decryptExportSecret`), lifecycle/cleanup registry, and
+ * the logger. The clipboard-lease module is intentionally NOT mocked — it runs
+ * for real against the mocked electron clipboard + cleanup registry so the
+ * lease lifecycle (timer, conditional clear, quit cleanup) is exercised
+ * end-to-end. Exercises the full handler control flow without touching real
+ * keystores, the vault file, or the actual OS clipboard.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,14 +59,14 @@ class LocalSecretVaultErrorMock extends Error {
   }
 }
 
-// ── keystore loader + decrypt mocks ────────────────────────────────────────
-const mockLoadKeystore = vi.fn();
-const mockLoadSolanaKeystore = vi.fn();
-const mockDecryptPrivateKey = vi.fn();
-const mockDecryptSolanaSecretKey = vi.fn();
-const mockEncodeSolanaSecretKey = vi.fn();
+// ── engine inventory + export-helper mocks ─────────────────────────────────
+// The handler resolves the wallet by id (`getWalletById`) then decrypts +
+// verifies it in the engine (`decryptExportSecret`). Both are mocked so the
+// handler's control flow is tested in isolation from real keystores.
+const mockGetWalletById = vi.fn();
+const mockDecryptExportSecret = vi.fn();
 
-// VexError clone surfaced by keystore loaders on parse failure.
+// VexError clone surfaced by the engine export helper on decrypt/verify failure.
 class FakeEngineVexError extends Error {
   constructor(
     public readonly code: string,
@@ -128,14 +132,9 @@ vi.mock("@vex-lib/local-secret-vault.js", () => ({
 }));
 
 vi.mock("@vex-lib/wallet.js", () => ({
-  loadKeystore: () => mockLoadKeystore(),
-  loadSolanaKeystore: () => mockLoadSolanaKeystore(),
-  decryptPrivateKey: (keystore: unknown, password: string) =>
-    mockDecryptPrivateKey(keystore, password),
-  decryptSolanaSecretKey: (keystore: unknown, password: string) =>
-    mockDecryptSolanaSecretKey(keystore, password),
-  encodeSolanaSecretKey: (bytes: Uint8Array) =>
-    mockEncodeSolanaSecretKey(bytes),
+  getWalletById: (family: unknown, id: unknown) =>
+    mockGetWalletById(family, id),
+  decryptExportSecret: (args: unknown) => mockDecryptExportSecret(args),
 }));
 
 vi.mock("../../paths/config-dir.js", () => ({
@@ -171,28 +170,40 @@ const { walletExportPrivateKeyInputSchema } = await import(
 
 const trustedSender = createTrustedSender({ sender: createTestWebContents() });
 
+const WALLET_ID_EVM = "evm_11111111-1111-1111-1111-111111111111";
+const WALLET_ID_SOLANA = "sol_22222222-2222-2222-2222-222222222222";
+
 const VALID_INPUT_EVM = {
-  chain: "evm" as const,
+  chain: "evm",
+  walletId: WALLET_ID_EVM,
   password: "master-password-12",
-  riskAcknowledged: true as const,
-};
+  riskAcknowledged: true,
+} as const;
 
 const VALID_INPUT_SOLANA = {
-  chain: "solana" as const,
+  chain: "solana",
+  walletId: WALLET_ID_SOLANA,
   password: "master-password-12",
-  riskAcknowledged: true as const,
+  riskAcknowledged: true,
+} as const;
+
+// Inventory entry returned by `getWalletById`. The handler only checks for
+// non-null and forwards it to the (mocked) decrypt helper + logs the id from
+// the input, so a minimal shape is sufficient here. The real entry shape is
+// exercised in the engine `inventory.test.ts`.
+const STUB_ENTRY_EVM = {
+  id: WALLET_ID_EVM,
+  address: "0x1234567890abcdef1234567890abcdef12345678",
+  label: "EVM 1",
+  createdAt: "2026-01-01T00:00:00.000Z",
 };
 
-const STUB_KEYSTORE_EVM = {
-  version: 1,
-  ciphertext: "x",
-  iv: "y",
-  salt: "z",
-  tag: "t",
-  kdf: { name: "scrypt", N: 16384, r: 8, p: 1, dkLen: 32 },
+const STUB_ENTRY_SOLANA = {
+  id: WALLET_ID_SOLANA,
+  address: "So11111111111111111111111111111111111111112",
+  label: "Solana 1",
+  createdAt: "2026-01-01T00:00:00.000Z",
 };
-
-const STUB_KEYSTORE_SOLANA = { ...STUB_KEYSTORE_EVM };
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -208,11 +219,8 @@ beforeEach(() => {
   mockRecordExportFailure.mockReset();
   mockRecordExportSuccess.mockReset();
   mockVerifySecretVaultPassword.mockReset();
-  mockLoadKeystore.mockReset();
-  mockLoadSolanaKeystore.mockReset();
-  mockDecryptPrivateKey.mockReset();
-  mockDecryptSolanaSecretKey.mockReset();
-  mockEncodeSolanaSecretKey.mockReset();
+  mockGetWalletById.mockReset();
+  mockDecryptExportSecret.mockReset();
   mockGlobalCleanupAdd.mockClear();
   mockLog.info.mockClear();
   mockLog.warn.mockClear();
@@ -254,12 +262,20 @@ interface OkResult<T> {
   readonly data: T;
 }
 
+interface ExportOk {
+  chain: string;
+  format: string;
+  copied: boolean;
+  clearAfterMs: number;
+}
+
 // ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ──
 
 describe("input validation (Zod schema at boundary)", () => {
   it("rejects when riskAcknowledged is false", () => {
     const parsed = walletExportPrivateKeyInputSchema.safeParse({
       chain: "evm",
+      walletId: WALLET_ID_EVM,
       password: "master-password-12",
       riskAcknowledged: false,
     });
@@ -269,6 +285,7 @@ describe("input validation (Zod schema at boundary)", () => {
   it("rejects when riskAcknowledged is missing", () => {
     const parsed = walletExportPrivateKeyInputSchema.safeParse({
       chain: "evm",
+      walletId: WALLET_ID_EVM,
       password: "master-password-12",
     });
     expect(parsed.success).toBe(false);
@@ -277,6 +294,7 @@ describe("input validation (Zod schema at boundary)", () => {
   it("rejects passwords below the configured minimum", () => {
     const parsed = walletExportPrivateKeyInputSchema.safeParse({
       chain: "evm",
+      walletId: WALLET_ID_EVM,
       password: "short",
       riskAcknowledged: true,
     });
@@ -286,6 +304,36 @@ describe("input validation (Zod schema at boundary)", () => {
   it("rejects unknown chains", () => {
     const parsed = walletExportPrivateKeyInputSchema.safeParse({
       chain: "bitcoin",
+      walletId: WALLET_ID_EVM,
+      password: "master-password-12",
+      riskAcknowledged: true,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects a missing walletId", () => {
+    const parsed = walletExportPrivateKeyInputSchema.safeParse({
+      chain: "evm",
+      password: "master-password-12",
+      riskAcknowledged: true,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects a blank walletId", () => {
+    const parsed = walletExportPrivateKeyInputSchema.safeParse({
+      chain: "evm",
+      walletId: "",
+      password: "master-password-12",
+      riskAcknowledged: true,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects a walletId over the 128-char cap", () => {
+    const parsed = walletExportPrivateKeyInputSchema.safeParse({
+      chain: "evm",
+      walletId: `evm_${"a".repeat(130)}`,
       password: "master-password-12",
       riskAcknowledged: true,
     });
@@ -295,6 +343,7 @@ describe("input validation (Zod schema at boundary)", () => {
   it("rejects extra (strict-mode) properties", () => {
     const parsed = walletExportPrivateKeyInputSchema.safeParse({
       chain: "evm",
+      walletId: WALLET_ID_EVM,
       password: "master-password-12",
       riskAcknowledged: true,
       extra: "smuggle",
@@ -330,9 +379,10 @@ describe("throttle gate", () => {
     expect(result.error.retryable).toBe(true);
     expect(result.error.domain).toBe("wallet");
     expect(result.error.correlationId).toBe("throttled-1");
-    // Downstream calls must NOT run while the gate is closed.
+    // Downstream work must NOT run while the gate is closed.
     expect(mockVerifySecretVaultPassword).not.toHaveBeenCalled();
-    expect(mockLoadKeystore).not.toHaveBeenCalled();
+    expect(mockGetWalletById).not.toHaveBeenCalled();
+    expect(mockDecryptExportSecret).not.toHaveBeenCalled();
     expect(mockClipboardWriteText).not.toHaveBeenCalled();
   });
 });
@@ -357,6 +407,7 @@ describe("session lock check", () => {
     expect(result.error.code).toBe("wallet.keystore_locked");
     // Verify the handler did not reach the decryption stage.
     expect(mockVerifySecretVaultPassword).not.toHaveBeenCalled();
+    expect(mockDecryptExportSecret).not.toHaveBeenCalled();
     expect(mockClipboardWriteText).not.toHaveBeenCalled();
   });
 });
@@ -457,7 +508,7 @@ describe("password re-auth", () => {
 
 // ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ── ──
 
-describe("keystore loading", () => {
+describe("wallet resolution + decrypt / verify", () => {
   beforeEach(() => {
     mockCheckExportAllowed.mockReturnValue({ allowed: true });
     mockGetSecretSessionStatus.mockReturnValue({
@@ -467,8 +518,29 @@ describe("keystore loading", () => {
     mockVerifySecretVaultPassword.mockReturnValue(undefined);
   });
 
-  it("returns wallet.keystore_missing when EVM keystore loader yields null", async () => {
-    mockLoadKeystore.mockReturnValue(null);
+  it("returns wallets.invalid_selection (no decrypt, no clipboard) for an unknown walletId", async () => {
+    mockGetWalletById.mockReturnValue(null);
+    const fn = getHandler();
+
+    const result = (await fn(trustedSender, {
+      requestId: "unknown-id",
+      payload: VALID_INPUT_EVM,
+    })) as ErrResult;
+
+    expect(result.ok).toBe(false);
+    expect(result.error.code).toBe("wallets.invalid_selection");
+    expect(result.error.domain).toBe("wallets");
+    expect(result.error.correlationId).toBe("unknown-id");
+    // Fail closed BEFORE touching key material or the clipboard.
+    expect(mockDecryptExportSecret).not.toHaveBeenCalled();
+    expect(mockClipboardWriteText).not.toHaveBeenCalled();
+  });
+
+  it("returns wallet.keystore_missing when the EVM keystore file is absent", async () => {
+    mockGetWalletById.mockReturnValue(STUB_ENTRY_EVM);
+    mockDecryptExportSecret.mockImplementation(() => {
+      throw new FakeEngineVexError("KEYSTORE_NOT_FOUND", "keystore missing");
+    });
     const fn = getHandler();
 
     const result = (await fn(trustedSender, {
@@ -478,12 +550,17 @@ describe("keystore loading", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.code).toBe("wallet.keystore_missing");
-    expect(mockDecryptPrivateKey).not.toHaveBeenCalled();
     expect(mockClipboardWriteText).not.toHaveBeenCalled();
   });
 
-  it("returns wallet.keystore_missing when Solana keystore loader yields null", async () => {
-    mockLoadSolanaKeystore.mockReturnValue(null);
+  it("returns wallet.keystore_missing when the Solana keystore file is absent", async () => {
+    mockGetWalletById.mockReturnValue(STUB_ENTRY_SOLANA);
+    mockDecryptExportSecret.mockImplementation(() => {
+      throw new FakeEngineVexError(
+        "KHALANI_SOLANA_KEYSTORE_NOT_FOUND",
+        "keystore missing",
+      );
+    });
     const fn = getHandler();
 
     const result = (await fn(trustedSender, {
@@ -493,10 +570,35 @@ describe("keystore loading", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.code).toBe("wallet.keystore_missing");
+    expect(mockClipboardWriteText).not.toHaveBeenCalled();
   });
 
-  it("returns wallet.keystore_corrupt when the loader throws KEYSTORE_CORRUPT", async () => {
-    mockLoadKeystore.mockImplementation(() => {
+  it("returns wallet.keystore_corrupt and writes NOTHING when the key↔address verify fails (SIGNER_MISMATCH)", async () => {
+    mockGetWalletById.mockReturnValue(STUB_ENTRY_EVM);
+    mockDecryptExportSecret.mockImplementation(() => {
+      throw new FakeEngineVexError(
+        "SIGNER_MISMATCH",
+        "decrypted key does not match recorded address",
+      );
+    });
+    const fn = getHandler();
+
+    const result = (await fn(trustedSender, {
+      requestId: "mismatch-1",
+      payload: VALID_INPUT_EVM,
+    })) as ErrResult;
+
+    expect(result.ok).toBe(false);
+    expect(result.error.code).toBe("wallet.keystore_corrupt");
+    // SECURITY: a mismatched key must never reach the clipboard lease.
+    expect(mockClipboardWriteText).not.toHaveBeenCalled();
+    // A failed verify is NOT a wrong-password signal — throttle untouched.
+    expect(mockRecordExportFailure).not.toHaveBeenCalled();
+  });
+
+  it("returns wallet.keystore_corrupt when the keystore is corrupt / unsupported", async () => {
+    mockGetWalletById.mockReturnValue(STUB_ENTRY_EVM);
+    mockDecryptExportSecret.mockImplementation(() => {
       throw new FakeEngineVexError("KEYSTORE_CORRUPT", "bad schema");
     });
     const fn = getHandler();
@@ -508,11 +610,13 @@ describe("keystore loading", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.code).toBe("wallet.keystore_corrupt");
+    expect(mockClipboardWriteText).not.toHaveBeenCalled();
   });
 
-  it("returns wallet.keystore_corrupt on unrecognised loader exceptions (defensive)", async () => {
-    mockLoadKeystore.mockImplementation(() => {
-      throw new Error("unexpected loader explosion");
+  it("returns wallet.keystore_corrupt on unrecognised decrypt exceptions (defensive)", async () => {
+    mockGetWalletById.mockReturnValue(STUB_ENTRY_EVM);
+    mockDecryptExportSecret.mockImplementation(() => {
+      throw new Error("unexpected explosion");
     });
     const fn = getHandler();
 
@@ -523,6 +627,7 @@ describe("keystore loading", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.code).toBe("wallet.keystore_corrupt");
+    expect(mockClipboardWriteText).not.toHaveBeenCalled();
   });
 });
 
@@ -536,24 +641,19 @@ describe("success path — EVM", () => {
       unlocked: true,
     });
     mockVerifySecretVaultPassword.mockReturnValue(undefined);
-    mockLoadKeystore.mockReturnValue(STUB_KEYSTORE_EVM);
+    mockGetWalletById.mockReturnValue(STUB_ENTRY_EVM);
   });
 
   it("writes the hex private key to clipboard and returns the expected shape", async () => {
     const EVM_SECRET =
       "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-    mockDecryptPrivateKey.mockReturnValue(EVM_SECRET);
+    mockDecryptExportSecret.mockReturnValue({ secret: EVM_SECRET, format: "hex" });
     const fn = getHandler();
 
     const result = (await fn(trustedSender, {
       requestId: "ok-evm",
       payload: VALID_INPUT_EVM,
-    })) as OkResult<{
-      chain: string;
-      format: string;
-      copied: boolean;
-      clearAfterMs: number;
-    }>;
+    })) as OkResult<ExportOk>;
 
     expect(result.ok).toBe(true);
     expect(result.data).toEqual({
@@ -562,18 +662,26 @@ describe("success path — EVM", () => {
       copied: true,
       clearAfterMs: 10_000,
     });
+    // Main resolves the selected wallet by id and hands the engine the entry
+    // + the re-typed password — never a renderer-supplied address.
+    expect(mockGetWalletById).toHaveBeenCalledWith("evm", WALLET_ID_EVM);
+    expect(mockDecryptExportSecret).toHaveBeenCalledWith({
+      family: "evm",
+      entry: STUB_ENTRY_EVM,
+      password: "master-password-12",
+    });
     expect(mockClipboardWriteText).toHaveBeenCalledWith(EVM_SECRET);
     expect(mockRecordExportSuccess).toHaveBeenCalledTimes(1);
     // 2 = handler-registration cleanup (auto-added by registerHandler) +
-    // clipboard-lease cleanup (added by the handler when it took the lease).
+    // clipboard-lease cleanup (added by the lease when it took the write).
     expect(mockGlobalCleanupAdd).toHaveBeenCalledTimes(2);
     expect(__getActiveLeaseTokenForTests()).not.toBeNull();
   });
 
-  it("audit-logs metadata only — secret never appears in log args", async () => {
+  it("audit-logs metadata only — secret + password never appear in log args", async () => {
     const EVM_SECRET =
       "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-    mockDecryptPrivateKey.mockReturnValue(EVM_SECRET);
+    mockDecryptExportSecret.mockReturnValue({ secret: EVM_SECRET, format: "hex" });
     const fn = getHandler();
 
     await fn(trustedSender, {
@@ -590,10 +698,19 @@ describe("success path — EVM", () => {
       .filter((v): v is string => typeof v === "string")
       .join("\n");
     expect(allLogArgs).not.toContain(EVM_SECRET);
-    // The metadata audit line should still mention the chain + correlationId.
-    expect(mockLog.info).toHaveBeenCalledWith(
-      expect.stringMatching(/chain=evm.*correlationId=audit-1/),
-    );
+    expect(allLogArgs).not.toContain("master-password-12");
+
+    // The metadata audit line names chain + walletId + correlationId.
+    const auditLine =
+      mockLog.info.mock.calls
+        .flat()
+        .find(
+          (v): v is string =>
+            typeof v === "string" && v.includes("exportPrivateKey"),
+        ) ?? "";
+    expect(auditLine).toContain("chain=evm");
+    expect(auditLine).toContain(`walletId=${WALLET_ID_EVM}`);
+    expect(auditLine).toContain("correlationId=audit-1");
   });
 });
 
@@ -607,37 +724,31 @@ describe("success path — Solana", () => {
       unlocked: true,
     });
     mockVerifySecretVaultPassword.mockReturnValue(undefined);
-    mockLoadSolanaKeystore.mockReturnValue(STUB_KEYSTORE_SOLANA);
+    mockGetWalletById.mockReturnValue(STUB_ENTRY_SOLANA);
   });
 
-  it("zeroizes the decrypted Uint8Array after encoding, writes base58 to clipboard", async () => {
-    const SOLANA_BYTES = new Uint8Array(64);
-    SOLANA_BYTES.fill(7);
+  it("writes the base58 secret to clipboard and returns the expected shape", async () => {
+    // The engine helper owns Solana plaintext-buffer zeroization (covered in
+    // src/__tests__/wallet/inventory.test.ts); the handler only sees the
+    // already-encoded base58 string.
     const BASE58 = "fakebase58encodedsecret1234567890";
-    mockDecryptSolanaSecretKey.mockReturnValue(SOLANA_BYTES);
-    mockEncodeSolanaSecretKey.mockImplementation((bytes: Uint8Array) => {
-      // Confirm the bytes are still non-zero AT encode time.
-      expect(Array.from(bytes).every((b) => b === 7)).toBe(true);
-      return BASE58;
-    });
+    mockDecryptExportSecret.mockReturnValue({ secret: BASE58, format: "base58" });
     const fn = getHandler();
 
     const result = (await fn(trustedSender, {
       requestId: "ok-sol",
       payload: VALID_INPUT_SOLANA,
-    })) as OkResult<{
-      chain: string;
-      format: string;
-      copied: boolean;
-      clearAfterMs: number;
-    }>;
+    })) as OkResult<ExportOk>;
 
     expect(result.ok).toBe(true);
     expect(result.data.chain).toBe("solana");
     expect(result.data.format).toBe("base58");
+    expect(mockDecryptExportSecret).toHaveBeenCalledWith({
+      family: "solana",
+      entry: STUB_ENTRY_SOLANA,
+      password: "master-password-12",
+    });
     expect(mockClipboardWriteText).toHaveBeenCalledWith(BASE58);
-    // After the handler returns, the buffer should be zeroed in place.
-    expect(Array.from(SOLANA_BYTES).every((b) => b === 0)).toBe(true);
   });
 });
 
@@ -651,13 +762,13 @@ describe("clipboard lease lifecycle", () => {
       unlocked: true,
     });
     mockVerifySecretVaultPassword.mockReturnValue(undefined);
-    mockLoadKeystore.mockReturnValue(STUB_KEYSTORE_EVM);
+    mockGetWalletById.mockReturnValue(STUB_ENTRY_EVM);
   });
 
   it("clear fires after CLEAR_AFTER_MS when clipboard content matches our hash", async () => {
     const SECRET =
       "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-    mockDecryptPrivateKey.mockReturnValue(SECRET);
+    mockDecryptExportSecret.mockReturnValue({ secret: SECRET, format: "hex" });
     const fn = getHandler();
     await fn(trustedSender, {
       requestId: "lease-1",
@@ -679,7 +790,7 @@ describe("clipboard lease lifecycle", () => {
   it("does NOT clear when clipboard content changed before the timer fires", async () => {
     const SECRET =
       "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-    mockDecryptPrivateKey.mockReturnValue(SECRET);
+    mockDecryptExportSecret.mockReturnValue({ secret: SECRET, format: "hex" });
     const fn = getHandler();
     await fn(trustedSender, {
       requestId: "lease-overwrite",
@@ -700,7 +811,9 @@ describe("clipboard lease lifecycle", () => {
       "0x1111111111111111111111111111111111111111111111111111111111111111";
     const SECRET_2 =
       "0x2222222222222222222222222222222222222222222222222222222222222222";
-    mockDecryptPrivateKey.mockReturnValueOnce(SECRET_1).mockReturnValueOnce(SECRET_2);
+    mockDecryptExportSecret
+      .mockReturnValueOnce({ secret: SECRET_1, format: "hex" })
+      .mockReturnValueOnce({ secret: SECRET_2, format: "hex" });
     const fn = getHandler();
 
     await fn(trustedSender, {
@@ -732,7 +845,7 @@ describe("clipboard lease lifecycle", () => {
   it("registers a cleanup task that conditionally clears on app quit", async () => {
     const SECRET =
       "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-    mockDecryptPrivateKey.mockReturnValue(SECRET);
+    mockDecryptExportSecret.mockReturnValue({ secret: SECRET, format: "hex" });
     const fn = getHandler();
     await fn(trustedSender, {
       requestId: "lease-quit",
@@ -753,7 +866,7 @@ describe("clipboard lease lifecycle", () => {
   it("cleanup task no-ops on quit when clipboard content was overwritten", async () => {
     const SECRET =
       "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-    mockDecryptPrivateKey.mockReturnValue(SECRET);
+    mockDecryptExportSecret.mockReturnValue({ secret: SECRET, format: "hex" });
     const fn = getHandler();
     await fn(trustedSender, {
       requestId: "lease-quit-overwritten",

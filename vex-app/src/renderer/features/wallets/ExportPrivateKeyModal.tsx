@@ -53,6 +53,11 @@ import {
 } from "../../components/ui/dialog.js";
 import { Input } from "../../components/ui/input.js";
 import { Label } from "../../components/ui/label.js";
+import { ExportLockIcon } from "./ExportLockIcon.js";
+import {
+  ExportWalletPicker,
+  type ExportWalletSelection,
+} from "./ExportWalletPicker.js";
 
 type Chain = "evm" | "solana";
 
@@ -60,45 +65,13 @@ type Phase = "idle" | "copied" | "cleared" | "closing";
 
 export interface ExportPrivateKeyModalProps {
   readonly chain: Chain;
-  readonly walletAddress: string;
   readonly onClose: () => void;
-}
-
-/**
- * Inline lock SVG — same rationale as UnlockScreen.LockIcon: lucide-react is
- * not a vex-app dependency, and pulling a 200KB icon set for a single glyph
- * is not justified.
- */
-function LockIcon(): JSX.Element {
-  return (
-    <svg
-      aria-hidden
-      className="h-5 w-5 text-destructive"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  );
 }
 
 const CHAIN_LABEL: Record<Chain, string> = {
   evm: "EVM",
   solana: "Solana",
 };
-
-const ADDR_PREFIX_LEN = 6;
-const ADDR_SUFFIX_LEN = 4;
-
-function truncateAddress(addr: string): string {
-  if (addr.length <= ADDR_PREFIX_LEN + ADDR_SUFFIX_LEN + 1) return addr;
-  return `${addr.slice(0, ADDR_PREFIX_LEN)}…${addr.slice(-ADDR_SUFFIX_LEN)}`;
-}
 
 /**
  * Auto-close delay (ms) once the clipboard-scrub countdown has elapsed and
@@ -115,7 +88,6 @@ const SESSION_LOCK_AUTOCLOSE_MS = 3000;
 
 export function ExportPrivateKeyModal({
   chain,
-  walletAddress,
   onClose,
 }: ExportPrivateKeyModalProps): JSX.Element {
   // Password stays in the DOM (uncontrolled input). React state only tracks
@@ -128,6 +100,8 @@ export function ExportPrivateKeyModal({
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [clearCountdown, setClearCountdown] = useState<number>(0);
+  // Which wallet to export — set by the picker; null disables submit.
+  const [selected, setSelected] = useState<ExportWalletSelection | null>(null);
 
   // Ref-based reentry guard so the auto-close `setTimeout` callbacks never
   // call `onClose` twice (StrictMode double-mount, fast user double-click).
@@ -208,12 +182,16 @@ export function ExportPrivateKeyModal({
   }, [safeClose]);
 
   const canSubmit =
-    phase === "idle" && riskAcknowledged && passwordLongEnough && !pending;
+    phase === "idle" &&
+    selected !== null &&
+    riskAcknowledged &&
+    passwordLongEnough &&
+    !pending;
 
   const onSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>): Promise<void> => {
       event.preventDefault();
-      if (!canSubmit) return;
+      if (!canSubmit || selected === null) return;
 
       setPending(true);
       setError(null);
@@ -221,6 +199,7 @@ export function ExportPrivateKeyModal({
       try {
         const result = await window.vex.wallet.exportPrivateKey({
           chain,
+          walletId: selected.walletId,
           password: passwordRef.current?.value ?? "",
           riskAcknowledged: true,
         });
@@ -262,7 +241,7 @@ export function ExportPrivateKeyModal({
         setPending(false);
       }
     },
-    [canSubmit, chain, scheduleSessionLockAutoClose, wipePasswordField],
+    [canSubmit, chain, selected, scheduleSessionLockAutoClose, wipePasswordField],
   );
 
   const onCancel = useCallback((): void => {
@@ -286,14 +265,13 @@ export function ExportPrivateKeyModal({
       >
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <LockIcon />
+            <ExportLockIcon />
             <DialogTitle>
               Export private key — {CHAIN_LABEL[chain]}
             </DialogTitle>
           </div>
           <p className="text-xs text-muted-foreground">
-            Exporting {CHAIN_LABEL[chain]} key for{" "}
-            <code className="font-mono">{truncateAddress(walletAddress)}</code>
+            Choose a wallet, then re-enter your master password.
           </p>
         </DialogHeader>
 
@@ -306,6 +284,11 @@ export function ExportPrivateKeyModal({
               }}
               className="flex flex-col gap-4"
             >
+              <ExportWalletPicker
+                chain={chain}
+                disabled={pending}
+                onSelect={setSelected}
+              />
               <p
                 className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
                 role="alert"
