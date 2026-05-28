@@ -160,3 +160,26 @@ Build/config (root + vex-app) consolidated by the lead (me) during Structure.md 
 - 2026-05-28: All three found blockers (F1+F2+F3) FIXED + dual-Codex-reviewed + uncommitted.
   Per project plan, NEXT: 10-agent vex-agent deep audit → `Structure-vex-agent.md` + vex-app
   coverage gap report. Audit plan in `VEX-INDEX/audit-vex-agent-plan.md`.
+- 2026-05-28: F1+F2+F3 committed and pushed to `origin/main` (3 commits: 97c2c9c F1+F2,
+  0430072 F3, c138af8 docs/audit). Foundation files added afterwards: `README.md`,
+  `MANIFEST.yml`, `glossary.md`, `decisions/ADR-0001-global-model-session-wallet.md`.
+  Structure redesigned with Codex (new session `vex-index-design`) — front matter,
+  stable IDs (CAP-/FLOW-/FINDING-/ADR-), `path:line symbol` anchors, canonical
+  coverage in `audits/current/coverage-gaps.md` only, `boundaries/` folder for
+  trust/IPC/env/DB contracts, `decisions/` folder for ADRs.
+- 2026-05-28: ROUND 1 complete. 10 `general-purpose` agents (sonnet, parallel) wrote
+  module docs for `src/vex-agent/`:
+    1. engine-core (11 CAPs · 6 open Qs · dead-export candidates: runTool, effectiveRecallSeed)
+    2. engine-runner (17 CAPs · abortMissionRun + retryActiveMissionRun + stopActiveMissionForEdit have no IPC handler)
+    3. engine-runtime-events (14 CAPs · F5 confirmed: controlStateBus not bridged to renderer)
+    4. engine-mission (4 low-risk notes · no ADR-0001 divergence)
+    5. engine-wake-subagents-prompts (F2 wired confirmed · subagents disabled = intentional MVP)
+    6. engine-compact (15 CAPs · Track 1/2 separation invariant documented)
+    7. inference (F1 resetProvider call site confirmed · pre-claim provider gate in 2 CAPs · Track-2 chunker bypasses registry singleton — flagged)
+    8. tools-internal (25 CAPs · wallet prepare/confirm split · 5 open Qs)
+    9. tools-protocols (5 protocols · MUTATION_MATRIX with 27 entries · `execute_tool` actionKind override)
+    10. data-memory-knowledge (27 migrations catalogued · `sessions` has NO model_id → ADR-0001 verified)
+  ADR-0001 verdict across all 10 modules: zero contradictions.
+  Working tree: 10 module .md files + foundation (README/MANIFEST/glossary/ADR-0001).
+  NOT yet committed. Next: optional commit; Round 2 (root `src/` + flows/ + boundaries/);
+  Round 3 (vex-app/ + populated coverage-gaps).

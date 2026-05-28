@@ -1,0 +1,381 @@
+# VEX-INDEX MANIFEST — canonical machine-readable doc catalog.
+# Source of truth for which docs cover which paths + their freshness state.
+# Update when a doc lands or its source_commit changes. README.md is for humans;
+# this file is for retrieval/refresh.
+#
+# To detect stale docs:
+#   git log --since=<doc.source_commit> --name-only -- <doc.stale_when_paths_change>
+# Any hit means re-run the doc's agent or update by hand.
+
+version: 1
+generated_at: 2026-05-28
+last_source_commit: c138af8
+last_source_commit_subject: "docs(vex-index): repo audit tracker + Stage-1 structure + fix plans"
+
+id_conventions:
+  module: "module.<area>.<name>"            # e.g. module.vex-agent.engine-core
+  flow: "FLOW-<name>"                       # e.g. FLOW-chat-turn
+  boundary: "boundary.<topic>"              # e.g. boundary.process-boundaries
+  decision: "ADR-NNNN-<slug>"               # e.g. ADR-0001-global-model-session-wallet
+  finding: "FINDING-<area>-<NNN>"           # e.g. FINDING-security-001
+  capability: "CAP-<area>-<verb>-<target>"  # e.g. CAP-engine-resume-paused_wake
+
+docs:
+  # Trackers / indexes
+  - id: index.readme
+    kind: readme
+    path: VEX-INDEX/README.md
+
+  - id: index.manifest
+    kind: manifest
+    path: VEX-INDEX/MANIFEST.yml
+
+  - id: index.progress
+    kind: tracker
+    path: VEX-INDEX/00-PROGRESS.md
+
+  - id: index.structure
+    kind: zone-index
+    path: VEX-INDEX/Structure.md
+    source_commit: c138af8
+    indexed_at: 2026-05-27
+    stale_when_paths_change:
+      - "src/vex-agent/**"
+      - "vex-app/src/**"
+      - "src/lib/**"
+      - "src/tools/**"
+      - "src/providers/**"
+
+  - id: index.glossary
+    kind: glossary
+    path: VEX-INDEX/glossary.md
+
+  - id: index.audit-vex-agent-plan
+    kind: audit-plan
+    path: VEX-INDEX/audit-vex-agent-plan.md
+    status: round-1-in-progress
+
+  # Fix plans (shipped on main)
+  - id: fix-plan.F1
+    kind: fix-plan
+    path: VEX-INDEX/fix-plans/F1-model-provider-env.md
+    status: shipped
+    shipped_in_commit: 97c2c9c
+
+  - id: fix-plan.F2
+    kind: fix-plan
+    path: VEX-INDEX/fix-plans/F2-wake-worker.md
+    status: shipped
+    shipped_in_commit: 97c2c9c
+
+  - id: fix-plan.F3
+    kind: fix-plan
+    path: VEX-INDEX/fix-plans/F3-approval-card-ui.md
+    status: shipped
+    shipped_in_commit: 0430072
+
+  - id: deep.F1
+    kind: bug-rca
+    path: VEX-INDEX/Deep-F1-model-provider-bug.md
+    status: shipped
+    shipped_in_commit: 97c2c9c
+
+  # Decisions
+  - id: ADR-0001-global-model-session-wallet
+    kind: decision
+    path: VEX-INDEX/decisions/ADR-0001-global-model-session-wallet.md
+    status: accepted
+    related: [module.vex-agent.inference, audit.current.coverage-gaps]
+
+# Modules — populated as audit rounds write them. Each entry uses the schema:
+#   - id: module.<area>.<name>
+#     path: VEX-INDEX/modules/<area>/<name>.md
+#     source_commit: <abbrev>
+#     indexed_at: YYYY-MM-DD
+#     covers_paths: [<globs>]
+#     stale_when_paths_change: [<globs>]
+#     related: [<ids>]
+modules:
+  - id: module.vex-agent.inference
+    path: VEX-INDEX/modules/vex-agent/inference.md
+    source_commit: dee0d08
+    indexed_at: 2026-05-28
+    covers_paths:
+      - "src/vex-agent/inference/**"
+    stale_when_paths_change:
+      - "src/vex-agent/inference/**"
+      - "src/lib/agent-config.ts"
+      - "src/providers/env-resolution.ts"
+      - "src/utils/dotenv.ts"
+      - "vex-app/src/main/ipc/onboarding/provider.ts"
+      - "src/vex-agent/db/migrations/**"
+    related:
+      - module.vex-agent.engine-runner
+      - module.vex-agent.engine-core
+      - module.vex-agent.tools-internal
+      - module.vex-agent.engine-compact
+      - ADR-0001-global-model-session-wallet
+      - fix-plan.F1
+
+  - id: module.vex-agent.tools-internal
+    path: VEX-INDEX/modules/vex-agent/tools-internal.md
+    source_commit: c138af8
+    indexed_at: 2026-05-28
+    covers_paths:
+      - "src/vex-agent/tools/registry.ts"
+      - "src/vex-agent/tools/dispatcher.ts"
+      - "src/vex-agent/tools/types.ts"
+      - "src/vex-agent/tools/taxonomy.ts"
+      - "src/vex-agent/tools/risk-level.ts"
+      - "src/vex-agent/tools/registry/**"
+      - "src/vex-agent/tools/internal/**"
+    stale_when_paths_change:
+      - "src/vex-agent/tools/registry.ts"
+      - "src/vex-agent/tools/dispatcher.ts"
+      - "src/vex-agent/tools/types.ts"
+      - "src/vex-agent/tools/taxonomy.ts"
+      - "src/vex-agent/tools/risk-level.ts"
+      - "src/vex-agent/tools/registry/**"
+      - "src/vex-agent/tools/internal/**"
+    related:
+      - module.vex-agent.engine-runner
+      - module.vex-agent.engine-runtime-events
+      - module.vex-agent.inference
+      - module.vex-agent.tools-protocols
+      - module.vex-agent.data-memory-knowledge
+      - module.vex-agent.engine-wake-subagents-prompts
+
+  - id: module.vex-agent.engine-core
+    path: VEX-INDEX/modules/vex-agent/engine-core.md
+    source_commit: c138af8
+    indexed_at: 2026-05-28
+    covers_paths:
+      - "src/vex-agent/engine/core/turn.ts"
+      - "src/vex-agent/engine/core/turn-loop*.ts"
+      - "src/vex-agent/engine/core/hydrate.ts"
+      - "src/vex-agent/engine/core/context-band.ts"
+      - "src/vex-agent/engine/core/stop-conditions.ts"
+      - "src/vex-agent/engine/core/transcript-integrity.ts"
+      - "src/vex-agent/engine/core/recall-seed.ts"
+      - "src/vex-agent/engine/core/run-tool.ts"
+      - "src/vex-agent/engine/core/tool-output-overflow.ts"
+      - "src/vex-agent/engine/core/operator-instructions.ts"
+    stale_when_paths_change:
+      - "src/vex-agent/engine/core/turn*.ts"
+      - "src/vex-agent/engine/core/hydrate.ts"
+      - "src/vex-agent/engine/core/context-band.ts"
+      - "src/vex-agent/engine/core/stop-conditions.ts"
+      - "src/vex-agent/engine/core/transcript-integrity.ts"
+      - "src/vex-agent/engine/core/recall-seed.ts"
+      - "src/vex-agent/engine/core/run-tool.ts"
+      - "src/vex-agent/engine/core/tool-output-overflow.ts"
+      - "src/vex-agent/engine/core/operator-instructions.ts"
+    related:
+      - module.vex-agent.engine-runner
+      - module.vex-agent.engine-runtime-events
+      - module.vex-agent.engine-mission
+
+  - id: module.vex-agent.engine-runner
+    path: VEX-INDEX/modules/vex-agent/engine-runner.md
+    source_commit: c138af8
+    indexed_at: 2026-05-28
+    covers_paths:
+      - "src/vex-agent/engine/core/runner/**"
+      - "src/vex-agent/engine/core/approval-runtime.ts"
+      - "src/vex-agent/engine/core/approval-runtime/**"
+      - "src/vex-agent/engine/core/rewind.ts"
+      - "src/vex-agent/engine/core/resume.ts"
+      - "src/vex-agent/engine/core/reject.ts"
+      - "src/vex-agent/engine/core/approval-intent-preview.ts"
+    stale_when_paths_change:
+      - "src/vex-agent/engine/core/runner/**"
+      - "src/vex-agent/engine/core/approval-runtime*"
+      - "src/vex-agent/engine/core/approval-runtime/**"
+      - "src/vex-agent/engine/core/rewind.ts"
+      - "src/vex-agent/engine/core/resume.ts"
+      - "src/vex-agent/engine/core/reject.ts"
+      - "src/vex-agent/engine/core/approval-intent-preview.ts"
+    related:
+      - module.vex-agent.engine-core
+      - module.vex-agent.engine-runtime-events
+      - module.vex-agent.engine-mission
+
+  - id: module.vex-agent.engine-runtime-events
+    path: VEX-INDEX/modules/vex-agent/engine-runtime-events.md
+    source_commit: c138af8
+    indexed_at: 2026-05-28
+    covers_paths:
+      - "src/vex-agent/engine/runtime/**"
+      - "src/vex-agent/engine/events/**"
+      - "src/vex-agent/engine/checkpoint/**"
+      - "src/vex-agent/engine/support/**"
+      - "src/vex-agent/engine/ingress.ts"
+      - "src/vex-agent/engine/runtime-clock.ts"
+      - "src/vex-agent/engine/types.ts"
+      - "src/vex-agent/engine/index.ts"
+    stale_when_paths_change:
+      - "src/vex-agent/engine/runtime/**"
+      - "src/vex-agent/engine/events/**"
+      - "src/vex-agent/engine/checkpoint/**"
+      - "src/vex-agent/engine/support/**"
+      - "src/vex-agent/engine/ingress.ts"
+      - "src/vex-agent/engine/runtime-clock.ts"
+      - "src/vex-agent/engine/types.ts"
+      - "src/vex-agent/engine/index.ts"
+    related:
+      - module.vex-agent.engine-core
+      - module.vex-agent.engine-runner
+      - module.vex-agent.engine-mission
+      - module.vex-agent.engine-compact
+
+  - id: module.vex-agent.engine-mission
+    path: VEX-INDEX/modules/vex-agent/engine-mission.md
+    source_commit: c138af8
+    indexed_at: 2026-05-28
+    covers_paths:
+      - "src/vex-agent/engine/mission/**"
+    stale_when_paths_change:
+      - "src/vex-agent/engine/mission/**"
+    related:
+      - module.vex-agent.engine-runner
+      - module.vex-agent.engine-runtime-events
+      - module.vex-agent.engine-wake-subagents-prompts
+      - module.vex-agent.data-memory-knowledge
+
+  - id: module.vex-agent.engine-wake-subagents-prompts
+    path: VEX-INDEX/modules/vex-agent/engine-wake-subagents-prompts.md
+    source_commit: c138af8
+    indexed_at: 2026-05-28
+    covers_paths:
+      - "src/vex-agent/engine/wake/**"
+      - "src/vex-agent/engine/subagents/**"
+      - "src/vex-agent/engine/prompts/**"
+    stale_when_paths_change:
+      - "src/vex-agent/engine/wake/**"
+      - "src/vex-agent/engine/subagents/**"
+      - "src/vex-agent/engine/prompts/**"
+    related:
+      - module.vex-agent.engine-runner
+      - module.vex-agent.engine-mission
+      - module.vex-agent.engine-compact
+      - module.vex-agent.tools-internal
+      - fix-plan.F2
+
+  - id: module.vex-agent.engine-compact
+    path: VEX-INDEX/modules/vex-agent/engine-compact.md
+    source_commit: c138af8
+    indexed_at: 2026-05-28
+    covers_paths:
+      - "src/vex-agent/engine/compact-jobs/**"
+    stale_when_paths_change:
+      - "src/vex-agent/engine/compact-jobs/**"
+    related:
+      - module.vex-agent.engine-core
+      - module.vex-agent.engine-runtime-events
+      - module.vex-agent.data-memory-knowledge
+      - module.vex-agent.inference
+
+  - id: module.vex-agent.tools-protocols
+    path: VEX-INDEX/modules/vex-agent/tools-protocols.md
+    source_commit: c138af8
+    indexed_at: 2026-05-28
+    covers_paths:
+      - "src/vex-agent/tools/protocols/**"
+    stale_when_paths_change:
+      - "src/vex-agent/tools/protocols/**"
+    related:
+      - module.vex-agent.tools-internal
+      - module.vex-agent.data-memory-knowledge
+      - module.vex-agent.inference
+
+  - id: module.vex-agent.data-memory-knowledge
+    path: VEX-INDEX/modules/vex-agent/data-memory-knowledge.md
+    source_commit: c138af8
+    indexed_at: 2026-05-28
+    covers_paths:
+      - "src/vex-agent/db/**"
+      - "src/vex-agent/memory/**"
+      - "src/vex-agent/knowledge/**"
+      - "src/vex-agent/sync/**"
+      - "src/vex-agent/embeddings/**"
+      - "src/vex-agent/scripts/**"
+      - "src/vex-agent/public/**"
+    stale_when_paths_change:
+      - "src/vex-agent/db/**"
+      - "src/vex-agent/memory/**"
+      - "src/vex-agent/knowledge/**"
+      - "src/vex-agent/sync/**"
+      - "src/vex-agent/embeddings/**"
+      - "src/vex-agent/scripts/**"
+    related:
+      - module.vex-agent.engine-core
+      - module.vex-agent.engine-runtime-events
+      - module.vex-agent.engine-mission
+      - module.vex-agent.engine-compact
+      - module.vex-agent.inference
+      - module.vex-agent.tools-internal
+      - module.vex-agent.tools-protocols
+      - ADR-0001-global-model-session-wallet
+
+# Flows — Round 2.
+flows: []
+
+# Boundaries — post-Round 1 (trust/IPC/env/DB contracts).
+boundaries: []
+
+# Audit docs — current snapshot. Findings inside have status: open|fixed|superseded|wontfix.
+audits:
+  - id: audit.current.coverage-gaps
+    path: VEX-INDEX/audits/current/coverage-gaps.md
+    status: pending
+  - id: audit.current.quality-findings
+    path: VEX-INDEX/audits/current/quality-findings.md
+    status: pending
+  - id: audit.current.security-review
+    path: VEX-INDEX/audits/current/security-review.md
+    status: pending
+
+# Templates referenced by README.md for agent prompts and human authors.
+templates:
+  module: |
+    ---
+    id: module.<area>.<name>
+    kind: module
+    paths: [<globs>]
+    source_commit: <abbrev>
+    indexed_at: YYYY-MM-DD
+    stale_when_paths_change: [<globs>]
+    related: [<ids>]
+    ---
+    # <Title>
+    ## Purpose
+    ## Retrieval keywords
+    ## State owned
+    ## Boundary crossings
+    ## File map
+    ## Key types & invariants
+    ## Capabilities (stable IDs)
+    ## Public API (consumed by)
+    ## Internal flow
+    ## Dependencies
+    ## Cross-references
+    ## Refresh triggers
+    ## Open questions
+
+  flow: |
+    ---
+    id: FLOW-<name>
+    kind: flow
+    paths: [<globs>]
+    source_commit: <abbrev>
+    indexed_at: YYYY-MM-DD
+    stale_when_paths_change: [<globs>]
+    related: [<ids>]
+    ---
+    # FLOW-<name>: <title>
+    ## Trigger
+    ## Steps
+    | # | caller (file:line symbol) | callee | state change | persistence / event | failure mode |
+    ## Invariants
+    ## Related modules / capabilities
+    ## Known failure modes
