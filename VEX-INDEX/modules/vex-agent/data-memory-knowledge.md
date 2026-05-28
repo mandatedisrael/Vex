@@ -447,7 +447,7 @@ engine repos (boundary shift).
 
 ## Open questions
 
-- Does `syncTick` / `startSyncExecutor` have a production desktop callsite? Z6 `index.ts`
-  starts compact and wake workers, but no sync worker wiring was found in desktop boot.
+- ~~Does `syncTick` / `startSyncExecutor` have a production desktop callsite?~~ RESOLVED (Bundle A / F11):
+  Z6 `index.ts` now starts compact + wake + sync workers; `setupSyncWorker()` (`vex-app/src/main/agent/sync-worker.ts`) owns `startSyncExecutor`.
 - `runtime_state` and `runtime_cycles` tables (mig 001) appear to be legacy loop infrastructure. Confirm if they are still written by any active code path or if they are dead state.
 - `inbox_events` has `src/vex-agent/db/repos/inbox.ts`; older notes saying no repo exists are superseded.

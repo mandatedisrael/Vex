@@ -347,7 +347,7 @@ src/providers/env-resolution.ts                    # provider resolution (shared
 
 - **F5 unresolved**: Control-state events are published by `control-bridge.ts` and fan out to windows via `broadcastToAllWindows()`, but preload does not yet expose a receiver interface. Renderer cannot consume live control state. Blocking renderer runtime bar visibility.
 
-- **Sync executor wiring unclear**: The structure mentions a sync executor in Z2 that was not found wired into `index.ts` or worker setup. Sync compact jobs may enqueue without a desktop worker claiming them. Verify: is sync executor responsibility intended to stay with Z2 engine, or should main own a supervisor for it too?
+- ~~**Sync executor wiring unclear**~~ RESOLVED (Bundle A / F11): main now owns a sync supervisor — `setupSyncWorker()` is started in `index.ts` after the wake worker and drained in the quit `Promise.allSettled([...])`, mirroring the compact/wake pattern (`agent/sync-worker.ts` + `database/sync-db.ts`).
 
 - **Telemetry consent DSN mismatch**: Sentry initialization gates on both consent (true) + DSN (non-empty). If one is missing, Sentry stays disabled. Unclear if this is a feature or a correctness gap — what happens if the user consents but DSN is not set? Should we warn?
 

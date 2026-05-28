@@ -60,7 +60,7 @@ Capabilities surface via IPC handlers: migration status, connection probes, sess
 - session scope (`vex_app`), foreign scope guard
 - IPC handlers: memory, knowledge, messages, usage, compaction, approvals
 - JSONB reduction, sanitization, tool_call redaction
-- sync executor not wired (F11 open)
+- sync executor wired (F11 fixed in Bundle A — `agent/sync-worker.ts` + `database/sync-db.ts`)
 
 ## State owned
 
@@ -363,17 +363,8 @@ Watch paths:
 
 ### F11: Sync executor not wired
 
-**Status**: OPEN  
-**Finding**: Code references "sync executor" in planning docs and agent integration stages, but no active scheduler/worker is instantiated in main-process boot.
-
-**Evidence**:
-- `grep -rn "sync executor" vex-app/src/main/` returns nothing.
-- `vex-app/src/main/index.ts` does not call a sync startup routine.
-- `compaction-db.ts` provides `probeCompactJobsReady()` (schema gate), but no corresponding wake-worker equivalent for sync.
-
-**Impact**: If the sync executor is meant to run in the desktop app (as opposed to only in the engine), its absence is a missing feature. If it's engine-only, the apparent planning gap is just unexecuted earlier direction.
-
-**Next step**: Confirm whether sync executor should be wired into main boot, and if so, where (likely alongside wake-worker supervisor initialization).
+**Status**: FIXED (Bundle A / Round 4)  
+**Resolution**: `setupSyncWorker()` (`vex-app/src/main/agent/sync-worker.ts`) is started in `vex-app/src/main/index.ts` after `setupWakeWorker()` and drained in the quit `Promise.allSettled([...])`. Schema gate is `vex-app/src/main/database/sync-db.ts probeProtocolSyncReady()` (`to_regclass('public.protocol_sync_jobs')`), mirroring `wake-db.ts`. No provider gate (sync makes public-address network reads, not inference calls), so it starts as soon as the schema is ready — pre-unlock public-address egress is an accepted privacy trade-off (no key access). Dual Codex GREEN LIGHT.
 
 ### Schema version vs. file count
 

@@ -64,11 +64,11 @@ VEX-INDEX/
 ├── audit-vex-agent-plan.md             10-agent vex-agent deep-audit plan (Round 1)
 ├── modules/
 │   ├── _INDEX.md                       terse listing of all modules (auto/manual updated)
-│   ├── vex-agent/                      ~10 docs — Round 1
-│   ├── src-root/                       — Round 2
-│   └── vex-app/                        seed docs from 2026-05-28 verification; expand in Round 3
-├── flows/_INDEX.md                     flow index; full flow docs pending
-├── boundaries/_INDEX.md                boundary index; full boundary docs pending
+│   ├── vex-agent/                      10 docs — Round 1
+│   ├── src-root/                       10 docs — Round 2
+│   └── vex-app/                        6 seed + 10 deep docs — Round 3 (commit 041ce57)
+├── flows/                              _INDEX + 6 FLOW-*.md (Round 3)
+├── boundaries/                         _INDEX + 4 boundary-*.md (Round 3)
 ├── decisions/                          ADRs (start with ADR-0001 global-model)
 └── audits/
     ├── current/                        latest truth (coverage-gaps, quality-findings, security)
@@ -86,7 +86,7 @@ A doc is **stale** when any path in its `stale_when_paths_change` has changed si
 
 ## Conventions for round-N audit agents
 
-Round 1 = `modules/vex-agent/*`. Round 2 = `modules/src-root/*` + Stage-1/2 refresh. Round 3 = expand `modules/vex-app/*` + dedicated `flows/*` + dedicated `boundaries/*`.
+Round 1 = `modules/vex-agent/*`. Round 2 = `modules/src-root/*` + Stage-1/2 refresh. Round 3 = `modules/vex-app/*` deep + dedicated `flows/*` + `boundaries/*` (done, 041ce57). Round 4 = independent Codex audit (5 subagents) → Bundle A fixes (F-S3 lock scrub, F-S5 document_delete gate, F11 sync worker) via `/harness`-style Codex gating; index refreshed. Remaining open: F4, F5, F6, F10-KDF, F12, FINDING-codex-001/002/003 (candidate Bundle B).
 
 Agents:
 - Use `general-purpose` subagent type (have `Write` to land directly here).

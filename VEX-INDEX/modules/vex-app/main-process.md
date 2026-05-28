@@ -59,7 +59,7 @@ background workers.
 ## Known gaps
 
 - F5: control-state event reaches main broadcast but not preload/renderer.
-- Sync executor was not found wired in `index.ts`; protocol sync jobs may enqueue without a desktop worker.
+- Sync executor wired in `index.ts` via `setupSyncWorker()` (Bundle A / F11); compact + wake + sync all drain on quit.
 - Updater channels exist, but no updater main handler/autoUpdater implementation was found.
 
 ## Refresh triggers

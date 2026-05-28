@@ -226,7 +226,7 @@ No DB state. No Zustand. No filesystem writes.
 | `engine/core/runner/mission.ts:128` | `resolveProvider()` | `resumeMissionRun` — throws if null |
 | `engine/core/turn.ts:150` | `runStreamingInference(provider, ...)` | `executeTurn` — primary streaming path |
 | `engine/subagents/runner.ts:53` | `resolveProvider()` + `loadEnvConfig()` + `loadSubagentConfig()` | Subagent runner (disabled in production — `subagent_spawn` commented out) |
-| `engine/compact-jobs/chunker-call.ts:63` | `new OpenRouterProvider()` (direct) | Track 2 compaction chunker — **bypasses registry singleton**; own instance per job |
+| `engine/compact-jobs/chunker-call.ts:64` | `new OpenRouterProvider()` (direct) | Track 2 compaction chunker — **bypasses registry singleton** (Codex-confirmed by-design; per-job fresh construct, `resetProvider()` does not affect in-flight calls) |
 | `engine/wake/executor.ts:94` | `deps.isProviderReady()` → `isWakeProviderConfigured()` | Pre-claim gate; checks `OPENROUTER_API_KEY && AGENT_MODEL` in env only |
 | `vex-app/src/main/ipc/onboarding/provider.ts:70` | `resetProvider()` (dynamic import) | F1 fix: called after `writeProvider` + `loadProviderDotenv({overwrite:true})` inside env-write mutex |
 

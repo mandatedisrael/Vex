@@ -236,3 +236,31 @@ Build/config (root + vex-app) consolidated by the lead (me) during Structure.md 
     - `VEX-INDEX/boundaries/` 4 boundary docs (process-boundaries, ipc-contracts, env-secrets, database-contracts) consolidating cross-cutting contracts.
     - MANIFEST.yml updated: 36 modules total (10 vex-agent + 10 src-root + 6 vex-app seed + 10 vex-app deep), 6 FLOW-* entries, 4 boundary entries, 0 missing paths.
   Source snapshot: `cf05003`. Working tree: 10 new deep .md + 6 FLOW-*.md + 4 boundary-*.md + MANIFEST/_INDEX/00-PROGRESS edits.
+- 2026-05-28: ROUND 4 — independent Codex re-audit + Bundle A fixes.
+  Codex (session `vex-index-audit-round-4`, 5 subagents, read-only) pressure-tested the
+  open findings against source + node_modules SDKs. Verdicts: F4 confirmed-bug (OpenRouter
+  loadConfig per-turn, cache `/models`), F5 confirmed-bug (no preload `onControlState`),
+  F6 confirmed-bug (production `RuntimeRequestResult` still imported by
+  `renderer/lib/api/runtime.ts:24`), F11 confirmed-bug (sync worker unwired),
+  F12 confirmed-by-design, FINDING-security-003 confirmed-bug (lock leaves env+provider),
+  FINDING-security-004 confirmed-bug (keystore N=16384), FINDING-security-005 confirmed-bug
+  (document_delete ungated), Track-2 chunker confirmed-by-design. NEW: FINDING-codex-001
+  (wallet auto-backup omits inventory keystores), FINDING-codex-002 (`fetchJson<T>` cast
+  without Zod), FINDING-codex-003 (reembed script-only — needs-more-info). Index drift caught:
+  matrix 28 (not 27), sync tables `protocol_sync_jobs`/`protocol_sync_runs`, chunker `:64`,
+  stale "Round 3 pending" text.
+  Bundle A (top-3) implemented via `/harness`-equivalent Codex GREEN-LIGHT gating
+  (session `harness-bundle-a-security`; plan BLOCKED→revised→GREEN, final review GREEN):
+    - FINDING-security-005: `document_delete` → `mutating:true` (`src/vex-agent/tools/registry/documents.ts:54`);
+      restricted-mode regression + census update. `document_write` deliberately stays ungated.
+    - FINDING-security-003: `lockSecretSession()` now async — `scrubUnlockedRuntime()` sweeps
+      `MANAGED_SECRET_ENV_KEYS` from `process.env` + `invalidateProviderCache()` awaits
+      `resetProvider()`; centralized; explicit lock paths await, quit hooks fire-and-forget
+      after the sync scrub; `getUnlockedSecretPresence` failure path routes through the same scrub.
+    - F11: new `vex-app/src/main/agent/sync-worker.ts` + `database/sync-db.ts`; `setupSyncWorker()`
+      wired in `index.ts` (no provider gate — public-address egress) + drained on quit.
+  Verified: engine dispatcher+registry 65 pass/7 skip; vex-app session 17 pass; sync-worker 5 pass;
+  root `tsc --noEmit` clean; `pnpm --dir vex-app lint` (tsc + boundary check) clean. NOT committed
+  (awaiting explicit user request). Index refreshed: audits/Structure/README/tools-protocols/
+  FLOW-compaction/data-memory + boot docs updated to fixed; new findings tracked as candidate Bundle B
+  (F4, F5, F6, F10-KDF, F12, codex-001/002/003).

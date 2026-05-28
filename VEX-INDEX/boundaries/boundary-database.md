@@ -85,7 +85,7 @@ This is deliberate. Engine owns the canonical schema and the write paths. Main o
 
 ## Open gaps (verify in follow-ups)
 
-- **GAP-Z6-sync-worker** (`audits/current/coverage-gaps.md`): `src/vex-agent/sync/*` exposes a sync executor that does not appear to be wired in `vex-app/src/main/index.ts`. Mutating protocol tools enqueue sync work; without a desktop-side executor, these jobs may accumulate. Confirm intent or wire.
+- ~~**GAP-Z6-sync-worker**~~ FIXED (Bundle A): `setupSyncWorker()` (`vex-app/src/main/agent/sync-worker.ts`) now drains `protocol_sync_jobs`/`protocol_sync_runs`, gated by `database/sync-db.ts probeProtocolSyncReady()`. Started at boot after wake, drained on quit. No provider gate — sync does public-address network reads (not key access), so it can run pre-unlock (privacy trade-off).
 - **Drift risk**: column renames or new sensitive fields in engine repos require matching updates in main raw queries; no automated check enforces parity.
 - **Schema gaps 007 / 008 / 012**: intentional, but document the historical reason somewhere durable (suggest fix-plan or comment in migration index).
 

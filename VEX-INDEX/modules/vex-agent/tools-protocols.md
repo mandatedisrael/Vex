@@ -49,8 +49,9 @@ behind those two entry points.
 - **`proj_activity` / `proj_positions` / `proj_lots` (DB tables)**: projection rows
   for business truth. Populated by `sync/activity-populator.ts:populateActivity`
   only for **successful** mutations; failed mutations → `protocol_executions` only.
-- **`sync_jobs` / `sync_runs` (DB tables)**: enqueue-side written by
-  `db/repos/sync.ts:enqueueRun` after each successful execution.
+- **`protocol_sync_jobs` / `protocol_sync_runs` (DB tables)**: enqueue-side written by
+  `db/repos/sync.ts:enqueueRun` after each successful execution. Drained by the
+  desktop sync worker (`vex-app/src/main/agent/sync-worker.ts`, F11/Bundle A).
 - **Env gates**: each manifest's optional `requiresEnv` field is evaluated at module
   load (`catalog.ts:isProtocolToolAvailable`) and re-checked at runtime
   (`runtime.ts:executeProtocolTool`). No persistent state; runtime-env only.
@@ -79,7 +80,7 @@ behind those two entry points.
   - `runtime.ts:21` re-exports `discoverProtocolCapabilities` from `discovery.ts`
   - `runtime.ts:47` `withActionKind` — local helper that stamps `actionKind` on any `ToolResult`; **always overwrites** handler-set value (manifest is authoritative)
   - `runtime.ts:268` `captureExecution` — private async function; guards on `dryRun`, dispatches `recordExecution` → optional `enqueueRun` → `populateCaptureItems` (after `validateCaptureContract`)
-- `protocols/mutation-matrix.ts:66` `MUTATION_MATRIX: ReadonlyMap<string, MutationContract>` — 27 entries covering every mutating tool. Classifies `role` (`pnl_spot|pnl_prediction|projection|audit|utility`), `capture` (`full|none`), `expectedType`, `previewSupport`, `fanOut` (`single|items`), `requiredFields`, `valuationExpected` (`exact|conditional|none`), optional `requiredMetaFields`
+- `protocols/mutation-matrix.ts:66` `MUTATION_MATRIX: ReadonlyMap<string, MutationContract>` — 28 entries covering every mutating tool. Classifies `role` (`pnl_spot|pnl_prediction|projection|audit|utility`), `capture` (`full|none`), `expectedType`, `previewSupport`, `fanOut` (`single|items`), `requiredFields`, `valuationExpected` (`exact|conditional|none`), optional `requiredMetaFields`
 - `protocols/capture-validator.ts:17` `validateCaptureContract` — validates `_tradeCapture` against `MUTATION_MATRIX` entry: missing capture, unexpected type, missing required fields (with exception logic), missing meta fields (e.g. `contracts` for `solana.predict.buy`), and W4A valuation guard (hard fail for `exact` handlers missing `inputValueUsd`/`outputValueUsd`)
   - `capture-validator.ts:143` `isPreviewExecution` — checks `contract.previewSupport === true && params.dryRun === true`
 - `protocols/capture-pipeline.ts:17` `extractExternalRefs` — maps known result fields (`txHash`, `orderId`, `positionPubkey`, `orderKey`, `positionId`, `conditionId`, `signature`, `instrumentKey`, `positionKey`) + nested `_tradeCapture` fields to correlation dict

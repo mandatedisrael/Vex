@@ -118,7 +118,7 @@ Bridges the in-process engine's event buses and background executors to the rend
 - **Implication**: if provider config is absent, the executor stays idle and logs a warning every poll interval (5000ms default).
 
 ### Compact chunker provider usage
-- **Location**: `src/vex-agent/engine/compact-jobs/chunker-call.ts:63` dynamic import.
+- **Location**: `src/vex-agent/engine/compact-jobs/chunker-call.ts:64` dynamic import.
 - **Issue flagged for audit (Round 1)**: `new OpenRouterProvider()` is constructed directly in the chunker instead of using the centralized inference registry singleton. This bypasses any future provider deduplication, pooling, or accounting logic that might exist in the registry.
 - **Current impact**: minimal (single-instance context, no registry singleton yet); future changes to provider lifecycle should surface this call.
 
@@ -282,10 +282,10 @@ This module is stale if:
 - **Next step**: preload must add `onControlState: (cb) => subscribe(EV.engine.controlState, controlStateEventSchema, cb)` to expose the bridge.
 
 ### Compact executor's direct OpenRouter construction
-- **Status**: FLAGGED ROUND-1, requires follow-up.
-- **Question**: `src/vex-agent/engine/compact-jobs/chunker-call.ts:63` constructs `new OpenRouterProvider()` directly instead of going through a provider registry singleton.
-- **Why it matters**: if inference provider management moves to a registry with pooling, caching, or usage accounting, the compact executor will bypass that logic.
-- **Evidence**: line 63, `const provider = new OpenRouterProvider();` (no registry lookup).
+- **Status**: Round-4 Codex verdict = confirmed-by-design (acceptable today).
+- **Question**: `src/vex-agent/engine/compact-jobs/chunker-call.ts:64` constructs `new OpenRouterProvider()` directly instead of going through a provider registry singleton.
+- **Why it matters**: if inference provider management moves to a registry with pooling, caching, or usage accounting, the compact executor will bypass that logic. `resetProvider()` does NOT affect an in-flight chunker call; per-job fresh construction picks up current env on the next tick.
+- **Evidence**: line 64, `const provider = new OpenRouterProvider();` (no registry lookup).
 - **Mitigation**: mark as FINDING for future refactor if registry is introduced.
 
 ### Wake executor provider gate timing

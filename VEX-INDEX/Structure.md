@@ -101,7 +101,7 @@ Owns run lifecycle: claim lease -> hydrate -> build tools -> `runTurnLoop` -> fi
 - `tools/dispatcher.ts` approval gate uses **`mutating`**, not `actionKind`: restricted + mutating + not approved -> pending approval.
 - `actionKind` is still important for intent/risk/audit/UI, but it does not by itself force approval.
 - `execute_tool` is a read-only wrapper; protocol runtime overwrites result `actionKind` from the target manifest. Incorrect manifest metadata directly affects approval/risk/audit.
-- Drift candidate: `document_delete` is `actionKind:"destructive"` but currently `mutating:false`; index this as a security-review finding, not as an already-fixed bug.
+- `document_delete` is `actionKind:"destructive"` AND now `mutating:true` (FIXED in Bundle A / FINDING-security-005 — was `mutating:false`, which bypassed the restricted-mode approval gate). `document_write` deliberately stays `mutating:false` (low-risk, recoverable scratchpad; pinned by a dispatcher test).
 
 **Cross-zone**: consumed by Z1/Z2. Imports Z4 repos and Z5 protocol/wallet clients.
 
@@ -128,7 +128,7 @@ Owns run lifecycle: claim lease -> hydrate -> build tools -> `runTurnLoop` -> fi
 
 **Sync**
 - `src/vex-agent/sync` exposes projectors/executor for protocol sync runs.
-- Desktop boot currently wires compact + wake workers, but no sync executor was found in `vex-app/src/main/index.ts`. Mutating protocol tools enqueue sync work, so this is a real coverage gap to verify/fix later.
+- Desktop boot wires compact + wake + sync workers (sync added in Bundle A / F11). `setupSyncWorker()` drains `protocol_sync_jobs`/`protocol_sync_runs` enqueued by mutating protocol tools.
 
 ---
 
@@ -145,7 +145,7 @@ Root MCP/CLI library; pure subsets are bridged into `vex-app` through `@vex-lib`
 - `src/tools/wallet/**` owns local keystore, inventory, signing clients, and Polymarket credential derivation.
 - Protocol clients under `src/tools/{dexscreener,khalani,kyberswap,polymarket,solana-ecosystem,twitter-account}` are engine/main-only. They assume caller has already enforced approval, wallet policy, and key lifetime.
 
-Important caveat: `lockSecretSession()` clears the in-memory master password, but does not remove vault-injected API keys from `process.env`.
+Lock semantics (FIXED in Bundle A / FINDING-security-003): `lockSecretSession()` now (1) clears the in-memory master password, (2) sweeps `MANAGED_SECRET_ENV_KEYS` (master-password key + all vault keys) from `process.env`, and (3) awaits `resetProvider()` to drop the cached inference provider (necessary because `resolveProvider()` returns its cache before re-reading env). Centralized in `scrubUnlockedRuntime()` + `invalidateProviderCache()`; the `getUnlockedSecretPresence` failure path routes through the same scrub.
 
 ---
 
@@ -163,7 +163,8 @@ Privileged process: secrets, wallet, DB, Docker/Compose, onboarding, IPC, engine
 - `index.ts:129 registerAllIpcHandlers()`.
 - `index.ts:136 setupCompactWorker()` starts Track 2 supervisor.
 - `index.ts:143 setupWakeWorker()` starts wake supervisor.
-- `index.ts:151-163` drains compact+wake workers before Compose/Postgres cleanup on quit.
+- `index.ts setupSyncWorker()` starts the sync supervisor (Bundle A / F11; no provider gate, public-address egress).
+- `index.ts` drains compact+wake+sync workers (Promise.allSettled) before Compose/Postgres cleanup on quit.
 
 **Security**
 - `windows/main-window.ts:139-150` uses `contextIsolation:true`, `sandbox:true`, `nodeIntegration:false`, `webSecurity:true`, no insecure content, devtools only unpackaged.
@@ -247,8 +248,9 @@ Untrusted UI. It talks to main only via `window.vex` and pure shared schemas/typ
 | **F7** | ADR-0001 holds: global model, no `sessions.model_id`, per-session wallet selection. | implemented | HIGH | migration 026, `sessions.getModel`, ADR-0001 |
 | **F8** | Subagents are implemented but intentionally disabled at registry/dispatcher surface. | intentional | HIGH | `tools/registry/subagents.ts`, `tools/dispatcher.ts` |
 | **F9** | UI polish/perf: slash placeholder incomplete; transcript cap/no virtualization. | open | HIGH | Z8 appShell files |
-| **F10** | Wallet keystore KDF N=16384 is weaker than vault N=65536; lock does not clear vault secrets from `process.env`. | open | MED | `src/tools/wallet/keystore.ts`, `vex-app/src/main/secrets/session.ts` |
-| **F11** | Sync executor was not found wired in desktop boot; protocol sync jobs may enqueue without being drained. | open | HIGH | `src/vex-agent/sync/*`, `vex-app/src/main/index.ts` |
+| **F10** | Wallet keystore KDF N=16384 is weaker than vault N=65536 (still open). Lock-clear half FIXED by Bundle A: `lockSecretSession()` now sweeps `MANAGED_SECRET_ENV_KEYS` from `process.env` + resets the cached provider. | partial (KDF open; lock-clear fixed) | MED | `src/tools/wallet/keystore.ts`, `vex-app/src/main/secrets/session.ts` |
+| **F11** | Sync executor wiring FIXED by Bundle A: `setupSyncWorker()` started at boot (after wake) + drained on quit; new `agent/sync-worker.ts` + `database/sync-db.ts` (probe `protocol_sync_jobs`). No provider gate (public-address egress, no key access). | fixed | HIGH | `src/vex-agent/sync/executor.ts:39`, `vex-app/src/main/index.ts`, `vex-app/src/main/agent/sync-worker.ts` |
+| **F-S5** | `document_delete` approval-gate bypass FIXED by Bundle A: `mutating:true` so restricted mode now gates it. `document_write` intentionally stays ungated. | fixed | HIGH | `src/vex-agent/tools/registry/documents.ts:54`, `src/vex-agent/tools/dispatcher.ts:293` |
 | **F12** | Updater/release is placeholder-only: dependency/channels exist, no implementation, no production signing/notarization/update workflow. | open | HIGH | `vex-app/package.json`, `shared/ipc/channels.ts`, `.github/workflows/ci.yml` |
 | **F13** | Docker Model Runner `:12434` references are legacy/status drift; bundled compose uses llama.cpp on `127.0.0.1:55134/v1`. | open-doc-drift | HIGH | `vex-app/resources/compose/docker-compose.template.yml`, `embedding-defaults.ts` |
 
@@ -256,7 +258,7 @@ Untrusted UI. It talks to main only via `window.vex` and pure shared schemas/typ
 
 ## Open verification questions
 
-1. Is the sync executor intentionally not started in the Electron desktop app, or should it join compact+wake workers?
+1. ~~Is the sync executor intentionally not started in the Electron desktop app?~~ RESOLVED (Bundle A): it should join compact+wake — `setupSyncWorker()` now wired in `index.ts`.
 2. Should vault lock clear vault-injected API keys from `process.env`, or is “UI lock only clears master password” the intended runtime model?
 3. Should `document_delete` be `mutating:true`, or is it intentionally destructive/actionKind-only but approval-free?
 4. Should `CH.updater.check` remain a reserved constant, or be removed until updater implementation lands?
