@@ -39,18 +39,25 @@ src/tools/wallet/
   iv: string,          // base64, 12 bytes (GCM nonce)
   salt: string,        // base64, 32 bytes
   tag: string,         // base64, 16 bytes (GCM auth tag)
-  kdf: { name: "scrypt", N: 16384, r: 8, p: 1, dkLen: 32 }
+  kdf: { name: "scrypt", N: 65536, r: 8, p: 1, dkLen: 32 }
 }
 ```
 
 ### Crypto pipeline
 
 ```
-Password → scrypt(N=16384, r=8, p=1) → 256-bit key
+Password → scrypt(N=65536, r=8, p=1, maxmem=256 MiB) → 256-bit key
 Key + random IV (96-bit) → AES-256-GCM encrypt → ciphertext + auth tag
 ```
 
 All using `node:crypto` — zero external dependencies.
+
+`N=65536` matches the secret vault (`src/lib/local-secret-vault.ts`); a future bump to
+the OWASP `N>=2^17` target should move keystore and vault together. `deriveKey` sets an
+explicit `maxmem = 256 MiB` because Node's default scrypt cap is 32 MiB and `128*N*r`
+exceeds it above `N=2^15` (without it every encrypt/decrypt throws "memory limit
+exceeded"). Decrypt derives from each file's stored `kdf` params, so keystores written
+at any supported `N` still open — and the 256 MiB ceiling covers up to `N=2^18`.
 
 ### File safety
 

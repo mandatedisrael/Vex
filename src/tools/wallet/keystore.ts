@@ -24,17 +24,28 @@ export interface KeystoreV1 {
 
 const KDF_PARAMS = {
   name: "scrypt" as const,
-  N: 2 ** 14, // 16384
+  N: 2 ** 16, // 65536 — vault parity (src/lib/local-secret-vault.ts). OWASP scrypt
+  // guidance is N>=2^17; 65536 is the same deliberate interactive-unlock compromise
+  // the vault documents. A future bump to 2^17 should move keystore + vault together.
   r: 8,
   p: 1,
   dkLen: 32,
 };
 
 function deriveKey(password: string, salt: Uint8Array, dkLen: number, params = KDF_PARAMS): Buffer {
+  // Node's scrypt enforces a soft memory cap of 32 MiB by default; once N exceeds
+  // 2^15 (with r=8, p=1) the buffer requirement (128*N*r bytes) passes that cap and
+  // the call fails with `memory limit exceeded`. Raise the ceiling to 256 MiB —
+  // enough headroom for any KDF params we currently target (covers up to N=2^18) and
+  // still reasonable for a desktop unlock. Mirrors local-secret-vault.ts deriveKey.
+  // Applied in this shared helper so it covers encrypt AND decrypt; decrypt passes the
+  // file's own `kdf` params, so keystores written at any supported N still open.
+  const maxmem = 256 * 1024 * 1024;
   return scryptSync(password, salt, dkLen, {
     N: params.N,
     r: params.r,
     p: params.p,
+    maxmem,
   });
 }
 
