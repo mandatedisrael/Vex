@@ -166,9 +166,10 @@ describe("registry", () => {
     expect(namespace?.description).toContain("khalani");
   });
 
-  it("mutating tools are wallet_send_confirm, polymarket_setup", () => {
+  it("mutating tools are document_delete, polymarket_setup, wallet_send_confirm", () => {
     const mutating = getAllTools().filter(t => t.mutating).map(t => t.name).sort();
     expect(mutating).toEqual([
+      "document_delete",
       "polymarket_setup",
       "wallet_send_confirm",
     ]);

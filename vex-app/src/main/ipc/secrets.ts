@@ -96,7 +96,10 @@ export function registerSecretsHandlers(): Array<() => void> {
       inputSchema: secretsLockInputSchema,
       outputSchema: secretsLockResultSchema,
       handle: async (_input, ctx): Promise<Result<SecretsLockResult>> => {
-        lockSecretSession();
+        // Await so the provider-cache invalidation is provably done before we
+        // report locked — a cached provider would otherwise keep serving the
+        // old credentials after lock (FINDING-security-003).
+        await lockSecretSession();
         log.info(
           `[ipc:vex:secrets:lock] ok=true correlationId=${ctx.requestId}`,
         );

@@ -189,8 +189,9 @@ export function registerWalletExportHandler(): () => void {
           if (lockoutTriggered) {
             // Relock the vault — the user must re-unlock from scratch.
             // The throttle continues to enforce a 30s window in parallel
-            // so an attacker also can't immediately retry.
-            lockSecretSession();
+            // so an attacker also can't immediately retry. Awaited so the
+            // provider cache is cleared before we return (FINDING-security-003).
+            await lockSecretSession();
             log.warn(
               `[ipc:vex:wallet:exportPrivateKey] lockout triggered, vault relocked ` +
                 `chain=${input.chain} correlationId=${ctx.requestId}`,

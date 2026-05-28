@@ -15,6 +15,7 @@ const mockGetSecretVaultStatus = vi.fn();
 const mockStripManagedSecretsFromDotenvFile = vi.fn();
 const mockUnlockSecretVault = vi.fn();
 const mockWriteSecretVaultSecrets = vi.fn();
+const mockResetProvider = vi.fn();
 
 class LocalSecretVaultErrorMock extends Error {
   constructor(
@@ -44,6 +45,17 @@ vi.mock("@vex-lib/local-secret-vault.js", () => ({
 vi.mock("@vex-lib/secret-keys.js", () => ({
   MASTER_PASSWORD_ENV_KEY: "VEX_MASTER_PASSWORD",
   VAULT_SECRET_KEYS: ["JUPITER_API_KEY"] as const,
+  // Mirror the real composition: master-password key + all vault keys. The
+  // relock scrub iterates this, so it must be defined or scrubUnlockedRuntime
+  // would iterate `undefined`.
+  MANAGED_SECRET_ENV_KEYS: ["VEX_MASTER_PASSWORD", "JUPITER_API_KEY"] as const,
+}));
+
+// lockSecretSession dynamically imports the engine inference registry to drop
+// the cached provider after a relock (FINDING-security-003). Mock it so the
+// test never pulls the real engine graph and we can assert the reset fired.
+vi.mock("@vex-agent/inference/registry.js", () => ({
+  resetProvider: () => mockResetProvider(),
 }));
 
 // `@vex-lib/polymarket.js` re-exports through `polymarket-credentials.ts`,
@@ -115,6 +127,7 @@ beforeEach(() => {
   mockUnlockSecretVault.mockReset();
   mockWriteSecretVaultSecrets.mockReset();
   mockGetPrimaryEvmAddress.mockReset();
+  mockResetProvider.mockReset();
 });
 
 afterEach(() => {
@@ -137,7 +150,7 @@ describe("lockSecretSession", () => {
       unlocked: true,
     });
 
-    session.lockSecretSession();
+    await session.lockSecretSession();
     expect(session.getSecretSessionStatus()).toEqual({
       vaultConfigured: true,
       unlocked: false,
@@ -148,7 +161,7 @@ describe("lockSecretSession", () => {
     mockGetSecretVaultStatus.mockReturnValue({ configured: true });
     const session = await loadSession();
     expect(session.getSecretSessionStatus().unlocked).toBe(false);
-    session.lockSecretSession();
+    await session.lockSecretSession();
     expect(session.getSecretSessionStatus().unlocked).toBe(false);
   });
 
@@ -158,9 +171,9 @@ describe("lockSecretSession", () => {
 
     const session = await loadSession();
     session.unlockSecretSession("correct-password");
-    session.lockSecretSession();
-    session.lockSecretSession();
-    session.lockSecretSession();
+    await session.lockSecretSession();
+    await session.lockSecretSession();
+    await session.lockSecretSession();
     expect(session.getSecretSessionStatus().unlocked).toBe(false);
   });
 
@@ -172,12 +185,63 @@ describe("lockSecretSession", () => {
     session.unlockSecretSession("correct-password");
     expect(session.requireUnlockedMasterPassword().ok).toBe(true);
 
-    session.lockSecretSession();
+    await session.lockSecretSession();
     const result = session.requireUnlockedMasterPassword();
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("wallet.keystore_locked");
     }
+  });
+
+  // ── FINDING-security-003: relock must scrub env + reset provider ──
+
+  it("deletes every MANAGED_SECRET_ENV_KEY from process.env on lock", async () => {
+    mockGetSecretVaultStatus.mockReturnValue({ configured: true });
+    mockUnlockSecretVault.mockReturnValue({ version: 1, secrets: {} });
+
+    const session = await loadSession();
+    session.unlockSecretSession("correct-password");
+
+    // Simulate the vault-injected runtime: managed secrets present in env.
+    process.env.VEX_MASTER_PASSWORD = "should-be-cleared";
+    process.env.JUPITER_API_KEY = "jk-should-be-cleared";
+
+    await session.lockSecretSession();
+
+    expect(process.env.VEX_MASTER_PASSWORD).toBeUndefined();
+    expect(process.env.JUPITER_API_KEY).toBeUndefined();
+  });
+
+  it("invalidates the engine provider cache on lock (resetProvider awaited)", async () => {
+    mockGetSecretVaultStatus.mockReturnValue({ configured: true });
+    mockUnlockSecretVault.mockReturnValue({ version: 1, secrets: {} });
+
+    const session = await loadSession();
+    session.unlockSecretSession("correct-password");
+
+    await session.lockSecretSession();
+
+    expect(mockResetProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it("scrubs managed env keys when getUnlockedSecretPresence's probe fails (defensive relock)", async () => {
+    mockGetSecretVaultStatus.mockReturnValue({ configured: true });
+    // First unlock returns OK so the session is unlocked; the SECOND unlock
+    // (inside the presence probe) throws, forcing the defensive relock path.
+    mockUnlockSecretVault
+      .mockReturnValueOnce({ version: 1, secrets: {} })
+      .mockImplementationOnce(() => {
+        throw new LocalSecretVaultErrorMock("corrupt", "corrupt");
+      });
+
+    const session = await loadSession();
+    session.unlockSecretSession("correct-password");
+
+    process.env.JUPITER_API_KEY = "jk-should-be-cleared";
+
+    const presence = session.getUnlockedSecretPresence();
+    expect(presence.unlocked).toBe(false);
+    expect(process.env.JUPITER_API_KEY).toBeUndefined();
   });
 });
 

@@ -8,6 +8,7 @@ import {
   writeSecretVaultSecrets,
 } from "@vex-lib/local-secret-vault.js";
 import {
+  MANAGED_SECRET_ENV_KEYS,
   MASTER_PASSWORD_ENV_KEY,
   VAULT_SECRET_KEYS,
   type VaultSecretKey,
@@ -113,16 +114,55 @@ export function unlockSecretSession(
 }
 
 /**
- * Best-effort in-process scrub of the cached master password. JS strings are
- * immutable so we cannot zero the underlying buffer; nulling the reference is
- * the strongest in-process defense. Invoked from quit hooks + the explicit
- * `vex:secrets:lock` IPC channel.
+ * Synchronous part of a relock (FINDING-security-003): drop the cached master
+ * password reference AND remove every managed secret the unlock flow injected
+ * into `process.env`. Synchronous on purpose — callers in sync contexts (quit
+ * hooks, the sync `getUnlockedSecretPresence` failure path) get the scrub before
+ * any `await`, so the security guarantee never depends on a pending microtask.
+ *
+ * Sweeps `MANAGED_SECRET_ENV_KEYS` (master-password key + all vault keys), not
+ * just `VAULT_SECRET_KEYS`, so a relock leaves NO managed secret in env.
  */
-export function lockSecretSession(): void {
+function scrubUnlockedRuntime(): void {
   unlockedMasterPassword = null;
-  // Encourage GC so the residual string is more likely to be collected before
-  // a crash dump captures it. `global.gc` only exists when launched with
-  // `--expose-gc`; this is best-effort, not a guarantee.
+  for (const key of MANAGED_SECRET_ENV_KEYS) {
+    delete process.env[key];
+  }
+}
+
+/**
+ * Invalidate the engine's cached inference provider after a relock. Required
+ * because `resolveProvider()` returns its `cachedProvider` BEFORE re-reading
+ * env — deleting `process.env.OPENROUTER_API_KEY` alone would not stop a
+ * previously-resolved provider instance from continuing to serve. Dynamic
+ * import keeps the engine off the main bundle's static graph (boundary rule);
+ * a failure here is logged but never fails the lock.
+ */
+async function invalidateProviderCache(): Promise<void> {
+  try {
+    const { resetProvider } = await import("@vex-agent/inference/registry.js");
+    resetProvider();
+  } catch (err) {
+    log.warn("[secrets-session] resetProvider after lock failed", err);
+  }
+}
+
+/**
+ * Relock the secret session. Scrubs the cached master password and every
+ * managed secret from `process.env`, then invalidates the engine's cached
+ * inference provider so post-lock turns cannot reuse the old credentials.
+ *
+ * The env/password scrub is synchronous and runs before the first `await`, so
+ * fire-and-forget callers (quit hooks) still get the hard scrub. Explicit lock
+ * paths (`vex:secrets:lock` IPC, export-failure lockout) MUST `await` this so
+ * the provider cache is provably cleared before they report success. JS strings
+ * are immutable, so nulling the reference + GC is the strongest in-process
+ * defense for the residual password string. `global.gc` only exists with
+ * `--expose-gc`; the GC hint is best-effort.
+ */
+export async function lockSecretSession(): Promise<void> {
+  scrubUnlockedRuntime();
+  await invalidateProviderCache();
   if (typeof global.gc === "function") global.gc();
 }
 
@@ -173,7 +213,12 @@ export function getUnlockedSecretPresence(): SecretPresence {
     return { ...status, secrets };
   } catch (cause) {
     log.warn("[secrets-session] presence probe failed; locking vault", cause);
-    unlockedMasterPassword = null;
+    // Defensive relock: same scrub as an explicit lock (env + password), but
+    // this getter is synchronous so the provider-cache reset is fire-and-forget.
+    // The env/password scrub IS synchronous, so the security guarantee holds
+    // before we return; only the cache invalidation lands on a later microtask.
+    scrubUnlockedRuntime();
+    void invalidateProviderCache();
     return { vaultConfigured: status.vaultConfigured, unlocked: false, secrets: {} };
   }
 }

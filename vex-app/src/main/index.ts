@@ -33,6 +33,7 @@ import { globalCleanup } from "./lifecycle/cleanup-registry.js";
 import { makeOrderedQuitCleanup } from "./lifecycle/ordered-quit-cleanup.js";
 import { setupCompactWorker } from "./agent/compact-worker.js";
 import { setupWakeWorker } from "./agent/wake-worker.js";
+import { setupSyncWorker } from "./agent/sync-worker.js";
 import { lockSecretSession } from "./secrets/session.js";
 import { createMainWindow } from "./windows/main-window.js";
 import { installMinimalMenu } from "./menu.js";
@@ -100,10 +101,14 @@ installBeforeQuitHook();
 // `before-quit` was suppressed by an active-mission gate that later resolved.
 // Both listeners are idempotent — calling `lockSecretSession()` twice is safe.
 app.on("before-quit", () => {
-  lockSecretSession();
+  // Fire-and-forget: the env/password scrub inside lockSecretSession is
+  // synchronous (runs before the first await), so it completes during this
+  // listener; only the provider-cache reset resolves on a later microtask,
+  // which is moot on a quitting process. lockSecretSession catches internally.
+  void lockSecretSession();
 });
 app.on("will-quit", () => {
-  lockSecretSession();
+  void lockSecretSession();
 });
 
 app.whenReady().then(async () => {
@@ -142,7 +147,17 @@ app.whenReady().then(async () => {
   // (the executor's own pre-claim OPENROUTER_API_KEY + AGENT_MODEL gate).
   const stopWakeWorker = setupWakeWorker();
 
-  // 6b. Register lifecycle-driven cleanup. BOTH workers must drain in-flight
+  // 6a-sync. Own the engine sync executor so post-mutation protocol_sync_runs
+  // drain into refreshed balance/portfolio projections (otherwise every
+  // mutating protocol tool enqueues a run that sits pending forever and the
+  // renderer shows stale balances). Unlike compact/wake there is NO provider
+  // gate — sync makes no inference calls; it does public-address network reads.
+  // It stays idle until the protocol_sync_jobs schema is ready (supervisor
+  // probe), independent of vault unlock (an accepted privacy trade-off; no key
+  // material is touched).
+  const stopSyncWorker = setupSyncWorker();
+
+  // 6b. Register lifecycle-driven cleanup. ALL workers must drain in-flight
   // work BEFORE cleanupOnQuit stops Compose/Postgres — and globalCleanup runs
   // tasks concurrently, so makeOrderedQuitCleanup sequences (drain workers) ->
   // cleanupOnQuit in one ordered task. Rejected stops are logged so a stuck
@@ -153,6 +168,7 @@ app.whenReady().then(async () => {
       const results = await Promise.allSettled([
         stopCompactWorker(),
         stopWakeWorker(),
+        stopSyncWorker(),
       ]);
       for (const r of results) {
         if (r.status === "rejected") {

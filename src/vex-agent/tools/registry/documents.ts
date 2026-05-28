@@ -51,7 +51,7 @@ export const DOCUMENT_TOOLS: readonly ToolDef[] = [
     } },
   },
   {
-    name: "document_delete", kind: "internal", mutating: false, pressureSafety: "mutating", actionKind: "destructive",
+    name: "document_delete", kind: "internal", mutating: true, pressureSafety: "mutating", actionKind: "destructive",
     description:
       "Archive (soft-delete) a scratchpad note. Reversible by writing the same slug again. "
       + "For durable knowledge entries use knowledge_update_status (status='archived') instead — knowledge has lifecycle (active / superseded / invalidated / archived) and a lineage chain; documents are just a flat slug→content scratchpad.",

@@ -87,6 +87,34 @@ describe("dispatcher — subagent, wallet, unknown, no-stubs", () => {
     expect(result.output).toMatch(/approval/i);
   });
 
+  it("document_delete under restricted + unapproved → pendingApproval (FINDING-security-005 regression)", async () => {
+    // document_delete is actionKind:"destructive" + mutating:true. The gate
+    // keys on `mutating`, so a restricted+unapproved session must NOT reach the
+    // soft-delete handler — it must surface an approval card instead. Before the
+    // fix this tool had mutating:false and silently archived notes ungated.
+    const result = await dispatchTool(
+      { name: "document_delete", args: { slug: "test" }, toolCallId: "call_doc_delete" },
+      baseContext,
+    );
+
+    expect(result.pendingApproval).toBe(true);
+    expect(result.success).toBe(false);
+    expect(result.output).toMatch(/approval/i);
+  });
+
+  it("document_write stays ungated under restricted + unapproved (scratchpad write, deliberately not gated)", async () => {
+    // Sibling document_write has mutating:false on purpose — scratchpad writes
+    // are low-risk + recoverable, so they run without an approval card even in
+    // restricted mode. Pins the deliberate asymmetry vs document_delete.
+    const result = await dispatchTool(
+      { name: "document_write", args: { title: "Scratch", content: "x" }, toolCallId: "call_doc_write_ungated" },
+      baseContext,
+    );
+
+    expect(result.pendingApproval).not.toBe(true);
+    expect(result.success).toBe(true);
+  });
+
   // ── Unknown tool ─────────────────────────────────────────────────
 
   it("returns error for completely unknown tool", async () => {
