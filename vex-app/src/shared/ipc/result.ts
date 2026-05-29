@@ -78,6 +78,18 @@ export type VexDomain =
 export type VexErrorCode =
   | "validation.invalid_input"
   | "validation.invalid_sender"
+  /**
+   * Wallet archive restore (C2). `wallet.signer_mismatch` =
+   * `SIGNER_MISMATCH` from the C1 restore primitive (the decrypted key does
+   * not derive the address recorded in the manifest, or the archive's
+   * signer identity disagrees with what it claims). `validation.archive_*`
+   * cover a structurally bad (`ARCHIVE_MANIFEST_MALFORMED`) or incomplete
+   * (`ARCHIVE_INCOMPLETE`) backup archive. All three:
+   * `retryable: false, userActionable: true`.
+   */
+  | "wallet.signer_mismatch"
+  | "validation.archive_incomplete"
+  | "validation.archive_manifest_malformed"
   | "permissions.denied"
   | "wallet.insufficient_funds"
   | "wallet.user_rejected"
@@ -207,6 +219,9 @@ export interface VexError {
 export const VEX_ERROR_CODES = [
   "validation.invalid_input",
   "validation.invalid_sender",
+  "wallet.signer_mismatch",
+  "validation.archive_incomplete",
+  "validation.archive_manifest_malformed",
   "permissions.denied",
   "wallet.insufficient_funds",
   "wallet.user_rejected",

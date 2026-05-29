@@ -50,7 +50,13 @@ const ENGINE_CODE = {
   INVALID_PRIVATE_KEY: "INVALID_PRIVATE_KEY",
   WALLET_INVENTORY_FULL: "WALLET_INVENTORY_FULL",
   WALLET_DUPLICATE_ADDRESS: "WALLET_DUPLICATE_ADDRESS",
+  WALLET_USER_REJECTED: "WALLET_USER_REJECTED",
   AGENT_VALIDATION_ERROR: "AGENT_VALIDATION_ERROR",
+  // Full-archive restore (C2). Mirrors src/errors.ts ErrorCodes.
+  SIGNER_MISMATCH: "SIGNER_MISMATCH",
+  ARCHIVE_MANIFEST_MALFORMED: "ARCHIVE_MANIFEST_MALFORMED",
+  ARCHIVE_INCOMPLETE: "ARCHIVE_INCOMPLETE",
+  ARCHIVE_RESTORE_FAILED: "ARCHIVE_RESTORE_FAILED",
 } as const;
 
 interface EngineErrorLike {
@@ -170,6 +176,62 @@ export function mapWalletEngineError(cause: unknown): Result<never, VexError> {
           message: "This wallet address is already in your inventory.",
           retryable: false,
           userActionable: true,
+          redacted: true,
+        });
+      // ── Full-archive restore (C2) ─────────────────────────────────────────
+      case ENGINE_CODE.SIGNER_MISMATCH:
+        // The decrypted key does not derive the address recorded in the
+        // backup manifest — the archive is untrustworthy. Never retry, never
+        // overwrite. NOT user-actionable beyond "use a different backup".
+        return err({
+          code: "wallet.signer_mismatch",
+          domain: "wallet",
+          message:
+            "Backup verification failed: a wallet key does not match its recorded address. This backup cannot be restored.",
+          retryable: false,
+          userActionable: true,
+          redacted: true,
+        });
+      case ENGINE_CODE.ARCHIVE_INCOMPLETE:
+        return err({
+          code: "validation.archive_incomplete",
+          domain: "onboarding",
+          message:
+            "Backup is incomplete: one or more files referenced by the manifest are missing.",
+          retryable: false,
+          userActionable: true,
+          redacted: true,
+        });
+      case ENGINE_CODE.ARCHIVE_MANIFEST_MALFORMED:
+        return err({
+          code: "validation.archive_manifest_malformed",
+          domain: "onboarding",
+          message:
+            "Backup manifest is malformed or in an unsupported format and cannot be restored.",
+          retryable: false,
+          userActionable: true,
+          redacted: true,
+        });
+      case ENGINE_CODE.ARCHIVE_RESTORE_FAILED:
+        // Catch-all for restore I/O / path-containment failures. Closest
+        // existing public code; the manifest itself parsed but the restore
+        // could not complete safely.
+        return err({
+          code: "validation.invalid_input",
+          domain: "onboarding",
+          message:
+            "Backup could not be restored. The archive may be outside the backups folder or unreadable.",
+          retryable: false,
+          userActionable: true,
+          redacted: true,
+        });
+      case ENGINE_CODE.WALLET_USER_REJECTED:
+        return err({
+          code: "wallet.user_rejected",
+          domain: "wallet",
+          message: "Restore cancelled.",
+          retryable: false,
+          userActionable: false,
           redacted: true,
         });
       case ENGINE_CODE.AGENT_VALIDATION_ERROR:

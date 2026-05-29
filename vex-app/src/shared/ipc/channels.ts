@@ -59,6 +59,8 @@ export const CH = {
     walletGenerateSolana: "vex:onboarding:walletGenerateSolana",
     walletImportSolana: "vex:onboarding:walletImportSolana",
     walletRestoreFromBackup: "vex:onboarding:walletRestoreFromBackup",
+    walletListBackups: "vex:onboarding:walletListBackups",
+    walletRestoreArchive: "vex:onboarding:walletRestoreArchive",
     walletOpenBackupFolder: "vex:onboarding:walletOpenBackupFolder",
     walletAddEvm: "vex:onboarding:walletAddEvm",
     walletAddSolana: "vex:onboarding:walletAddSolana",

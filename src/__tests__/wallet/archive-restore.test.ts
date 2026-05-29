@@ -312,6 +312,30 @@ describe("restoreFromBackupArchive", () => {
     expect(code).toBe(ErrorCodes.ARCHIVE_MANIFEST_MALFORMED);
   });
 
+  it("rejects a vault-role file with a non-canonical filename", async () => {
+    mkdirSync(testBackupsDir, { recursive: true });
+    const dir = join(testBackupsDir, "renamed-vault");
+    mkdirSync(dir);
+    // role:"vault" but filename != secrets.vault.json — an untrusted archive
+    // must not swap the live vault under a disguised name.
+    writeFileSync(join(dir, "vault.json"), "{}", "utf-8");
+    writeFileSync(
+      join(dir, "manifest.json"),
+      JSON.stringify({
+        version: 2,
+        cliVersion: "x",
+        createdAt: new Date().toISOString(),
+        wallets: [],
+        files: [{ filename: "vault.json", role: "vault" }],
+      }),
+      "utf-8",
+    );
+    const code = await codeOf(() =>
+      restoreMod.restoreFromBackupArchive({ archiveDir: dir, password: TEST_PASSWORD }),
+    );
+    expect(code).toBe(ErrorCodes.ARCHIVE_MANIFEST_MALFORMED);
+  });
+
   it("rejects a symlinked file entry", async () => {
     mkdirSync(testBackupsDir, { recursive: true });
     const dir = join(testBackupsDir, "symlink");

@@ -18,8 +18,10 @@ import type {
   WalletImportEvmResult,
   WalletImportSolanaInput,
   WalletImportSolanaResult,
+  WalletListBackupsResult,
   WalletOpenBackupFolderInput,
   WalletOpenBackupFolderResult,
+  WalletRestoreArchiveResult,
   WalletRestoreInput,
   WalletRestoreResult,
 } from "../../../schemas/wallets.js";
@@ -67,6 +69,19 @@ export interface OnboardingBridge {
   readonly walletRestoreFromBackup: (
     input: WalletRestoreInput
   ) => Promise<Result<WalletRestoreResult>>;
+  /**
+   * Full-archive restore (C2). `listBackups` returns metadata only (opaque
+   * backup ids, public addresses — no secrets, no absolute paths).
+   * `restoreArchive` takes the opaque `id` + master password; main resolves
+   * the id under BACKUPS_DIR, restores the whole archive (wallets + vault +
+   * .env), and refreshes the process runtime. The result carries no key
+   * material and no absolute path.
+   */
+  readonly listBackups: () => Promise<Result<WalletListBackupsResult>>;
+  readonly restoreArchive: (
+    id: string,
+    password: string
+  ) => Promise<Result<WalletRestoreArchiveResult>>;
   readonly walletOpenBackupFolder: (
     input: WalletOpenBackupFolderInput
   ) => Promise<Result<WalletOpenBackupFolderResult>>;

@@ -84,6 +84,18 @@ export interface RestoreFromBackupArchiveResult {
   readonly filesRestored: string[];
   readonly walletsRestored: WalletInventoryEntry[];
   readonly backupDir: string | null;
+  /**
+   * Whether the archive actually carried a `role:"vault"` file that was written
+   * to `SECRETS_VAULT_FILE`. ROLE-derived (not filename-derived): callers must
+   * use THIS — not a filename check on `filesRestored` — to decide whether to
+   * refresh the secret session, because `vaultLocked:false` is also returned
+   * when there is no vault at all.
+   */
+  readonly vaultRestored: boolean;
+  /**
+   * Only meaningful when `vaultRestored` is true: false = the restored vault
+   * opens with the supplied password; true = it does not (different password).
+   */
   readonly vaultLocked: boolean;
 }
 
@@ -188,10 +200,26 @@ export async function restoreFromBackupArchive(
     }
     seenFilenames.add(filename);
 
-    if (role === "vault") vaultCount += 1;
-    else if (role === "env") envCount += 1;
-    else if (role === "config") configCount += 1;
-    else if (role === "wallet-evm" || role === "wallet-solana") {
+    // Singleton system files MUST use their canonical basename. This makes the
+    // vault/env/config decision role-based AND filename-stable: an untrusted
+    // archive cannot, e.g., declare role:"vault" under a different filename to
+    // swap the live vault while a filename-based caller misses it.
+    if (role === "vault") {
+      if (filename !== basenameOf(SECRETS_VAULT_FILE)) {
+        rejectMalformed(`Vault file must be named ${basenameOf(SECRETS_VAULT_FILE)}.`);
+      }
+      vaultCount += 1;
+    } else if (role === "env") {
+      if (filename !== basenameOf(ENV_FILE)) {
+        rejectMalformed(`Env file must be named ${basenameOf(ENV_FILE)}.`);
+      }
+      envCount += 1;
+    } else if (role === "config") {
+      if (filename !== basenameOf(CONFIG_FILE)) {
+        rejectMalformed(`Config file must be named ${basenameOf(CONFIG_FILE)}.`);
+      }
+      configCount += 1;
+    } else if (role === "wallet-evm" || role === "wallet-solana") {
       const family: InventoryFamily = role === "wallet-solana" ? "solana" : "evm";
       if (!file.walletId || !file.walletFamily || !file.address) {
         rejectMalformed(`Wallet file ${filename} is missing walletId/walletFamily/address.`);
@@ -587,7 +615,13 @@ export async function restoreFromBackupArchive(
       }
     }
 
-    return { filesRestored, walletsRestored, backupDir, vaultLocked };
+    return {
+      filesRestored,
+      walletsRestored,
+      backupDir,
+      vaultRestored: stagedVault !== undefined,
+      vaultLocked,
+    };
   } finally {
     try {
       rmSync(stagingDir, { recursive: true, force: true });

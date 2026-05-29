@@ -166,6 +166,24 @@ export async function lockSecretSession(): Promise<void> {
   if (typeof global.gc === "function") global.gc();
 }
 
+/**
+ * Adopt a master password as the unlocked session AFTER an external mutation
+ * swapped the on-disk vault file (C2 archive restore). The restore primitive
+ * has already written the new `secrets.vault.json`; this refreshes
+ * `process.env` from that RESTORED vault and marks the session unlocked with
+ * the supplied password — the same in-memory state `unlockSecretSession`
+ * establishes, but WITHOUT re-running `unlockSecretVault` first (the caller
+ * already proved the password decrypts the restored vault by completing the
+ * restore). Throws `LocalSecretVaultError` if the restored vault cannot be
+ * read with `password`; callers map it through `mapWalletEngineError` /
+ * `toPublicError`. NEVER logs the password.
+ */
+export function adoptUnlockedPassword(password: string): void {
+  applyUnlockedRuntime(password);
+  unlockedMasterPassword = password;
+  stripManagedSecretsFromDotenvFile(ENV_FILE);
+}
+
 export function requireUnlockedMasterPassword(): Result<string> {
   if (unlockedMasterPassword !== null) return ok(unlockedMasterPassword);
   return err({

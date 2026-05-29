@@ -22,7 +22,9 @@ import {
   walletImportAddInputSchema,
   walletImportEvmInputSchema,
   walletImportSolanaInputSchema,
+  walletListBackupsInputSchema,
   walletOpenBackupFolderInputSchema,
+  walletRestoreArchiveInputSchema,
   walletRestoreInputSchema,
 } from "../../shared/schemas/wallets.js";
 import type {
@@ -99,6 +101,20 @@ export const onboarding = {
       CH.onboarding.walletRestoreFromBackup,
       input,
       walletRestoreInputSchema
+    );
+  },
+  listBackups() {
+    return invokeWithSchema(
+      CH.onboarding.walletListBackups,
+      {},
+      walletListBackupsInputSchema
+    );
+  },
+  restoreArchive(id: string, password: string) {
+    return invokeWithSchema(
+      CH.onboarding.walletRestoreArchive,
+      { id, password },
+      walletRestoreArchiveInputSchema
     );
   },
   walletOpenBackupFolder(input: WalletOpenBackupFolderInput) {
