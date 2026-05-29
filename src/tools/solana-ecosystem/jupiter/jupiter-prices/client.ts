@@ -4,6 +4,7 @@
  */
 
 import { fetchJson } from "../../../../utils/http.js";
+import { jupiterPriceResponseSchema } from "./schemas.js";
 import { JUPITER_PRICE_V3_BASE_URL, type JupiterPriceRequestParams, type JupiterPriceResponse } from "./types.js";
 import {
   getJupiterPriceHeaders,
@@ -23,6 +24,7 @@ export async function jupiterPrices(params: JupiterPriceRequestParams): Promise<
   return fetchJson<JupiterPriceResponse>(
     `${JUPITER_PRICE_V3_BASE_URL}/price/v3?${toQueryString({ ids: validated.ids.join(",") })}`,
     { headers: getJupiterPriceHeaders() },
+    jupiterPriceResponseSchema,
   );
 }
 
@@ -32,6 +34,7 @@ export async function jupiterPricesByMint(mints: string[]): Promise<JupiterPrice
   return fetchJson<JupiterPriceResponse>(
     `${JUPITER_PRICE_V3_BASE_URL}/price/v3?${toQueryString({ ids: normalizeJupiterPriceMintList(mints) })}`,
     { headers: getJupiterPriceHeaders() },
+    jupiterPriceResponseSchema,
   );
 }
 

@@ -36,6 +36,7 @@ import {
   isRetryableError,
 } from "@vex-agent/inference/resilience.js";
 import logger from "@utils/logger.js";
+import { openAIEmbeddingsResponseSchema } from "./schemas.js";
 
 // ── Public API ───────────────────────────────────────────────────
 
@@ -179,7 +180,18 @@ async function callEmbeddingsEndpoint(
     throw new Error(`embeddings provider returned ${res.status}: ${text.slice(0, 200)}`);
   }
 
-  const json = (await res.json()) as OpenAIEmbeddingsResponse;
+  const raw: unknown = await res.json();
+  const parsed = openAIEmbeddingsResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(
+      `embeddings provider returned malformed response: ${parsed.error.issues
+        .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+        .join("; ")}`,
+    );
+  }
+  // The wire interface stays canonical; the schema mirrors it, so the validated
+  // value is assignable to OpenAIEmbeddingsResponse and tsc verifies the shape.
+  const json: OpenAIEmbeddingsResponse = parsed.data;
   const embedding = json.data?.[0]?.embedding;
   if (!Array.isArray(embedding)) {
     throw new Error(`embeddings provider returned malformed response: missing data[0].embedding`);

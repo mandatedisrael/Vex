@@ -65,6 +65,10 @@ export const ErrorCodes = {
   // HTTP
   HTTP_REQUEST_FAILED: "HTTP_REQUEST_FAILED",
   HTTP_TIMEOUT: "HTTP_TIMEOUT",
+  // Response body failed schema validation (codex-002). Distinct from
+  // HTTP_REQUEST_FAILED so callers can treat a malformed/hostile payload as
+  // non-retryable while still retrying genuine network failures.
+  HTTP_RESPONSE_INVALID: "HTTP_RESPONSE_INVALID",
 
   // Khalani / HyperStream
   KHALANI_API_ERROR: "KHALANI_API_ERROR",

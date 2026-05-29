@@ -5,6 +5,7 @@
 
 import { fetchJson } from "../../../../utils/http.js";
 import { JUPITER_TOKENS_V2_BASE_URL, type JupiterMintInformation, type JupiterTokenCategoryParams, type JupiterTokenSearchParams, type JupiterTokenTag } from "./types.js";
+import { jupiterMintInformationListSchema } from "./schemas.js";
 import { getJupiterTokensHeaders, normalizeMintList, requireJupiterTokensApiKey, validateJupiterMintList, validateJupiterTokenCategoryParams, validateJupiterTokenSearchParams, validateJupiterTokenTag } from "./validation.js";
 
 function toQueryString(query: Record<string, string>): string {
@@ -18,6 +19,7 @@ export async function jupiterTokenSearch(params: JupiterTokenSearchParams): Prom
   return fetchJson<JupiterMintInformation[]>(
     `${JUPITER_TOKENS_V2_BASE_URL}/search?${toQueryString({ query: params.query })}`,
     { headers: getJupiterTokensHeaders() },
+    jupiterMintInformationListSchema,
   );
 }
 
@@ -29,6 +31,7 @@ export async function jupiterTokensByMint(mints: string[]): Promise<JupiterMintI
   return fetchJson<JupiterMintInformation[]>(
     `${JUPITER_TOKENS_V2_BASE_URL}/search?${toQueryString({ query: normalizeMintList(normalizedMints) })}`,
     { headers: getJupiterTokensHeaders() },
+    jupiterMintInformationListSchema,
   );
 }
 
@@ -38,6 +41,7 @@ export async function jupiterTokensByTag(tag: JupiterTokenTag): Promise<JupiterM
   return fetchJson<JupiterMintInformation[]>(
     `${JUPITER_TOKENS_V2_BASE_URL}/tag?${toQueryString({ query: validateJupiterTokenTag(tag) })}`,
     { headers: getJupiterTokensHeaders() },
+    jupiterMintInformationListSchema,
   );
 }
 
@@ -51,6 +55,7 @@ export async function jupiterTokensByCategory(
   return fetchJson<JupiterMintInformation[]>(
     `${JUPITER_TOKENS_V2_BASE_URL}/${validated.category}/${validated.interval}${query}`,
     { headers: getJupiterTokensHeaders() },
+    jupiterMintInformationListSchema,
   );
 }
 
@@ -60,5 +65,6 @@ export async function jupiterRecentTokens(): Promise<JupiterMintInformation[]> {
   return fetchJson<JupiterMintInformation[]>(
     `${JUPITER_TOKENS_V2_BASE_URL}/recent`,
     { headers: getJupiterTokensHeaders() },
+    jupiterMintInformationListSchema,
   );
 }

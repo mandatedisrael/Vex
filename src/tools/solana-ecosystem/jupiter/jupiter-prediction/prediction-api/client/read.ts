@@ -59,6 +59,27 @@ import {
   validateJupiterPredictionPnlHistoryParams,
   validateJupiterPredictionLeaderboardsParams,
 } from "../validation.js";
+import {
+  jupiterPredictionEventSchema,
+  jupiterPredictionEventsResponseSchema,
+  jupiterPredictionSearchEventsResponseSchema,
+  jupiterPredictionSuggestedEventsResponseSchema,
+  jupiterPredictionEventMarketsResponseSchema,
+  jupiterPredictionMarketResponseSchema,
+  jupiterPredictionOrderbookResponseSchema,
+  jupiterPredictionTradingStatusResponseSchema,
+  jupiterPredictionOrdersResponseSchema,
+  jupiterPredictionOrderResponseSchema,
+  jupiterPredictionOrderStatusResponseSchema,
+  jupiterPredictionPositionsResponseSchema,
+  jupiterPredictionPositionResponseSchema,
+  jupiterPredictionHistoryResponseSchema,
+  jupiterPredictionProfileResponseSchema,
+  jupiterPredictionPnlHistoryResponseSchema,
+  jupiterPredictionTradesResponseSchema,
+  jupiterPredictionLeaderboardsResponseSchema,
+  jupiterPredictionVaultInfoResponseSchema,
+} from "../schemas.js";
 import { withQuery } from "./url.js";
 
 // ── Events ─────────────────────────────────────────────────────────
@@ -82,6 +103,7 @@ export async function jupiterPredictionEvents(
       filter: validated.filter,
     }),
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionEventsResponseSchema,
   );
 }
 
@@ -98,6 +120,7 @@ export async function jupiterPredictionSearchEvents(
       limit: validated.limit != null ? String(validated.limit) : undefined,
     }),
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionSearchEventsResponseSchema,
   );
 }
 
@@ -112,6 +135,7 @@ export async function jupiterPredictionEvent(
       includeMarkets: validated.includeMarkets != null ? String(validated.includeMarkets) : undefined,
     }),
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionEventSchema,
   );
 }
 
@@ -126,6 +150,7 @@ export async function jupiterPredictionSuggestedEvents(
       provider: validated.provider,
     }),
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionSuggestedEventsResponseSchema,
   );
 }
 
@@ -143,6 +168,7 @@ export async function jupiterPredictionEventMarkets(
       end: validated.end != null ? String(validated.end) : undefined,
     }),
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionEventMarketsResponseSchema,
   );
 }
 
@@ -155,6 +181,7 @@ export async function jupiterPredictionEventMarket(
   return fetchJson<JupiterPredictionEventMarketResponse>(
     `${JUPITER_PREDICTION_API_BASE_URL}/events/${validated.eventId}/markets/${validated.marketId}`,
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionMarketResponseSchema,
   );
 }
 
@@ -167,6 +194,7 @@ export async function jupiterPredictionMarket(
   return fetchJson<JupiterPredictionMarketResponse>(
     `${JUPITER_PREDICTION_API_BASE_URL}/markets/${validated.marketId}`,
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionMarketResponseSchema,
   );
 }
 
@@ -179,6 +207,7 @@ export async function jupiterPredictionOrderbook(
   return fetchJson<JupiterPredictionOrderbookResponse>(
     `${JUPITER_PREDICTION_API_BASE_URL}/orderbook/${validated.marketId}`,
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionOrderbookResponseSchema,
   );
 }
 
@@ -188,6 +217,7 @@ export async function jupiterPredictionTradingStatus(): Promise<JupiterPredictio
   return fetchJson<JupiterPredictionTradingStatusResponse>(
     `${JUPITER_PREDICTION_API_BASE_URL}/trading-status`,
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionTradingStatusResponseSchema,
   );
 }
 
@@ -206,6 +236,7 @@ export async function jupiterPredictionOrders(
       ownerPubkey: validated.ownerPubkey,
     }),
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionOrdersResponseSchema,
   );
 }
 
@@ -218,6 +249,7 @@ export async function jupiterPredictionOrder(
   return fetchJson<JupiterPredictionOrderResponse>(
     `${JUPITER_PREDICTION_API_BASE_URL}/orders/${validated.orderPubkey}`,
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionOrderResponseSchema,
   );
 }
 
@@ -230,6 +262,7 @@ export async function jupiterPredictionOrderStatus(
   return fetchJson<JupiterPredictionOrderStatusResponse>(
     `${JUPITER_PREDICTION_API_BASE_URL}/orders/status/${validated.orderPubkey}`,
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionOrderStatusResponseSchema,
   );
 }
 
@@ -251,6 +284,7 @@ export async function jupiterPredictionPositions(
       isYes: validated.isYes != null ? String(validated.isYes) : undefined,
     }),
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionPositionsResponseSchema,
   );
 }
 
@@ -263,6 +297,7 @@ export async function jupiterPredictionPosition(
   return fetchJson<JupiterPredictionPositionResponse>(
     `${JUPITER_PREDICTION_API_BASE_URL}/positions/${validated.positionPubkey}`,
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionPositionResponseSchema,
   );
 }
 
@@ -283,6 +318,7 @@ export async function jupiterPredictionHistory(
       positionPubkey: validated.positionPubkey,
     }),
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionHistoryResponseSchema,
   );
 }
 
@@ -295,6 +331,7 @@ export async function jupiterPredictionProfile(
   return fetchJson<JupiterPredictionProfileResponse>(
     `${JUPITER_PREDICTION_API_BASE_URL}/profiles/${validated.ownerPubkey}`,
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionProfileResponseSchema,
   );
 }
 
@@ -310,6 +347,7 @@ export async function jupiterPredictionPnlHistory(
       count: validated.count != null ? String(validated.count) : undefined,
     }),
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionPnlHistoryResponseSchema,
   );
 }
 
@@ -321,6 +359,7 @@ export async function jupiterPredictionTrades(): Promise<JupiterPredictionTrades
   return fetchJson<JupiterPredictionTradesResponse>(
     `${JUPITER_PREDICTION_API_BASE_URL}/trades`,
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionTradesResponseSchema,
   );
 }
 
@@ -337,6 +376,7 @@ export async function jupiterPredictionLeaderboards(
       metric: validated.metric,
     }),
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionLeaderboardsResponseSchema,
   );
 }
 
@@ -346,5 +386,6 @@ export async function jupiterPredictionVaultInfo(): Promise<JupiterPredictionVau
   return fetchJson<JupiterPredictionVaultInfoResponse>(
     `${JUPITER_PREDICTION_API_BASE_URL}/vault-info`,
     { headers: getJupiterPredictionHeaders() },
+    jupiterPredictionVaultInfoResponseSchema,
   );
 }

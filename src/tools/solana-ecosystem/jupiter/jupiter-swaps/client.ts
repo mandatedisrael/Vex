@@ -14,6 +14,11 @@ import type {
 } from "./types.js";
 import { JUPITER_SWAP_V2_BASE_URL } from "./types.js";
 import {
+  jupiterSwapBuildResponseSchema,
+  jupiterSwapExecuteResponseSchema,
+  jupiterSwapOrderResponseSchema,
+} from "./schemas.js";
+import {
   getJupiterSwapHeaders,
   normalizeBuildQueryParams,
   normalizeOrderQueryParams,
@@ -29,6 +34,7 @@ export async function jupiterSwapOrder(params: JupiterSwapOrderParams): Promise<
   return fetchJson<JupiterSwapOrderResponse>(
     `${JUPITER_SWAP_V2_BASE_URL}/order?${toQueryString(query)}`,
     { headers: getJupiterSwapHeaders() },
+    jupiterSwapOrderResponseSchema,
   );
 }
 
@@ -37,6 +43,7 @@ export async function jupiterSwapBuild(params: JupiterSwapBuildParams): Promise<
   return fetchJson<JupiterSwapBuildResponse>(
     `${JUPITER_SWAP_V2_BASE_URL}/build?${toQueryString(query)}`,
     { headers: getJupiterSwapHeaders() },
+    jupiterSwapBuildResponseSchema,
   );
 }
 
@@ -52,5 +59,6 @@ export async function jupiterSwapExecute(
       headers: getJupiterSwapHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(request),
     },
+    jupiterSwapExecuteResponseSchema,
   );
 }

@@ -5,6 +5,7 @@ import {
   embedDocument,
   embedQuery,
 } from "@vex-agent/embeddings/client.js";
+import { openAIEmbeddingsResponseSchema } from "@vex-agent/embeddings/schemas.js";
 
 const VALID_CONFIG = {
   baseUrl: "http://localhost:12434/engines/llama.cpp/v1",
@@ -163,6 +164,85 @@ describe("embedDocument", () => {
     });
     await expect(embedDocument("t", "s", VALID_CONFIG)).rejects.toThrow(/returned 400/);
     expect(calls).toBe(1);
+  });
+});
+
+describe("openAIEmbeddingsResponseSchema (boundary gate)", () => {
+  const PROBE = [0.1, 0.2, 0.3];
+
+  it("accepts a valid response, including unknown forward-compat fields", () => {
+    const r = openAIEmbeddingsResponseSchema.safeParse({
+      object: "list",
+      data: [{ object: "embedding", index: 0, embedding: PROBE }],
+      model: "ai/embeddinggemma:300M-Q8_0",
+      usage: { prompt_tokens: 4, total_tokens: 4 },
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.data[0].embedding).toEqual(PROBE);
+      expect(r.data.model).toBe("ai/embeddinggemma:300M-Q8_0");
+    }
+  });
+
+  it("accepts a response without a model field (provider omits it)", () => {
+    expect(
+      openAIEmbeddingsResponseSchema.safeParse({ data: [{ embedding: PROBE }] }).success,
+    ).toBe(true);
+  });
+
+  it("accepts data:[] so the client's own missing-embedding check still fires", () => {
+    // The schema must NOT pre-empt the descriptive `missing data[0].embedding`
+    // error the client throws — an empty data array is a valid shape here.
+    expect(openAIEmbeddingsResponseSchema.safeParse({ data: [] }).success).toBe(true);
+  });
+
+  it("rejects a missing data field", () => {
+    expect(openAIEmbeddingsResponseSchema.safeParse({ model: "m" }).success).toBe(false);
+  });
+
+  it("rejects data that is not an array", () => {
+    expect(
+      openAIEmbeddingsResponseSchema.safeParse({ data: { embedding: PROBE } }).success,
+    ).toBe(false);
+  });
+
+  it("rejects an embedding that is not a number array", () => {
+    expect(
+      openAIEmbeddingsResponseSchema.safeParse({ data: [{ embedding: "not-an-array" }] }).success,
+    ).toBe(false);
+  });
+
+  it("rejects an embedding containing non-number elements", () => {
+    expect(
+      openAIEmbeddingsResponseSchema.safeParse({ data: [{ embedding: [1, "two", 3] }] }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a non-string model field", () => {
+    expect(
+      openAIEmbeddingsResponseSchema.safeParse({ data: [{ embedding: PROBE }], model: 42 }).success,
+    ).toBe(false);
+  });
+});
+
+describe("embedDocument schema boundary (malformed wire body)", () => {
+  const originalFetch = global.fetch;
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("throws malformed-response on a body that fails schema validation", async () => {
+    // `data` is the wrong type — caught by the boundary schema, not the dim check.
+    mockFetchOk({ data: "totally wrong" });
+    await expect(embedDocument("t", "s", VALID_CONFIG)).rejects.toThrow(/malformed response/);
+  });
+
+  it("throws malformed-response when an embedding has non-number elements", async () => {
+    mockFetchOk({ data: [{ embedding: [1, "x", 3] }] });
+    await expect(embedDocument("t", "s", VALID_CONFIG)).rejects.toThrow(/malformed response/);
   });
 });
 

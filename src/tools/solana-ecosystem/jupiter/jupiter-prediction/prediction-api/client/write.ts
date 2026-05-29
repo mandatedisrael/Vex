@@ -22,6 +22,11 @@ import {
   validateJupiterPredictionClaimPositionRequest,
   validateJupiterPredictionPositionParams,
 } from "../validation.js";
+import {
+  jupiterPredictionCreateOrderResponseSchema,
+  jupiterPredictionCloseAllPositionsResponseSchema,
+  jupiterPredictionClaimPositionResponseSchema,
+} from "../schemas.js";
 
 export async function jupiterPredictionCreateOrder(
   request: JupiterPredictionCreateOrderRequest,
@@ -35,6 +40,7 @@ export async function jupiterPredictionCreateOrder(
       headers: getJupiterPredictionHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(validateJupiterPredictionCreateOrderRequest(request)),
     },
+    jupiterPredictionCreateOrderResponseSchema,
   );
 }
 
@@ -52,6 +58,7 @@ export async function jupiterPredictionClosePosition(
       headers: getJupiterPredictionHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(validateJupiterPredictionClosePositionRequest(request)),
     },
+    jupiterPredictionCreateOrderResponseSchema,
   );
 }
 
@@ -67,6 +74,7 @@ export async function jupiterPredictionCloseAllPositions(
       headers: getJupiterPredictionHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(validateJupiterPredictionCloseAllPositionsRequest(request)),
     },
+    jupiterPredictionCloseAllPositionsResponseSchema,
   );
 }
 
@@ -84,5 +92,6 @@ export async function jupiterPredictionClaimPosition(
       headers: getJupiterPredictionHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(validateJupiterPredictionClaimPositionRequest(request)),
     },
+    jupiterPredictionClaimPositionResponseSchema,
   );
 }

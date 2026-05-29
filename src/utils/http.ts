@@ -2,7 +2,9 @@
  * HTTP utilities with timeout and error handling.
  */
 
+import type { ZodType } from "zod";
 import { VexError, ErrorCodes } from "../errors.js";
+import { isRecord } from "./validation-helpers.js";
 
 const DEFAULT_TIMEOUT_MS = 30000;
 
@@ -47,14 +49,26 @@ export async function fetchWithTimeout(
 }
 
 /**
- * Parse JSON response with error handling.
+ * Parse a JSON response with error handling.
+ *
+ * When `schema` is supplied the parsed body is validated with Zod and the
+ * validated value is returned (codex-002). Validation failures throw
+ * `HTTP_RESPONSE_INVALID` — distinct from network failures so callers can
+ * treat a malformed/hostile payload as non-retryable. When `schema` is
+ * omitted the body is returned via an unchecked cast for backward
+ * compatibility; new external-API callers SHOULD pass a schema (or validate
+ * the `readJson` result with a dedicated validator).
  */
-export async function parseJsonResponse<T>(response: Response): Promise<T> {
+export async function parseJsonResponse<T>(
+  response: Response,
+  schema?: ZodType<T>
+): Promise<T> {
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
     try {
-      const errorBody = await response.json();
-      if (errorBody.error) {
+      // Treat the error body as untrusted `unknown` — never assume a shape.
+      const errorBody: unknown = await response.json();
+      if (isRecord(errorBody) && typeof errorBody.error === "string") {
         errorMessage = errorBody.error;
       }
     } catch {
@@ -63,25 +77,46 @@ export async function parseJsonResponse<T>(response: Response): Promise<T> {
     throw new VexError(ErrorCodes.HTTP_REQUEST_FAILED, errorMessage);
   }
 
+  let json: unknown;
   try {
-    return (await response.json()) as T;
+    json = await response.json();
   } catch {
     throw new VexError(
       ErrorCodes.HTTP_REQUEST_FAILED,
       "Failed to parse JSON response"
     );
   }
+
+  if (!schema) {
+    return json as T;
+  }
+
+  const parsed = schema.safeParse(json);
+  if (!parsed.success) {
+    const detail = parsed.error.issues
+      .slice(0, 5)
+      .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
+      .join("; ");
+    throw new VexError(
+      ErrorCodes.HTTP_RESPONSE_INVALID,
+      `Response failed schema validation: ${detail}`,
+      "The upstream API returned an unexpected response shape"
+    );
+  }
+  return parsed.data;
 }
 
 /**
- * Combined fetch + JSON parse with error handling.
+ * Combined fetch + JSON parse with error handling. Pass `schema` to validate
+ * the response body at the boundary (codex-002).
  */
 export async function fetchJson<T>(
   url: string,
-  options: FetchOptions = {}
+  options: FetchOptions = {},
+  schema?: ZodType<T>
 ): Promise<T> {
   const response = await fetchWithTimeout(url, options);
-  return parseJsonResponse<T>(response);
+  return parseJsonResponse<T>(response, schema);
 }
 
 /**

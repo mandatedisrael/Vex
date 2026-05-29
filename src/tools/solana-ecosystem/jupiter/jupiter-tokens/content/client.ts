@@ -11,6 +11,11 @@ import type {
   JupiterTokenContentSummariesResponse,
 } from "./types.js";
 import {
+  jupiterTokenContentFeedResponseSchema,
+  jupiterTokenContentMultipleMintsResponseSchema,
+  jupiterTokenContentSummariesResponseSchema,
+} from "./schemas.js";
+import {
   getJupiterContentHeaders,
   normalizeJupiterContentMints,
   requireJupiterContentApiKey,
@@ -29,6 +34,7 @@ export async function jupiterTokenContentByMints(
   return fetchJson<JupiterTokenContentMultipleMintsResponse>(
     `${JUPITER_TOKENS_V2_BASE_URL}/content?${toQueryString({ mints: normalizeJupiterContentMints(mints) })}`,
     { headers: getJupiterContentHeaders() },
+    jupiterTokenContentMultipleMintsResponseSchema,
   );
 }
 
@@ -38,6 +44,7 @@ export async function jupiterTokenContentCooking(): Promise<JupiterTokenContentM
   return fetchJson<JupiterTokenContentMultipleMintsResponse>(
     `${JUPITER_TOKENS_V2_BASE_URL}/content/cooking`,
     { headers: getJupiterContentHeaders() },
+    jupiterTokenContentMultipleMintsResponseSchema,
   );
 }
 
@@ -54,6 +61,7 @@ export async function jupiterTokenContentFeed(
   return fetchJson<JupiterTokenContentFeedResponse>(
     `${JUPITER_TOKENS_V2_BASE_URL}/content/feed?${toQueryString(query)}`,
     { headers: getJupiterContentHeaders() },
+    jupiterTokenContentFeedResponseSchema,
   );
 }
 
@@ -65,5 +73,6 @@ export async function jupiterTokenContentSummaries(
   return fetchJson<JupiterTokenContentSummariesResponse>(
     `${JUPITER_TOKENS_V2_BASE_URL}/content/summaries?${toQueryString({ mints: normalizeJupiterContentMints(mints) })}`,
     { headers: getJupiterContentHeaders() },
+    jupiterTokenContentSummariesResponseSchema,
   );
 }

@@ -24,6 +24,13 @@ import {
   validateJupiterLendEarningsParams,
   validateJupiterLendSharesRequest,
 } from "./validation.js";
+import {
+  jupiterLendEarnEarningsResponseSchema,
+  jupiterLendEarnInstructionResponseSchema,
+  jupiterLendEarnPositionsResponseSchema,
+  jupiterLendEarnTokensResponseSchema,
+  jupiterLendEarnTransactionResponseSchema,
+} from "./schemas.js";
 
 function toQueryString(query: Record<string, string>): string {
   return new URLSearchParams(query).toString();
@@ -33,6 +40,7 @@ export async function jupiterLendEarnTokens(): Promise<JupiterLendEarnTokensResp
   return fetchJson<JupiterLendEarnTokensResponse>(
     `${JUPITER_LEND_EARN_API_BASE_URL}/tokens`,
     { headers: getJupiterLendHeaders() },
+    jupiterLendEarnTokensResponseSchema,
   );
 }
 
@@ -44,6 +52,7 @@ export async function jupiterLendEarnPositions(
       users: normalizeJupiterLendUsersQuery(params.users),
     })}`,
     { headers: getJupiterLendHeaders() },
+    jupiterLendEarnPositionsResponseSchema,
   );
 }
 
@@ -58,6 +67,7 @@ export async function jupiterLendEarnEarnings(
       positions: normalizeJupiterLendPositionsQuery(validated.positions),
     })}`,
     { headers: getJupiterLendHeaders() },
+    jupiterLendEarnEarningsResponseSchema,
   );
 }
 
@@ -71,6 +81,7 @@ export async function jupiterLendEarnDepositTransaction(
       headers: getJupiterLendHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(validateJupiterLendAmountRequest(request)),
     },
+    jupiterLendEarnTransactionResponseSchema,
   );
 }
 
@@ -84,6 +95,7 @@ export async function jupiterLendEarnWithdrawTransaction(
       headers: getJupiterLendHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(validateJupiterLendAmountRequest(request)),
     },
+    jupiterLendEarnTransactionResponseSchema,
   );
 }
 
@@ -97,6 +109,7 @@ export async function jupiterLendEarnMintTransaction(
       headers: getJupiterLendHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(validateJupiterLendSharesRequest(request)),
     },
+    jupiterLendEarnTransactionResponseSchema,
   );
 }
 
@@ -110,6 +123,7 @@ export async function jupiterLendEarnRedeemTransaction(
       headers: getJupiterLendHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(validateJupiterLendSharesRequest(request)),
     },
+    jupiterLendEarnTransactionResponseSchema,
   );
 }
 
@@ -123,6 +137,7 @@ export async function jupiterLendEarnDepositInstructions(
       headers: getJupiterLendHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(validateJupiterLendAmountRequest(request)),
     },
+    jupiterLendEarnInstructionResponseSchema,
   );
 }
 
@@ -136,6 +151,7 @@ export async function jupiterLendEarnWithdrawInstructions(
       headers: getJupiterLendHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(validateJupiterLendAmountRequest(request)),
     },
+    jupiterLendEarnInstructionResponseSchema,
   );
 }
 
@@ -149,6 +165,7 @@ export async function jupiterLendEarnMintInstructions(
       headers: getJupiterLendHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(validateJupiterLendSharesRequest(request)),
     },
+    jupiterLendEarnInstructionResponseSchema,
   );
 }
 
@@ -162,5 +179,6 @@ export async function jupiterLendEarnRedeemInstructions(
       headers: getJupiterLendHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(validateJupiterLendSharesRequest(request)),
     },
+    jupiterLendEarnInstructionResponseSchema,
   );
 }
