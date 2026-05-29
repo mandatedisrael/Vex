@@ -10,8 +10,8 @@ paths:
   - "src/vex-agent/engine/runtime-clock.ts"
   - "src/vex-agent/engine/types.ts"
   - "src/vex-agent/engine/index.ts"
-source_commit: c138af8
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change:
   - "src/vex-agent/engine/runtime/**"
   - "src/vex-agent/engine/events/**"
@@ -218,7 +218,7 @@ compact executors build on.
 - vex-app coverage: `audits/current/coverage-gaps.md#CAP-engine-runtime-…`, `audits/current/coverage-gaps.md#CAP-engine-events-…`
 - related flows: `flows/FLOW-chat-turn.md` (pending), `flows/FLOW-mission-wake.md` (pending)
 - related decisions: `decisions/ADR-0001-global-model-session-wallet.md` — `EngineContext` must NOT carry a model field
-- quality findings: `audits/current/quality-findings.md` — F5 (`EV.engine.controlState` not bridged to renderer; `controlStateBus` emits never reach Z8)
+- quality findings: `audits/current/quality-findings.md` — F5 RESOLVED (Bundle B): `EV.engine.controlState` now bridged to renderer (preload `onControlState` + `useControlStateLiveSync`); `controlStateBus` emits now reach Z8.
 
 ## ADR-0001 contradiction check
 
@@ -238,5 +238,5 @@ Re-index when any of the following change:
 ## Open questions
 
 - `observeAndApplyControl` always emits `terminalStatus: "stopped"` for `stop_terminal`; comment notes puzzle-04 may refine to `"cancelled"` when there is no committed work. Not yet done.
-- `controlStateBus` emit path from `releaseLeaseAndEmitControlState` reaches `vex-app/src/main/agent/control-bridge.ts` which subscribes — but F5 (Structure.md): no preload subscription method / bridge method exists, so the event never reaches the renderer. The bridge fires into a void at the renderer layer.
+- `controlStateBus` emit path from `releaseLeaseAndEmitControlState` reaches `vex-app/src/main/agent/control-bridge.ts` which subscribes and broadcasts — F5 RESOLVED (Bundle B): preload now exposes `onControlState` and renderer `useControlStateLiveSync` consumes it, so the event reaches the renderer (invalidates runtime-state + pending-approvals queries).
 - `_emit-control-state.ts` in `vex-app/src/main/ipc/runtime/` imports `controlStateBus` directly from `@vex-agent/engine/runtime/control-bus.js` (not through the engine barrel) — intentional to avoid pulling engine's full public surface; acceptable but worth noting for future refactor.

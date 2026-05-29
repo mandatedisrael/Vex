@@ -13,8 +13,8 @@ paths:
   - vex-app/src/renderer/features/appShell/ApprovalsRegion.tsx
   - vex-app/src/renderer/features/appShell/ApprovalCard.tsx
   - vex-app/src/renderer/lib/api/approvals.ts
-source_commit: cf05003
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change:
   - src/vex-agent/tools/dispatcher.ts
   - src/vex-agent/engine/core/runner/**
@@ -63,8 +63,8 @@ Round-1 fact: the approval gate uses **`mutating`**, NOT `actionKind`. `actionKi
 |---|---------------------------|--------|--------------|---------------------|---------------|
 | 1 | `src/vex-agent/engine/core/turn-loop.ts` calls `runTool` → `tools/dispatcher.ts` | dispatcher checks `restricted && mutating && !approved` | computes approval intent preview via `approval-intent-preview.ts` | none | malformed manifest → error |
 | 2 | dispatcher invokes `approval-runtime` to register pending approval | `engine/core/approval-runtime.ts` (or subfolder modules) | inserts pending approval row, transitions run to `paused_approval` | row `approvals` insert; row `runs.status='paused_approval'`; control-state event | duplicate pending approval → idempotent merge |
-| 3 | engine `controlBus.publish(controlStateChanged)` | `vex-app/src/main/agent/control-bridge.ts` | broadcasts `EV.engine.controlState` to all BrowserWindows | window send | **F5 OPEN**: preload does not expose `onControlState` → renderer doesn't see live event |
-| 4 | renderer `ApprovalsRegion` polls every 5s (F3 workaround for F5) | `lib/api/approvals.ts usePendingApprovals(sessionId, {refetchInterval: 5000})` | TanStack Query refetch `approvals.listPending` | TanStack cache | none |
+| 3 | engine `controlBus.publish(controlStateChanged)` | `vex-app/src/main/agent/control-bridge.ts` → preload `onControlState` → renderer `useControlStateLiveSync` | broadcasts `EV.engine.controlState` to all BrowserWindows; renderer invalidates `approvalsKeys.pending` + `runtimeKeys.state` | window send | **F5 RESOLVED (Bundle B)**: preload now exposes `onControlState`; push refresh reaches renderer. Emit is post-commit on lease release (step 2's row insert is in a separate txn), so the 5s poll below is retained as a fast fallback. |
+| 4 | renderer `useControlStateLiveSync` push + `ApprovalsRegion` 5s poll (fast fallback) | `lib/api/runtime.ts useControlStateLiveSync` + `lib/api/approvals.ts usePendingApprovals(sessionId, {refetchInterval: 5000})` | TanStack Query refetch `approvals.listPending` (on event, else ≤5s) | TanStack cache | none |
 | 5 | poll returns pending row | renderer mounts `ApprovalCard` per row; first-new card focuses Reject | local state `armedAction`, `seenIds` | none | none |
 | 6 | user inspects card; reads risk/actionKind/args; for high-risk presses Approve once → armed → presses Approve again within 4s | `useApprove({approvalId})` / `useReject({approvalId})` | `window.vex.approvals.resolve({approvalId, decision, correlationId})` | preload envelope | armed timeout clears state |
 | 7 | preload `agent/approvals.ts resolve` | `invokeWithSchema(CH.approvals.resolve)` | none | request | invalid envelope |
@@ -91,7 +91,7 @@ Round-1 fact: the approval gate uses **`mutating`**, NOT `actionKind`. `actionKi
 - `module.vex-agent.tools-protocols` — protocol manifests provide `actionKind` for `execute_tool`-wrapped calls; mutation matrix authoritative
 
 ## Known failure modes
-- **F5 latency.** Approval cards appear up to 5s late because control-state event is not bridged; user perceives the pause but not the immediate transition.
+- **F5 latency — RESOLVED (Bundle B).** Control-state is now bridged end-to-end (`onControlState` in preload → `useControlStateLiveSync` in renderer), so approval cards refresh on push the moment the event arrives. The control-state emit is post-commit on lease release (separate txn from the pending-approval insert) and can be dropped at the preload Zod gate or fire before the renderer subscribes, so the `ApprovalsRegion` 5s poll is retained as a fast fallback rather than the primary path. Worst-case latency is bounded by that ≤5s poll only when the push is missed.
 - **Stale pending after backend expiry.** If backend sweep expires the approval before user resolves, resolve IPC returns `approvals.expired`; renderer invalidates and the card disappears.
 - **Concurrent resolve.** Two windows both press resolve → engine returns conflict for the second; first wins.
 - **Manifest drift.** Round 2 finding: `document_delete` is `actionKind:"destructive"` but `mutating:false` — flagged as a security/quality finding (FINDING-security-005). Approval gate would NOT fire today for that call.

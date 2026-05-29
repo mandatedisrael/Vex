@@ -22,8 +22,8 @@ related:
   - fix-plan.F3
   - audit.current.quality-findings
   - ADR-0001-global-model-session-wallet
-source_commit: cf05003
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change:
   - vex-app/src/renderer/**
   - vex-app/src/preload/**
@@ -55,7 +55,7 @@ The renderer remains **untrusted UI** and must not import `src/vex-agent`, Node/
 - TanStack Query cache, queryKeys, invalidation patterns
 - StreamStore ephemeral preview, token-by-token streaming
 - uiStore Zustand routing, activeSessionId, appShellView
-- F3 approval card UX evidence, F5 control-state polling gap, F9 transcript virtualization
+- F3 approval card UX evidence, F5 control-state bridge RESOLVED (Bundle B): onControlState push + 5s fast fallback, F9 transcript virtualization
 - Window.vex IPC bridge, preload contract, renderer-main boundary
 
 ---
@@ -140,12 +140,13 @@ All backend calls are method calls on `window.vex.*`, never direct HTTP or Node 
 
 ### Backend → Renderer (Subscriptions)
 
-Two live-event subscriptions (engine spine) via `window.vex.engine`:
+Three live-event subscriptions (engine spine) via `window.vex.engine` (F5 RESOLVED Bundle B added `onControlState`):
 
 | Event | Handler | Impact |
 |-------|---------|--------|
 | `onStreamDelta(event)` | Applied to `streamStore` in `useStreamPreviewSync` | Accumulates ephemeral preview text/tool/phase |
 | `onTranscriptAppend(event)` | Invalidates `messagesKeys.forSession()` + clears matching preview | Fetches and renders persisted transcript row |
+| `onControlState(event)` | `useControlStateLiveSync` invalidates `runtimeKeys.state()` + `approvalsKeys.pending()` (re-validated at preload via `controlStateEventSchema`) | Push-refreshes runtime status + pending approvals; 5s ApprovalsRegion poll is the fast fallback |
 
 ---
 
@@ -174,7 +175,7 @@ Two live-event subscriptions (engine spine) via `window.vex.engine`:
 
 - **SessionPanel.tsx** (126 lines): Orchestration—branches on activeSessionId
   - No session → welcome hero + composer; selected session → header + mission card (if applicable) + transcript + approvals + composer
-  - Mounts live-sync hooks: `useTranscriptLiveSync`, `useUsageLiveSync`, `useStreamPreviewSync`
+  - Mounts live-sync hooks: `useTranscriptLiveSync`, `useUsageLiveSync`, `useStreamPreviewSync`, `useControlStateLiveSync` (F5 RESOLVED Bundle B — invalidates `runtimeKeys.state(sessionId)` + `approvalsKeys.pending(sessionId)` on each `EV.engine.controlState` event; 30s runtime-state fallback interval)
   - Renders sub-components: SessionContext, MissionContractCard, SessionTranscript, ApprovalsRegion, SessionComposer
 
 #### Transcript & Streaming
@@ -194,7 +195,7 @@ Two live-event subscriptions (engine spine) via `window.vex.engine`:
 #### Approvals (F3 Evidence)
 
 - **ApprovalsRegion.tsx** (106 lines): Inline approval container between transcript and composer
-  - **POLLS EVERY 5 SECONDS** (REFETCH_INTERVAL_MS = 5_000) — F3 constraint due to no control-state bridge (F5 gap)
+  - **5s refetch** (REFETCH_INTERVAL_MS = 5_000) — F5 RESOLVED (Bundle B): now a FAST FALLBACK, not a workaround. Push via `useControlStateLiveSync` (mounted in SessionPanel) is primary; the 5s poll catches events dropped at the preload Zod gate or fired before the renderer subscribed (controlState emit is post-commit on lease release, not part of the approval transaction)
   - Bounded height (max-h-[40vh]) so multiple pending cards don't push composer off-screen
   - Tracks seen approval IDs in ref; focuses only the FIRST newly-appearing card
   - Errors surface inline via `kind: "error"`
@@ -299,7 +300,7 @@ All in `lib/api/`:
 
 ### Approvals (F3) Specifics
 
-1. **Polling:** ApprovalsRegion calls `usePendingApprovals(sessionId, { refetchInterval: 5_000 })` — the only poll in the chat layer (proof that control-state bridge is missing, F5 gap)
+1. **Polling:** ApprovalsRegion calls `usePendingApprovals(sessionId, { refetchInterval: 5_000 })` — F5 RESOLVED (Bundle B): the control-state bridge now exists (`useControlStateLiveSync` push is primary), so this 5s refetch is RETAINED as a fast fallback for events dropped at the preload Zod gate or fired before subscription, not the only refresh path
 2. **Two-step confirm:** High-risk card arms on first click, fires on second within 4s; switching buttons or timeout resets
 3. **Focus:** Reject button focused on initial mount (empty useEffect deps); subsequent refetches never re-focus (parent detects newly-appearing IDs)
 4. **Invalidation scope:** `approvalsKeys.pending(sessionId)` + `["approvals", "history", sessionId]` prefix match + `messagesKeys.forSession()` + `runtimeKeys.state()`
@@ -546,8 +547,8 @@ window.vex.engine.onTranscriptAppend event (role=assistant)
 
 ### Fix Plans
 
-- **F3 (Approval Unblock)**: ApprovalsRegion implementation + two-step confirm ✅ shipped; polling workaround documented
-- **F5 (Control State Bridge)**: Missing `EV.engine.controlState` event; renderer currently polls every 5s as workaround
+- **F3 (Approval Unblock)**: ApprovalsRegion implementation + two-step confirm ✅ shipped; 5s polling retained as a fast fallback behind the F5 control-state push (Bundle B), no longer a workaround
+- **F5 (Control State Bridge)**: ✅ RESOLVED (Bundle B). `EV.engine.controlState` now bridged end-to-end: preload `onControlState` (re-validates via `controlStateEventSchema`), `EngineEventsBridge.onControlState`, and renderer `useControlStateLiveSync(sessionId)` (mounted in SessionPanel) invalidating `runtimeKeys.state()` + `approvalsKeys.pending()`. Push is primary; ApprovalsRegion's 5s refetch is retained as a fast fallback (controlState emit is post-commit on lease release, so an event can drop at the Zod gate or fire pre-subscription)
 - **F9 (Transcript Virtualization)**: 500-node cap prevents large chats; no virtualization yet (future stage 8-2c)
 
 ### ADRs
@@ -560,10 +561,11 @@ window.vex.engine.onTranscriptAppend event (role=assistant)
 
 Cache is refreshed when:
 
-1. **Live events from engine:** `onStreamDelta` + `onTranscriptAppend` (no polling overhead)
+1. **Live events from engine:** `onStreamDelta` + `onTranscriptAppend` + `onControlState` (F5 RESOLVED Bundle B — control-state push invalidates `runtimeKeys.state()` + `approvalsKeys.pending()`)
 2. **Explicit user action:** create/delete/pin session, approve/reject, submit chat, dispatch slash
-3. **Polling (F5 workaround only):**
-   - ApprovalsRegion: 5s refetch (no control-state bridge)
+3. **Polling (fast fallbacks, not workarounds):**
+   - ApprovalsRegion: 5s refetch — F5 RESOLVED (Bundle B): retained as fast fallback behind the primary `useControlStateLiveSync` push (catches events dropped at the preload Zod gate or fired pre-subscription)
+   - useControlStateLiveSync: 30s runtime-state fallback interval
    - TranscriptLiveSync: 30s fallback if onTranscriptAppend missed
 4. **Window focus:** refetchOnWindowFocus: true (TanStack Query default)
 5. **Network reconnect:** refetchOnReconnect: true
@@ -578,15 +580,12 @@ Manual invalidation patterns (Codex §11):
 
 ## Open Questions
 
-### F5: Control-State Bridge Evidence
+### F5: Control-State Bridge Evidence — ✅ RESOLVED (Bundle B)
 
-- **Status:** Shipping stage in progress
-- **Current evidence:** ApprovalsRegion hardcoded 5_000ms polling; no other UI polls
-- **Precise question:** Which exact UI states rely on this workaround vs. would benefit from live control-state event?
-  - Approval list (confirmed: polls)
-  - Runtime bar status chips? (likely event-driven already)
-  - Pause/resume button disabled state? (need to verify if polling or event)
-- **Action:** Confirm in F5 fix plan whether to bridge full control-state or targeted sub-fields
+- **Status:** Resolved. Full control-state bridged end-to-end via `EV.engine.controlState`.
+- **Resolution:** preload `onControlState` (re-validates via `controlStateEventSchema`), `EngineEventsBridge.onControlState`, and renderer `useControlStateLiveSync(sessionId)` (mounted in SessionPanel) invalidating `runtimeKeys.state(sessionId)` + `approvalsKeys.pending(sessionId)` on each event, with a 30s runtime-state fallback interval.
+- **Push vs. poll:** Push (controlState) is primary. ApprovalsRegion's 5s refetch is retained as a fast fallback — the controlState emit is post-commit (on lease release via `releaseLeaseAndEmitControlState`), NOT part of the approval/transition transaction, so an event can be dropped at the preload Zod gate or fire before the renderer subscribes.
+- **Historical question (now answered):** which UI states relied on the poll — the approval list and runtime-state query; both are now push-refreshed by `useControlStateLiveSync`, with the 5s poll as backstop.
 
 ### F9: Transcript 500-Node Cap
 
@@ -627,7 +626,7 @@ Manual invalidation patterns (Codex §11):
 
 This module is stable for read-only reference and feature development. Before implementing new features in this layer:
 
-1. **Check this doc's F5/F9 evidence** if touching approvals, polling, or transcript scaling
+1. **Check this doc's F5 (RESOLVED Bundle B) / F9 evidence** if touching approvals, control-state push/polling, or transcript scaling
 2. **Verify process boundaries** before adding any new renderer files (no vex-agent imports)
 3. **Use existing patterns** for queries (queryKeys factory), mutations (no auto-retry for dangerous ops), and component structure (split concerns into sub-components)
 4. **Test invariants:** catalog bidirectionality, approval focus tracking, transcript page cap, streaming preview lifecycle
@@ -642,7 +641,7 @@ This module is stable for read-only reference and feature development. Before im
 
 ### What the Main Claude Must Not Assume
 
-1. Control-state bridge is complete (F5 open) — approvals still poll; runtime state may be stale
+1. Control-state bridge is complete and the only refresh path (F5 RESOLVED Bundle B, but push is best-effort) — `useControlStateLiveSync` push primary; ApprovalsRegion's 5s poll is retained as a fast fallback because the post-commit controlState emit can drop at the preload Zod gate or fire pre-subscription
 2. Transcript virtualization exists (F9 open) — 500-node hard cap active; no virtual scrolling
 3. Model is per-session (ADR-0001 specifies global) — only one model per app; wallet picked at session creation
 4. Renderer can call any backend function (process boundary enforced) — all calls through `window.vex.*`, never direct imports

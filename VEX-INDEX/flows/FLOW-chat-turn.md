@@ -11,8 +11,8 @@ paths:
   - src/vex-agent/engine/ingress.ts
   - src/vex-agent/engine/core/turn.ts
   - src/vex-agent/engine/core/turn-loop.ts
-source_commit: cf05003
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change:
   - vex-app/src/renderer/features/appShell/SessionComposer.tsx
   - vex-app/src/renderer/lib/api/chat.ts
@@ -87,4 +87,4 @@ User types in `SessionComposer` and presses Enter (or hits Submit). Active sessi
 - **Provider unavailable.** Vault locked OR `.env` missing `AGENT_MODEL` OR OpenRouter models API transiently down → chat handler returns `provider.unavailable`. Renderer surfaces composer red banner ("No inference provider is available. Unlock Vex or complete provider setup, then retry.").
 - **Cancellation.** User triggers cancel → `vex:cancel` invocation aborts the AbortController → engine receives signal → turn loop breaks at next yield → `appendMessage("cancelled")` → transcript refresh.
 - **Sender mismatch.** Trusted-sender check in `registerHandler` rejects renderer that didn't originate from the privileged window.
-- **F5 gap.** `EV.engine.controlState` events do not reach the renderer; runtime status changes (pause/resume/stop) require renderer polling via `runtime.getState`. Chat itself is unaffected but mode transitions during a turn are observable only after invalidation.
+- **F5 RESOLVED (Bundle B).** `EV.engine.controlState` now reaches the renderer via preload `onControlState` + `useControlStateLiveSync` (mounted in `SessionPanel`), which invalidates `runtimeKeys.state` on each event (30s fallback for missed events). Runtime status changes (pause/resume/stop) are pushed instead of poll-only. Chat itself was always unaffected.

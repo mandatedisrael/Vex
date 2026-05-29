@@ -2,8 +2,8 @@
 id: audit.current.coverage-gaps
 kind: audit
 paths: ["src/**", "vex-app/**", ".github/workflows/**"]
-source_commit: cf05003
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change: ["src/**", "vex-app/**", ".github/workflows/**", "VEX-INDEX/modules/**/*.md"]
 related: [index.structure, index.modules]
 ---
@@ -13,8 +13,8 @@ related: [index.structure, index.modules]
 | ID | Area | Status | Evidence |
 |---|---|---|---|
 | GAP-Z6-sync-worker | Sync executor not wired in desktop boot | fixed | Bundle A (Round 4): `setupSyncWorker()` wired in `vex-app/src/main/index.ts` after wake + drained in the Promise.allSettled; new `agent/sync-worker.ts` (no provider gate; public-address egress framing) + `database/sync-db.ts` (`to_regclass('public.protocol_sync_jobs')`). Dual Codex GREEN LIGHT. |
-| GAP-Z7-control-state-bridge | `EV.engine.controlState` not exposed to renderer (F5) | open | main publishes control state; preload engine bridge exposes transcript/stream only. Codex confirmed: `control-bridge.ts:33` publishes, `preload/agent/engine.ts:16` has no `onControlState`. Candidate Bundle B. |
-| GAP-Z7-runtime-types | Runtime bridge return types use legacy result shape (F6) | open | Codex confirmed production drift: `shared/types/bridge/agent/runtime.ts:4 RuntimeRequestResult` still imported by `renderer/lib/api/runtime.ts:24` while `shared/schemas/runtime.ts` defines per-action unions. Candidate Bundle B. |
+| GAP-Z7-control-state-bridge | `EV.engine.controlState` not exposed to renderer (F5) | fixed | Bundle B / F5 (commit 85ed941). Preload `onControlState` added (`preload/agent/engine.ts` → `subscribe(EV.engine.controlState, controlStateEventSchema, cb)`) + `EngineEventsBridge.onControlState` type. Renderer `useControlStateLiveSync` (`renderer/lib/api/runtime.ts`) mounted in `SessionPanel` pushes invalidation of `runtimeKeys.state` + `approvalsKeys.pending` per event, with a 30s runtime fallback. `ApprovalsRegion` 5s poll retained as a fast fallback — the controlState emit is post-commit on lease release, not part of the approval transaction (Codex). Codex GREEN LIGHT (plan + final review). |
+| GAP-Z7-runtime-types | Runtime bridge return types use legacy result shape (F6) | fixed | Bundle B / F6 (commit 85ed941). `RuntimeBridge` + renderer mutation hooks retyped to the per-action discriminated unions (`RuntimeRequestPauseResult`/`StopResult`/`ResumeResult`/`CancelWakeResult`); legacy `runtimeRequestResultSchema`/`RuntimeRequestResult` deleted from `shared/schemas/runtime.ts` (+ its legacy test). Preload unchanged — `satisfies RuntimeBridge` re-infers `T` from the contextual return type. `tsc --noEmit` clean. Codex GREEN LIGHT. |
 | GAP-updater | Updater is placeholder-only (F12) | open | dependency/channels exist, no registered handler/autoUpdater implementation. Candidate Bundle B (user-triggered, autoDownload=false). |
 | GAP-release | Production release gates missing | open | builder profile unsigned; CI has no signing/notarization/update metadata/checksum workflow |
 | GAP-docker-e2e | Full Docker/Compose/migration/onboarding E2E absent | open | smoke test excludes daemon/bootstrap/wizard/unlock |

@@ -4,8 +4,8 @@ kind: module
 title: Main-Process IPC Engine Orchestration
 short: IPC handler plumbing, cancellation registry, chat submit, mission lifecycle, runtime control, approvals, session CRUD
 tags: [electron, ipc, engine-bridge, async, lifecycle]
-indexed_at: 2026-05-28
-source_commit: cf05003
+indexed_at: 2026-05-29
+source_commit: 85ed941
 paths:
   - vex-app/src/main/ipc/register-handler.ts
   - vex-app/src/main/ipc/register-all.ts
@@ -95,7 +95,7 @@ The renderer remains untrusted: it cannot import `src/vex-agent`, Node APIs, DB,
 
 ## Retrieval Keywords
 
-`registerHandler` trusted-sender, cancel envelope, correlationId registry, AbortController, cancel-helpers raceWithAbort isAbortError, cancelledError, chat.submit engine import, session validation, mission.start prepareMissionStart dispatchPreparedMission, runtime control requestPause requestResume requestStop, approval resolve decision decision persistence sweepExpiredApprovals, session.create wallet-refs, runtime.getState mission-runs-db, control-state emit controlStateBus, F4 OpenRouterProvider.loadConfig per-turn API call, F6 RuntimeRequestResult legacy vs per-action schemas.
+`registerHandler` trusted-sender, cancel envelope, correlationId registry, AbortController, cancel-helpers raceWithAbort isAbortError, cancelledError, chat.submit engine import, session validation, mission.start prepareMissionStart dispatchPreparedMission, runtime control requestPause requestResume requestStop, approval resolve decision decision persistence sweepExpiredApprovals, session.create wallet-refs, runtime.getState mission-runs-db, control-state emit controlStateBus, F4 OpenRouterProvider.loadConfig per-turn API call, F6 RESOLVED (Bundle B) RuntimeRequestResult legacy alias deleted; RuntimeBridge/renderer use per-action schemas.
 
 ---
 
@@ -500,11 +500,11 @@ The renderer remains untrusted: it cannot import `src/vex-agent`, Node APIs, DB,
 
 **Fix Plan F4 (OpenRouter Provider Availability — OPEN):** `OpenRouterProvider.loadConfig()` (src/vex-agent/inference/openrouter.ts:98) calls `this.client.models.list({})` EVERY TURN in runners (mission.ts:41, agent.ts:..., etc.). Transient OpenRouter API failure → returns `null` → engine throws "No inference provider available" → chat handler classifies as `provider.unavailable`. Evidence: openrouter.ts:105 dynamic API call per `loadConfig()` invocation; no caching or fallback fallback.
 
-**Fix Plan F6 (Runtime Result Schema Variance — OPEN):** 
-- Legacy `RuntimeRequestResult` (runtime.ts:180) is a generic "status/message/missionRunId" shape from puzzle 01.
-- Per-action schemas (runtimeRequestPauseResultSchema, runtimeRequestResumeResultSchema, runtimeRequestStopResultSchema, runtimeCancelWakeResultSchema) are discriminated unions (puzzle 03).
-- Puzzle-03 handlers use per-action schemas in their `outputSchema` param; legacy schema is kept for backwards-compat with old test scaffolds.
-- **No mismatch in live code:** each handler explicitly declares its per-action output schema.
+**Fix Plan F6 (Runtime Result Schema Variance — RESOLVED (Bundle B)):** 
+- The legacy generic `runtimeRequestResultSchema` / `RuntimeRequestResult` alias (formerly a "status/message/missionRunId" shape from puzzle 01) was DELETED from `vex-app/src/shared/schemas/runtime.ts` (along with its legacy test). The type no longer exists; the schema file now ends with `ControlStateEvent` (~runtime.ts:171).
+- Per-action schemas (runtimeRequestPauseResultSchema, runtimeRequestResumeResultSchema, runtimeRequestStopResultSchema, runtimeCancelWakeResultSchema) are discriminated unions (puzzle 03) and are now the sole result contract.
+- `RuntimeBridge` (`vex-app/src/shared/types/bridge/agent/runtime.ts`) + the 4 renderer mutation hooks now use the per-action discriminated unions (`RuntimeRequestPauseResult`, `RuntimeRequestStopResult`, `RuntimeRequestResumeResult`, `RuntimeCancelWakeResult`). Preload `runtime.ts` is unchanged — `satisfies RuntimeBridge` re-infers the per-action `T`; `tsc --noEmit` is clean.
+- **No mismatch in live code:** each handler explicitly declares its per-action output schema, and the bridge/renderer types match.
 
 ---
 
@@ -533,20 +533,21 @@ The renderer remains untrusted: it cannot import `src/vex-agent`, Node APIs, DB,
 ---
 
 ### F6: RuntimeRequestResult Legacy vs Per-Action Schemas
-**Status:** Confirmed NOT a mismatch in live code.
+**Status:** RESOLVED (Bundle B) — legacy alias deleted; bridge/renderer now use per-action schemas.
 
-**Evidence:** 
-- `shared/schemas/runtime.ts:180–187` — `runtimeRequestResultSchema` is a puzzle-01 placeholder.
-- `shared/schemas/runtime.ts:70–107` — Per-action discriminated unions (pauseResult, stopResult, resumeResult, wakeResult).
+**Resolution:** The legacy generic `runtimeRequestResultSchema` / `RuntimeRequestResult` alias was DELETED from `vex-app/src/shared/schemas/runtime.ts` (along with its legacy test). The type no longer exists; the schema file now ends with `ControlStateEvent` (~runtime.ts:171). `RuntimeBridge` (`vex-app/src/shared/types/bridge/agent/runtime.ts`) + the 4 renderer mutation hooks were migrated to the per-action discriminated unions. Preload `runtime.ts` is unchanged — `satisfies RuntimeBridge` re-infers the per-action `T`; `tsc --noEmit` is clean.
+
+**Evidence (historical analysis, retained):** 
+- `shared/schemas/runtime.ts:70–107` — Per-action discriminated unions (pauseResult, stopResult, resumeResult, wakeResult) — now the sole result contract.
 - Live handlers (puzzle 03+):
   - `runtime/get-state.ts:24` declares `outputSchema: runtimeStateDtoSchema`
   - `runtime/request-pause.ts:32` declares `outputSchema: runtimeRequestPauseResultSchema`
   - `runtime/request-resume.ts:20` declares `outputSchema: runtimeRequestResumeResultSchema`
   - `runtime/request-stop.ts` declares `outputSchema: runtimeRequestStopResultSchema`
   - `runtime/cancel-wake.ts` declares `outputSchema: runtimeCancelWakeResultSchema`
-- Comment at runtime.ts:175: "Puzzle-01 placeholder result. Kept around for the existing failing stub `getState` test scaffold; the live handlers in puzzle 03 use the per-action discriminated unions above."
+- Formerly a puzzle-01 placeholder (`runtimeRequestResultSchema`, ~runtime.ts:180) was retained only for an old `getState` stub test scaffold; both the schema and that scaffold have now been removed.
 
-**Conclusion:** No variance in live handlers. Legacy schema is retained only for old test infrastructure. Safe.
+**Conclusion:** No variance in live handlers, and the bridge/renderer types now match the per-action schemas. The backwards-compat placeholder has been removed.
 
 ---
 

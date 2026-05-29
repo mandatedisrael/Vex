@@ -87,8 +87,10 @@ no polling. `usePendingApprovals` exists but is imported by nothing in the appSh
   a tool-result rejection (per engine semantics) OR terminates per backend rule; high-risk → two-step.
 
 ## Risks / mitigations
-- **5s poll** while no pending is a small but real background cost. Acceptable for MVP; bridging
-  `EV.engine.controlState` (Z7 F5) for push-based updates is a follow-up.
+- **5s poll** while no pending is a small but real background cost. F5 (Bundle B) bridged
+  `EV.engine.controlState` and `useControlStateLiveSync` now pushes a pending-approval refresh, so
+  the happy path is near-instant; the 5s poll is retained as a fast fallback (the emit is post-commit
+  on lease release, not part of the approval transaction, and can be missed).
 - **Two-step heuristic** (`risk in {high,critical} OR actionKind in {destructive,user_wallet_broadcast}`)
   is a defensible default; Codex may want it tightened/loosened.
 - **Stale state**: the backend already handles the cached/already-resolved race (`runtimeOutcome` +

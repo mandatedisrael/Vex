@@ -7,8 +7,8 @@ paths:
   - vex-app/src/main/agent/wake-worker.ts
   - vex-app/src/main/database/wake-db.ts
   - vex-app/src/main/index.ts
-source_commit: cf05003
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change:
   - src/vex-agent/tools/internal/loop-defer.ts
   - src/vex-agent/engine/wake/**
@@ -49,7 +49,7 @@ A mission runner calls the internal `loop_defer` tool to sleep itself until a fu
 | 3 | each supervisor tick (when schema present): dynamic-import `@vex-agent/engine/wake/executor.js startWakeExecutor`, call `tick()` | `src/vex-agent/engine/wake/executor.ts:83 startWakeExecutor` / per-tick callback | none yet | none | none |
 | 4 | **F2 pre-claim gate** inside executor `tick()` — invokes injected `deps.isProviderReady()` (default = `isWakeProviderConfigured()` checks both `OPENROUTER_API_KEY && AGENT_MODEL`) | if false → return `[]` immediately (no destructive claim) | none | none | provider not configured → silent skip; row stays |
 | 5 | gate passes → `claimDue()` does `SELECT … FOR UPDATE SKIP LOCKED` on due rows | engine claims `loop_wake_requests` row + claims the run lease | row update (lease holder, fire_at_claimed); run still `paused_wake` until resume | row update | lease conflict → row skipped |
-| 6 | executor injects a wake banner into transcript, calls `resumeMissionRun` | engine resumes turn loop from where it was deferred (`src/vex-agent/engine/core/resume.ts`) | run status `running`; transcript append wake banner + assistant turn | row updates; transcript event; control-state event (F5 — not bridged) | provider failure during resume → `paused_error` |
+| 6 | executor injects a wake banner into transcript, calls `resumeMissionRun` | engine resumes turn loop from where it was deferred (`src/vex-agent/engine/core/resume.ts`) | run status `running`; transcript append wake banner + assistant turn | row updates; transcript event; control-state event (F5 RESOLVED (Bundle B) — now bridged via `onControlState` preload method → renderer `useControlStateLiveSync` pushes runtime status live) | provider failure during resume → `paused_error` |
 | 7 | turn loop continues until next stop condition (`loop_defer` again, finalize, approval gate, compaction pressure) | same as FLOW-chat-turn / FLOW-mission-start | as before | as before | as before |
 | 8 | app quit: `vex-app/src/main/index.ts` drains compact + wake workers via `Promise.allSettled` BEFORE Postgres teardown | workers' `stop()` is idempotent; rejected stops are logged | none | log line | none |
 
@@ -74,4 +74,4 @@ A mission runner calls the internal `loop_defer` tool to sleep itself until a fu
 - **Provider models API transient failure.** Same handling as FLOW-chat-turn — resume can fail with `paused_error`; `/mission continue` recovers when provider returns.
 - **Schema not yet present.** Supervisor uses `to_regclass('public.loop_wake_requests')` to gate startup; never errors loudly on a fresh install pre-migration.
 - **Crash mid-resume.** Lease and fire_at_claimed timestamps allow recovery on next boot — uncommitted resume's row claim expires; another tick picks it up safely.
-- **F5 gap.** Wake-driven status changes (paused_wake → running → done) are not pushed live to renderer; UI sees them via polling/invalidation.
+- **F5 RESOLVED (Bundle B).** Wake-driven runtime status changes (paused_wake → running → done) ARE now pushed live to renderer: the control-state event is bridged through the `onControlState` preload method and the renderer `useControlStateLiveSync(sessionId)` hook invalidates `runtimeKeys.state` + `approvalsKeys.pending` on each event (with a 30s runtime-state fallback interval). Push is primary; because the emit is post-commit (on lease release) and can be dropped at the preload Zod gate or fire before the renderer subscribes, the `ApprovalsRegion` 5s `refetchInterval` is retained as a fast fallback. Transcript content (wake banner + assistant turn) still refreshes via the transcript live-sync.

@@ -7,8 +7,8 @@ paths:
   - "vex-app/src/shared/schemas/**"
   - "vex-app/src/shared/types/bridge/**"
   - "vex-app/src/shared/types/bridge.ts"
-source_commit: cf05003
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change:
   - "vex-app/src/preload/**"
   - "vex-app/src/shared/ipc/**"
@@ -45,10 +45,10 @@ Result/Error contracts, cancellation envelopes, and event subscriptions.
 
 ## Important gaps
 
-- F5: `EV.engine.controlState` has a schema and main publisher, but no preload method.
-- Runtime bridge methods still return legacy `RuntimeRequestResult` while handlers use per-action schemas.
+- F5 RESOLVED (Bundle B): `EV.engine.controlState` is now bridged. `preload/agent/engine.ts` exposes `onControlState` (re-validates with `controlStateEventSchema` at the preload layer), `EngineEventsBridge` declares it, and renderer `useControlStateLiveSync(sessionId)` (mounted in `SessionPanel.tsx`) invalidates runtime-state + pending-approvals queries on each event. `ApprovalsRegion` RETAINS its 5s `refetchInterval` as a fast FALLBACK (the controlState emit is post-commit on lease release, not part of the approval transaction, so the event can be dropped at the preload Zod gate or fire pre-subscription); push is primary, the 5s poll is the safety net.
+- F6 RESOLVED (Bundle B): runtime bridge methods now use the per-action discriminated unions (`RuntimeRequestPauseResult` / `RuntimeRequestStopResult` / `RuntimeRequestResumeResult` / `RuntimeCancelWakeResult`) matching the handlers. The legacy `RuntimeRequestResult` alias / `runtimeRequestResultSchema` was REMOVED from `shared/schemas/runtime.ts`.
 - Constants without live bridge/handler: `CH.onboarding.providerListModels`, `CH.onboarding.providerTest`, `CH.updater.check`.
-- Events not bridged to renderer: `EV.system.*`, `EV.docker.daemonChanged`, `EV.updater.available`, `EV.engine.controlState`.
+- Events not bridged to renderer: `EV.system.*`, `EV.docker.daemonChanged`, `EV.updater.available`. (`EV.engine.controlState` is now bridged — see F5 RESOLVED above.)
 - Some legacy bridge barrels omit newer domain types; narrow imports currently avoid the issue.
 
 ## Refresh triggers

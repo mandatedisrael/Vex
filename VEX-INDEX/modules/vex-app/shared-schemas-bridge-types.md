@@ -8,8 +8,8 @@ paths:
   - vex-app/src/shared/types/bridge/**/*.ts
   - vex-app/src/shared/embedding-defaults.ts
   - vex-app/src/shared/ipc/envelope.ts
-source_commit: cf05003
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change:
   - vex-app/src/shared/schemas/**
   - vex-app/src/shared/types/bridge/**
@@ -39,7 +39,7 @@ This layer also owns the cancellation envelope, result discriminators, and error
 
 ## Retrieval Keywords
 
-Zod schema, z.infer, bridge type, RuntimeRequestResult, RuntimeBridge, cancellation envelope, mission contract, mission draft, mission run lifecycle, transcript schema, approvals schema, wallets schema, secrets schema, F6 OPEN, discriminated union, per-action result, result.ts, VexError domain, VexErrorCode.
+Zod schema, z.infer, bridge type, RuntimeBridge, per-action result, cancellation envelope, mission contract, mission draft, mission run lifecycle, transcript schema, approvals schema, wallets schema, secrets schema, F6 RESOLVED (Bundle B), discriminated union, result.ts, VexError domain, VexErrorCode.
 
 ---
 
@@ -86,7 +86,7 @@ Renderer → Preload Validator → Main Handler → Preload Promise → Renderer
 ### Schemas (vex-app/src/shared/schemas/)
 
 **Core request/response infrastructure:**
-- `runtime.ts:28-187` — `RuntimeStateDto`, `RuntimeRequestInput`, `RuntimeRequestPauseResult`, `RuntimeRequestStopResult`, `RuntimeRequestResumeResult`, `RuntimeCancelWakeResult`, `ControlStateEvent`, and backwards-compat `RuntimeRequestResult` (see F6 OPEN)
+- `runtime.ts:28-171` — `RuntimeStateDto`, `RuntimeRequestInput`, `RuntimeRequestPauseResult`, `RuntimeRequestStopResult`, `RuntimeRequestResumeResult`, `RuntimeCancelWakeResult`, `ControlStateEvent` (F6 RESOLVED (Bundle B): the legacy backwards-compat `runtimeRequestResultSchema`/`RuntimeRequestResult` alias was deleted — file now ends at `ControlStateEvent` ~line 171)
 - `cancel.ts` — cancellation intent schemas
 - `sessions.ts` — session lifecycle, mission run statuses, session chat metadata
 
@@ -142,9 +142,9 @@ Renderer → Preload Validator → Main Handler → Preload Promise → Renderer
 - `bridge/common.ts` — `AbortableInvocation<T>`, `TelemetryReportInput`
 
 **Agent bridges (vex-app/src/shared/types/bridge/agent/):**
-- `agent/runtime.ts:14-30` — `RuntimeBridge` (**F6 OPEN: uses `RuntimeRequestResult` instead of per-action discriminators**)
+- `agent/runtime.ts:14-30` — `RuntimeBridge` (**F6 RESOLVED (Bundle B): now declares the per-action discriminated unions**)
   - `getState: (RuntimeRequestInput) => Promise<Result<RuntimeStateDto>>`
-  - `requestPause/requestStop/requestResume/cancelWake` all return `Promise<Result<RuntimeRequestResult>>` (puzzle 01 alias; should be per-action union)
+  - `requestPause/requestStop/requestResume/cancelWake` now return their per-action unions (`RuntimeRequestPauseResult`, `RuntimeRequestStopResult`, `RuntimeRequestResumeResult`, `RuntimeCancelWakeResult`); the puzzle-01 `RuntimeRequestResult` alias was deleted
 - `agent/sessions.ts` — `SessionsBridge`
 - `agent/chat.ts` — `ChatBridge`
 - `agent/messages.ts` — `MessagesBridge`
@@ -203,7 +203,7 @@ Renderer → Preload Validator → Main Handler → Preload Promise → Renderer
 **Per-action discriminators (preferred over generic Result):**
 - Example: `runtime.ts:70-145` — `runtimeRequestPauseResultSchema` uses `.discriminatedUnion("outcome", [...])`
 - Renderer's mutation hook switches on `outcome` literal to drive UI state
-- **F6 OPEN**: `RuntimeBridge.requestPause/Stop/Resume/cancelWake` should return the per-action union, not the generic `RuntimeRequestResult`
+- **F6 RESOLVED (Bundle B)**: `RuntimeBridge.requestPause/Stop/Resume/cancelWake` now return the per-action union; the generic `RuntimeRequestResult` alias was deleted
 
 ### Secret Handling
 
@@ -250,12 +250,12 @@ Renderer → Preload Validator → Main Handler → Preload Promise → Renderer
 
 **Control mutations:**
 - `requestPause/Stop/Resume/cancelWake` each take `RuntimeRequestInput` (sessionId only)
-- **F6 OPEN**: Bridge declares return type `Promise<Result<RuntimeRequestResult>>` (puzzle 01 alias), but schemas define per-action discriminated unions (puzzle 03)
+- **F6 RESOLVED (Bundle B)**: Bridge now declares the per-action discriminated unions (matching the puzzle-03 live handlers); the puzzle-01 `RuntimeRequestResult` alias was deleted
   - `runtimeRequestPauseResultSchema` → 5 outcomes: queued, already_pending, no_active_run, already_paused, terminal
   - `runtimeRequestStopResultSchema` → 3 outcomes: queued, already_terminal, no_active_run
   - `runtimeRequestResumeResultSchema` → 6 outcomes: resumed, already_running, no_active_run, blocked_approval, blocked_error, lease_busy
   - `runtimeCancelWakeResultSchema` → 2 outcomes: cancelled_wake, no_pending_wake
-- Live handlers (puzzle 03) return the per-action schema; bridge type needs to be updated
+- Bridge type and renderer mutation hooks now align with the live handlers' per-action schemas
 
 ### Error Codes by Domain
 
@@ -521,9 +521,11 @@ This document should be refreshed when:
 
 ## Open Questions
 
-### F6 OPEN: `RuntimeBridge` Type-Schema Mismatch
+### F6 RESOLVED (Bundle B): `RuntimeBridge` Type-Schema Mismatch
 
-**Issue:** `RuntimeBridge` declares control mutations with outdated return type.
+**Resolution (commit 85ed941):** the recommendation below shipped verbatim — `RuntimeBridge` and the renderer mutation hooks now declare the per-action discriminated unions, and the legacy `runtimeRequestResultSchema`/`RuntimeRequestResult` alias (+ its legacy test) was deleted. Preload needed no change (`satisfies RuntimeBridge` re-infers `T`). `tsc --noEmit` clean; Codex GREEN LIGHT. The historical analysis is kept below.
+
+**Issue (historical):** `RuntimeBridge` declared control mutations with an outdated return type.
 
 **Bridge declaration** (vex-app/src/shared/types/bridge/agent/runtime.ts:14-30):
 ```typescript
@@ -602,7 +604,7 @@ export type RuntimeRequestResult = z.infer<typeof runtimeRequestResultSchema>;
 2. Secrets never cross IPC; success results return only non-secret metadata
 3. Errors use unified `VexError` type with domain, code, and correlation ID for tracing
 4. Mission lifecycle and runtime control plane use per-action discriminated unions for renderer state branching
-5. F6 OPEN: RuntimeBridge needs per-action result types to match schemas
+5. F6 RESOLVED (Bundle B): RuntimeBridge now declares per-action result types matching the schemas; the legacy `RuntimeRequestResult` alias was deleted
 
 **For implementation:**
 - When adding a new IPC surface, create schema + bridge type pair in parallel
@@ -614,4 +616,4 @@ export type RuntimeRequestResult = z.infer<typeof runtimeRequestResultSchema>;
 ---
 
 **Module indexed:** 2025-05-28
-**Thoroughness:** Very thorough (60+ schemas across agent + shell domains, all bridge types, 4 major subsystems, F6 finding enumerated)
+**Thoroughness:** Very thorough (60+ schemas across agent + shell domains, all bridge types, 4 major subsystems, F6 RESOLVED in Bundle B)

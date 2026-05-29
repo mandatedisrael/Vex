@@ -5,8 +5,8 @@ paths:
   - "vex-app/src/main/agent/**"
   - "vex-app/src/main/support/agent-bug-report-sink.ts"
   - "vex-app/src/main/support/bug-report-service.ts"
-source_commit: cf05003
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change:
   - "vex-app/src/main/agent/**"
   - "vex-app/src/main/support/agent-bug-report-sink.ts"
@@ -142,7 +142,7 @@ Bridges the in-process engine's event buses and background executors to the rend
 - `vex-app/src/main/index.ts:152–162` — sequences both worker `stop()` callbacks through `makeOrderedQuitCleanup()` BEFORE compose/Postgres teardown.
 
 ### Event listeners (preload/renderer)
-- `vex-app/src/preload/agent/engine.ts:17–20` — exposes `vex.engine.onTranscriptAppend()` and `vex.engine.onStreamDelta()` (NOT `onControlState` — F5 gap).
+- `vex-app/src/preload/agent/engine.ts:17–20` — exposes `vex.engine.onTranscriptAppend()`, `vex.engine.onStreamDelta()`, and `vex.engine.onControlState()` (F5 RESOLVED (Bundle B): `onControlState` now bridged, re-validating each payload via `controlStateEventSchema` at the third layer).
 - Renderer hooks via TanStack Query and real-time invalidation on `EV.engine.*` signals.
 
 ## Internal flow
@@ -182,7 +182,8 @@ controlStateBus (engine) →
     on emit: safeParse(event) via controlStateEventSchema →
       if !success: drop + log warning →
       if success: broadcastToAllWindows(EV.engine.controlState, parsed.data) →
-        [preload/renderer path — but F5: preload does NOT expose onControlState]
+        [preload/renderer path — F5 RESOLVED (Bundle B): preload exposes onControlState;
+         renderer useControlStateLiveSync invalidates runtimeKeys.state + approvalsKeys.pending]
 ```
 
 ### Compact worker supervisor flow
@@ -274,12 +275,11 @@ This module is stale if:
 
 ## Open questions
 
-### F5 gap — control-state not exposed to preload
-- **Status**: CONFIRMED.
-- **Evidence**: `vex-app/src/main/agent/control-bridge.ts:33` broadcasts `EV.engine.controlState` via `broadcastToAllWindows()`. Main-process side is complete.
-- **Evidence**: `vex-app/src/preload/agent/engine.ts:16–21` exposes `onTranscriptAppend` and `onStreamDelta` only; NO `onControlState` method.
-- **Impact**: renderer cannot subscribe control-state changes. Workaround: always call `runtime.getState()` (IPC round-trip) after expected control transitions.
-- **Next step**: preload must add `onControlState: (cb) => subscribe(EV.engine.controlState, controlStateEventSchema, cb)` to expose the bridge.
+### F5 gap — control-state not exposed to preload — RESOLVED (Bundle B)
+- **Status**: RESOLVED (commit 85ed941). Codex GREEN LIGHT (plan + final review).
+- **Main**: `vex-app/src/main/agent/control-bridge.ts:33` broadcasts `EV.engine.controlState` via `broadcastToAllWindows()` (unchanged).
+- **Preload**: `vex-app/src/preload/agent/engine.ts` now adds `onControlState: (cb) => subscribe(EV.engine.controlState, controlStateEventSchema, cb)` (+ the method on `EngineEventsBridge`), re-validating each payload at the third layer.
+- **Renderer**: `useControlStateLiveSync(sessionId)` (`renderer/lib/api/runtime.ts`), mounted in `SessionPanel`, invalidates `runtimeKeys.state` + `approvalsKeys.pending` per event with a 30s runtime fallback. `ApprovalsRegion` retains its 5s poll as a fast fallback (the emit is post-commit on lease release, not in the approval transaction).
 
 ### Compact executor's direct OpenRouter construction
 - **Status**: Round-4 Codex verdict = confirmed-by-design (acceptable today).

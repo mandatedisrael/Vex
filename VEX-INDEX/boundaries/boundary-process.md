@@ -8,8 +8,8 @@ paths:
   - vex-app/src/shared/**
   - vex-app/scripts/check-process-boundaries.mjs
   - src/vex-agent/**
-source_commit: cf05003
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change:
   - vex-app/src/main/**
   - vex-app/src/preload/**
@@ -74,9 +74,9 @@ related:
 
 ## What's currently leaking or fragile
 
-- **F5 — control-state.** Main publishes `EV.engine.controlState` to BrowserWindow but preload does not expose a subscriber. No data leak (renderer never receives), but the boundary contract has a one-sided publisher; revisit when bridging.
+- **F5 — control-state. RESOLVED (Bundle B).** Preload now exposes `onControlState` (`preload/agent/engine.ts`), re-validating each payload via `controlStateEventSchema` before forwarding (third validation layer). Renderer `useControlStateLiveSync` consumes it. The publisher is no longer one-sided.
 - **Round-2 finding (renderer-clean spot-check).** Current renderer imports are pure metadata/schemas only. Any future `@vex-lib/*` import in renderer must be re-checked against `check-process-boundaries.mjs`.
-- **Runtime bridge types (F6).** `RuntimeBridge` declares legacy `RuntimeRequestResult` while live handlers use per-action discriminated unions. Live code is safe (handlers declare per-action output schemas); the type drift is a maintenance hazard.
+- **Runtime bridge types (F6). RESOLVED (Bundle B).** `RuntimeBridge` + renderer hooks now declare the per-action discriminated unions; the legacy `RuntimeRequestResult` alias was deleted. Type and runtime shape are back in sync.
 
 ## Refresh triggers
 

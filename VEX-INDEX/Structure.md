@@ -196,9 +196,9 @@ Trust boundary: `window.vex` is a narrow typed bridge; no raw `ipcRenderer`, `in
 - `shared/ipc/channels.ts` current inventory: 93 request channel constants across 24 request domains; `EV` has 10 event constants across system/docker/database/updater/engine.
 - `shared/ipc/result.ts` current inventory: 29 domains, 54 error codes.
 - `preload/_dispatch.ts` validates renderer inputs and subscribed events; main `registerHandler` validates success outputs and malformed error envelopes.
-- Unbridged/dead or reserved constants: `CH.onboarding.providerListModels`, `CH.onboarding.providerTest`, `CH.updater.check`, `EV.engine.controlState`, `EV.system.*`, `EV.docker.daemonChanged`, `EV.updater.available`.
-- F5 remains real: main publishes `EV.engine.controlState`, but preload engine bridge currently exposes transcript append + stream delta only.
-- Runtime bridge type drift remains: `RuntimeBridge` uses legacy `RuntimeRequestResult` while handlers validate per-action schemas.
+- Unbridged/dead or reserved constants: `CH.onboarding.providerListModels`, `CH.onboarding.providerTest`, `CH.updater.check`, `EV.system.*`, `EV.docker.daemonChanged`, `EV.updater.available`.
+- F5 RESOLVED (Bundle B): `EV.engine.controlState` is now bridged — preload exposes `onControlState`, renderer `useControlStateLiveSync` consumes it.
+- F6 RESOLVED (Bundle B): `RuntimeBridge` + renderer hooks use per-action result types; legacy `RuntimeRequestResult` deleted.
 
 ---
 
@@ -210,7 +210,7 @@ Untrusted UI. It talks to main only via `window.vex` and pure shared schemas/typ
 - `WizardShell.tsx:174-199` makes unlock conditional; completed setup with locked vault routes to `unlock`, not blindly to appShell.
 - Wizard order: keystore -> wallets -> apiKeys -> embedding -> agentCore -> provider -> review.
 - `SessionPanel.tsx:93-109` active-session mount order: `SessionContext`, optional `MissionContractCard`, `SessionTranscript`, `ApprovalsRegion`, `SessionComposer`.
-- F3 is fixed: `ApprovalsRegion` polls pending approvals every 5s because control-state is not bridged; `ApprovalCard` invalidates pending/history/messages/runtime after approve/reject.
+- F3 is fixed: `ApprovalsRegion` renders pending approvals; F5 (Bundle B) now pushes a pending-approval refresh via `useControlStateLiveSync`, with the 5s poll retained as a fast fallback. `ApprovalCard` invalidates pending/history/messages/runtime after approve/reject.
 - `SessionRuntimeBar.tsx:99-129` displays global model/unconfigured state from `sessions.getModel`; there is no per-session model selector.
 - `SessionCreator.tsx` owns per-session wallet selection at session creation.
 - Docker/compose/migrations UI is route-driven from IPC result kinds; log parsing is cosmetic.
@@ -225,7 +225,7 @@ Untrusted UI. It talks to main only via `window.vex` and pure shared schemas/typ
 
 **Mission start / wake**: Z8 slash `/mission start` -> Z6 mission IPC -> Z2 `prepareMissionStart` + fire-and-forget runner. `loop_defer` writes `loop_wake_requests`, run becomes `paused_wake`; Z6 `setupWakeWorker()` now starts the wake executor, which gates before claim on provider readiness.
 
-**Restricted approval**: mutating tool + restricted + not approved -> Z3/Z1 approval queue/intents -> run `paused_approval`. Z8 `ApprovalsRegion` polls and renders `ApprovalCard`; approve/reject IPC calls Z6 approval runtime and resumes/finalizes through Z1. Live control-state still does not reach renderer (F5), so polling/invalidation is the workaround.
+**Restricted approval**: mutating tool + restricted + not approved -> Z3/Z1 approval queue/intents -> run `paused_approval`. Z8 `ApprovalsRegion` renders `ApprovalCard`; approve/reject IPC calls Z6 approval runtime and resumes/finalizes through Z1. F5 (Bundle B): `useControlStateLiveSync` pushes a pending-approval refresh on `EV.engine.controlState`; the 5s poll is retained as a fast fallback (the emit is post-commit on lease release, not in the approval transaction).
 
 **Compaction**: context pressure -> Z2 Track 1 `executeCompactNow` archives prefix and enqueues outbox in one transaction; Z6 `setupCompactWorker()` runs Track 2 async chunking/embedding. Track 2 requires key+model but never blocks Track 1.
 
@@ -243,8 +243,8 @@ Untrusted UI. It talks to main only via `window.vex` and pure shared schemas/typ
 | **F2** | Wake worker omission fixed: `setupWakeWorker()` starts at boot and executor gates before destructive claim on key+model. | fixed | HIGH | `vex-app/src/main/index.ts:143`, `src/vex-agent/engine/wake/executor.ts` |
 | **F3** | Restricted approval UI fixed: `ApprovalsRegion` + `ApprovalCard` are mounted in `SessionPanel`. | fixed | HIGH | `vex-app/src/renderer/features/appShell/SessionPanel.tsx:103`, `ApprovalsRegion.tsx:38` |
 | **F4** | OpenRouter `loadConfig()` still hits models API every turn; transient model API failures can look like no provider. Provider reset is not called on generic vault unlock. | open | MED | `src/vex-agent/inference/openrouter.ts:98`, `registry.ts:134`, `vex-app/src/main/secrets/session.ts` |
-| **F5** | `EV.engine.controlState` is broadcast from main but not bridged to renderer; runtime UI relies on polling/invalidation. | open | HIGH | `vex-app/src/main/agent/control-bridge.ts:23`, `vex-app/src/preload/agent/engine.ts` |
-| **F6** | Runtime bridge result types drift from current per-action schemas. | open | MED | `vex-app/src/shared/types/bridge/agent/runtime.ts`, `vex-app/src/shared/schemas/runtime.ts` |
+| **F5** | `EV.engine.controlState` bridged to renderer (Bundle B): preload `onControlState` + `useControlStateLiveSync` (push invalidate runtime + approvals, 30s runtime fallback); `ApprovalsRegion` keeps 5s fallback. Codex GREEN LIGHT. | fixed | HIGH | `vex-app/src/preload/agent/engine.ts`, `vex-app/src/renderer/lib/api/runtime.ts`, `SessionPanel.tsx` |
+| **F6** | Runtime bridge result types realigned to per-action schemas (Bundle B); legacy `RuntimeRequestResult` deleted. `tsc` clean; Codex GREEN LIGHT. | fixed | HIGH | `vex-app/src/shared/types/bridge/agent/runtime.ts`, `vex-app/src/shared/schemas/runtime.ts` |
 | **F7** | ADR-0001 holds: global model, no `sessions.model_id`, per-session wallet selection. | implemented | HIGH | migration 026, `sessions.getModel`, ADR-0001 |
 | **F8** | Subagents are implemented but intentionally disabled at registry/dispatcher surface. | intentional | HIGH | `tools/registry/subagents.ts`, `tools/dispatcher.ts` |
 | **F9** | UI polish/perf: slash placeholder incomplete; transcript cap/no virtualization. | open | HIGH | Z8 appShell files |

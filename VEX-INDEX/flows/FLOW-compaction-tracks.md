@@ -8,8 +8,8 @@ paths:
   - src/vex-agent/tools/internal/compact/now.ts
   - vex-app/src/main/agent/compact-worker.ts
   - vex-app/src/main/index.ts
-source_commit: cf05003
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change:
   - src/vex-agent/engine/compact-jobs/**
   - src/vex-agent/tools/internal/compact/now.ts
@@ -45,7 +45,7 @@ Engine reaches context pressure during turn loop. The turn-loop's compact-gate d
 |---|---------------------------|--------|--------------|---------------------|---------------|
 | 1 | turn loop pressure check OR `/compact now` | `src/vex-agent/engine/compact-jobs/service.ts:64 executeCompactNow` | begin DB transaction | none | none |
 | 2 | Track 1 INSIDE the transaction: build prefix summary, archive transcript prefix, enqueue Track 2 job row | service writes prefix checkpoint, archives, inserts `compact_jobs` row, COMMITs | row inserts (`compact_checkpoints`, `compact_jobs`); messages archived | commit may fail → transaction rolls back; turn loop sees error | rollback (no partial state) |
-| 3 | Track 1 returns synchronously; turn loop continues with compacted context | engine appends synthetic recap message; control-state event | row updates; transcript appendMessage | F5 (not bridged to renderer live) |
+| 3 | Track 1 returns synchronously; turn loop continues with compacted context | engine appends synthetic recap message; control-state event | row updates; transcript appendMessage | F5 RESOLVED (Bundle B): control-state event now bridged to renderer (`onControlState` preload + `useControlStateLiveSync`), but it invalidates runtime-state + approvals — NOT compaction history (that uses `useCompactionLiveSync` transcript invalidation) |
 | 4 | Electron main boot started `setupCompactWorker()` (`vex-app/src/main/index.ts:136`) → supervisor `vex-app/src/main/agent/compact-worker.ts` ticks every 30s | dynamic-import `@vex-agent/engine/compact-jobs/executor.js startCompactJobsExecutor` and call tick() | none | none | DB not ready → supervisor delays |
 | 5 | Track 2 executor `src/vex-agent/engine/compact-jobs/executor.ts:64 startCompactJobsExecutor` | provider gate (`OPENROUTER_API_KEY && AGENT_MODEL`) check; if missing → skip tick | none | none | provider missing → silent skip; job stays |
 | 6 | gate passes → polls `compact_jobs` for due rows (FOR UPDATE SKIP LOCKED), claims one | row update (claim) | none | claim contention → skipped |
@@ -74,4 +74,4 @@ Engine reaches context pressure during turn loop. The turn-loop's compact-gate d
 - **OpenRouter chunker outage.** Track 2 job stays pending until budget exhausts; live context still works because Track 1 already trimmed.
 - **Embedding service down.** Same as above; chunks land without embeddings if retry path tolerates that (verify), otherwise job fails.
 - **Stale Track-2 provider after vault re-key.** Because chunker bypasses registry, `resetProvider()` from onboarding/provider persist does NOT replace the in-flight Track-2 provider instance. Mitigation: Track-2 instance is per-job-tick, so next tick gets a fresh construct from current env. Document explicitly.
-- **F5 gap.** Compaction transitions (Track 1 completes; Track 2 finishes) do not push live events to renderer. UI compaction history view reads via TanStack query (polling/invalidation).
+- **F5 RESOLVED (Bundle B).** The control-state event is now bridged to the renderer (`onControlState` preload method + `useControlStateLiveSync`), but it invalidates runtime-state + approvals queries only — it does NOT push compaction-history transitions. Compaction-history transitions (Track 1 completes; Track 2 finishes) still reach the UI via the compaction history view's own transcript-driven invalidation (`useCompactionLiveSync`) over TanStack query, not via controlState.

@@ -284,7 +284,25 @@ Build/config (root + vex-app) consolidated by the lead (me) during Structure.md 
   Tooling note: B1b used the dynamic Workflow tool for design+adversarial verification (the
   resumed run recovered from a synth-agent StructuredOutput failure by re-running synthesis
   schema-less). Implementation delegated to Opus subagents per checkpoint; main agent reviewed
-  diffs + re-ran tests independently + drove the Codex gates. STILL OPEN (Bundle B remainder):
-  F4 (OpenRouter /models per-turn cache), F5 (controlState preload bridge), F6 (RuntimeRequestResult
-  drift), F10-KDF-OWASP (joint vault+keystore bump to 2^17), F12 (updater), codex-002 (fetchJson Zod),
+  diffs + re-ran tests independently + drove the Codex gates.
+- 2026-05-29: BUNDLE B — F5 + F6 SHIPPED (runtime bridge; `/codex`-gated, NOT yet committed).
+  - F5 (controlState preload bridge): preload `engine.ts` adds `onControlState` (+ `EngineEventsBridge`
+    type), re-validating via `controlStateEventSchema` at the third layer. New renderer hook
+    `useControlStateLiveSync(sessionId)` (`renderer/lib/api/runtime.ts`), mounted in `SessionPanel`,
+    pushes invalidation of `runtimeKeys.state` + `approvalsKeys.pending` per event with a 30s
+    runtime-state fallback. `ApprovalsRegion` KEEPS its 5s poll as a fast fallback — Codex caught that
+    the controlState emit is post-commit on lease release (not in the approval txn) and can be missed,
+    so dropping the poll would regress F3 unblock latency to 30s.
+  - F6 (RuntimeRequestResult drift): `RuntimeBridge` + the 4 renderer mutation hooks retyped to the
+    per-action discriminated unions; legacy `runtimeRequestResultSchema`/`RuntimeRequestResult` alias
+    DELETED from `shared/schemas/runtime.ts` (+ its legacy test). Preload unchanged — `satisfies
+    RuntimeBridge` re-infers `T`. Stale "feature_unavailable until puzzle 03" docstrings corrected
+    (handlers are live DB-backed).
+  Process: 5-agent Explore recon (pointed at VEX-INDEX) → plan → Codex named session `f5f6-harness`
+  (RED→GREEN: required keeping the 5s approvals fallback) → inline implement → `pnpm --dir vex-app lint`
+  (tsc + boundaries) clean + focused vitest 70 pass (incl. new `renderer/lib/api/__tests__/runtime.test.ts`,
+  6) → Codex final review GREEN LIGHT. Index refresh: parallel doc-sweep workflow (10 files) +
+  coverage-gaps/Structure/boundaries/flows/00-PROGRESS by hand. NOT committed (awaiting explicit user
+  request). STILL OPEN (Bundle B remainder): F4 (OpenRouter /models per-turn cache), F10-KDF-OWASP
+  (joint vault+keystore bump to 2^17), F12 (updater), codex-002 (fetchJson Zod),
   codex-003 (reembed runtime trigger).

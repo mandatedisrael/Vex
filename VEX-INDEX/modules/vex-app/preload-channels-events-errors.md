@@ -11,8 +11,8 @@ paths:
   - vex-app/src/main/ipc/register-handler.ts
   - vex-app/src/main/ipc/register-all.ts
   - vex-app/src/shared/types/bridge/**/*.ts
-source_commit: cf05003
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change:
   - vex-app/src/shared/ipc/channels.ts
   - vex-app/src/shared/ipc/result.ts
@@ -39,7 +39,7 @@ Deep inventory of the Vex Electron preload bridge: every IPC channel (request/re
 - **Event constants (EV):** all 10 push events across 6 domains  
 - **Error codes:** 54 domain-specific codes + 5 reserved domains for `feature_unavailable`
 - **Domain registry:** 29 `VexDomain` values partitioned into shell (vex-app integration) and agent (vex-agent runtime integration)
-- **Reserved/unbridged channels:** channels defined in the constant list but not yet bridged to the renderer (e.g., `CH.onboarding.providerListModels`, `EV.engine.controlState`)
+- **Reserved/unbridged channels:** channels defined in the constant list but not yet bridged to the renderer (e.g., `CH.onboarding.providerListModels`). Note: `EV.engine.controlState` is now bridged as of Bundle B (F5 RESOLVED).
 - **Validation guarantees:** Zod schema enforcement at boundaries, malformed error shape rejection, correlation ID tracking
 
 ---
@@ -54,7 +54,7 @@ Deep inventory of the Vex Electron preload bridge: every IPC channel (request/re
 - Preload validation: `invokeWithSchema`, `abortableInvoke`, `subscribe`
 - Main validation: `registerHandler`, `requestEnvelopeSchema`
 - Error contract: `VexError`, `Result<T, E>`, `correlationId`
-- Unbridged/reserved channels: `CH.onboarding.providerListModels`, `CH.onboarding.providerTest`, `CH.updater.check`, `EV.system.*`, `EV.docker.daemonChanged`, `EV.updater.available`, `EV.engine.controlState`
+- Unbridged/reserved channels: `CH.onboarding.providerListModels`, `CH.onboarding.providerTest`, `CH.updater.check`, `EV.system.*`, `EV.docker.daemonChanged`, `EV.updater.available` (`EV.engine.controlState` is now bridged — F5 RESOLVED, Bundle B)
 
 ---
 
@@ -133,7 +133,7 @@ Renderer (receives only Zod-validated shapes)
 - `vex-app/src/preload/agent/compaction.ts` — `compaction.getStatus()`, `.listHistory()`, `.retry()`
 - `vex-app/src/preload/agent/knowledge.ts` — `knowledge.list()`, `.updateStatus()`
 - `vex-app/src/preload/agent/memory.ts` — `memory.listSession()`, `.getStats()`
-- `vex-app/src/preload/agent/engine.ts:16–21` — `engine.onTranscriptAppend()`, `.onStreamDelta()` (NO `.onControlState()` yet)
+- `vex-app/src/preload/agent/engine.ts:16–21` — `engine.onTranscriptAppend()`, `.onStreamDelta()`, `.onControlState()` (F5 RESOLVED, Bundle B — `onControlState` subscribes to `EV.engine.controlState` and re-validates via `controlStateEventSchema`)
 
 ### IPC contract definitions
 
@@ -179,7 +179,7 @@ Renderer (receives only Zod-validated shapes)
 - `vex-app/src/shared/types/bridge/agent/engine.ts:19–44` — EngineEventsBridge:
   - `onTranscriptAppend()` method exists
   - `onStreamDelta()` method exists
-  - **NO** `onControlState()` method (F5 open)
+  - `onControlState()` method exists (F5 RESOLVED, Bundle B — declared on `EngineEventsBridge` and implemented in preload)
 
 - `vex-app/src/shared/types/bridge/common.ts` — Shared types:
   - `AbortableInvocation<T>` interface (promise + cancel function)
@@ -395,7 +395,7 @@ When renderer calls `.cancel()` on an `AbortableInvocation`:
 | updater | available | `EV.updater.available` | `{ version, releaseNotes }` | N/A | **unbridged** |
 | engine | transcriptAppend | `EV.engine.transcriptAppend` | `{ sessionId, messageId }` | `engine.onTranscriptAppend()` | ✓ bridged |
 | engine | streamDelta | `EV.engine.streamDelta` | `{ sessionId, delta, done }` | `engine.onStreamDelta()` | ✓ bridged |
-| engine | controlState | `EV.engine.controlState` | `{ sessionId, state, leaseActive, leaseExpiresAt }` | N/A | **F5: UNBRIDGED** |
+| engine | controlState | `EV.engine.controlState` | `{ sessionId, state, leaseActive, leaseExpiresAt }` | `engine.onControlState()` | ✓ bridged (F5 RESOLVED, Bundle B) |
 
 ### Error code inventory (54 codes)
 
@@ -588,13 +588,13 @@ All these hooks call methods on `window.vex.*`:
 - `broadcastToAllWindows(EV.database.migrateProgress, payload)` → `database.onProgress()` hook
 - `broadcastToAllWindows(EV.engine.transcriptAppend, payload)` → `engine.onTranscriptAppend()` hook
 - `broadcastToAllWindows(EV.engine.streamDelta, payload)` → `engine.onStreamDelta()` hook
+- `broadcastToAllWindows(EV.engine.controlState, payload)` → `engine.onControlState()` hook (F5 RESOLVED, Bundle B). Note: this emit is post-commit (on lease release via `releaseLeaseAndEmitControlState`), NOT part of the approval/transition transaction, so renderer `useControlStateLiveSync` treats it as primary push while `ApprovalsRegion` keeps its 5s poll as a fast fallback.
 
 Unbridged publishers (main only, no renderer subscription):
 - `broadcastToAllWindows(EV.system.logLine, payload)`
 - `broadcastToAllWindows(EV.system.resume, payload)`
 - `broadcastToAllWindows(EV.docker.daemonChanged, payload)`
 - `broadcastToAllWindows(EV.updater.available, payload)`
-- `broadcastToAllWindows(EV.engine.controlState, payload)` — **F5: NOT BRIDGED YET**
 
 ---
 
@@ -763,45 +763,40 @@ This document is stale when any of these paths change:
 
 ## Open Questions
 
-### F5: `EV.engine.controlState` event unbridged
+### F5: `EV.engine.controlState` event unbridged — RESOLVED (Bundle B)
 
-**Finding:** `EV.engine.controlState` constant exists in `channels.ts:281` and is published by main (`src/main/agent/control-bridge.ts`) but has **NO** preload subscription method.
+**Resolution:** The control-state bridge is now complete. `engine.onControlState(cb)` is declared on `EngineEventsBridge` and implemented in preload (`engine.ts`) as `subscribe(EV.engine.controlState, controlStateEventSchema, cb)` (third-layer re-validation). Renderer `useControlStateLiveSync(sessionId)` (mounted in `SessionPanel.tsx` alongside the other live-sync hooks) invalidates `runtimeKeys.state(sessionId)` + `approvalsKeys.pending(sessionId)` on each matching event, with a 30s runtime-state fallback interval. `ApprovalsRegion` retains its 5s `refetchInterval` as a FAST FALLBACK (not a workaround): the controlState emit is post-commit (on lease release via `releaseLeaseAndEmitControlState`), NOT part of the approval/transition transaction, and an event can be dropped at the preload Zod gate or fire before the renderer subscribes — so push is primary, the 5s poll is the safety net.
 
-**Evidence:**
+**Original finding (historical, now addressed):** `EV.engine.controlState` constant exists in `channels.ts:281` and is published by main (`src/main/agent/control-bridge.ts`); at the time of the original index it had no preload subscription method.
+
+**Evidence at time of finding:**
 - Channel defined: `EV.engine.controlState = "vex:event:engine:controlState"`
 - Publisher exists: `broadcastToAllWindows(EV.engine.controlState, parsed.data)`
-- Preload bridge (`engine.ts`) exports `onTranscriptAppend` and `onStreamDelta` only
-- No `onControlState` method in `EngineEventsBridge` interface
+- Preload bridge (`engine.ts`) exported `onTranscriptAppend` and `onStreamDelta` only — now also exports `onControlState`
+- No `onControlState` method in `EngineEventsBridge` interface — now declared
 
-**Impact:** Renderer cannot subscribe to runtime control state changes (pause/stop/resume/lease). Comment in `channels.ts:259–278` suggests this is intentional for puzzle 3 (future), but the event publisher is already in place.
-
-**Questions:**
-1. Is the preload method intentionally deferred, or is this a gap?
-2. Should the main-side publisher be gated by a feature flag until puzzle 3 lands?
-3. Which renderer components (if any) need to subscribe to `controlState`?
-
-**Recommendation:** Confirm puzzle 3 timeline and decide whether to:
-- Keep the event unpublished until the preload bridge is ready
-- Implement `onControlState()` preload subscription now
-- Document the temporary unpubished state in the event schema
+**Original questions (resolved):**
+1. Was the preload method intentionally deferred, or a gap? → Now bridged in Bundle B.
+2. Should the main-side publisher be gated by a feature flag? → Not needed; the renderer subscribes and re-validates.
+3. Which renderer components subscribe to `controlState`? → `useControlStateLiveSync` (mounted in `SessionPanel.tsx`), invalidating runtime-state + pending-approvals queries.
 
 ---
 
-### F6: Legacy `RuntimeRequestResult` vs per-action schemas
+### F6: Legacy `RuntimeRequestResult` vs per-action schemas — RESOLVED (Bundle B)
 
-**Finding:** Some runtime handlers may return a legacy `RuntimeRequestResult` union instead of per-action Zod schemas (e.g., `getState` vs `requestPause` vs `requestStop`).
+**Resolution:** `RuntimeBridge` (`vex-app/src/shared/types/bridge/agent/runtime.ts`) and the 4 renderer mutation hooks now use the per-action discriminated unions: `RuntimeRequestPauseResult`, `RuntimeRequestStopResult`, `RuntimeRequestResumeResult`, `RuntimeCancelWakeResult`. The legacy `runtimeRequestResultSchema` / `RuntimeRequestResult` alias was DELETED from `vex-app/src/shared/schemas/runtime.ts` (along with its legacy test) — the type no longer exists; `shared/schemas/runtime.ts` now ends with `ControlStateEvent` (~line 171). Preload `runtime.ts` is unchanged — `satisfies RuntimeBridge` re-infers the per-action `T`, and `tsc --noEmit` is clean.
 
-**Evidence:**
+**Original finding (historical, now addressed):** Some runtime handlers were suspected of returning a legacy `RuntimeRequestResult` union instead of per-action shapes (e.g., `getState` vs `requestPause` vs `requestStop`).
+
+**Evidence at time of finding:**
 - `runtime.getState()` returns a complex `RuntimeState` DTO
-- `runtime.requestPause()`, `.requestStop()`, `.requestResume()` likely return `void` or a sparse result
-- Need to verify main handler implementations to confirm return type consistency
+- `runtime.requestPause()`, `.requestStop()`, `.requestResume()`, `.cancelWake()` now return per-action discriminated-union results
+- Main handler implementations confirmed consistent with the per-action `RuntimeBridge` interface
 
-**Impact:** If handlers return inconsistent shapes, output validation in `registerHandler` may fail type-safety expectations.
-
-**Recommendation:** Audit all runtime handlers (`vex-app/src/main/ipc/runtime.ts`) and confirm:
-1. Each has an explicit `outputSchema` passed to `registerHandler`
-2. Return types are consistent with `RuntimeBridge` interface
-3. Legacy `RuntimeRequestResult` is not used as a catch-all
+**Original recommendation (resolved):** Runtime handlers (`vex-app/src/main/ipc/runtime.ts`) were audited:
+1. Each passes an explicit `outputSchema` to `registerHandler`
+2. Return types match the per-action `RuntimeBridge` interface
+3. The catch-all `RuntimeRequestResult` alias was removed entirely
 
 ---
 
@@ -819,12 +814,13 @@ Channels defined in constants but NOT bridged to preload (may be future, unused,
 #### Database (1)
 - `CH.database.status` — Database health (read-only, may not need renderer exposure)
 
-#### Events (5)
+#### Events (4)
 - `EV.system.logLine` — System log events (internal, no renderer subscription)
 - `EV.system.resume` — Resume-from-suspend signal (internal, no renderer subscription)
 - `EV.docker.daemonChanged` — Docker daemon status toggle (published but unbridged; renderer may poll `docker.detect()` instead)
 - `EV.updater.available` — New version available (published but unbridged; future updater UI in puzzle TBD)
-- `EV.engine.controlState` — Runtime control state change (published but unbridged; **F5 open**)
+
+(`EV.engine.controlState` was formerly listed here; it is now bridged via `engine.onControlState()` — F5 RESOLVED, Bundle B.)
 
 **Maintenance note:** When adding new handler or event, explicitly decide:
 1. Is it renderer-facing? If yes, bridge it.
@@ -839,19 +835,20 @@ Channels defined in constants but NOT bridged to preload (may be future, unused,
 
 If the task is to **inventory the preload channels/events/errors**, this document is complete. The inventory is 92 CH constants, 10 EV constants, 54 error codes, 29 domains, with exact file locations and per-domain method signatures.
 
-If the task is to **bridge `EV.engine.controlState`**, read the F5 findings above and confirm with the user the puzzle 3 timeline before implementing.
+`EV.engine.controlState` is already bridged (F5 RESOLVED, Bundle B) — see the F5 section above for the push/poll model. No further bridging work is required for it.
 
 ### Files the main Claude must read next
 
-- `vex-app/src/shared/types/bridge/agent/engine.ts` — Add `onControlState()` method signature here
-- `vex-app/src/preload/agent/engine.ts` — Implement preload subscription
-- `vex-app/src/shared/schemas/runtime.ts` — Find or create the controlState event schema
-- `vex-app/src/main/agent/control-bridge.ts` — Verify publisher location + schema
+- `vex-app/src/shared/types/bridge/agent/engine.ts` — `EngineEventsBridge` now declares `onControlState()`
+- `vex-app/src/preload/agent/engine.ts` — preload subscription implemented (`subscribe(EV.engine.controlState, controlStateEventSchema, cb)`)
+- `vex-app/src/shared/schemas/runtime.ts` — `controlStateEventSchema` / `ControlStateEvent` (file ends ~line 171; legacy `runtimeRequestResultSchema` removed)
+- `vex-app/src/renderer/lib/api/runtime.ts` — `useControlStateLiveSync(sessionId)` consumer hook
+- `vex-app/src/main/agent/control-bridge.ts` — Publisher location + schema
 
 ### What the main Claude must not assume
 
 1. **Not all error codes are used equally.** Some (`feature_unavailable` codes, `approvals.expired`, `compaction.invalid_state`) are puzzle-specific and may not appear until late phases.
-2. **Not all events are bridged.** `EV.system.logLine`, `EV.system.resume`, `EV.docker.daemonChanged`, `EV.updater.available`, `EV.engine.controlState` are defined but not exposed to the renderer.
+2. **Not all events are bridged.** `EV.system.logLine`, `EV.system.resume`, `EV.docker.daemonChanged`, `EV.updater.available` are defined but not exposed to the renderer. (`EV.engine.controlState` IS now bridged — F5 RESOLVED, Bundle B.)
 3. **Onboarding channels are not all implemented.** `CH.onboarding.providerListModels` and `CH.onboarding.providerTest` are reserved in the constants but no preload methods exist.
 4. **Preload does not cache or manage state.** It is a pure bridge; all state lives in main or renderer.
 5. **Cancel registry is per-request, not per-handler.** A single handler can have multiple in-flight requests with different correlationIds, and only the matching one is aborted.

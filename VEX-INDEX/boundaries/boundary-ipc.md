@@ -9,8 +9,8 @@ paths:
   - vex-app/src/main/ipc/register-handler.ts
   - vex-app/src/main/ipc/register-all.ts
   - vex-app/src/main/ipc/cancel.ts
-source_commit: cf05003
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change:
   - vex-app/src/shared/ipc/**
   - vex-app/src/shared/schemas/**
@@ -62,7 +62,8 @@ The wire contract between renderer (via preload bridge) and Electron main. All s
 - `EV.system.*` (logLine, resume) — published-side may exist, no preload subscriber method.
 - `EV.docker.daemonChanged` — published by docker layer, no preload subscriber.
 - `EV.updater.available` — defined, no live publisher (F12).
-- `EV.engine.controlState` — published by `main/agent/control-bridge.ts`, **no preload subscriber method** (F5).
+
+(F5 RESOLVED, Bundle B: `EV.engine.controlState` is now bridged — preload exposes `onControlState` via `subscribe(EV.engine.controlState, controlStateEventSchema, cb)`, consumed by renderer `useControlStateLiveSync`. No longer an unbridged constant.)
 
 These constants stay in the inventory intentionally (don't delete) but must be flagged on every audit until either bridged or removed.
 

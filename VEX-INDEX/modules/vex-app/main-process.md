@@ -3,8 +3,8 @@ id: module.vex-app.main-process
 kind: module
 paths:
   - "vex-app/src/main/**"
-source_commit: cf05003
-indexed_at: 2026-05-28
+source_commit: 85ed941
+indexed_at: 2026-05-29
 stale_when_paths_change:
   - "vex-app/src/main/**"
   - "vex-app/src/shared/ipc/**"
@@ -44,7 +44,7 @@ background workers.
 - `vex-app/src/main/protocol/app-protocol.ts:20` privileged `app://vex` registration + path containment handler.
 - `vex-app/src/main/permissions.ts:11` deny-all permission handlers.
 - `vex-app/src/main/ipc/register-handler.ts:228` trusted sender, request parsing, output validation, error normalization.
-- `vex-app/src/main/agent/control-bridge.ts:23` publishes `EV.engine.controlState` to windows; preload does not expose it yet.
+- `vex-app/src/main/agent/control-bridge.ts:23` publishes `EV.engine.controlState` to windows; preload now exposes it via `onControlState` (F5 resolved, Bundle B).
 - `vex-app/src/main/agent/compact-worker.ts` and `wake-worker.ts` own worker supervisors.
 - `vex-app/src/main/ipc/onboarding/provider.ts` persists provider config, reloads `.env` with overwrite, calls `resetProvider()`.
 
