@@ -177,4 +177,15 @@ describe("preload bridge surface", () => {
       "onStreamDelta not exposed by the preload composer",
     ).toContain("onStreamDelta");
   });
+
+  it("exposes EV.engine.controlState and the control-state bridge method (F5)", () => {
+    const corpus = PRELOAD_FILES.map((f) => readFileSync(f, "utf8")).join("\n");
+    expect(corpus, "EV.engine.controlState not referenced in preload").toContain(
+      "EV.engine.controlState",
+    );
+    expect(
+      corpus,
+      "onControlState not exposed by the preload composer",
+    ).toContain("onControlState");
+  });
 });

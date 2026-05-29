@@ -2,9 +2,12 @@
  * Inline approval region (F3 — restricted-mode unblock).
  *
  * Mounted in `SessionPanel` between the transcript and the composer for an
- * active session. Polls `usePendingApprovals` at REFETCH_INTERVAL_MS so a
- * newly-paused run surfaces without a manual refresh (no `EV.engine.controlState`
- * bridge to the renderer yet — see Z7 F5 follow-up).
+ * active session. `useControlStateLiveSync` (F5) now pushes a pending-approval
+ * refresh on `EV.engine.controlState`, so a newly-paused run surfaces
+ * near-instantly. The REFETCH_INTERVAL_MS poll is retained as a fast fallback:
+ * the control-state emit is post-commit (on lease release), not part of the
+ * approval transaction, and an event can be dropped at the preload Zod gate or
+ * fire before the renderer subscribes.
  *
  * Codex F3 constraints honoured:
  *  1. `Result.ok === false` is surfaced as an inline error — TanStack `isError`

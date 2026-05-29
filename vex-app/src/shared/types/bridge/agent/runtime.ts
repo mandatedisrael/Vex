@@ -1,15 +1,21 @@
 import type { Result } from "../../../ipc/result.js";
 import type {
+  RuntimeCancelWakeResult,
   RuntimeRequestInput,
-  RuntimeRequestResult,
+  RuntimeRequestPauseResult,
+  RuntimeRequestResumeResult,
+  RuntimeRequestStopResult,
   RuntimeStateDto,
 } from "../../../schemas/runtime.js";
 
 /**
  * Runtime state + control plane for the active mission run.
- * `getState` is read-only; the four control mutations fail closed
- * with `runtime.feature_unavailable` until puzzle 03 lands the
- * DB-backed control plane + runner leases.
+ *
+ * `getState` is read-only. The four control mutations are LIVE
+ * (puzzle 03 DB-backed control plane + runner leases): each resolves
+ * to a `Result` wrapping that action's own per-action discriminated
+ * union keyed on `outcome`, so the renderer narrows on `outcome` to
+ * drive the correct UI transition. No raw owner IDs cross the boundary.
  */
 export interface RuntimeBridge {
   readonly getState: (
@@ -17,14 +23,14 @@ export interface RuntimeBridge {
   ) => Promise<Result<RuntimeStateDto>>;
   readonly requestPause: (
     input: RuntimeRequestInput
-  ) => Promise<Result<RuntimeRequestResult>>;
+  ) => Promise<Result<RuntimeRequestPauseResult>>;
   readonly requestStop: (
     input: RuntimeRequestInput
-  ) => Promise<Result<RuntimeRequestResult>>;
+  ) => Promise<Result<RuntimeRequestStopResult>>;
   readonly requestResume: (
     input: RuntimeRequestInput
-  ) => Promise<Result<RuntimeRequestResult>>;
+  ) => Promise<Result<RuntimeRequestResumeResult>>;
   readonly cancelWake: (
     input: RuntimeRequestInput
-  ) => Promise<Result<RuntimeRequestResult>>;
+  ) => Promise<Result<RuntimeCancelWakeResult>>;
 }

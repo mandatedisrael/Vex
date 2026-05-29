@@ -20,6 +20,7 @@ import { useMemo } from "react";
 import type { JSX } from "react";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import { useTranscriptLiveSync } from "../../lib/api/messages.js";
+import { useControlStateLiveSync } from "../../lib/api/runtime.js";
 import { useStreamPreviewSync } from "../../lib/api/streams.js";
 import { useUsageLiveSync } from "../../lib/api/usage.js";
 import { useSession } from "../../lib/api/sessions.js";
@@ -35,10 +36,13 @@ export function SessionPanel(): JSX.Element {
   const activeSessionId = useUiStore((s) => s.activeSessionId);
   // Puzzle 02/06: keep the active session's transcript + usage queries fresh
   // (transcript-append event + 30s fallback poll). Puzzle 09: drive the
-  // ephemeral streaming preview from the engine stream spine. Pure side effects.
+  // ephemeral streaming preview from the engine stream spine. F5: push
+  // runtime-state + pending-approval refresh from the control-state event.
+  // Pure side effects.
   useTranscriptLiveSync(activeSessionId);
   useUsageLiveSync(activeSessionId);
   useStreamPreviewSync(activeSessionId);
+  useControlStateLiveSync(activeSessionId);
   const detailQuery = useSession(activeSessionId);
 
   const activeSession = useMemo((): SessionListItem | null => {

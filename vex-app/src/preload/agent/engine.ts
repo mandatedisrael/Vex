@@ -9,6 +9,7 @@
 
 import { EV } from "../../shared/ipc/channels.js";
 import { transcriptAppendEventSchema } from "../../shared/schemas/messages.js";
+import { controlStateEventSchema } from "../../shared/schemas/runtime.js";
 import { streamDeltaEventSchema } from "../../shared/schemas/stream.js";
 import type { EngineEventsBridge } from "../../shared/types/bridge/agent/engine.js";
 import { subscribe } from "../_dispatch.js";
@@ -18,4 +19,6 @@ export const engine = {
     subscribe(EV.engine.transcriptAppend, transcriptAppendEventSchema, cb),
   onStreamDelta: (cb) =>
     subscribe(EV.engine.streamDelta, streamDeltaEventSchema, cb),
+  onControlState: (cb) =>
+    subscribe(EV.engine.controlState, controlStateEventSchema, cb),
 } satisfies EngineEventsBridge;

@@ -26,6 +26,9 @@ vi.mock("../../../lib/api/usage.js", () => ({
 vi.mock("../../../lib/api/streams.js", () => ({
   useStreamPreviewSync: () => undefined,
 }));
+vi.mock("../../../lib/api/runtime.js", () => ({
+  useControlStateLiveSync: () => undefined,
+}));
 
 // Provide an active session via useSession; keep other sessions exports intact.
 vi.mock("../../../lib/api/sessions.js", async (importActual) => {

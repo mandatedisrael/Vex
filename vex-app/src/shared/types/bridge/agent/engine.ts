@@ -14,6 +14,7 @@
  */
 
 import type { TranscriptAppendEvent } from "@shared/schemas/messages.js";
+import type { ControlStateEvent } from "@shared/schemas/runtime.js";
 import type { StreamDeltaEvent } from "@shared/schemas/stream.js";
 
 export interface EngineEventsBridge {
@@ -40,5 +41,21 @@ export interface EngineEventsBridge {
    */
   readonly onStreamDelta: (
     cb: (event: StreamDeltaEvent) => void,
+  ) => () => void;
+
+  /**
+   * Subscribe to `EV.engine.controlState` events — broadcast after a
+   * committed runtime control transition (pause / stop / resume /
+   * wake-cancel) or a lease release (puzzle 03). The renderer hook
+   * (`useControlStateLiveSync`) filters by `event.sessionId` and
+   * invalidates that session's runtime-state + pending-approvals
+   * queries, so composer gating and the inline approval card refresh
+   * without relying on polling alone. The payload carries only a lease
+   * summary — never owner IDs.
+   *
+   * Returns an idempotent unsubscribe function.
+   */
+  readonly onControlState: (
+    cb: (event: ControlStateEvent) => void,
   ) => () => void;
 }

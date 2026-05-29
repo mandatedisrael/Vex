@@ -64,10 +64,10 @@ export function usePendingApprovals(
   sessionId: string | null,
   options?: { readonly refetchInterval?: number },
 ): UseQueryResult<Result<ReadonlyArray<ApprovalSummaryDto>>> {
-  // Modest polling for the approval card (F3) — no `EV.engine.controlState`
-  // bridge yet (Z7 F5), so the renderer learns about a new `paused_approval`
-  // by re-reading the queue. Disabled by default to keep other callers' load
-  // unchanged.
+  // Fast fallback poll for the approval card (F3). `useControlStateLiveSync`
+  // (F5) pushes a refresh on `EV.engine.controlState`, but that emit is
+  // post-commit (lease release) and can be missed, so the card keeps a short
+  // poll. Opt-in via `refetchInterval` to keep other callers' load unchanged.
   const base = pendingOptions(sessionId ?? "");
   return useQuery({
     ...base,

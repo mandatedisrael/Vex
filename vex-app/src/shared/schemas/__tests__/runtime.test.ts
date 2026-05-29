@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   runtimeRequestInputSchema,
-  runtimeRequestResultSchema,
   runtimeStateDtoSchema,
   runtimeRequestPauseResultSchema,
   runtimeRequestStopResultSchema,
@@ -75,16 +74,6 @@ describe("runtime schemas", () => {
     );
   });
 
-  it("runtimeRequestResultSchema (legacy) accepts the three documented variants", () => {
-    for (const status of ["queued", "already_terminal", "unavailable"] as const) {
-      const parsed = runtimeRequestResultSchema.safeParse({
-        status,
-        missionRunId: null,
-        message: "x",
-      });
-      expect(parsed.success).toBe(true);
-    }
-  });
 });
 
 describe("runtime per-action discriminated unions", () => {

@@ -169,19 +169,3 @@ export const controlStateEventSchema = z
   })
   .strict();
 export type ControlStateEvent = z.infer<typeof controlStateEventSchema>;
-
-// ── Backwards-compat alias (no longer used by puzzle-03 handlers) ───
-
-/**
- * Puzzle-01 placeholder result. Kept around for the existing failing
- * stub `getState` test scaffold; the live handlers in puzzle 03 use
- * the per-action discriminated unions above.
- */
-export const runtimeRequestResultSchema = z
-  .object({
-    status: z.enum(["queued", "already_terminal", "unavailable"]),
-    missionRunId: z.string().nullable(),
-    message: z.string(),
-  })
-  .strict();
-export type RuntimeRequestResult = z.infer<typeof runtimeRequestResultSchema>;
