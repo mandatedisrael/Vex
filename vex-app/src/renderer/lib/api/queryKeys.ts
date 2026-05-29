@@ -24,6 +24,10 @@ export const onboardingKeys = {
   // Puzzle 5 B-UI — lowercased EVM addresses with Polymarket creds configured.
   polymarketConfiguredAddresses: () =>
     ["onboarding", "polymarketConfiguredAddresses"] as const,
+  // C3 — full-archive restore screen. Metadata-only backup listing (no
+  // secrets, no paths). Invalidated after a successful restore so the list
+  // refreshes if the archive set changed.
+  backups: () => ["onboarding", "backups"] as const,
 };
 
 // ── Agent integration puzzle 1 ────────────────────────────────────────

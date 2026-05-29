@@ -13,10 +13,13 @@
  */
 
 import {
+  queryOptions,
   useMutation,
+  useQuery,
   useQueryClient,
   type QueryClient,
   type UseMutationResult,
+  type UseQueryResult,
 } from "@tanstack/react-query";
 import type { Result } from "@shared/ipc/result.js";
 import type {
@@ -28,8 +31,10 @@ import type {
   WalletGenerateSolanaResult,
   WalletImportEvmResult,
   WalletImportSolanaResult,
+  WalletListBackupsResult,
   WalletOpenBackupFolderInput,
   WalletOpenBackupFolderResult,
+  WalletRestoreArchiveResult,
   WalletRestoreInput,
   WalletRestoreResult,
 } from "@shared/schemas/wallets.js";
@@ -198,4 +203,74 @@ export function useExportAllWallets(): UseMutationResult<
 export function useInvalidateEnvStateAfterWalletWrite(): () => void {
   const queryClient = useQueryClient();
   return () => invalidateWalletQueries(queryClient);
+}
+
+// ── Full-archive restore (C3) ────────────────────────────────────────────────
+// `listBackups` is metadata-only (opaque backup `id`s, public addresses — NO
+// secrets, NO absolute paths). `restoreArchive` takes that opaque `id` + the
+// master password and rebuilds the entire local inventory + vault + .env in
+// main, then refreshes the process runtime. The renderer NEVER receives key
+// material; the password lives only in the uncontrolled DOM input at the call
+// site and is cleared immediately after submit (never in state / cache / logs).
+
+const BACKUPS_STALE_MS = 30_000;
+
+export function backupsListOptions() {
+  return queryOptions({
+    queryKey: onboardingKeys.backups(),
+    queryFn: () => window.vex.onboarding.listBackups(),
+    staleTime: BACKUPS_STALE_MS,
+  });
+}
+
+/**
+ * Available backup archives for the restore screen. Returns the `Result`
+ * un-unwrapped (same convention as `useEnvState` / `useAvailableWallets`):
+ * the component branches on `.ok` to render the metadata-only success state
+ * vs. the redacted error. Enabled by default.
+ */
+export function useListBackups(): UseQueryResult<Result<WalletListBackupsResult>> {
+  return useQuery(backupsListOptions());
+}
+
+/**
+ * Restore a full backup archive — direct async function, NOT a `useMutation`
+ * hook. The `password` is a secret: routing it through `useMutation` would
+ * park it in the mutation observer's retained `variables` (devtools / staleness
+ * / re-render), which violates the repo's hard secret rule (codex turn 8 RED
+ * #1, same reason `importWalletEvm` and `wallet.exportPrivateKey` are bare
+ * async). The caller therefore:
+ *  - reads `password` from an uncontrolled DOM ref at submit time,
+ *  - clears that input synchronously before the IPC promise resolves,
+ *  - drives pending state via a local `useState`,
+ *  - calls `useInvalidateAfterArchiveRestore()` on a successful result.
+ *
+ * This is a dangerous, non-idempotent operation: it replaces the existing
+ * wallet set (main shows a native replace-confirm dialog) — so it must never
+ * be silently retried, which the bare-async shape also guarantees (no
+ * `retry` machinery).
+ */
+export async function restoreArchive(
+  id: string,
+  password: string
+): Promise<Result<WalletRestoreArchiveResult>> {
+  return window.vex.onboarding.restoreArchive(id, password);
+}
+
+/**
+ * Invalidate everything a successful archive restore changes: the global
+ * wallet inventory + onboarding env-state badge (`invalidateWalletQueries`),
+ * the wizard state (the rebuilt config may flip step completion), and the
+ * backups listing itself (the archive set may have changed). Hook indirection
+ * so the bare-async caller doesn't wire a QueryClient manually.
+ */
+export function useInvalidateAfterArchiveRestore(): () => void {
+  const queryClient = useQueryClient();
+  return () => {
+    invalidateWalletQueries(queryClient);
+    void queryClient.invalidateQueries({
+      queryKey: onboardingKeys.wizardState(),
+    });
+    void queryClient.invalidateQueries({ queryKey: onboardingKeys.backups() });
+  };
 }

@@ -50,6 +50,7 @@ import { WIZARD_STEP_META } from "../wizard-icons.js";
 import { WizardStepPanel } from "../WizardStepPanel.js";
 import { ChainActions } from "./wallets/ChainActions.js";
 import { ExportAllWallets } from "./wallets/ExportAllWallets.js";
+import { RestoreFromArchive } from "./wallets/RestoreFromArchive.js";
 
 interface ChainState {
   readonly evm?: string;
@@ -240,7 +241,10 @@ export function WalletsStep({
               )}
             </div>
           </div>
-          <ExportAllWallets />
+          <div className="flex flex-col gap-3">
+            <ExportAllWallets />
+            <RestoreFromArchive />
+          </div>
           {advanceError !== null ? (
             <p className="text-sm text-[var(--color-danger)]" role="alert">
               {advanceError}
@@ -298,11 +302,10 @@ export function WalletsStep({
           />
         </TabsContent>
       </Tabs>
-      {anyWallet ? (
-        <div className="mt-4 border-t border-white/[0.08] pt-4">
-          <ExportAllWallets />
-        </div>
-      ) : null}
+      <div className="mt-4 flex flex-col gap-3 border-t border-white/[0.08] pt-4">
+        {anyWallet ? <ExportAllWallets /> : null}
+        <RestoreFromArchive />
+      </div>
       {advanceError !== null ? (
         <p className="mt-3 text-sm text-[var(--color-danger)]" role="alert">
           {advanceError}

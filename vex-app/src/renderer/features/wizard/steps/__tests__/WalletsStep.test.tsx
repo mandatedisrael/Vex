@@ -26,6 +26,7 @@ import type {
   WalletExportAllResult,
   WalletGenerateEvmResult,
   WalletGenerateSolanaResult,
+  WalletListBackupsResult,
   WalletOpenBackupFolderInput,
   WalletOpenBackupFolderResult,
   WalletRestoreResult,
@@ -51,6 +52,8 @@ const mockImportAddEvm = vi.fn();
 const mockImportAddSolana = vi.fn();
 const mockExportAll = vi.fn();
 const mockUseAvailableWallets = vi.fn();
+const mockInvalidateArchiveRestore = vi.fn();
+const mockRestoreArchive = vi.fn();
 
 vi.mock("../../../../lib/api/onboarding.js", () => ({
   useEnvState: () => mockUseEnvState(),
@@ -129,6 +132,21 @@ vi.mock("../../../../lib/api/wallets.js", () => ({
       Error,
       void
     >,
+  // C3 — RestoreFromArchive (rendered collapsed in WalletsStep). Stubbed so the
+  // panel mounts without hitting IPC; its full behaviour lives in
+  // wallets/__tests__/RestoreFromArchive.test.tsx.
+  useListBackups: () =>
+    ({
+      data: { ok: true, data: { backups: [] } },
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+      refetch: vi.fn(),
+    }) as unknown as UseQueryResult<Result<WalletListBackupsResult>>,
+  useInvalidateAfterArchiveRestore: () => mockInvalidateArchiveRestore,
+  restoreArchive: (id: string, password: string) =>
+    mockRestoreArchive(id, password),
 }));
 
 vi.mock("../../../../lib/api/wallet-inventory.js", () => ({
@@ -210,6 +228,8 @@ beforeEach(() => {
   mockImportAddSolana.mockReset();
   mockExportAll.mockReset();
   mockUseAvailableWallets.mockReset();
+  mockInvalidateArchiveRestore.mockReset();
+  mockRestoreArchive.mockReset();
   // Default: empty inventory so configured-branch flows render the
   // WalletInventoryPanel without surfacing extra addresses.
   mockUseAvailableWallets.mockReturnValue({
