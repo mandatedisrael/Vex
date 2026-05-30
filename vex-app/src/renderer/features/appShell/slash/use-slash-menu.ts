@@ -21,6 +21,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from "react";
+import type { SessionMode } from "@shared/schemas/sessions.js";
 import { filterSlashCatalog, type SlashCatalogEntry } from "./catalog.js";
 
 export interface SlashMenuController {
@@ -39,14 +40,16 @@ export function useSlashMenu(args: {
   readonly draft: string;
   readonly setDraft: (value: string) => void;
   readonly textareaRef: RefObject<HTMLTextAreaElement | null>;
+  /** Active session mode — filters mission-only commands out of agent sessions. */
+  readonly mode?: SessionMode;
 }): SlashMenuController {
-  const { draft, setDraft, textareaRef } = args;
+  const { draft, setDraft, textareaRef, mode } = args;
   const listboxId = useId();
   const [dismissedAt, setDismissedAt] = useState<string | null>(null);
   const [rawActiveIndex, setActiveIndex] = useState(0);
   const [selectionToken, setSelectionToken] = useState(0);
 
-  const items = filterSlashCatalog(draft);
+  const items = filterSlashCatalog(draft, mode);
   const open = items.length > 0 && draft !== dismissedAt;
   // Clamp so a shrunk list never points aria-activedescendant out of range
   // in the render before the reset effect runs.
@@ -94,6 +97,10 @@ export function useSlashMenu(args: {
           );
           break;
         case "Enter": {
+          // Shift+Enter (newline) and IME composition must NOT select — let
+          // them fall through so the textarea inserts a newline / the IME
+          // commits, and so the composer's own Enter-to-send stays inert here.
+          if (event.shiftKey || event.nativeEvent?.isComposing) break;
           event.preventDefault();
           const entry = items[activeIndex];
           if (entry !== undefined) select(entry);

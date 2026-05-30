@@ -9,11 +9,19 @@ import { act, renderHook } from "@testing-library/react";
 import { type KeyboardEvent } from "react";
 import { useSlashMenu } from "../use-slash-menu.js";
 
-function keyEvent(key: string): KeyboardEvent<HTMLTextAreaElement> {
-  // Minimal stand-in: the hook only reads `key` and calls `preventDefault`.
-  return { key, preventDefault: vi.fn() } as unknown as KeyboardEvent<
-    HTMLTextAreaElement
-  >;
+function keyEvent(
+  key: string,
+  overrides: { readonly shiftKey?: boolean; readonly isComposing?: boolean } = {},
+): KeyboardEvent<HTMLTextAreaElement> {
+  const { shiftKey = false, isComposing = false } = overrides;
+  // Minimal stand-in: the hook reads `key`, `shiftKey`,
+  // `nativeEvent.isComposing`, and calls `preventDefault`.
+  return {
+    key,
+    shiftKey,
+    nativeEvent: { isComposing },
+    preventDefault: vi.fn(),
+  } as unknown as KeyboardEvent<HTMLTextAreaElement>;
 }
 
 function setup(initialDraft: string) {
@@ -58,6 +66,35 @@ describe("useSlashMenu (8-6a)", () => {
     const expected = result.current.items[1]!.template;
     act(() => result.current.handleKeyDown(keyEvent("Enter")));
     expect(setDraft).toHaveBeenCalledWith(expected);
+  });
+
+  it("Shift+Enter does NOT select — falls through so the textarea inserts a newline", () => {
+    const { result, setDraft } = setup("/re");
+    const ev = keyEvent("Enter", { shiftKey: true });
+    act(() => result.current.handleKeyDown(ev));
+    expect(setDraft).not.toHaveBeenCalled();
+    expect(ev.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("Enter during IME composition does NOT select", () => {
+    const { result, setDraft } = setup("/re");
+    const ev = keyEvent("Enter", { isComposing: true });
+    act(() => result.current.handleKeyDown(ev));
+    expect(setDraft).not.toHaveBeenCalled();
+    expect(ev.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("agent mode hides mission-only commands from the menu", () => {
+    const setDraft = vi.fn();
+    const textareaRef = { current: document.createElement("textarea") };
+    const { result } = renderHook(() =>
+      useSlashMenu({ draft: "/", setDraft, textareaRef, mode: "agent" }),
+    );
+    const kinds = result.current.items.map((entry) => entry.kind);
+    expect(kinds).toContain("rewind");
+    expect(kinds).toContain("retry");
+    expect(kinds).not.toContain("mission-start");
+    expect(kinds).not.toContain("mission-renew");
   });
 
   it("suppresses reopen against the inserted value, but reopens on the next edit", () => {

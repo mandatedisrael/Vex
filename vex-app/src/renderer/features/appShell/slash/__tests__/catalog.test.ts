@@ -4,7 +4,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { SLASH_COMMAND_CATALOG, filterSlashCatalog } from "../catalog.js";
+import {
+  SLASH_COMMAND_CATALOG,
+  filterSlashCatalog,
+  slashCommandList,
+} from "../catalog.js";
 import { SLASH_COMMAND_LABEL, type SlashCommand } from "../types.js";
 import { parseSlashCommand } from "../parser.js";
 
@@ -51,5 +55,26 @@ describe("slash catalog (8-6a)", () => {
     ).sort();
     expect(kinds).toEqual(labelKinds);
     expect(new Set(kinds).size).toBe(kinds.length);
+  });
+
+  it("agent mode hides mission-only commands; mission mode offers them all", () => {
+    expect(
+      filterSlashCatalog("/", "agent")
+        .map((e) => e.kind)
+        .sort(),
+    ).toEqual(["restore", "retry", "rewind"].sort());
+    expect(filterSlashCatalog("/", "mission")).toHaveLength(
+      SLASH_COMMAND_CATALOG.length,
+    );
+    // Mode filter composes with the prefix filter.
+    expect(filterSlashCatalog("/mission ", "agent")).toEqual([]);
+  });
+
+  it("slashCommandList advertises exactly the mode's commands", () => {
+    expect(slashCommandList("agent")).toBe("/retry, /rewind <N>, /restore");
+    const mission = slashCommandList("mission");
+    expect(mission).toContain("/mission start");
+    expect(mission).toContain("/rewind <N>"); // arg annotated, shared across modes
+    expect(slashCommandList("agent")).not.toContain("/mission");
   });
 });

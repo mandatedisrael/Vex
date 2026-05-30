@@ -57,7 +57,7 @@ export function SessionWelcomeHero(): JSX.Element {
         {TRUST_BADGES.map((badge) => (
           <span
             key={badge.label}
-            className="inline-flex h-8 items-center gap-2 rounded-md border border-white/[0.06] bg-white/[0.035] px-2.5 text-xs text-[var(--color-text-secondary)]"
+            className="inline-flex h-8 items-center gap-2 rounded-md border border-white/[0.06] px-2.5 text-xs text-[var(--color-text-secondary)]"
           >
             <HugeiconsIcon
               icon={badge.icon}

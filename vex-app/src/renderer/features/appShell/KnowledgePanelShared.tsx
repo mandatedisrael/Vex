@@ -12,7 +12,7 @@ import type { JSX } from "react";
 export const SECTION =
   "flex flex-col gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4";
 export const PILL =
-  "inline-flex items-center rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-text-secondary)]";
+  "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-text-secondary)]";
 
 export function Loading({ label }: { readonly label: string }): JSX.Element {
   return (

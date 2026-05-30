@@ -8,8 +8,13 @@
   --color-accent-primary: #6366f1;
   --color-accent-secondary: #8b5cf6;
   --color-text-primary: #e5e7eb;
-  --color-text-secondary: #9ca3af;
-  --color-text-muted: #6b7280;
+  /* Brightened for contrast: gray secondary/muted text + numbers + muted icons
+   * were near-invisible on the dark glass surfaces. Kept below
+   * --color-text-primary so the three-step hierarchy survives. One change here
+   * lifts ~215 text/icon usages app-wide (these vars + the muted-foreground
+   * shadcn alias); no per-component edits needed. */
+  --color-text-secondary: #d4d6dc;
+  --color-text-muted: #b5b7c0;
   --color-success: #10b981;
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
@@ -210,4 +215,35 @@ body,
 }
 .vex-scroll::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Global custom scrollbar for the whole app (Electron = Chromium, so
+ * ::-webkit-scrollbar is the canonical surface). Replaces the default white OS
+ * scrollbar on the chat transcript, slash menu, sessions list, and every other
+ * overflow container with the #3275f8 accent thumb. Onboarding screens keep
+ * their own accent-tinted thumb via the more-specific `[data-vex-onboarding]`
+ * rules above; this is the app-shell default. */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, #3275f8 34%, transparent);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, #3275f8 54%, transparent);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+html {
+  scrollbar-color: color-mix(in oklab, #3275f8 34%, transparent) transparent;
+  scrollbar-width: thin;
 }

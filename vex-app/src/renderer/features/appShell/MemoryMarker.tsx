@@ -51,7 +51,7 @@ export function MemoryMarker({
       data-vex-marker="recall"
       className="flex justify-start"
     >
-      <div className="flex max-w-[80%] flex-col gap-1 rounded-md border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[11px]">
+      <div className="flex max-w-[80%] flex-col gap-1 rounded-md border border-white/[0.06] px-2.5 py-1.5 text-[11px]">
         <span className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
           <HugeiconsIcon icon={icon} size={12} aria-hidden />
           <span>{label}</span>

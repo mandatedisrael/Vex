@@ -44,7 +44,8 @@ import {
   readRunStatus,
   submitSuccessText,
 } from "./composer-helpers.js";
-import { QUICK_ACTIONS } from "./composer-quick-actions.js";
+import { ComposerQuickActions } from "./ComposerQuickActions.js";
+import { slashCommandList } from "./slash/catalog.js";
 import { parseSlashCommand } from "./slash/parser.js";
 import { useSlashCommandDispatch } from "./slash/dispatch.js";
 import { useSlashMenu } from "./slash/use-slash-menu.js";
@@ -75,7 +76,15 @@ export function SessionComposer({
   // "send button permanently disabled" bug). `activeSession` stays for
   // soft, detail-derived UI only (placeholder, quick-action visibility).
   const sessionId = activeSessionId;
-  const submitChat = useSubmitChat();
+  // Destructure stable members: `mutateAsync`/`stop` are referentially stable
+  // (observer-bound + useCallback), so the hand-off effect below depends on
+  // `submitTurn` instead of the per-render `useSubmitChat()` object — which
+  // otherwise re-ran the effect every render.
+  const {
+    isPending: submitPending,
+    mutateAsync: submitTurn,
+    stop: stopTurn,
+  } = useSubmitChat();
   const openCreateSession = useUiStore((s) => s.openCreateSession);
   const pendingFirstMessage = useUiStore((s) => s.pendingFirstMessage);
   const clearPendingFirstMessage = useUiStore((s) => s.clearPendingFirstMessage);
@@ -91,13 +100,19 @@ export function SessionComposer({
     missionId,
   });
 
+  // Agent sessions (and the welcome state) hide mission-loop commands; the
+  // menu, the under-input hint, and the unknown-command suggestion all key off
+  // this so they advertise the same mode-appropriate set.
+  const composerMode = activeSession?.mode ?? "agent";
+
   const [draft, setDraft] = useState<string>("");
   const [notice, setNotice] = useState<ComposerNotice>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(
     null,
   );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const slashMenu = useSlashMenu({ draft, setDraft, textareaRef });
+  const formRef = useRef<HTMLFormElement>(null);
+  const slashMenu = useSlashMenu({ draft, setDraft, textareaRef, mode: composerMode });
 
   useLayoutEffect((): void => {
     const el = textareaRef.current;
@@ -126,7 +141,7 @@ export function SessionComposer({
     const message = pendingFirstMessage.message;
     clearPendingFirstMessage();
     void (async () => {
-      const outcome = await submitChat.mutateAsync({ sessionId, message });
+      const outcome = await submitTurn({ sessionId, message });
       if (!outcome.ok) {
         setNotice({ tone: "error", text: outcome.error.message });
         setDraft(message);
@@ -134,7 +149,7 @@ export function SessionComposer({
       }
       setNotice({ tone: "info", text: submitSuccessText(outcome.data) });
     })();
-  }, [sessionId, pendingFirstMessage, clearPendingFirstMessage, submitChat]);
+  }, [sessionId, pendingFirstMessage, clearPendingFirstMessage, submitTurn]);
 
   const runStatus = readRunStatus(runtimeQuery.data);
   const freeTextGate = runStatus !== null && FREE_TEXT_DISALLOWED.has(runStatus);
@@ -171,13 +186,17 @@ export function SessionComposer({
         openCreateSession(message);
         return;
       }
+      // Enter can fire a submit even while a turn / slash dispatch is in flight
+      // (requestSubmit() ignores the disabled Send button), so gate here before
+      // any parsing or dispatch.
+      if (submitPending || slashDispatch.pending) return;
       setNotice(null);
 
       const parsed = parseSlashCommand(message);
       if (parsed.kind === "unknown") {
         setNotice({
           tone: "error",
-          text: `Unknown command: ${parsed.raw}. Try /mission start, /rewind <N>, /restore, /mission-renew.`,
+          text: `Unknown command: ${parsed.raw}. Try ${slashCommandList(composerMode)}.`,
         });
         return;
       }
@@ -198,16 +217,19 @@ export function SessionComposer({
         setNotice({ tone: "error", text: gatedReason(runStatus) });
         return;
       }
-      if (submitChat.isPending) return;
-      const outcome = await submitChat.mutateAsync({
+      // Clear optimistically — the message is on its way to the agent and the
+      // transcript already shows it. On failure, restore the draft ONLY if the
+      // user has not typed something new into the (now-empty) input.
+      setDraft("");
+      const outcome = await submitTurn({
         sessionId,
         message,
       });
       if (!outcome.ok) {
         setNotice({ tone: "error", text: outcome.error.message });
+        setDraft((cur) => (cur.length === 0 ? message : cur));
         return;
       }
-      setDraft("");
       setNotice({ tone: "info", text: submitSuccessText(outcome.data) });
     },
     [
@@ -217,7 +239,10 @@ export function SessionComposer({
       freeTextGate,
       openCreateSession,
       runStatus,
-      submitChat,
+      slashDispatch,
+      submitPending,
+      submitTurn,
+      composerMode,
     ],
   );
 
@@ -227,9 +252,7 @@ export function SessionComposer({
   }, []);
 
   const submitDisabled =
-    draft.trim().length === 0 ||
-    submitChat.isPending ||
-    slashDispatch.pending;
+    draft.trim().length === 0 || submitPending || slashDispatch.pending;
 
   return (
     <>
@@ -244,6 +267,7 @@ export function SessionComposer({
           onActivate={slashMenu.setActiveIndex}
         />
       <form
+        ref={formRef}
         onSubmit={onSubmit}
         data-vex-area="chat-composer"
         className="overflow-hidden rounded-3xl border border-[#3275f8]/38 bg-[#061026]/66 shadow-[0_0_54px_rgba(30,78,210,0.16)] backdrop-blur-2xl"
@@ -255,7 +279,21 @@ export function SessionComposer({
             setDraft(event.target.value);
             setNotice(null);
           }}
-          onKeyDown={slashMenu.handleKeyDown}
+          onKeyDown={(event) => {
+            // Slash menu gets first refusal (arrows/Enter/Escape while open).
+            slashMenu.handleKeyDown(event);
+            // Enter sends; Shift+Enter and IME composition insert a newline. If
+            // the menu consumed the key it already called preventDefault.
+            if (
+              !event.defaultPrevented &&
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault();
+              formRef.current?.requestSubmit();
+            }
+          }}
           rows={1}
           placeholder={placeholderFor(activeSession)}
           aria-label="Session draft"
@@ -276,19 +314,19 @@ export function SessionComposer({
             <span className="truncate">
               {sessionId === null
                 ? "type a message to start a session"
-                : "type /mission start, /rewind <N>, /restore, /mission-renew"}
+                : `type ${slashCommandList(composerMode)}`}
             </span>
-            {submitChat.isPending || slashDispatch.pending ? (
+            {submitPending || slashDispatch.pending ? (
               <span role="status" className="ml-2 hidden text-[#8da5ff] sm:inline">
                 Working…
               </span>
             ) : null}
           </div>
 
-          {submitChat.isPending ? (
+          {submitPending ? (
             <button
               type="button"
-              onClick={() => submitChat.stop()}
+              onClick={() => stopTurn()}
               aria-label="Stop generating"
               className="flex h-10 w-12 shrink-0 items-center justify-center rounded-full bg-[#3758ff] text-white shadow-[0_0_28px_rgba(55,88,255,0.36)] transition-colors hover:bg-[#4668ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8da5ff]"
             >
@@ -321,19 +359,7 @@ export function SessionComposer({
       ) : null}
 
       {showQuickActions ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {QUICK_ACTIONS.map((action) => (
-            <button
-              key={action.label}
-              type="button"
-              onClick={() => applyQuickAction(action.prompt)}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/[0.08] bg-black/[0.18] px-3 text-xs text-[var(--color-text-secondary)] backdrop-blur-xl transition-colors hover:border-[#3275f8]/32 hover:bg-[#3275f8]/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8]"
-            >
-              <HugeiconsIcon icon={action.icon} size={15} aria-hidden />
-              {action.label}
-            </button>
-          ))}
-        </div>
+        <ComposerQuickActions onPick={applyQuickAction} />
       ) : null}
 
       <ConfirmDestructiveDialog

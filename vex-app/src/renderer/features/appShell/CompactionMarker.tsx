@@ -27,7 +27,7 @@ export function CompactionMarker({
       data-vex-marker="compaction"
       className="flex justify-center"
     >
-      <div className="flex max-w-[80%] items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-[11px] text-[var(--color-text-muted)]">
+      <div className="flex max-w-[80%] items-center gap-1.5 rounded-md border border-white/[0.06] px-2.5 py-1 text-[11px] text-[var(--color-text-muted)]">
         <HugeiconsIcon icon={Archive02Icon} size={12} aria-hidden />
         <span className="break-words">{label}</span>
       </div>

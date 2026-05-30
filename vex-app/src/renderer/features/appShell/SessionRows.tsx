@@ -393,10 +393,12 @@ function Badge({
   readonly children: string;
 }): JSX.Element {
   const cls = {
-    agent: "bg-[#3275f8]/12 text-[#8da5ff]",
-    mission: "bg-[#7c5cff]/14 text-[#b2a3ff]",
-    restricted: "bg-white/[0.05] text-[var(--color-text-secondary)]",
-    full: "bg-warning/14 text-warning",
+    // Chat-type badges (mode + permission) render flat — text only, no fill.
+    agent: "text-[#8da5ff]",
+    mission: "text-[#b2a3ff]",
+    restricted: "text-[var(--color-text-secondary)]",
+    full: "text-warning",
+    // Run-status badges keep their fill so live activity stays scannable.
     active: "bg-success/12 text-success",
     paused: "bg-warning/14 text-warning",
     stopped: "bg-white/[0.05] text-[var(--color-text-muted)]",

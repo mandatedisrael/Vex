@@ -22,7 +22,6 @@ import { useUiStore } from "../../stores/uiStore.js";
 import { SessionDeleteDialog } from "./SessionDeleteDialog.js";
 import { KnowledgeButton } from "./KnowledgeButton.js";
 import { SettingsButton } from "./SettingsButton.js";
-import { ReportIssueButton } from "./ReportIssueButton.js";
 import {
   SessionGroups,
   SessionsEmptyPlaceholder,
@@ -305,7 +304,7 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
       >
         <KnowledgeButton compact={!sidebarOpen} />
         <SettingsButton compact={!sidebarOpen} />
-        <ReportIssueButton compact={!sidebarOpen} />
+        {/* Report issue intentionally hidden for now; ReportIssueButton/Dialog retained for re-enable. */}
       </footer>
 
       <SessionDeleteDialog

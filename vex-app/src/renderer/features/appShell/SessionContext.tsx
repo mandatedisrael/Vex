@@ -63,7 +63,7 @@ export function SessionContext({
       activeSession.mode === "mission" ? Target02Icon : AiChat01Icon;
     const title = getSessionTitle(activeSession);
     return (
-      <div className="mt-7 flex max-w-[620px] flex-col gap-2">
+      <div className="mt-7 flex flex-col gap-2">
         <div
           data-vex-area="session-header"
           role="group"
@@ -95,7 +95,7 @@ export function SessionContext({
 
 function ContextPill({ children }: { readonly children: string }): JSX.Element {
   return (
-    <span className="rounded-md bg-white/[0.06] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+    <span className="rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
       {children}
     </span>
   );

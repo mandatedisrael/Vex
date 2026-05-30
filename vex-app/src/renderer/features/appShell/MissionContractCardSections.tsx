@@ -76,7 +76,7 @@ function headerMeta(kind: CardStateKind): HeaderMeta {
         icon: Target02Icon,
         iconClass: "text-[#8da5ff]",
         badge: "Setup needed",
-        badgeClass: "bg-white/[0.06] text-[var(--color-text-muted)]",
+        badgeClass: "text-[var(--color-text-muted)]",
         dataState: "setup-needed",
       };
     case "awaiting-acceptance":
@@ -84,7 +84,7 @@ function headerMeta(kind: CardStateKind): HeaderMeta {
         icon: InformationCircleIcon,
         iconClass: "text-[#8da5ff]",
         badge: "Awaiting acceptance",
-        badgeClass: "bg-[#3275f8]/15 text-[#8da5ff]",
+        badgeClass: "text-[#8da5ff]",
         dataState: "awaiting-acceptance",
       };
     case "accepted":
@@ -92,7 +92,7 @@ function headerMeta(kind: CardStateKind): HeaderMeta {
         icon: CheckmarkCircle02Icon,
         iconClass: "text-emerald-400",
         badge: "Accepted",
-        badgeClass: "bg-emerald-400/10 text-emerald-300",
+        badgeClass: "text-emerald-300",
         dataState: "accepted",
       };
     case "dirty-acceptance":
@@ -100,7 +100,7 @@ function headerMeta(kind: CardStateKind): HeaderMeta {
         icon: InformationCircleIcon,
         iconClass: "text-amber-300",
         badge: "Contract changed",
-        badgeClass: "bg-amber-400/10 text-amber-300",
+        badgeClass: "text-amber-300",
         dataState: "dirty-acceptance",
       };
   }
@@ -185,7 +185,7 @@ function ChipList({ items }: { readonly items: readonly string[] }): JSX.Element
       {items.map((item) => (
         <span
           key={item}
-          className="rounded-md border border-white/[0.06] bg-white/[0.05] px-2 py-0.5 font-mono text-[11px] text-foreground"
+          className="rounded-md border border-white/[0.06] px-2 py-0.5 font-mono text-[11px] text-foreground"
         >
           {item}
         </span>

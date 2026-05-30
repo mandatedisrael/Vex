@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -334,6 +335,68 @@ describe("AppShell", () => {
     await screen.findByText("Message sent.");
   });
 
+  it("ENTER in the draft sends the message and clears the input", async () => {
+    const row = makeAgentRow("Enter send");
+    sessionsListMock.mockResolvedValueOnce({ ok: true, data: [row] });
+    sessionsGetMock.mockResolvedValue({ ok: true, data: row });
+    useUiStore.setState({ activeSessionId: row.id });
+
+    renderShell();
+    await screen.findByText("Enter send");
+
+    const draft = screen.getByLabelText("Session draft") as HTMLTextAreaElement;
+    fireEvent.change(draft, { target: { value: "gm vex" } });
+    fireEvent.keyDown(draft, { key: "Enter" });
+
+    await waitFor(() => expect(chatSubmitMock).toHaveBeenCalledTimes(1));
+    expect(chatSubmitMock).toHaveBeenCalledWith({ sessionId: row.id, message: "gm vex" });
+    await waitFor(() => expect(draft.value).toBe(""));
+  });
+
+  it("Shift+Enter does NOT send (keeps the draft for a newline)", async () => {
+    const row = makeAgentRow("Shift enter");
+    sessionsListMock.mockResolvedValueOnce({ ok: true, data: [row] });
+    sessionsGetMock.mockResolvedValue({ ok: true, data: row });
+    useUiStore.setState({ activeSessionId: row.id });
+
+    renderShell();
+    await screen.findByText("Shift enter");
+
+    const draft = screen.getByLabelText("Session draft") as HTMLTextAreaElement;
+    fireEvent.change(draft, { target: { value: "line one" } });
+    fireEvent.keyDown(draft, { key: "Enter", shiftKey: true });
+
+    expect(chatSubmitMock).not.toHaveBeenCalled();
+    expect(draft.value).toBe("line one");
+  });
+
+  it("ENTER while a turn is pending does not start a second submit (pending guard, not empty guard)", async () => {
+    const row = makeAgentRow("Pending guard");
+    sessionsListMock.mockResolvedValueOnce({ ok: true, data: [row] });
+    sessionsGetMock.mockResolvedValue({ ok: true, data: row });
+    useUiStore.setState({ activeSessionId: row.id });
+    // Never settles → the turn stays pending (Stop stays mounted).
+    chatSubmitMock.mockReturnValue({
+      promise: new Promise<never>(() => {}),
+      cancel: vi.fn(),
+    });
+
+    renderShell();
+    await screen.findByText("Pending guard");
+
+    const draft = screen.getByLabelText("Session draft") as HTMLTextAreaElement;
+    fireEvent.change(draft, { target: { value: "first" } });
+    fireEvent.keyDown(draft, { key: "Enter" });
+    await waitFor(() => expect(chatSubmitMock).toHaveBeenCalledTimes(1));
+    await screen.findByRole("button", { name: "Stop generating" });
+
+    // Type a NEW non-empty draft (so the empty-message guard is NOT what blocks)
+    // and press Enter again — the pending guard must keep it at one submit.
+    fireEvent.change(draft, { target: { value: "second" } });
+    fireEvent.keyDown(draft, { key: "Enter" });
+    expect(chatSubmitMock).toHaveBeenCalledTimes(1);
+  });
+
   it("swaps Send for a Stop button while a turn streams and cancels it (9-5b)", async () => {
     const row = makeAgentRow("Stoppable chat");
     sessionsListMock.mockResolvedValueOnce({ ok: true, data: [row] });
@@ -522,6 +585,49 @@ describe("AppShell", () => {
         (screen.getByLabelText("Session draft") as HTMLTextAreaElement).value,
       ).toBe("first message"),
     );
+  });
+
+  it("welcome→create under StrictMode: composer returns to idle after the first send settles", async () => {
+    // Regression for the RQ v5 MutationObserver detach: the welcome→create
+    // hand-off fires `chat.submit` from a mount effect, and StrictMode's dev
+    // mount-effect replay unsubscribes the observer mid-flight (detaching it
+    // from the in-flight mutation with no reattach). Without the reset() guard
+    // in useSubmitChat, the observer misses the settle and `isPending` freezes
+    // at true → the composer is stuck as a dead "Stop generating" button and
+    // the next message can never be sent. Use the no-provider error so the
+    // submit settles immediately (the engine cannot be the slow part).
+    sessionsListMock.mockResolvedValueOnce({ ok: true, data: [] });
+    useUiStore.setState({ activeSessionId: null });
+    chatSubmitMock.mockReturnValue({
+      promise: Promise.resolve({
+        ok: false,
+        error: {
+          code: "provider.unavailable",
+          domain: "chat",
+          message: "No inference provider is available.",
+          retryable: true,
+          userActionable: true,
+          redacted: true,
+          correlationId: "c",
+        },
+      }),
+      cancel: vi.fn(),
+    });
+    renderShellStrict();
+
+    const draft = (await screen.findByLabelText("Session draft")) as HTMLTextAreaElement;
+    fireEvent.change(draft, { target: { value: "first message" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByRole("heading", { name: "New session" });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    // The turn settled (error surfaced) → the composer must be idle again:
+    // Send is back and the Stop control is gone.
+    await screen.findByText("No inference provider is available.");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Send message" })).toBeTruthy(),
+    );
+    expect(screen.queryByRole("button", { name: "Stop generating" })).toBeNull();
   });
 
   it("new-session modal form is a bounded flex column so the footer/Create stays reachable (bug C)", async () => {
@@ -969,6 +1075,21 @@ function renderShell(): ReturnType<typeof render> & {
   // without destructuring) working while letting new tests read the
   // QueryClient for direct cache assertions.
   return Object.assign(result, { queryClient: client });
+}
+
+// Same as `renderShell` but wrapped in <StrictMode> so dev mount-effect
+// replay (subscribe → cleanup → subscribe) is exercised — the condition that
+// detaches the chat MutationObserver mid-flight and froze `isPending`.
+function renderShellStrict(): ReturnType<typeof render> {
+  const client = createQueryClient();
+  client.setDefaultOptions({ queries: { retry: false } });
+  return render(
+    <StrictMode>
+      <QueryClientProvider client={client}>
+        <AppShell />
+      </QueryClientProvider>
+    </StrictMode>,
+  );
 }
 
 function makeSessionRows(): readonly SessionListItem[] {

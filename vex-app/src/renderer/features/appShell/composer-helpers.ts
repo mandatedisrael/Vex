@@ -56,10 +56,10 @@ export function gatedReason(status: MissionRunStatus | null): string {
  */
 export function submitSuccessText(data: ChatSubmitResult): string {
   if (data.stopReason === "user_stopped") return "Stopped.";
-  return (
-    data.text ??
-    (data.treatedAsInitialGoal ? "Mission goal received." : "Message sent.")
-  );
+  // Generic confirmation only — never echo `data.text` (the assistant reply),
+  // which already renders in the transcript bubble + streaming preview. Echoing
+  // it here duplicated the whole reply below the composer input.
+  return data.treatedAsInitialGoal ? "Mission goal received." : "Message sent.";
 }
 
 export function placeholderFor(session: SessionListItem | null): string {

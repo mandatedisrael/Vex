@@ -240,7 +240,7 @@ function KnowledgeRow({
           {entry.tags.map((t) => (
             <span
               key={t}
-              className="rounded bg-white/[0.05] px-1 py-0.5 text-[10px] text-[var(--color-text-muted)]"
+              className="rounded px-1 py-0.5 text-[10px] text-[var(--color-text-muted)]"
             >
               #{t}
             </span>

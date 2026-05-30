@@ -84,7 +84,7 @@ export function SessionRuntimeBar({
 }
 
 const PILL =
-  "inline-flex items-center gap-1.5 rounded-md bg-white/[0.06] px-2 py-1 font-mono text-[10px]";
+  "inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-mono text-[10px]";
 
 function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -107,7 +107,7 @@ function ModelIndicator({
         data-vex-area="session-model-indicator"
         data-state="unconfigured"
         aria-label="Model not configured"
-        className="inline-flex items-center rounded-md bg-white/[0.04] px-2 py-1 text-[10px] text-[var(--color-text-muted)]"
+        className="inline-flex items-center rounded-md px-2 py-1 text-[10px] text-[var(--color-text-muted)]"
       >
         Model not configured
       </span>
@@ -118,7 +118,7 @@ function ModelIndicator({
       data-vex-area="session-model-indicator"
       data-state="configured"
       aria-label={`Model: ${model.modelId}`}
-      className="inline-flex items-center gap-1.5 rounded-md bg-white/[0.06] px-2 py-1"
+      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1"
       title={`Global model${model.provider !== null ? ` · ${model.provider}` : ""} · ${model.modelId}`}
     >
       <ModelBrandIcon modelId={model.modelId} size={13} />

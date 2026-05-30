@@ -63,7 +63,7 @@ export function SlashCommandMenu({
               {entry.hint}
             </span>
             {entry.destructive ? (
-              <span className="shrink-0 rounded-sm bg-[#f0b23a]/12 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#f0b23a]">
+              <span className="shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#f0b23a]">
                 confirm
               </span>
             ) : null}
