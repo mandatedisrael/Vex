@@ -43,6 +43,16 @@ export function buildBasePrompt(context: EngineContext): string {
   if (context.isSubagent) lines.push("Role: subagent (delegated task from parent)");
   lines.push("");
 
+  lines.push("# Response formatting");
+  lines.push("");
+  lines.push("Write replies in GitHub-Flavored Markdown — the desktop app renders it.");
+  lines.push("- Use headings, bullet/numbered lists, **bold**, *italic*, and `inline code`.");
+  lines.push("- Put code, addresses, hashes, and JSON in fenced code blocks.");
+  lines.push("- Use Markdown tables for structured/tabular data (balances, comparisons).");
+  lines.push("- Use plain `https://` links; do not embed images or raw HTML.");
+  lines.push("Lead with the answer, then detail. Keep it concise.");
+  lines.push("");
+
   if (context.loadedDocuments.size > 0) {
     lines.push("# Loaded Documents");
     lines.push("");

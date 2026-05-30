@@ -49,6 +49,9 @@ describe("prompt-stack", () => {
           expect(joined).toContain("VEX");
           expect(joined).toContain("# Your current aspect");
           expect(joined).toContain("# Memory and self-learning");
+          // Global output-format directive (batch 3) — present in every mode.
+          expect(joined).toContain("# Response formatting");
+          expect(joined).toContain("GitHub-Flavored Markdown");
 
           // Tool usage markers
           expect(joined).toContain("discover_tools");

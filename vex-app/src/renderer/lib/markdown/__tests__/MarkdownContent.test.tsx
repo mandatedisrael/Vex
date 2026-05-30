@@ -80,9 +80,47 @@ describe("MarkdownContent", () => {
     expect(container.textContent).toContain("the alt");
   });
 
-  it("does not crash on table markdown (renders its text)", () => {
-    const { container } = renderMd("| a | b |\n| - | - |\n| 1 | 2 |");
-    expect(container.textContent).toContain("a");
-    expect(container.textContent).toContain("1");
+  it("renders a GFM table as a semantic <table> with header + body cells", () => {
+    const { container } = renderMd(
+      "| Asset | Amount |\n| --- | ---: |\n| ETH | 1.5 |\n| SOL | 20 |",
+    );
+    const table = container.querySelector("table");
+    expect(table).not.toBeNull();
+    const headers = Array.from(container.querySelectorAll("th")).map(
+      (th) => th.textContent,
+    );
+    expect(headers).toEqual(["Asset", "Amount"]);
+    const bodyRows = container.querySelectorAll("tbody tr");
+    expect(bodyRows).toHaveLength(2);
+    expect(container.querySelectorAll("tbody td")[0]?.textContent).toBe("ETH");
+    // Right-aligned column carries the alignment class, not an inline style.
+    const amountCell = container.querySelectorAll("tbody td")[1];
+    expect(amountCell?.className).toContain("text-right");
+    expect(amountCell?.getAttribute("style")).toBeNull();
+  });
+
+  it("renders inline markup inside table cells (still escaped, no HTML sink)", () => {
+    const { container } = renderMd(
+      "| k | v |\n| - | - |\n| **bold** | `<img src=x>` |",
+    );
+    expect(container.querySelector("td strong")?.textContent).toBe("bold");
+    // Raw-HTML-looking cell text stays literal — no <img> element.
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toContain("<img src=x>");
+  });
+
+  it("renders a GFM task list with disabled checkboxes reflecting state, no literal marker", () => {
+    const { container } = renderMd("- [x] done\n- [ ] todo");
+    const boxes = container.querySelectorAll('input[type="checkbox"]');
+    expect(boxes).toHaveLength(2);
+    expect((boxes[0] as HTMLInputElement).checked).toBe(true);
+    expect((boxes[1] as HTMLInputElement).checked).toBe(false);
+    // Non-interactive display: disabled (and thus non-focusable), not interactive.
+    expect((boxes[0] as HTMLInputElement).disabled).toBe(true);
+    expect(container.textContent).toContain("done");
+    expect(container.textContent).toContain("todo");
+    // The marked `checkbox` token is dropped — no doubled `[x]`/`[ ]` marker.
+    expect(container.textContent).not.toContain("[x]");
+    expect(container.textContent).not.toContain("[ ]");
   });
 });

@@ -11,7 +11,9 @@
  *     plain text. Allowed links get `target="_blank" rel="noopener noreferrer"`
  *     and main's `shell.openExternal` allowlist stays the final gate;
  *   - images render as ALT TEXT only — never an `<img>` (no remote fetch);
- *   - raw-HTML and unsupported tokens (tables, …) render as escaped text;
+ *   - GFM tables + task lists render as semantic elements (cells/items go
+ *     through the same escaped-React-text path — no HTML sink);
+ *   - raw-HTML and any still-unsupported tokens render as escaped text;
  *   - if `lexer` throws, the original text is shown verbatim, never blanked.
  */
 
@@ -141,9 +143,29 @@ function renderBlock(token: Token, key: number): ReactNode {
         </blockquote>
       );
     case "list": {
-      const items = token.items.map((item, i) => (
-        <li key={i}>{renderBlocks(item.tokens)}</li>
-      ));
+      const items = token.items.map((item, i) =>
+        item.task ? (
+          // GFM task list item — a non-interactive (disabled, non-focusable)
+          // checkbox reflecting `[x]`/`[ ]`, plus the item content. marked emits
+          // a separate `checkbox` token at the head of `item.tokens`; drop it so
+          // the literal marker isn't rendered alongside the visual checkbox.
+          <li key={i} className="flex list-none items-start gap-2">
+            <input
+              type="checkbox"
+              checked={item.checked === true}
+              disabled
+              aria-hidden
+              className="mt-1.5 accent-[#3275f8]"
+            />
+            <span className="min-w-0">
+              {renderBlocks(item.tokens.filter((t) => t.type !== "checkbox"))}
+            </span>
+          </li>
+        ) : (
+          <li key={i}>{renderBlocks(item.tokens)}</li>
+        ),
+      );
+      const hasTask = token.items.some((item) => item.task);
       return token.ordered ? (
         <ol
           key={key}
@@ -153,7 +175,7 @@ function renderBlock(token: Token, key: number): ReactNode {
           {items}
         </ol>
       ) : (
-        <ul key={key} className="list-disc pl-5">
+        <ul key={key} className={hasTask ? "flex flex-col gap-1" : "list-disc pl-5"}>
           {items}
         </ul>
       );
@@ -168,8 +190,51 @@ function renderBlock(token: Token, key: number): ReactNode {
             : tokenText(token)}
         </p>
       );
+    case "table": {
+      // GFM table → semantic <table>. Cells render through renderInline, so
+      // their content stays escaped React text (same no-HTML-sink guarantee).
+      const align = token.align ?? [];
+      const alignClass = (i: number): string =>
+        align[i] === "center"
+          ? "text-center"
+          : align[i] === "right"
+            ? "text-right"
+            : "text-left";
+      return (
+        <div key={key} className="overflow-x-auto">
+          <table className="w-full border-collapse text-[0.95em]">
+            <thead>
+              <tr className="border-b border-white/15">
+                {token.header.map((cell, i) => (
+                  <th
+                    key={i}
+                    className={`px-2 py-1 font-semibold ${alignClass(i)}`}
+                  >
+                    {renderInline(cell.tokens)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {token.rows.map((cells, r) => (
+                <tr key={r} className="border-b border-white/[0.06]">
+                  {cells.map((cell, c) => (
+                    <td
+                      key={c}
+                      className={`px-2 py-1 align-top ${alignClass(c)}`}
+                    >
+                      {renderInline(cell.tokens)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
     default:
-      // html + unsupported (tables, …) → escaped text, never elements.
+      // raw HTML + anything still unsupported → escaped text, never elements.
       return (
         <p key={key} className="whitespace-pre-wrap break-words">
           {tokenText(token)}
