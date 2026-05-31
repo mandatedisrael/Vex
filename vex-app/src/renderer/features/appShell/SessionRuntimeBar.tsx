@@ -141,6 +141,14 @@ function UsageChip({
   if (!hasTurns) return null;
 
   const cost = totals?.totalCost ?? null;
+  // Cached (read-from-cache) tokens for the last turn, and the cumulative
+  // tokens billed across the whole session — both already captured/summed in
+  // the DB; surfaced here so the on-screen accounting is complete, not just
+  // hidden in the tooltip.
+  const cached =
+    lastTurn !== null && lastTurn.cachedTokens > 0 ? lastTurn.cachedTokens : null;
+  const sessionTotal =
+    totals !== null && totals.totalTokens > 0 ? totals.totalTokens : null;
 
   return (
     <span
@@ -153,6 +161,12 @@ function UsageChip({
           ↑{fmtTokens(lastTurn.promptTokens)} ↓
           {fmtTokens(lastTurn.completionTokens)}
         </span>
+      ) : null}
+      {cached !== null ? (
+        <span aria-label="cached tokens">⚡{fmtTokens(cached)}</span>
+      ) : null}
+      {sessionTotal !== null ? (
+        <span aria-label="session total tokens">Σ{fmtTokens(sessionTotal)}</span>
       ) : null}
       {cost !== null ? (
         <span aria-label="session cost">{fmtCost(cost)}</span>
@@ -171,6 +185,12 @@ function buildUsageTitle(
       `Last turn: ${lastTurn.promptTokens} in / ${lastTurn.completionTokens} out` +
         ` (${lastTurn.totalTokens} total)`,
     );
+    if (lastTurn.cachedTokens > 0) {
+      lines.push(`Cached: ${lastTurn.cachedTokens} tokens read from cache`);
+    }
+    if (lastTurn.reasoningTokens > 0) {
+      lines.push(`Reasoning: ${lastTurn.reasoningTokens} tokens`);
+    }
   }
   if (totals !== null) {
     lines.push(

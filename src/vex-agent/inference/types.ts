@@ -44,6 +44,14 @@ export interface InferenceUsage {
   cachedTokens?: number;
   /** Reasoning tokens (OpenRouter extended thinking) — separate pricing */
   reasoningTokens?: number;
+  /**
+   * Authoritative per-request cost reported by the provider (OpenRouter
+   * `usage.cost`, USD). Present on every response now that usage accounting
+   * is always-on; `null`/`undefined` when the provider did not report it, in
+   * which case cost falls back to the local price-table estimate. Never
+   * forwarded to the renderer stream preview (stripped at the stream bridge).
+   */
+  cost?: number | null;
 }
 
 // ── Tool calling ─────────────────────────────────────────────────

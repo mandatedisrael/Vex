@@ -116,13 +116,18 @@ export function synthesizeMissingToolResults(
 
 // ── Response parsing ─────────────────────────────────────────────
 
-export function extractUsage(raw: { promptTokens?: number; completionTokens?: number; totalTokens?: number; completionTokensDetails?: { reasoningTokens?: number | null } | null; promptTokensDetails?: { cachedTokens?: number } | null } | undefined): InferenceUsage {
+export function extractUsage(raw: { promptTokens?: number; completionTokens?: number; totalTokens?: number; cost?: number | null; completionTokensDetails?: { reasoningTokens?: number | null } | null; promptTokensDetails?: { cachedTokens?: number } | null } | undefined): InferenceUsage {
   return {
     promptTokens: raw?.promptTokens ?? 0,
     completionTokens: raw?.completionTokens ?? 0,
     totalTokens: raw?.totalTokens ?? 0,
     cachedTokens: raw?.promptTokensDetails?.cachedTokens ?? undefined,
     reasoningTokens: raw?.completionTokensDetails?.reasoningTokens ?? undefined,
+    // OpenRouter returns `usage.cost` (USD) automatically on every response;
+    // the engine prefers it over the local price-table estimate. `null` when
+    // unreported. (The renderer stream preview never receives this — it is
+    // stripped at the stream bridge boundary.)
+    cost: raw?.cost ?? undefined,
   };
 }
 

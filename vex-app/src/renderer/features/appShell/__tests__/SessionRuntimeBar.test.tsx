@@ -250,6 +250,56 @@ describe("SessionRuntimeBar", () => {
       ).toBe("Model not configured");
     });
   });
+
+  it("renders cached tokens and cumulative session tokens when present", async () => {
+    setVex({
+      getModel: vi.fn().mockResolvedValue(ok(MODEL_CONFIGURED)),
+      getLastTurn: vi
+        .fn()
+        .mockResolvedValue(ok({ ...lastTurn(), cachedTokens: 800 })),
+      getSessionTotals: vi
+        .fn()
+        .mockResolvedValue(ok({ ...totals(3, 0.05), totalTokens: 950 })),
+      getContextWindow: vi.fn().mockResolvedValue(ok(null)),
+    });
+    const { container } = render(
+      createElement(SessionRuntimeBar, { sessionId: SESSION }),
+      { wrapper: makeWrapper(freshClient()) },
+    );
+
+    await waitFor(() => {
+      const meter = container.querySelector('[data-vex-area="usage-meter"]');
+      expect(meter).not.toBeNull();
+      expect(
+        meter?.querySelector('[aria-label="cached tokens"]')?.textContent,
+      ).toContain("800");
+      expect(
+        meter?.querySelector('[aria-label="session total tokens"]')?.textContent,
+      ).toContain("950");
+    });
+  });
+
+  it("hides the cached-tokens chip when the last turn had no cache hits", async () => {
+    setVex({
+      getModel: vi.fn().mockResolvedValue(ok(MODEL_CONFIGURED)),
+      getLastTurn: vi.fn().mockResolvedValue(ok(lastTurn())), // cachedTokens: 0
+      getSessionTotals: vi.fn().mockResolvedValue(ok(totals(1, 0.01))),
+      getContextWindow: vi.fn().mockResolvedValue(ok(null)),
+    });
+    const { container } = render(
+      createElement(SessionRuntimeBar, { sessionId: SESSION }),
+      { wrapper: makeWrapper(freshClient()) },
+    );
+
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-vex-area="usage-meter"]'),
+      ).not.toBeNull();
+    });
+    expect(
+      container.querySelector('[aria-label="cached tokens"]'),
+    ).toBeNull();
+  });
 });
 
 describe("SessionRuntimeBar — compaction chip (stage 7-1)", () => {

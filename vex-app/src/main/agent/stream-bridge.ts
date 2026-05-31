@@ -77,7 +77,21 @@ export function toRendererStreamDelta(
       };
       break;
     case "usage":
-      payload = { kind: "usage", usage: delta.usage };
+      // Explicitly pick the renderer-known token fields. Engine `usage` is the
+      // full `InferenceUsage`, which now also carries the authoritative
+      // `usage.cost`; the renderer stream schema is `.strict()` and the preview
+      // never needs cost, so it is dropped by construction here (along with any
+      // future provider-only field). Cost still reaches the persisted usage row.
+      payload = {
+        kind: "usage",
+        usage: {
+          promptTokens: delta.usage.promptTokens,
+          completionTokens: delta.usage.completionTokens,
+          totalTokens: delta.usage.totalTokens,
+          cachedTokens: delta.usage.cachedTokens,
+          reasoningTokens: delta.usage.reasoningTokens,
+        },
+      };
       break;
     case "done":
       payload = { kind: "done" };

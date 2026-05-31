@@ -48,6 +48,7 @@ import logger from "@utils/logger.js";
 import { normalizeOpenRouterError } from "./openrouter/errors.js";
 import { extractUsage, parseNonStreamingResponse, processToolCallDelta } from "./openrouter/mappers.js";
 import { buildOpenRouterParams } from "./openrouter/params.js";
+import { computeRequestCost } from "./openrouter/cost.js";
 
 // ── Provider ─────────────────────────────────────────────────────
 
@@ -426,32 +427,13 @@ export class OpenRouterProvider implements InferenceProvider {
   }
 
   // ── calculateCost ───────────────────────────────────────────────
+  //
+  // Delegates to the pure `computeRequestCost` (testable without a provider
+  // instance). It prefers OpenRouter's authoritative `usage.cost` and falls
+  // back to the local price-table estimate when that value is absent/invalid.
 
   calculateCost(usage: InferenceUsage, config: InferenceConfig): RequestCost {
-    const promptCost = (usage.promptTokens / 1_000_000) * config.inputPricePerM;
-    const completionCost = (usage.completionTokens / 1_000_000) * config.outputPricePerM;
-
-    let cachedSavings = 0;
-    if (config.cachePricePerM !== null && usage.cachedTokens && usage.cachedTokens > 0) {
-      const standardCost = (usage.cachedTokens / 1_000_000) * config.inputPricePerM;
-      const cacheCost = (usage.cachedTokens / 1_000_000) * config.cachePricePerM;
-      cachedSavings = standardCost - cacheCost;
-    }
-
-    let reasoningCost = 0;
-    if (config.reasoningPricePerM !== null && usage.reasoningTokens && usage.reasoningTokens > 0) {
-      const standardCost = (usage.reasoningTokens / 1_000_000) * config.outputPricePerM;
-      const actualCost = (usage.reasoningTokens / 1_000_000) * config.reasoningPricePerM;
-      reasoningCost = actualCost - standardCost;
-    }
-
-    const totalCost = promptCost + completionCost - cachedSavings + reasoningCost;
-
-    return {
-      totalCost,
-      currency: "USD",
-      breakdown: { promptCost, completionCost, cachedSavings, reasoningCost },
-    };
+    return computeRequestCost(usage, config);
   }
 
 }

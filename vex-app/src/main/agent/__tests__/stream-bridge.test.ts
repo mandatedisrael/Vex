@@ -118,6 +118,46 @@ describe("stream bridge", () => {
     }
   });
 
+  it("strips the authoritative cost from usage deltas (renderer schema is strict)", () => {
+    const teardown = setupStreamBridge();
+    try {
+      streamDeltaBus.emit(
+        baseEvent({
+          deltaType: "usage",
+          delta: {
+            kind: "usage",
+            usage: {
+              promptTokens: 100,
+              completionTokens: 50,
+              totalTokens: 150,
+              cachedTokens: 20,
+              reasoningTokens: 10,
+              cost: 0.0123,
+            },
+          },
+        }) as never,
+      );
+      expect(broadcastMock).toHaveBeenCalledTimes(1);
+      const payload = lastBroadcast();
+      // Only the 5 renderer-known token fields survive; cost is dropped so the
+      // strict renderer schema accepts the delta (and cost never leaks to UI).
+      expect(payload.delta).toEqual({
+        kind: "usage",
+        usage: {
+          promptTokens: 100,
+          completionTokens: 50,
+          totalTokens: 150,
+          cachedTokens: 20,
+          reasoningTokens: 10,
+        },
+      });
+      expect(JSON.stringify(payload)).not.toContain("cost");
+      expect(logWarn).not.toHaveBeenCalled();
+    } finally {
+      teardown();
+    }
+  });
+
   it("drops + logs a payload that fails strict validation (bad sessionId)", () => {
     const teardown = setupStreamBridge();
     try {
