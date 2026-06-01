@@ -22,6 +22,7 @@ import { createElement } from "react";
 
 import {
   useAcceptMissionContract,
+  useEditMission,
   useMissionContinue,
   useMissionRecover,
   useMissionRenew,
@@ -54,6 +55,7 @@ const mockMissionBridge = {
   restore: vi.fn(),
   renew: vi.fn(),
   retry: vi.fn(),
+  edit: vi.fn(),
   stop: vi.fn(),
   getRenewableSource: vi.fn(),
 };
@@ -167,6 +169,31 @@ describe("mission hook invalidations", () => {
       expect(invalidateSpy).toHaveBeenCalledWith({
         queryKey: runtimeKeys.state(SESSION),
       });
+    });
+  });
+
+  it("useEditMission invalidates draft + runtime + renewable source", async () => {
+    mockMissionBridge.edit.mockResolvedValue({
+      ok: true,
+      data: { outcome: "stopped" },
+    });
+    const { client, invalidateSpy } = makeClient();
+    const { result } = renderHook(() => useEditMission(), {
+      wrapper: makeWrapper(client),
+    });
+    await act(async () => {
+      await result.current.mutateAsync({ sessionId: SESSION });
+    });
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: missionKeys.draft(SESSION),
+      });
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: runtimeKeys.state(SESSION),
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: missionKeys.renewableSource(SESSION),
     });
   });
 

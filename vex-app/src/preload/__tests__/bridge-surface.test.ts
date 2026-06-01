@@ -126,6 +126,7 @@ describe("preload bridge surface", () => {
       "CH.mission.restore",
       "CH.mission.renew",
       "CH.mission.retry",
+      "CH.mission.edit",
       "CH.mission.stop",
       // Phase 7 — read-only resolver for /mission-renew lineage.
       "CH.mission.getRenewableSource",

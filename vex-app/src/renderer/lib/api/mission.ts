@@ -40,6 +40,8 @@ import type {
   MissionRecoverResult,
   MissionRenewInput,
   MissionRenewResult,
+  MissionEditInput,
+  MissionEditResult,
   MissionRestoreInput,
   MissionRestoreResult,
   MissionRetryInput,
@@ -226,6 +228,31 @@ export function useMissionRetry(): UseMutationResult<
     retry: false,
     onSuccess: (_result, input) => {
       qc.invalidateQueries({ queryKey: runtimeKeys.state(input.sessionId) });
+    },
+  });
+}
+
+/**
+ * Stop the active run to edit the mission: the run terminates and the mission
+ * returns to `draft`, so the next user turn collaboratively edits the contract
+ * (setup prompt + mission_draft_update). Invalidates draft + runtime state +
+ * renewable-source (the run becomes terminal-stopped → renew eligibility shifts).
+ */
+export function useEditMission(): UseMutationResult<
+  Result<MissionEditResult>,
+  Error,
+  MissionEditInput
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input) => window.vex.mission.edit(input),
+    retry: false,
+    onSuccess: (_result, input) => {
+      qc.invalidateQueries({ queryKey: missionKeys.draft(input.sessionId) });
+      qc.invalidateQueries({ queryKey: runtimeKeys.state(input.sessionId) });
+      qc.invalidateQueries({
+        queryKey: missionKeys.renewableSource(input.sessionId),
+      });
     },
   });
 }

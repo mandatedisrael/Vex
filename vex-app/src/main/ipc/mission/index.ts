@@ -10,6 +10,7 @@
 
 import { registerMissionAcceptContractHandler } from "./accept-contract.js";
 import { registerMissionContinueHandler } from "./continue.js";
+import { registerMissionEditHandler } from "./edit.js";
 import { registerMissionGetDiffHandler } from "./get-diff.js";
 import { registerMissionGetDraftHandler } from "./get-draft.js";
 import { registerMissionGetRenewableSourceHandler } from "./get-renewable-source.js";
@@ -32,6 +33,7 @@ export function registerMissionHandlers(): ReadonlyArray<() => void> {
     registerMissionContinueHandler(),
     registerMissionRecoverHandler(),
     registerMissionRetryHandler(),
+    registerMissionEditHandler(),
     registerMissionRewindHandler(),
     registerMissionRestoreHandler(),
     registerMissionRenewHandler(),

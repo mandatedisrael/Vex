@@ -189,6 +189,26 @@ export const missionRetryResultSchema = z.discriminatedUnion("outcome", [
 ]);
 export type MissionRetryResult = z.infer<typeof missionRetryResultSchema>;
 
+// ── edit (stop the active run → mission back to draft) ──────────
+//
+// Stops the active run so the operator can collaboratively edit the mission
+// contract: the run is terminated (stopped) and the parent mission returns to
+// `draft`, so the next user turn routes through the mission-setup prompt and
+// `mission_draft_update` becomes callable again. `already_terminal` is a race
+// path (no active run by the time the engine resolves it).
+
+export const missionEditInputSchema = z
+  .object({ sessionId: sessionIdField })
+  .strict();
+export type MissionEditInput = z.infer<typeof missionEditInputSchema>;
+
+export const missionEditResultSchema = z.discriminatedUnion("outcome", [
+  z.object({ outcome: z.literal("stopped") }).strict(),
+  z.object({ outcome: z.literal("no_active_run") }).strict(),
+  z.object({ outcome: z.literal("already_terminal") }).strict(),
+]);
+export type MissionEditResult = z.infer<typeof missionEditResultSchema>;
+
 // ── stop (delegates to runtime stop dispatcher) ─────────────────
 
 export const missionStopInputSchema = z

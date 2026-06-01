@@ -18,6 +18,7 @@ import {
   missionGetRenewableSourceInputSchema,
   missionRecoverInputSchema,
   missionRenewInputSchema,
+  missionEditInputSchema,
   missionRestoreInputSchema,
   missionRetryInputSchema,
   missionRewindInputSchema,
@@ -33,6 +34,7 @@ import type {
   MissionGetRenewableSourceInput,
   MissionRecoverInput,
   MissionRenewInput,
+  MissionEditInput,
   MissionRestoreInput,
   MissionRetryInput,
   MissionRewindInput,
@@ -119,6 +121,13 @@ export const mission = {
       CH.mission.retry,
       input,
       missionRetryInputSchema,
+    );
+  },
+  edit(input: MissionEditInput) {
+    return invokeWithSchema(
+      CH.mission.edit,
+      input,
+      missionEditInputSchema,
     );
   },
   stop(input: MissionStopInput) {
