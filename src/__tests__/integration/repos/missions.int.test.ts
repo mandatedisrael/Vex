@@ -44,7 +44,8 @@ describe("mission draft persistence (integration)", () => {
     expect(result.data).toEqual(expect.objectContaining({
       ready: true,
       status: "ready",
-      nextCommand: "/mission start",
+      nextAction:
+        "The draft is ready — tell the user they can start the mission with the Start mission button in the host UI.",
     }));
 
     const setup = await getMissionSetupState(draft.missionId);

@@ -73,7 +73,8 @@ describe("mission_draft_update tool", () => {
     });
     expect(result.data).toEqual(expect.objectContaining({
       ready: true,
-      nextCommand: "/mission start",
+      nextAction:
+        "The draft is ready — tell the user they can start the mission with the Start mission button in the host UI.",
     }));
   });
 
@@ -101,7 +102,7 @@ describe("mission_draft_update tool", () => {
     });
   });
 
-  it("returns /mission continue when a prior run exists", async () => {
+  it("returns the continue-button hint when a prior run exists", async () => {
     mockApplyMissionPatch.mockResolvedValueOnce({
       missionId: "mission-1",
       status: "ready",
@@ -117,7 +118,9 @@ describe("mission_draft_update tool", () => {
     );
 
     expect(result.success).toBe(true);
-    expect(result.data?.nextCommand).toBe("/mission continue");
+    expect(result.data?.nextAction).toBe(
+      "The draft is ready — tell the user they can continue the mission with the Continue button in the host UI.",
+    );
   });
 
   it("rejects outside mission setup", async () => {

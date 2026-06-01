@@ -3,10 +3,10 @@
  * draft for the same session.
  *
  * Codex direction: `renewMission` REQUIRES an explicit
- * `previousMissionId`. The slash command wrapper in the renderer
- * (phase 7) is the only place that's allowed to auto-resolve "latest
- * terminal accepted mission" → explicit id before calling this engine
- * helper. Engine never auto-finds.
+ * `previousMissionId`. The renderer's Renew control is the only place
+ * that's allowed to auto-resolve "latest terminal accepted mission" →
+ * explicit id (via `mission.getRenewableSource`) before calling this
+ * engine helper. Engine never auto-finds.
  *
  * Semantics:
  *

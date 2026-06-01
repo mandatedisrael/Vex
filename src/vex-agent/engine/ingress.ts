@@ -33,7 +33,7 @@ const QUEUED_INTERRUPT_TEXT =
   "Operator instruction queued for the active run. The model will read it at the next safe iteration boundary and continue.";
 
 const PAUSED_ERROR_TEXT =
-  "Run is paused due to a provider/runtime error. I saved your instruction; use /retry to re-attempt or /rewind to roll back.";
+  "Run is paused after a provider/runtime error. I saved your instruction; use the Recover button to re-attempt.";
 
 /**
  * Route an incoming user message to the correct runtime. Always cancels any
@@ -61,7 +61,7 @@ export async function routeUserMessage(
       // user message so the operator's input is visible in transcript,
       // but return a clear hint instead of letting the shell render the
       // empty-fallback `(no text — stopReason: unknown)` string. The
-      // operator drives recovery via /retry or /rewind.
+      // operator drives recovery via the Recover button.
       await addOperatorInstruction(sessionId, userInput, {
         target: "mission_run",
         runId: activeRun.id,

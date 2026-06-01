@@ -16,7 +16,7 @@ export const OPERATOR_INTERRUPT_MESSAGE_TYPE = "operator_interrupt";
 const OPERATOR_INTERRUPT_CUE = [
   "[Engine: operator_interrupt — The operator sent new guidance while this autonomous run was active.",
   "Acknowledge the latest operator instruction briefly, apply it if it is compatible with the active contract, then continue the run.",
-  "Do not ask for `/mission start` or `/mission continue` again unless the operator explicitly asks to leave execution.]",
+  "Do not ask the operator to start or continue the mission again unless they explicitly ask to leave execution.]",
 ].join(" ");
 
 export function maxOperatorInstructionId(messages: readonly Message[]): number {

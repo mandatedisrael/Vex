@@ -4,8 +4,8 @@
  *
  * Why this exists: native <select> renders its option list with the OS
  * default (white) chrome, which is unreadable on Vex's dark modals. This
- * is a fully-styled replacement that mirrors the existing SlashCommandMenu
- * listbox (dark panel, aria-activedescendant, useId) without Radix/portals.
+ * is a fully-styled replacement (dark panel, aria-activedescendant, useId)
+ * without Radix/portals.
  *
  * CSP: NO inline styles — the panel is anchored with Tailwind classes only,
  * so it stays compatible with `style-src 'self'`.

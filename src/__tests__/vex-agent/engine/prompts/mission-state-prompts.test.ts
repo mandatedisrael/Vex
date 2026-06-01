@@ -63,8 +63,8 @@ describe("mission state prompts", () => {
       },
     );
 
-    expect(prompt).toContain("shell activation command (`/mission start` or `/mission continue`) has already been executed");
-    expect(prompt).toContain("Treat earlier setup messages asking for `/mission start` as historical context only");
+    expect(prompt).toContain("started the run from the host UI (the Start or Continue control); the run is active");
+    expect(prompt).toContain("Treat earlier setup messages asking the operator to start the mission as historical context only");
     expect(prompt).toContain("do not call `loop_defer` because you are waiting for mission activation");
     expect(prompt).toContain("each research loop must produce a shortlist, an execution candidate, a defer decision, or a contract-valid stop");
   });

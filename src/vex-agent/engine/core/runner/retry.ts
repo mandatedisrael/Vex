@@ -37,7 +37,7 @@ export async function retryActiveMissionRun(sessionId: string): Promise<TurnResu
   const run = await missionRunsRepo.getActiveRunBySession(sessionId);
   if (!run) {
     throw new Error(
-      "No active mission run to retry. Start one with /mission start first.",
+      "No active mission run to retry. Start one with the Start mission button first.",
     );
   }
 

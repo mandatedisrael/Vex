@@ -1,12 +1,12 @@
 /**
  * `mission.getRenewableSource` — read-only resolver of the latest
- * terminal accepted mission for `/mission-renew` (puzzle 04 phase 7).
+ * terminal accepted mission for the Renew control.
  *
- * Renderer flow:
- *   user types `/mission-renew`
+ * Renderer flow (MissionControls):
+ *   no active run + a renewable source exists
  *     → renderer reads `mission.getRenewableSource(sessionId)`
- *     → if `missionId` → `mission.renew({ sessionId, previousMissionId })`
- *     → if `null`     → friendly "No completed mission to renew" notice
+ *     → if `missionId` → renders Renew → `mission.renew({ sessionId, previousMissionId })`
+ *     → if `null`     → no Renew button
  *
  * Latest-run semantics + 4-of-4 acceptance gate live in
  * `getRenewableSourceForSession` (vex-app/src/main/database/missions-db.ts).

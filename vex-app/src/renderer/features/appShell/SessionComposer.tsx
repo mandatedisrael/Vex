@@ -3,16 +3,15 @@
  *
  * Owns:
  *   - textarea + auto-grow + send button,
- *   - slash command parser routing,
- *   - confirmation dialog for destructive commands,
  *   - mission-run-status gating on free-text submit,
- *   - composer notice (success / error / blocked reasons),
+ *   - composer notice (success / error / inline Retry on a retryable error),
  *   - quick-action chips (hidden in mission mode — replaced by the
  *     mission contract card the parent renders).
  *
- * Pure helpers (gating reasons, placeholders, confirm-dialog labels)
- * live in `composer-helpers.ts`; the dispatcher hook lives in
- * `slash/dispatch.ts`. This file owns React state + event routing.
+ * Pure helpers (gating reasons, placeholders) live in `composer-helpers.ts`.
+ * Mission controls (start/continue/recover/stop/edit/renew) are buttons in
+ * `MissionControls.tsx`, mounted by the parent — this file owns only the
+ * chat-turn submit + its notice, never command parsing.
  */
 
 import {
@@ -32,29 +31,17 @@ import {
   flattenTranscriptPages,
   useTranscriptInfinite,
 } from "../../lib/api/messages.js";
-import { useMissionDraft } from "../../lib/api/mission.js";
 import { useRuntimeState } from "../../lib/api/runtime.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { cn } from "../../lib/utils.js";
-import { ConfirmDestructiveDialog } from "./ConfirmDestructiveDialog.js";
 import {
   FREE_TEXT_DISALLOWED,
-  confirmDescription,
-  confirmLabel,
-  confirmTitle,
-  confirmTone,
   gatedReason,
   placeholderFor,
   readRunStatus,
   submitSuccessText,
 } from "./composer-helpers.js";
 import { ComposerQuickActions } from "./ComposerQuickActions.js";
-import { slashCommandList } from "./slash/catalog.js";
-import { parseSlashCommand } from "./slash/parser.js";
-import { useSlashCommandDispatch } from "./slash/dispatch.js";
-import { useSlashMenu } from "./slash/use-slash-menu.js";
-import type { SlashCommand } from "./slash/types.js";
-import { SlashCommandMenu } from "./SlashCommandMenu.js";
 
 type ComposerNotice =
   | {
@@ -68,10 +55,6 @@ type ComposerNotice =
       readonly retry?: { readonly sessionId: string; readonly message: string };
     }
   | null;
-
-interface PendingConfirm {
-  readonly command: SlashCommand;
-}
 
 export interface SessionComposerProps {
   readonly activeSession: SessionListItem | null;
@@ -102,27 +85,10 @@ export function SessionComposer({
   const pendingFirstMessage = useUiStore((s) => s.pendingFirstMessage);
   const clearPendingFirstMessage = useUiStore((s) => s.clearPendingFirstMessage);
   const handedOffRef = useRef<string | null>(null);
-  const draftQuery = useMissionDraft(sessionId);
   const runtimeQuery = useRuntimeState(sessionId);
-  const missionId = useMemo<string | null>(() => {
-    if (!draftQuery.data?.ok) return null;
-    return draftQuery.data.data?.missionId ?? null;
-  }, [draftQuery.data]);
-  const slashDispatch = useSlashCommandDispatch({
-    sessionId: sessionId ?? "",
-    missionId,
-  });
-
-  // Agent sessions (and the welcome state) hide mission-loop commands; the
-  // menu, the under-input hint, and the unknown-command suggestion all key off
-  // this so they advertise the same mode-appropriate set.
-  const composerMode = activeSession?.mode ?? "agent";
 
   const [draft, setDraft] = useState<string>("");
   const [notice, setNotice] = useState<ComposerNotice>(null);
-  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(
-    null,
-  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   // Synchronous in-flight mutex (render `submitPending` lags a tick) + a mirror
@@ -131,7 +97,6 @@ export function SessionComposer({
   const inFlightRef = useRef(false);
   const sessionIdRef = useRef<string | null>(sessionId);
   sessionIdRef.current = sessionId;
-  const slashMenu = useSlashMenu({ draft, setDraft, textareaRef, mode: composerMode });
 
   useLayoutEffect((): void => {
     const el = textareaRef.current;
@@ -241,24 +206,6 @@ export function SessionComposer({
       transcriptQuery.isSuccess &&
       transcriptEmpty);
 
-  const dispatchSlash = useCallback(
-    async (command: SlashCommand): Promise<void> => {
-      if (sessionId === null) {
-        setNotice({ tone: "error", text: "Select a session first." });
-        return;
-      }
-      const outcome = await slashDispatch.dispatch(command);
-      if (outcome.kind === "success") {
-        setDraft("");
-        setNotice({ tone: "info", text: outcome.message });
-      } else {
-        // both `error` and `blocked` show as error-toned notices.
-        setNotice({ tone: "error", text: outcome.message });
-      }
-    },
-    [sessionId, slashDispatch],
-  );
-
   const onSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>): Promise<void> => {
       event.preventDefault();
@@ -272,33 +219,11 @@ export function SessionComposer({
         openCreateSession(message);
         return;
       }
-      // Enter can fire a submit even while a turn / slash dispatch is in flight
-      // (requestSubmit() ignores the disabled Send button), so gate here before
-      // any parsing or dispatch.
-      if (submitPending || slashDispatch.pending) return;
-      setNotice(null);
-
-      const parsed = parseSlashCommand(message);
-      if (parsed.kind === "unknown") {
-        setNotice({
-          tone: "error",
-          text: `Unknown command: ${parsed.raw}. Try ${slashCommandList(composerMode)}.`,
-        });
-        return;
-      }
-      if (parsed.kind === "invalid") {
-        setNotice({ tone: "error", text: parsed.reason });
-        return;
-      }
-      if (parsed.kind === "ok") {
-        if (parsed.requiresConfirm) {
-          setPendingConfirm({ command: parsed.command });
-          return;
-        }
-        await dispatchSlash(parsed.command);
-        return;
-      }
-      // not-a-command → plain chat submit. Gate on mission run status.
+      // Enter can fire a submit even while a turn is in flight (requestSubmit()
+      // ignores the disabled Send button), so gate here.
+      if (submitPending) return;
+      // Free text is gated while a mission run is active — mission controls
+      // live in the MissionControls strip above, not in the composer.
       if (freeTextGate) {
         setNotice({ tone: "error", text: gatedReason(runStatus) });
         return;
@@ -312,14 +237,11 @@ export function SessionComposer({
     [
       sessionId,
       draft,
-      dispatchSlash,
       freeTextGate,
       openCreateSession,
       runStatus,
-      slashDispatch,
       submitPending,
       runChatSubmit,
-      composerMode,
     ],
   );
 
@@ -328,99 +250,80 @@ export function SessionComposer({
     setNotice(null);
   }, []);
 
-  const submitDisabled =
-    draft.trim().length === 0 || submitPending || slashDispatch.pending;
+  const submitDisabled = draft.trim().length === 0 || submitPending;
 
   return (
     <>
-      <div className="relative mt-6">
-        <SlashCommandMenu
-          open={slashMenu.open}
-          items={slashMenu.items}
-          activeIndex={slashMenu.activeIndex}
-          listboxId={slashMenu.listboxId}
-          getOptionId={slashMenu.getOptionId}
-          onSelect={slashMenu.select}
-          onActivate={slashMenu.setActiveIndex}
-        />
-      <form
-        ref={formRef}
-        onSubmit={onSubmit}
-        data-vex-area="chat-composer"
-        className="overflow-hidden rounded-3xl border border-[#3275f8]/38 bg-[#061026]/66 shadow-[0_0_54px_rgba(30,78,210,0.16)] backdrop-blur-2xl"
-      >
-        <textarea
-          ref={textareaRef}
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            setNotice(null);
-          }}
-          onKeyDown={(event) => {
-            // Slash menu gets first refusal (arrows/Enter/Escape while open).
-            slashMenu.handleKeyDown(event);
-            // Enter sends; Shift+Enter and IME composition insert a newline. If
-            // the menu consumed the key it already called preventDefault.
-            if (
-              !event.defaultPrevented &&
-              event.key === "Enter" &&
-              !event.shiftKey &&
-              !event.nativeEvent.isComposing
-            ) {
-              event.preventDefault();
-              formRef.current?.requestSubmit();
-            }
-          }}
-          rows={1}
-          placeholder={placeholderFor(activeSession)}
-          aria-label="Session draft"
-          aria-autocomplete="list"
-          aria-expanded={slashMenu.open}
-          aria-controls={slashMenu.open ? slashMenu.listboxId : undefined}
-          aria-activedescendant={slashMenu.activeOptionId}
-          className={cn(
-            "block w-full resize-none overflow-y-auto bg-transparent px-5 pt-3.5 pb-2 text-base leading-7 text-foreground outline-none",
-            "min-h-[52px] max-h-[200px]",
-            "placeholder:text-[var(--color-text-muted)]",
-          )}
-        />
+      <div className="mt-6">
+        <form
+          ref={formRef}
+          onSubmit={onSubmit}
+          data-vex-area="chat-composer"
+          className="overflow-hidden rounded-3xl border border-[#3275f8]/38 bg-[#061026]/66 shadow-[0_0_54px_rgba(30,78,210,0.16)] backdrop-blur-2xl"
+        >
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setNotice(null);
+            }}
+            onKeyDown={(event) => {
+              // Enter sends; Shift+Enter and IME composition insert a newline.
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing
+              ) {
+                event.preventDefault();
+                formRef.current?.requestSubmit();
+              }
+            }}
+            rows={1}
+            placeholder={placeholderFor(activeSession)}
+            aria-label="Session draft"
+            className={cn(
+              "block w-full resize-none overflow-y-auto bg-transparent px-5 pt-3.5 pb-2 text-base leading-7 text-foreground outline-none",
+              "min-h-[52px] max-h-[200px]",
+              "placeholder:text-[var(--color-text-muted)]",
+            )}
+          />
 
-        <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-1">
-          <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--color-text-muted)]">
-            <span className="font-mono text-sm text-[#6f91ff]">/</span>
-            <span className="truncate">
-              {sessionId === null
-                ? "type a message to start a session"
-                : `type ${slashCommandList(composerMode)}`}
-            </span>
-            {submitPending || slashDispatch.pending ? (
-              <span role="status" className="ml-2 hidden text-[#8da5ff] sm:inline">
-                Working…
+          <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-1">
+            <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--color-text-muted)]">
+              <span className="truncate">
+                {sessionId === null
+                  ? "type a message to start a session"
+                  : "Enter to send · Shift+Enter for a newline"}
               </span>
-            ) : null}
-          </div>
+              {submitPending ? (
+                <span role="status" className="ml-2 hidden text-[#8da5ff] sm:inline">
+                  Working…
+                </span>
+              ) : null}
+            </div>
 
-          {submitPending ? (
-            <button
-              type="button"
-              onClick={() => stopTurn()}
-              aria-label="Stop generating"
-              className="flex h-10 w-12 shrink-0 items-center justify-center rounded-full bg-[#3758ff] text-white shadow-[0_0_28px_rgba(55,88,255,0.36)] transition-colors hover:bg-[#4668ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8da5ff]"
-            >
-              <HugeiconsIcon icon={StopCircleIcon} size={20} aria-hidden />
-            </button>
-          ) : (
-            <button
-              type="submit"
-              disabled={submitDisabled}
-              aria-label="Send message"
-              className="flex h-10 w-12 shrink-0 items-center justify-center rounded-full bg-[#3758ff] text-white shadow-[0_0_28px_rgba(55,88,255,0.36)] transition-colors hover:bg-[#4668ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8da5ff] disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              <HugeiconsIcon icon={ArrowUp01Icon} size={20} aria-hidden />
-            </button>
-          )}
-        </div>
-      </form>
+            {submitPending ? (
+              <button
+                type="button"
+                onClick={() => stopTurn()}
+                aria-label="Stop generating"
+                className="flex h-10 w-12 shrink-0 items-center justify-center rounded-full bg-[#3758ff] text-white shadow-[0_0_28px_rgba(55,88,255,0.36)] transition-colors hover:bg-[#4668ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8da5ff]"
+              >
+                <HugeiconsIcon icon={StopCircleIcon} size={20} aria-hidden />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={submitDisabled}
+                aria-label="Send message"
+                className="flex h-10 w-12 shrink-0 items-center justify-center rounded-full bg-[#3758ff] text-white shadow-[0_0_28px_rgba(55,88,255,0.36)] transition-colors hover:bg-[#4668ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8da5ff] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <HugeiconsIcon icon={ArrowUp01Icon} size={20} aria-hidden />
+              </button>
+            )}
+          </div>
+        </form>
       </div>
 
       {notice !== null ? (
@@ -439,7 +342,7 @@ export function SessionComposer({
             <button
               type="button"
               onClick={() => void handleRetry()}
-              disabled={submitPending || slashDispatch.pending}
+              disabled={submitPending}
               aria-label="Retry sending the message"
               className="inline-flex h-6 shrink-0 items-center rounded-md border border-[#3275f8]/40 bg-[#3275f8]/10 px-2 font-medium text-[#9bb2ff] transition-colors hover:bg-[#3275f8]/16 hover:text-[#bcccff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8] disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -452,22 +355,6 @@ export function SessionComposer({
       {showQuickActions ? (
         <ComposerQuickActions onPick={applyQuickAction} />
       ) : null}
-
-      <ConfirmDestructiveDialog
-        open={pendingConfirm !== null}
-        title={confirmTitle(pendingConfirm?.command)}
-        description={confirmDescription(pendingConfirm?.command)}
-        confirmLabel={confirmLabel(pendingConfirm?.command)}
-        tone={confirmTone(pendingConfirm?.command)}
-        pending={slashDispatch.pending}
-        onCancel={() => setPendingConfirm(null)}
-        onConfirm={async () => {
-          if (pendingConfirm === null) return;
-          const command = pendingConfirm.command;
-          setPendingConfirm(null);
-          await dispatchSlash(command);
-        }}
-      />
     </>
   );
 }

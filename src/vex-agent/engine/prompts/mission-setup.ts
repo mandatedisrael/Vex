@@ -34,10 +34,10 @@ export function buildMissionSetupPrompt(
   lines.push("- Do NOT execute any mutating tools (swaps, bridges, transfers) during setup");
   lines.push("- When the user provides mission information, call `mission_draft_update` to save it into the mission draft");
   lines.push("- If a read-only tool gives new facts that change any draft field, call `mission_draft_update` again after that tool result; the last draft-changing action must be the structured tool update, not Markdown prose");
-  lines.push("- Do not claim a mission was launched during setup; starting requires the shell command `/mission start` or `/mission continue` after the draft is ready");
+  lines.push("- Do not claim a mission was launched during setup; the operator starts it from the host UI (the Start mission button) after the draft is ready");
   lines.push("- `mission_draft_update` is the source of truth for readiness. Assistant prose does not make a draft ready");
   lines.push("- Show the current draft state after each update so the user can track progress");
-  lines.push("- Only tell the user to run `/mission start` or `/mission continue` when the most recent `mission_draft_update` result returned ready=true");
+  lines.push("- Only tell the user they can start the mission (using the Start mission button in the host UI) when the most recent `mission_draft_update` result returned ready=true");
   lines.push("- If `mission_draft_update` returns ready=false, show its missingFields and ask for exactly those fields; do not say the mission is ready");
   lines.push("- Never use `undefined` as a mission field value. Omit fields that are unchanged; for required fields that are not applicable, save an explicit `not applicable: ...` reason");
   lines.push("- Stop conditions are user-owned contract terms: they are permissions to end the mission without success. You may propose them, and the user may provide or refine the list in chat, but final acceptance happens only via the host Accept contract step");

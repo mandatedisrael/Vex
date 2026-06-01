@@ -43,7 +43,7 @@ export function requireMissionPromptContextFromSnapshot(
   const parsed = ContractSnapshotSchema.safeParse(snapshot);
   if (!parsed.success) {
     throw new Error(
-      "Failed mission run has no recoverable contract snapshot. Use /mission edit and start a fresh run.",
+      "Failed mission run has no recoverable contract snapshot. Use the Edit button and start a fresh run.",
     );
   }
   return parsed.data.missionPromptContext;

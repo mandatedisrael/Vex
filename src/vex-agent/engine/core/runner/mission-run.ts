@@ -80,10 +80,10 @@ async function addMissionActivationMessage(
   input: MissionActivationMessageInput,
 ): Promise<void> {
   const content = [
-    "[Engine: mission_started — The operator accepted the mission draft and the shell activation command has already been executed.",
+    "[Engine: mission_started — The operator accepted the mission draft and started the run from the host UI.",
     "You are now inside an active mission run.",
-    "Do not ask the operator to run `/mission start` or `/mission continue` again.",
-    "Treat earlier setup messages asking for `/mission start` as historical context only.",
+    "Do not ask the operator to start or continue the mission again.",
+    "Treat earlier setup messages asking the operator to start the mission as historical context only.",
     "Execute the frozen Mission Contract now.]",
   ].join(" ");
 

@@ -27,9 +27,9 @@ export function buildMissionRunPrompt(
 
   lines.push("## Runtime State");
   lines.push(`- Mission run active: ${engineContext.missionRunId ?? "yes"}`);
-  lines.push("- The operator has already accepted the mission draft and the shell activation command (`/mission start` or `/mission continue`) has already been executed");
-  lines.push("- Treat earlier setup messages asking for `/mission start` as historical context only");
-  lines.push("- Do not ask the operator to run `/mission start` or `/mission continue` again, and do not call `loop_defer` because you are waiting for mission activation");
+  lines.push("- The operator has already accepted the mission draft and started the run from the host UI (the Start or Continue control); the run is active");
+  lines.push("- Treat earlier setup messages asking the operator to start the mission as historical context only");
+  lines.push("- Do not ask the operator to start or continue the mission again, and do not call `loop_defer` because you are waiting for mission activation");
   lines.push("");
 
   lines.push("## Critical Rules");

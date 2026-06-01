@@ -1,11 +1,11 @@
 /**
  * Reusable confirmation dialog for destructive / lineage-altering
- * commands (puzzle 04 phase 7).
+ * actions.
  *
- * Used for `/rewind`, `/restore`, `/mission-renew`. Default focus
- * lands on Cancel (UX skill §3 — destructive default = least
- * destructive); both buttons disable during pending dispatch so the
- * user can't double-fire while a mutation is mid-flight.
+ * Currently used by `KnowledgeSection` for knowledge-base deletion.
+ * Default focus lands on Cancel (UX skill §3 — destructive default =
+ * least destructive); both buttons disable during pending dispatch so
+ * the user can't double-fire while a mutation is mid-flight.
  *
  * Mirrors `SessionDeleteDialog.tsx` so the chat-shell stays
  * stylistically coherent — same Tailwind shadows, same border tones,

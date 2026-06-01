@@ -64,7 +64,13 @@ export async function handleMissionDraftUpdate(
 
   const result = await applyMissionPatch(context.missionId, parsed.data);
   const latestRun = result.ready ? await missionRunsRepo.getRunBySession(context.sessionId) : null;
-  const nextCommand = result.ready ? (latestRun ? "/mission continue" : "/mission start") : null;
+  // The host UI owns activation now (Start / Continue buttons) — surface a
+  // button-language hint, never a slash command the user could type.
+  const nextAction = result.ready
+    ? latestRun
+      ? "The draft is ready — tell the user they can continue the mission with the Continue button in the host UI."
+      : "The draft is ready — tell the user they can start the mission with the Start mission button in the host UI."
+    : null;
 
   return {
     success: true,
@@ -74,7 +80,7 @@ export async function handleMissionDraftUpdate(
       ready: result.ready,
       missingFields: result.missingFields,
       currentDraft: result.currentDraft,
-      nextCommand,
+      nextAction,
     }, null, 2),
     data: {
       missionId: result.missionId,
@@ -82,7 +88,7 @@ export async function handleMissionDraftUpdate(
       ready: result.ready,
       missingFields: result.missingFields,
       currentDraft: result.currentDraft,
-      nextCommand,
+      nextAction,
     },
   };
 }

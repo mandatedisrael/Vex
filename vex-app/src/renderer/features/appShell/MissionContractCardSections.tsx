@@ -257,7 +257,7 @@ export function CardFooter({
   if (kind === "accepted") {
     return (
       <footer className="border-t border-white/[0.06] px-4 py-3 text-xs text-[var(--color-text-muted)]">
-        Type <span className="font-mono text-[#8da5ff]">/mission start</span> to dispatch.
+        Use the <span className="text-[#8da5ff]">Start mission</span> button below to dispatch.
       </footer>
     );
   }

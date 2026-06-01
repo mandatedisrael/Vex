@@ -80,7 +80,7 @@ export async function handleLoopDefer(
 
   if (MISSION_ACTIVATION_WAIT_PATTERN.test(reason)) {
     return fail(
-      "loop_defer: this mission run is already active. Do not wait for /mission start or /mission continue; execute the frozen Mission Contract now.",
+      "loop_defer: this mission run is already active. Do not wait for the operator to start or continue the mission; execute the frozen Mission Contract now.",
     );
   }
 

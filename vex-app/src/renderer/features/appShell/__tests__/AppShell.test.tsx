@@ -681,8 +681,8 @@ describe("AppShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
 
     const stopBtn = await screen.findByRole("button", { name: "Stop generating" });
-    // Pins the fix: a submit-typed Stop would re-run onSubmit (and could dispatch
-    // a slash command sitting in the draft) instead of only cancelling the turn.
+    // Pins the fix: a submit-typed Stop would re-run onSubmit (re-sending the
+    // draft) instead of only cancelling the turn.
     expect(stopBtn.getAttribute("type")).toBe("button");
     expect(screen.queryByRole("button", { name: "Send message" })).toBeNull();
 

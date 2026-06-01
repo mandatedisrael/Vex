@@ -24,8 +24,12 @@ export interface SetupResult {
   ready: boolean;
 }
 
+// Detects prose that implies the mission can start while the DB draft is not
+// ready. Slash commands were removed (host now starts via the Start mission
+// button), so this keys off the start ACTION ("start the mission" / "Start
+// mission button") plus explicit readiness claims — not a typed command.
 const START_SUGGESTION_PATTERN =
-  /(?:\/mission\s+(?:start|continue)|ready\s+to\s+start|mission\s+is\s+ready|all\s+required\s+fields|ready\s*=\s*true)/i;
+  /(?:start(?:ing)?\s+(?:the\s+)?mission|ready\s+to\s+start|mission\s+is\s+ready|all\s+required\s+fields|ready\s*=\s*true)/i;
 
 export function textSuggestsMissionStart(text: string | null): boolean {
   if (!text) return false;
@@ -40,7 +44,7 @@ export function formatMissionDraftNotReadyNotice(setup: SetupResult): string {
   return [
     "Mission draft is not ready in the database.",
     `DB status: ${setup.status}. Missing fields: ${formatMissingMissionFields(setup.missingFields)}.`,
-    "The model must save the complete draft with mission_draft_update before suggesting /mission start.",
+    "The model must save the complete draft with mission_draft_update before telling the user they can start the mission.",
   ].join(" ");
 }
 

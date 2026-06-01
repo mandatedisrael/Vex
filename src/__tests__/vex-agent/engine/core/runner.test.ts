@@ -326,7 +326,7 @@ describe("runner", () => {
         .mockResolvedValueOnce(makeMission({ title: "SOL Flip" }))
         .mockResolvedValueOnce(makeMission({ title: "SOL Flip" }));
       mockRunTurnLoop.mockResolvedValueOnce({
-        text: "Ready to start? Reply /mission start.",
+        text: "You can now start the mission from the host UI.",
         toolCallsMade: 1,
         pendingApprovals: [],
         stopReason: null,
@@ -335,7 +335,7 @@ describe("runner", () => {
       const result = await processMissionSetupTurn("session-1", "ready");
 
       expect(result.missionStatus).toBe("draft");
-      expect(result.text).toContain("Ready to start? Reply /mission start.");
+      expect(result.text).toContain("You can now start the mission from the host UI.");
       expect(result.text).toContain("Mission draft is not ready in the database.");
       expect(result.text).toContain("Missing fields:");
       expect(mockAddEngineMessage).toHaveBeenCalledWith(
