@@ -26,6 +26,7 @@ import {
   useMissionRecover,
   useMissionRenew,
   useMissionRestore,
+  useMissionRetry,
   useMissionRewind,
   useMissionStart,
   useMissionStop,
@@ -52,6 +53,7 @@ const mockMissionBridge = {
   rewind: vi.fn(),
   restore: vi.fn(),
   renew: vi.fn(),
+  retry: vi.fn(),
   stop: vi.fn(),
   getRenewableSource: vi.fn(),
 };
@@ -146,6 +148,25 @@ describe("mission hook invalidations", () => {
     // Phase 7 — start lifts source out of terminal-latest state.
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: missionKeys.renewableSource(SESSION),
+    });
+  });
+
+  it("useMissionRetry invalidates runtime state", async () => {
+    mockMissionBridge.retry.mockResolvedValue({
+      ok: true,
+      data: { outcome: "resumed", runId: "run-1" },
+    });
+    const { client, invalidateSpy } = makeClient();
+    const { result } = renderHook(() => useMissionRetry(), {
+      wrapper: makeWrapper(client),
+    });
+    await act(async () => {
+      await result.current.mutateAsync({ sessionId: SESSION });
+    });
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: runtimeKeys.state(SESSION),
+      });
     });
   });
 

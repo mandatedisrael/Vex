@@ -147,6 +147,42 @@ function toIntOrNull(value: number | string | null): number | null {
   return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
 }
 
+/**
+ * Latest mission_run for a session regardless of status (incl. terminal).
+ * Unlike `getActiveRunForSession` (active/paused only), this lets the
+ * `mission.retry` dispatcher distinguish a terminal run (→ blocked_terminal)
+ * from a session that never had a run (→ no_active_run). `null` = no run ever.
+ */
+export async function getLatestRunForSession(
+  sessionId: string,
+): Promise<
+  Result<{ missionRunId: string; status: MissionRunStatus } | null, VexError>
+> {
+  return withClient(async (client) => {
+    try {
+      const result = await client.query<{ id: string; status: string }>(
+        `SELECT id, status
+           FROM mission_runs
+          WHERE session_id = $1
+          ORDER BY started_at DESC
+          LIMIT 1`,
+        [sessionId],
+      );
+      const row = result.rows[0];
+      if (!row) return ok(null);
+      const parsed = missionRunStatusSchema.safeParse(row.status);
+      if (!parsed.success) {
+        return dbError(
+          `getLatestRunForSession: unrecognized run status "${row.status}"`,
+        );
+      }
+      return ok({ missionRunId: row.id, status: parsed.data });
+    } catch (cause) {
+      return dbError("getLatestRunForSession query failed", cause);
+    }
+  });
+}
+
 export async function getActiveRunForSession(
   sessionId: string,
 ): Promise<Result<RuntimeStateDto, VexError>> {

@@ -16,6 +16,7 @@ import { registerMissionGetRenewableSourceHandler } from "./get-renewable-source
 import { registerMissionRecoverHandler } from "./recover.js";
 import { registerMissionRenewHandler } from "./renew.js";
 import { registerMissionRestoreHandler } from "./restore.js";
+import { registerMissionRetryHandler } from "./retry.js";
 import { registerMissionRewindHandler } from "./rewind.js";
 import { registerMissionStartHandler } from "./start.js";
 import { registerMissionStopHandler } from "./stop.js";
@@ -30,6 +31,7 @@ export function registerMissionHandlers(): ReadonlyArray<() => void> {
     registerMissionStartHandler(),
     registerMissionContinueHandler(),
     registerMissionRecoverHandler(),
+    registerMissionRetryHandler(),
     registerMissionRewindHandler(),
     registerMissionRestoreHandler(),
     registerMissionRenewHandler(),

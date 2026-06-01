@@ -140,6 +140,7 @@ export const CH = {
     rewind: "vex:mission:rewind",
     restore: "vex:mission:restore",
     renew: "vex:mission:renew",
+    retry: "vex:mission:retry",
     stop: "vex:mission:stop",
     getRenewableSource: "vex:mission:getRenewableSource",
   },

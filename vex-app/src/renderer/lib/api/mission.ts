@@ -42,6 +42,8 @@ import type {
   MissionRenewResult,
   MissionRestoreInput,
   MissionRestoreResult,
+  MissionRetryInput,
+  MissionRetryResult,
   MissionRewindInput,
   MissionRewindResult,
   MissionStartInput,
@@ -201,6 +203,26 @@ export function useMissionContinue(): UseMutationResult<
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input) => window.vex.mission.continue(input),
+    retry: false,
+    onSuccess: (_result, input) => {
+      qc.invalidateQueries({ queryKey: runtimeKeys.state(input.sessionId) });
+    },
+  });
+}
+
+/**
+ * Recover-after-error: claims + resumes a `paused_error` mission run (the
+ * "Recover" button). Distinct from continue (paused_user/wake) and from
+ * recover-from-failed (new run). Invalidates runtime state on success.
+ */
+export function useMissionRetry(): UseMutationResult<
+  Result<MissionRetryResult>,
+  Error,
+  MissionRetryInput
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input) => window.vex.mission.retry(input),
     retry: false,
     onSuccess: (_result, input) => {
       qc.invalidateQueries({ queryKey: runtimeKeys.state(input.sessionId) });

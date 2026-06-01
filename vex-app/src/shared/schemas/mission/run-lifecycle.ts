@@ -141,6 +141,54 @@ export const missionRecoverResultSchema = z.discriminatedUnion("outcome", [
 ]);
 export type MissionRecoverResult = z.infer<typeof missionRecoverResultSchema>;
 
+// ── retry (paused_error recovery — the "Recover" button) ────────
+//
+// Distinct from `continue`: `continue` (runtime resume dispatcher) owns
+// paused_user/paused_wake and refuses paused_error; `retry` claims+resumes
+// ONLY a paused_error run. Every other state is classified explicitly so the
+// dispatcher is total.
+
+export const missionRetryInputSchema = z
+  .object({ sessionId: sessionIdField })
+  .strict();
+export type MissionRetryInput = z.infer<typeof missionRetryInputSchema>;
+
+export const missionRetryResultSchema = z.discriminatedUnion("outcome", [
+  z.object({ outcome: z.literal("resumed"), runId: z.string() }).strict(),
+  z
+    .object({ outcome: z.literal("already_running"), runId: z.string() })
+    .strict(),
+  z.object({ outcome: z.literal("no_active_run") }).strict(),
+  z
+    .object({
+      outcome: z.literal("blocked_approval"),
+      pendingApprovalId: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      outcome: z.literal("blocked_terminal"),
+      status: missionRunStatusSchema,
+    })
+    .strict(),
+  // paused_wake / paused_user → not an error pause; the operator should use
+  // Continue, not Recover.
+  z
+    .object({
+      outcome: z.literal("not_recoverable"),
+      status: missionRunStatusSchema,
+    })
+    .strict(),
+  z.object({ outcome: z.literal("status_changed") }).strict(),
+  z
+    .object({
+      outcome: z.literal("lease_busy"),
+      retryAfterMs: z.number().int().nonnegative().optional(),
+    })
+    .strict(),
+]);
+export type MissionRetryResult = z.infer<typeof missionRetryResultSchema>;
+
 // ── stop (delegates to runtime stop dispatcher) ─────────────────
 
 export const missionStopInputSchema = z

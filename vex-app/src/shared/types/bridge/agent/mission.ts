@@ -16,6 +16,8 @@ import type {
   MissionRenewResult,
   MissionRestoreInput,
   MissionRestoreResult,
+  MissionRetryInput,
+  MissionRetryResult,
   MissionRewindInput,
   MissionRewindResult,
   MissionStartInput,
@@ -63,6 +65,9 @@ export interface MissionBridge {
   readonly renew: (
     input: MissionRenewInput,
   ) => Promise<Result<MissionRenewResult>>;
+  readonly retry: (
+    input: MissionRetryInput,
+  ) => Promise<Result<MissionRetryResult>>;
   readonly stop: (
     input: MissionStopInput,
   ) => Promise<Result<MissionStopResult>>;
