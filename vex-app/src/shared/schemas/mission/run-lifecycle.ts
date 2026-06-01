@@ -220,6 +220,8 @@ export const missionStopResultSchema = z.discriminatedUnion("outcome", [
   z
     .object({ outcome: z.literal("queued"), requestId: z.string().uuid() })
     .strict(),
+  // A paused run is aborted directly (no runner to observe a queued stop).
+  z.object({ outcome: z.literal("stopped") }).strict(),
   z
     .object({
       outcome: z.literal("already_terminal"),

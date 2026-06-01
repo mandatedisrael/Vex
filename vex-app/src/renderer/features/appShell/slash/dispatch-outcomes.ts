@@ -146,6 +146,8 @@ export function mapStopOutcome(data: MissionStopResult): DispatchOutcome {
   switch (data.outcome) {
     case "queued":
       return { kind: "success", message: "Stop queued." };
+    case "stopped":
+      return { kind: "success", message: "Mission stopped." };
     case "already_terminal":
       return {
         kind: "blocked",

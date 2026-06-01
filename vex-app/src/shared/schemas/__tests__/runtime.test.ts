@@ -162,6 +162,9 @@ describe("runtime per-action discriminated unions", () => {
       }).success,
     ).toBe(true);
     expect(
+      runtimeRequestStopResultSchema.safeParse({ outcome: "stopped" }).success,
+    ).toBe(true);
+    expect(
       runtimeRequestStopResultSchema.safeParse({
         outcome: "already_terminal",
         status: "stopped",
