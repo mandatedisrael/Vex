@@ -26,3 +26,9 @@ export {
 export { claimRunLeaseAndFlipToRunning } from "./claim-run-lease.js";
 export { claimSessionLease } from "./claim-session-lease.js";
 export { observeAndApplyControl } from "./observe-and-apply.js";
+export {
+  claimRunForAutoRetry,
+  type ClaimAutoRetryInput,
+  type ClaimAutoRetryOutcome,
+  type AutoRetryIneligibleReason,
+} from "./claim-auto-retry.js";

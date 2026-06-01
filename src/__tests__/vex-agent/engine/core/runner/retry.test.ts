@@ -15,9 +15,15 @@ const mockGetActiveRunBySession = vi.fn();
 const mockClaimRunLeaseAndFlipToRunning = vi.fn();
 const mockResumeMissionRun = vi.fn();
 const mockReleaseLease = vi.fn().mockResolvedValue(undefined);
+const mockCancelForSession = vi.fn().mockResolvedValue(0);
 
 vi.mock("@vex-agent/db/repos/mission-runs.js", () => ({
   getActiveRunBySession: (...a: unknown[]) => mockGetActiveRunBySession(...a),
+}));
+
+// Phase 4d: retryActiveMissionRun cancels pending error_retry wakes first.
+vi.mock("@vex-agent/db/repos/loop-wake.js", () => ({
+  cancelForSession: (...a: unknown[]) => mockCancelForSession(...a),
 }));
 
 vi.mock("@vex-agent/engine/runtime/lease-and-status.js", () => ({
@@ -134,6 +140,11 @@ describe("retryActiveMissionRun", () => {
     const result = await retryActiveMissionRun("s-1");
     expect(mockResumeMissionRun).toHaveBeenCalledWith("run-1");
     expect(result).toEqual(okTurnResult);
+    // Phase 4d: a human Recover cancels any pending error_retry wake first.
+    expect(mockCancelForSession).toHaveBeenCalledWith(
+      "s-1",
+      "superseded_by_manual_recover",
+    );
   });
 
   it("flips paused_wake → running and resumes the run", async () => {

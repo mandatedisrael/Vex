@@ -24,6 +24,10 @@ import {
   isContinuableRuntimeStop,
   scheduleRuntimeContinuation,
 } from "./runtime-continuation.js";
+import {
+  enqueueAutoRetryWake,
+  persistErrorPauseWithMaybeAutoRetry,
+} from "./mission-auto-retry.js";
 
 const ERROR_MESSAGE_LIMIT = 4096;
 
@@ -196,17 +200,41 @@ export async function finalizeMissionRunError(
   });
 
   try {
-    await missionRunsRepo.updateStatus(runId, "paused_error", "provider_error", {
-      summary: errorMessage,
-      evidence: {
-        errorMessage,
-        errorClass,
-        occurredAt: new Date().toISOString(),
-        missionId,
+    // Phase 4d: decide auto-retry eligibility on a FRESH locked read and persist
+    // paused_error (incrementing the retry count in the same tx when eligible).
+    const decision = await persistErrorPauseWithMaybeAutoRetry(
+      {
         runId,
+        err,
+        summary: errorMessage,
+        evidenceBase: {
+          errorMessage,
+          errorClass,
+          occurredAt: new Date().toISOString(),
+          missionId,
+          runId,
+        },
       },
-    });
+      Date.now(),
+    );
     await emitFinalizeControlState(sessionId, runId);
+    // Enqueue the retry wake AFTER the persist commits. A failed/duplicate
+    // enqueue leaves the run recoverable (no auto-resume) — never throws.
+    if (decision.scheduled !== null) {
+      await enqueueAutoRetryWake({
+        sessionId,
+        runId,
+        attempt: decision.scheduled.attempt,
+        dueAt: decision.scheduled.dueAt,
+      });
+      logger.info("engine.mission.auto_retry_scheduled", {
+        runId,
+        missionId,
+        sessionId,
+        attempt: decision.scheduled.attempt,
+        nextRetryAt: decision.scheduled.dueAt,
+      });
+    }
     // Phase 2 BUG-REPORTING emit (puzzle 03): persisting `paused_error`
     // is the canonical recoverable-failure surface — emit so support
     // records carry the error class + agent context. Fail-closed

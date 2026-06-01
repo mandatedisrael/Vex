@@ -70,6 +70,14 @@ export interface FrozenMission {
   goal: string;
   draft: MissionDraft;
   approvedAt: string;
+  /**
+   * Raw constraints bag, frozen verbatim. `missionToDraft` only projects
+   * `deadline`, so policy flags that live in constraints (Phase 4d
+   * `autoRetryEnabled`, spend/loss caps) would otherwise be lost at freeze.
+   * The engine reads the auto-retry opt-in from here at error time — an
+   * immutable source that never drifts with a later draft edit.
+   */
+  constraintsJson: Record<string, unknown>;
 }
 
 /** Freeze a Mission row into an immutable snapshot for mission run. */
@@ -80,6 +88,7 @@ export function freezeDraft(m: Mission): FrozenMission {
     goal: m.goal ?? "",
     draft: missionToDraft(m),
     approvedAt: m.approvedAt ?? new Date().toISOString(),
+    constraintsJson: (m.constraintsJson as Record<string, unknown>) ?? {},
   };
 }
 

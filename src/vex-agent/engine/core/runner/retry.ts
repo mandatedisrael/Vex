@@ -21,6 +21,7 @@
 
 import type { TurnResult, MissionRunStatus } from "../../types.js";
 import * as missionRunsRepo from "@vex-agent/db/repos/mission-runs.js";
+import * as loopWakeRepo from "@vex-agent/db/repos/loop-wake.js";
 import {
   ACTIVE_RUN_STATUSES,
   PAUSED_RUN_STATUSES,
@@ -62,6 +63,12 @@ export async function retryActiveMissionRun(sessionId: string): Promise<TurnResu
     // Surface explicitly rather than silently resume.
     throw new Error(`Mission run is in an unrecognised state (${run.status}).`);
   }
+
+  // Phase 4d: a human Recover supersedes any scheduled auto-retry — cancel the
+  // pending error_retry wake so it can't fire later. A wake already CONSUMED by
+  // the executor cannot be cancelled; there, `claimRunForAutoRetry`'s atomic
+  // re-check (status/unsafe/attempt) is the authority and will skip.
+  await loopWakeRepo.cancelForSession(sessionId, "superseded_by_manual_recover");
 
   // Puzzle 03 — atomic claim lease + flip status in ONE transaction
   // so a concurrent IPC `requestResume` / wake executor can't leave

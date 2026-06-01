@@ -71,6 +71,11 @@ vi.mock("@vex-agent/db/repos/runtime-control-requests.js", () => ({
   markCleared: (...a: unknown[]) => mockMarkCleared(...a),
   markFailed: (...a: unknown[]) => mockMarkFailed(...a),
 }));
+// Phase 4d: runRetryDispatch cancels pending error_retry wakes before claiming.
+const mockCancelForSession = vi.fn().mockResolvedValue(0);
+vi.mock("@vex-agent/db/repos/loop-wake.js", () => ({
+  cancelForSession: (...a: unknown[]) => mockCancelForSession(...a),
+}));
 vi.mock("@vex-agent/engine/runtime/lease-and-status.js", () => ({
   claimRunLeaseAndFlipToRunning: (...a: unknown[]) => mockClaim(...a),
 }));

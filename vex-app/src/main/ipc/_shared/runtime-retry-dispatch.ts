@@ -78,6 +78,15 @@ export async function runRetryDispatch(
     }
 
     // status === "paused_error" — claim + flip + fire-and-forget resume.
+    // Phase 4d: a human Recover supersedes any scheduled auto-retry — cancel
+    // the pending error_retry wake so it can't fire later. A wake already
+    // CONSUMED by the executor can't be cancelled; there, claimRunForAutoRetry's
+    // atomic re-check (status/unsafe/attempt) is the authority and will skip.
+    const { cancelForSession } = await import(
+      "@vex-agent/db/repos/loop-wake.js"
+    );
+    await cancelForSession(input.sessionId, "superseded_by_manual_recover");
+
     const { enqueueRequest, markObserved, markCleared, markFailed } =
       await import("@vex-agent/db/repos/runtime-control-requests.js");
     const auditRequest = await enqueueRequest({

@@ -219,8 +219,7 @@ describe("ingress.routeUserMessage", () => {
       "anything",
       expect.objectContaining({ target: "mission_run", runId: "run-4", runStatus: "paused_error" }),
     );
-    expect(result.text).toContain("/retry");
-    expect(result.text).toContain("/rewind");
+    expect(result.text).toContain("Recover button");
     expect(result.stopReason).toBeNull();
     expect(mockResumeMissionRun).not.toHaveBeenCalled();
     expect(mockProcessAgentTurn).not.toHaveBeenCalled();

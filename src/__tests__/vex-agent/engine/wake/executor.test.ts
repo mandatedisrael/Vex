@@ -19,11 +19,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // the real `withTransaction` → `getPool().connect()` (which would
 // ECONNREFUSED at 127.0.0.1:5777 in the test environment).
 const mockClaimRunLeaseAndFlipToRunning = vi.fn();
+const mockClaimRunForAutoRetry = vi.fn();
 const mockReleaseLease = vi.fn().mockResolvedValue(undefined);
 const mockCreateLeaseHandle = vi.fn();
 
 vi.mock("@vex-agent/engine/runtime/lease-and-status.js", () => ({
   claimRunLeaseAndFlipToRunning: (...a: unknown[]) => mockClaimRunLeaseAndFlipToRunning(...a),
+  claimRunForAutoRetry: (...a: unknown[]) => mockClaimRunForAutoRetry(...a),
   claimSessionLease: vi.fn(),
   observeAndApplyControl: vi.fn().mockResolvedValue({ outcome: "no_request" }),
 }));
@@ -120,6 +122,64 @@ describe("wake.executor.tick", () => {
     });
     mockReleaseLease.mockReset();
     mockReleaseLease.mockResolvedValue(undefined);
+    mockClaimRunForAutoRetry.mockReset();
+  });
+
+  // ── Phase 4d: error_retry wakes ──────────────────────────────────
+  describe("auto-retry wakes", () => {
+    const autoWake = () =>
+      makeWake({ id: "wake-9", payload: { trigger: "error_retry", attempt: 2 } });
+
+    it("resumes a paused_error run through the auto-retry claim", async () => {
+      mockClaimRunForAutoRetry.mockResolvedValue({ outcome: "claimed", lease: makeStubLease() });
+      const deps = makeDeps({
+        claimDue: vi.fn().mockResolvedValue([autoWake()]),
+        getMissionRun: vi.fn().mockResolvedValue(makeRun({ status: "paused_error" })),
+      });
+
+      const results = await tick(new Date(), 10, deps);
+
+      expect(results[0]!.outcome).toEqual({ kind: "resumed", runId: "run-1" });
+      // Routed to the auto-retry claim with the payload attempt — NOT the
+      // paused_wake helper.
+      expect(mockClaimRunForAutoRetry).toHaveBeenCalledWith(
+        expect.objectContaining({ missionRunId: "run-1", expectedAttempt: 2 }),
+      );
+      expect(mockClaimRunLeaseAndFlipToRunning).not.toHaveBeenCalled();
+      expect(deps.resumeMissionRun).toHaveBeenCalledWith("run-1");
+    });
+
+    it("CONSUMED-WAKE RACE: a human Recover stamped unsafe → claim ineligible → skip, no resume", async () => {
+      // The wake was consumed by claimDue; meanwhile a human Recover mutated and
+      // stamped the run unsafe, then it fell back to paused_error. The atomic
+      // claim re-check rejects it.
+      mockClaimRunForAutoRetry.mockResolvedValue({ outcome: "ineligible", reason: "unsafe" });
+      const deps = makeDeps({
+        claimDue: vi.fn().mockResolvedValue([autoWake()]),
+        getMissionRun: vi.fn().mockResolvedValue(makeRun({ status: "paused_error" })),
+      });
+
+      const results = await tick(new Date(), 10, deps);
+
+      expect(results[0]!.outcome).toEqual({ kind: "skipped_claim_lost" });
+      expect(deps.resumeMissionRun).not.toHaveBeenCalled();
+    });
+
+    it("skips (no claim) when the run already moved off paused_error", async () => {
+      const deps = makeDeps({
+        claimDue: vi.fn().mockResolvedValue([autoWake()]),
+        getMissionRun: vi.fn().mockResolvedValue(makeRun({ status: "running" })),
+      });
+
+      const results = await tick(new Date(), 10, deps);
+
+      expect(results[0]!.outcome).toEqual({
+        kind: "skipped_stale_status",
+        currentStatus: "running",
+      });
+      expect(mockClaimRunForAutoRetry).not.toHaveBeenCalled();
+      expect(deps.resumeMissionRun).not.toHaveBeenCalled();
+    });
   });
 
   it("resumes a paused_wake mission run only after atomic claim", async () => {

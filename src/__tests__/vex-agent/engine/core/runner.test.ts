@@ -513,6 +513,7 @@ describe("runner", () => {
             missionId: "mission-1",
           }),
         }),
+        expect.anything(),
       );
     });
 
@@ -536,6 +537,7 @@ describe("runner", () => {
             errorMessage: "Session session-1 not found",
           }),
         }),
+        expect.anything(),
       );
     });
 
@@ -723,6 +725,7 @@ describe("runner", () => {
             runId: "run-1",
           }),
         }),
+        expect.anything(),
       );
     });
 
