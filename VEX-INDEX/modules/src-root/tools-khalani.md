@@ -32,7 +32,7 @@ execution (EVM and Solana), and typed error mapping for the Khalani API
 callsites: the protocol tool handlers in
 `src/vex-agent/tools/protocols/khalani/` (engine bridge), the sync/balance
 infrastructure in `src/vex-agent/sync/`, and scattered read-side internal tool
-handlers (`evm_read`, `wallet_read`, `wallet_resolve`).
+handlers (`evm_read`, `wallet_balances`, `wallet_resolve`).
 
 The module does **not** own tool registration or manifest logic. It is a pure
 protocol client + execution layer. All tool definitions, approval gating,
@@ -168,7 +168,7 @@ it (see Related modules).
 
 | Consumer | Import | Usage |
 |----------|--------|-------|
-| `src/vex-agent/tools/internal/wallet/read.ts` | `balances`, `types` | `getTokenBalancesAcrossChains` for `wallet_read` tool balance scan |
+| `src/vex-agent/tools/internal/wallet/read.ts` | `balances`, `types` | `getTokenBalancesAcrossChains` for `wallet_balances` tool balance scan |
 | `src/vex-agent/tools/internal/wallet/resolve.ts` | `types` | `ChainFamily` type import only |
 | `src/vex-agent/tools/internal/evm-read.ts` | `client`, `chains`, `evm-client` | `evm_read` tool: chain lookup + public client for read calls (balance, ERC20 metadata, tx receipts) |
 
@@ -290,7 +290,7 @@ read handler:
 
 **Consumed BY:**
 - Z3 `module.vex-agent.tools-protocols` — khalani protocol handlers (primary engine consumer)
-- Z3 `module.vex-agent.tools-internal` — `wallet_read` (balances), `evm_read` (public client + chain lookup), `wallet/resolve.ts` (ChainFamily type), internal khalani alias shim
+- Z3 `module.vex-agent.tools-internal` — `wallet_balances` (balances), `evm_read` (public client + chain lookup), `wallet/resolve.ts` (ChainFamily type), internal khalani alias shim
 - Z4 `module.vex-agent.data-memory-knowledge` (sync) — balance-sync, chains, portfolio-chain-map, worker
 - Test suite — `src/__tests__/khalani/**`
 
@@ -299,7 +299,7 @@ read handler:
 - vex-app coverage: `audits/current/coverage-gaps.md#CAP-khalani-bridge-dispatch`
 - quality findings: `audits/current/quality-findings.md`
 - related protocol engine wrapper: `module.vex-agent.tools-protocols` (manifest, approval gating, capture pipeline, protocol execution context)
-- related internal tools: `module.vex-agent.tools-internal` (khalani internal alias shim, wallet_read, evm_read)
+- related internal tools: `module.vex-agent.tools-internal` (khalani internal alias shim, wallet_balances, evm_read)
 - related signing primitives: `module.src-root.lib-wallet` (keystore decrypt, `WalletResolution`, `ChainWallet` construction — key is decrypted before passing to this module)
 - related decisions: `decisions/ADR-0001-global-model-session-wallet.md` — per-session wallet selection; `resolveSelectedAddress`/`resolveSigningWallet` enforce session scope before `executeDepositPlan` is called
 

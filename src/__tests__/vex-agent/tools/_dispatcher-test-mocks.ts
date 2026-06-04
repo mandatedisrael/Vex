@@ -25,7 +25,7 @@ vi.mock("@tools/wallet/multi-auth.js", () => ({
   }),
 }));
 
-// Phase 5B: wallet_read / send / khalani read resolve through the engine
+// Phase 5B: wallet_balances / send / khalani read resolve through the engine
 // resolver (resolve.ts), not the zero-arg multi-auth primitives. Mock that
 // boundary so dispatcher routing tests get the test wallet addresses.
 vi.mock("../../../vex-agent/tools/internal/wallet/resolve.js", () => ({

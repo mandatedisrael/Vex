@@ -18,7 +18,7 @@ export const KNOWLEDGE_TOOLS: readonly ToolDef[] = [
       + "Use ONLY for net-new content — replacing or updating an existing entry uses knowledge_supersede(previous_id). "
       + ""
       + "Save: persona facts (user goals, risk tolerance, signing constraints), observed strategies that worked, lessons from failures, observed user preferences with evidence, mastered protocols (rate limits, parameter quirks, gas patterns). "
-      + "Do not save: balances, prices, gas, open positions, quotes, tx hashes — those are live state, queried via wallet_read / evm_read / khalani_* / portfolio_inspect each turn. Anything already in proj_* / mission_runs / approval_queue is structured DB state, not knowledge. Raw secrets / mnemonics / private keys NEVER. "
+      + "Do not save: balances, prices, gas, open positions, quotes, tx hashes — those are live state, queried via wallet_balances / evm_read / khalani_* / portfolio each turn. Anything already in proj_* / mission_runs / approval_queue is structured DB state, not knowledge. Raw secrets / mnemonics / private keys NEVER. "
       + ""
       + "Provenance via the `source` field: 'observed' (default — directly seen in this session) or 'user_confirmed' (user explicitly stated as fact) reach Active Knowledge hot context; 'inferred' (derived from observation) or 'hypothesis' (thin-evidence guess) remain recallable via knowledge_recall but are NEVER auto-injected. Use 'hypothesis' for guesses you want remembered but NOT surfaced as fact next turn. "
       + ""

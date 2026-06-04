@@ -272,7 +272,7 @@ export interface ToolMapCategory {
 
 export const TOOL_MAP_CATEGORIES: readonly ToolMapCategory[] = [
   { label: "Protocol discovery/execution", toolNames: ["discover_tools", "execute_tool"] },
-  { label: "Live state reads", toolNames: ["wallet_read", "evm_read", "portfolio_inspect"] },
+  { label: "Live state reads", toolNames: ["wallet_balances", "evm_read", "portfolio"] },
   {
     label: "Khalani read shortcuts",
     toolNames: [

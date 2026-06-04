@@ -1,5 +1,5 @@
 /**
- * wallet_read tests.
+ * wallet_balances tests.
  *
  * Puzzle 5 phase 4: `wallet_send_prepare` / `wallet_send_confirm` are
  * covered by `src/__tests__/vex-agent/tools/internal/wallet/send.test.ts`
@@ -18,7 +18,7 @@ vi.mock("@tools/wallet/multi-auth.js", () => ({
   requireSolanaWallet: () => ({ family: "solana", address: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", secretKey: new Uint8Array(64) }),
 }));
 
-// Phase 5B: wallet_read resolves the address via the engine resolver. Mock it
+// Phase 5B: wallet_balances resolves the address via the engine resolver. Mock it
 // to return the test wallet addresses for the session's default resolution.
 vi.mock("../../../vex-agent/tools/internal/wallet/resolve.js", () => ({
   resolveSelectedAddress: (_r: unknown, _p: unknown, family: string) =>
@@ -70,18 +70,18 @@ vi.mock("@tools/khalani/chains.js", () => ({
   getCachedKhalaniChains: async () => [MOCK_CHAIN, MOCK_SOLANA_CHAIN],
 }));
 
-const { handleWalletRead } = await import(
+const { handleWalletBalances } = await import(
   "../../../vex-agent/tools/internal/wallet.js"
 );
 import { makeTestContext } from "./_test-context.js";
 
 const baseContext = makeTestContext();
 
-describe("wallet_read", () => {
+describe("wallet_balances", () => {
   // ── live snapshots ─────────────────────────────────────────────
 
   it("returns live snapshots for all configured wallets by default", async () => {
-    const result = await handleWalletRead({}, baseContext);
+    const result = await handleWalletBalances({}, baseContext);
     expect(result.success).toBe(true);
     const data = JSON.parse(result.output);
     expect(data.wallet).toBe("all");
@@ -94,8 +94,8 @@ describe("wallet_read", () => {
   // serializers and many LLM providers emit `""` for "no value" — the handler
   // must treat that as omission, not a validation error.
   it("treats empty chainIds string as omission (scans all chains)", async () => {
-    const omitted = await handleWalletRead({ wallet: "all" }, baseContext);
-    const empty = await handleWalletRead({ wallet: "all", chainIds: "" }, baseContext);
+    const omitted = await handleWalletBalances({ wallet: "all" }, baseContext);
+    const empty = await handleWalletBalances({ wallet: "all", chainIds: "" }, baseContext);
     expect(empty.success).toBe(true);
     expect(omitted.success).toBe(true);
     const omittedData = JSON.parse(omitted.output);
@@ -107,14 +107,14 @@ describe("wallet_read", () => {
   });
 
   it("treats whitespace-only chainIds as omission", async () => {
-    const result = await handleWalletRead({ wallet: "all", chainIds: "   " }, baseContext);
+    const result = await handleWalletBalances({ wallet: "all", chainIds: "   " }, baseContext);
     expect(result.success).toBe(true);
     const data = JSON.parse(result.output);
     expect(data.wallets).toHaveLength(2);
   });
 
   it("returns EVM snapshot when wallet=eip155", async () => {
-    const result = await handleWalletRead({ wallet: "eip155" }, baseContext);
+    const result = await handleWalletBalances({ wallet: "eip155" }, baseContext);
     expect(result.success).toBe(true);
     const data = JSON.parse(result.output);
     expect(data.wallets).toHaveLength(1);
@@ -124,7 +124,7 @@ describe("wallet_read", () => {
   });
 
   it("returns Solana snapshot when wallet=solana", async () => {
-    const result = await handleWalletRead({ wallet: "solana" }, baseContext);
+    const result = await handleWalletBalances({ wallet: "solana" }, baseContext);
     expect(result.success).toBe(true);
     const data = JSON.parse(result.output);
     expect(data.wallets).toHaveLength(1);
@@ -133,7 +133,7 @@ describe("wallet_read", () => {
   });
 
   it("snapshot includes token data with prices", async () => {
-    const result = await handleWalletRead({ wallet: "eip155" }, baseContext);
+    const result = await handleWalletBalances({ wallet: "eip155" }, baseContext);
     const data = JSON.parse(result.output);
     const tokens = data.wallets[0].tokens;
     expect(tokens.map((token: { symbol: string }) => token.symbol)).toContain("ETH");
@@ -147,8 +147,8 @@ describe("wallet_read", () => {
   // ── errors ─────────────────────────────────────────────────────
 
   it("fails on invalid wallet parameter", async () => {
-    const result = await handleWalletRead({ wallet: "bitcoin" }, baseContext);
+    const result = await handleWalletBalances({ wallet: "bitcoin" }, baseContext);
     expect(result.success).toBe(false);
-    expect(result.output).toContain("wallet_read");
+    expect(result.output).toContain("wallet_balances");
   });
 });

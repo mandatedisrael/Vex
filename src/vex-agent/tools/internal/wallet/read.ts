@@ -36,23 +36,23 @@ interface WalletSnapshot {
   tokens: unknown[];
 }
 
-// ── wallet_read ─────────────────────────────────────────────────
+// ── wallet_balances ─────────────────────────────────────────────
 
-export async function handleWalletRead(
+export async function handleWalletBalances(
   params: Record<string, unknown>,
   context: InternalToolContext,
 ): Promise<ToolResult> {
   const parsed = WalletReadArgs.safeParse(params);
   if (!parsed.success) {
     const firstIssue = parsed.error.issues[0];
-    return fail(`wallet_read: ${firstIssue?.message ?? "invalid arguments"}`);
+    return fail(`wallet_balances: ${firstIssue?.message ?? "invalid arguments"}`);
   }
 
   let selection: BalanceChainSelection;
   try {
     selection = await parseBalanceChainSelection(parsed.data.chainIds);
   } catch (err) {
-    return fail(`wallet_read: ${err instanceof Error ? err.message : String(err)}`);
+    return fail(`wallet_balances: ${err instanceof Error ? err.message : String(err)}`);
   }
   const walletFamilies = requestedWalletFamilies(parsed.data.wallet);
   const snapshots: WalletSnapshot[] = [];
@@ -62,7 +62,7 @@ export async function handleWalletRead(
     const chainIds = getSelectedChainIdsForFamily(selection, family);
     if (selection.rawProvided && chainIds?.length === 0) {
       if (parsed.data.wallet === family) {
-        return fail(`wallet_read: no ${family} chains matched chainIds="${parsed.data.chainIds}".`);
+        return fail(`wallet_balances: no ${family} chains matched chainIds="${parsed.data.chainIds}".`);
       }
       continue;
     }
@@ -89,7 +89,7 @@ export async function handleWalletRead(
   }
 
   if (snapshots.length === 0) {
-    return fail(`wallet_read: no requested wallet snapshots were available.${formatWalletErrors(walletErrors)}`);
+    return fail(`wallet_balances: no requested wallet snapshots were available.${formatWalletErrors(walletErrors)}`);
   }
 
   return ok({

@@ -113,7 +113,7 @@ describe("checkPressureDeny — runtime hard-deny (dispatcher)", () => {
     for (const band of bands) {
       expect(checkPressureDeny("memory_recall", band), `memory_recall @ ${band}`).toBeNull();
       expect(checkPressureDeny("knowledge_recall", band), `knowledge_recall @ ${band}`).toBeNull();
-      expect(checkPressureDeny("wallet_read", band), `wallet_read @ ${band}`).toBeNull();
+      expect(checkPressureDeny("wallet_balances", band), `wallet_balances @ ${band}`).toBeNull();
     }
   });
 });

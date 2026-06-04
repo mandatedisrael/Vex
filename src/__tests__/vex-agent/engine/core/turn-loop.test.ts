@@ -678,7 +678,7 @@ describe("turn-loop", () => {
           toolCalls: [
             { id: "call-1", name: "web_research", arguments: { query: "test" } },
             { id: "call-2", name: "execute_tool", arguments: { toolId: "solana.swap" } },
-            { id: "call-3", name: "wallet_read", arguments: {} },
+            { id: "call-3", name: "wallet_balances", arguments: {} },
           ],
         },
       ]);
@@ -791,7 +791,7 @@ describe("turn-loop", () => {
           toolCalls: [
             { id: "call-1", name: "web_research", arguments: { query: "market" } },
             { id: "call-2", name: "mission_stop", arguments: { reason: "goal_reached", summary: "Done" } },
-            { id: "call-3", name: "wallet_read", arguments: {} },
+            { id: "call-3", name: "wallet_balances", arguments: {} },
           ],
         },
       ]);
@@ -1099,7 +1099,7 @@ describe("turn-loop", () => {
       const provider = makeProvider([
         {
           toolCalls: [
-            { id: "tc-1", name: "wallet_read", arguments: {} },
+            { id: "tc-1", name: "wallet_balances", arguments: {} },
             { id: "tc-2", name: "compact_now", arguments: { conversation_summary: "..." } },
             { id: "tc-3", name: "knowledge_write", arguments: {} },
           ],

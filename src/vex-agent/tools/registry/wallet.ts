@@ -9,7 +9,7 @@ import type { ToolDef } from "../types.js";
 
 export const WALLET_TOOLS: readonly ToolDef[] = [
   {
-    name: "wallet_read", kind: "internal", mutating: false, pressureSafety: "read_only", actionKind: "read",
+    name: "wallet_balances", kind: "internal", mutating: false, pressureSafety: "read_only", actionKind: "read",
     description: "Read your token balances on each chain via Khalani. Defaults to your personal wallets — both EVM (`eip155`) and Solana — aggregated in one call. Pass `wallet` or `chainIds` only when you want to narrow the scan.",
     parameters: { type: "object", properties: {
       wallet: { type: "string", enum: ["eip155", "solana", "all"], description: "Which wallet family to read. Default 'all' aggregates your EVM + Solana wallets." },

@@ -3,5 +3,5 @@
  * Split into modules: wallet-read, wallet-send.
  */
 
-export { handleWalletRead } from "./wallet/read.js";
+export { handleWalletBalances } from "./wallet/read.js";
 export { handleWalletSendPrepare, handleWalletSendConfirm } from "./wallet/send.js";

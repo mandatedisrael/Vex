@@ -19,7 +19,7 @@ export function buildToolUsagePrompt(): string {
 
 Two ways to call tools:
 
-1. **Direct internal tools** — called by name. Listed in the Tool Map above with their category. Examples: \`wallet_read\`, \`memory_recall\`, \`compact_now\`. Used for agent-level operations and curated read-only shortcuts.
+1. **Direct internal tools** — called by name. Listed in the Tool Map above with their category. Examples: \`wallet_balances\`, \`memory_recall\`, \`compact_now\`. Used for agent-level operations and curated read-only shortcuts.
 
 2. **Protocol tools** — discovered through \`discover_tools\`, executed through \`execute_tool\` with a dotted \`toolId\` like \`khalani.bridge\` or \`kyberswap.swap.sell\`. The full multi-chain protocol surface lives here.
 
@@ -31,10 +31,10 @@ At pressure barrier (≥ 88% context), the only mutating action available is \`c
 
 Balances, prices, gas, open positions, quotes, transaction hashes are LIVE state. Re-query each turn — do not save them into knowledge or memory.
 
-- Your own wallet across all families in one call: \`wallet_read\`.
+- Your own wallet across all families in one call: \`wallet_balances\`.
 - One family / different address: \`khalani_tokens_balances\`.
 - On-chain EVM reads: \`evm_read\`.
-- Your projected portfolio (positions, lots, PnL, history): \`portfolio_inspect\` — reads from your own DB projections (\`portfolio_inspect(view="summary")\`, \`open_positions\`, \`lots\`, \`profits\`, \`unrealized\`, \`bridges\`, \`orders\`, \`activity\`, \`executions\`).
+- Your projected portfolio (positions, lots, PnL, history): \`portfolio\` — reads from your own DB projections (\`portfolio(view="summary")\`, \`open_positions\`, \`lots\`, \`profits\`, \`unrealized\`, \`bridges\`, \`orders\`, \`activity\`, \`executions\`).
 
 If a fact is queryable live, querying is cheaper than remembering — and the memorized version is stale by definition.
 
@@ -72,7 +72,7 @@ This is behavioral guidance. The runtime validates tokens where possible but can
 
 1. **Gas reserve on native tokens.** When spending ETH, POL, BNB, or any chain's native token, never spend the entire balance. Leave enough for at least one follow-up transaction. "All" / "max" for native assets means "balance minus gas reserve", not 100%. For ERC-20 tokens (USDC, WETH, etc.), "all" means the full balance.
 
-2. **Fresh balance before each mutation.** After a successful swap/bridge/zap, read fresh live balances before the next mutation. Use \`wallet_read\` for the full picture, or \`khalani_tokens_balances\` for a single family. Never chain multiple swaps based on estimated post-tx balances.
+2. **Fresh balance before each mutation.** After a successful swap/bridge/zap, read fresh live balances before the next mutation. Use \`wallet_balances\` for the full picture, or \`khalani_tokens_balances\` for a single family. Never chain multiple swaps based on estimated post-tx balances.
 
 3. **Address-first for EVM mutations.** Resolve exact token contract addresses via \`khalani.tokens.search(query, chainIds)\` BEFORE passing to kyberswap/khalani.bridge/zap. Pass the address, not the symbol.
 

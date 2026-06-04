@@ -5,7 +5,7 @@
  *
  * Two entry points, deliberately split (Codex stage-5B review):
  *   - `resolveSelectedAddress` — address-only, NEVER decrypts a key. For
- *     wallet_read / send prepare / balance display.
+ *     wallet_balances / send prepare / balance display.
  *   - `resolveSigningWallet` — decrypts the key. ONLY after the approval gate
  *     and immediately before broadcast (wallet_send_confirm executors).
  *

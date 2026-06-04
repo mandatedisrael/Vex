@@ -101,7 +101,7 @@ function rowWithoutIntent(overrides: Record<string, unknown> = {}): Record<strin
     status: "pending",
     session_id: SESSION,
     tool_call_id: null,
-    tool_call: { command: "wallet_read" },
+    tool_call: { command: "wallet_balances" },
     reasoning: "read wallet balances",
     permission_at_enqueue: "restricted",
     created_at: "2026-05-23T19:00:00.000Z",
@@ -193,7 +193,7 @@ describe("DTO projection — back-compat with rows predating migration 024", () 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const dto = result.data[0]!;
-    expect(dto.toolName).toBe("wallet_read");
+    expect(dto.toolName).toBe("wallet_balances");
     expect(dto.reasoningPreview).toBe("read wallet balances");
   });
 });

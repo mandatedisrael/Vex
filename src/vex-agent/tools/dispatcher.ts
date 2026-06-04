@@ -270,7 +270,7 @@ export const INTERNAL_TOOL_LOADERS: Readonly<Record<string, InternalHandlerLoade
   knowledge_history: async () => (await import("./internal/knowledge.js")).handleKnowledgeHistory,
 
   // Portfolio
-  portfolio_inspect: async () => (await import("./internal/portfolio-inspect.js")).handlePortfolioInspect,
+  portfolio: async () => (await import("./internal/portfolio-inspect.js")).handlePortfolio,
 
   // Khalani direct read aliases
   khalani_chains_list: async () => (await import("./internal/khalani.js")).handleKhalaniChainsList,
@@ -309,7 +309,7 @@ export const INTERNAL_TOOL_LOADERS: Readonly<Record<string, InternalHandlerLoade
   evm_read: async () => (await import("./internal/evm-read.js")).handleEvmRead,
 
   // Wallet
-  wallet_read: async () => (await import("./internal/wallet/read.js")).handleWalletRead,
+  wallet_balances: async () => (await import("./internal/wallet/read.js")).handleWalletBalances,
   wallet_send_prepare: async () => (await import("./internal/wallet/send.js")).handleWalletSendPrepare,
   wallet_send_confirm: async () => (await import("./internal/wallet/send.js")).handleWalletSendConfirm,
 };

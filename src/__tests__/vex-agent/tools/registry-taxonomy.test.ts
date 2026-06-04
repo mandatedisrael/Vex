@@ -75,11 +75,11 @@ describe("ActionKind — pinned critical classifications", () => {
     // Wallet — user signs locally
     ["wallet_send_confirm", "user_wallet_broadcast"],
     ["wallet_send_prepare", "approval_prepare"],
-    ["wallet_read", "read"],
+    ["wallet_balances", "read"],
 
     // Read-only DB / RPC / external API surfaces
     ["evm_read", "read"],
-    ["portfolio_inspect", "read"],
+    ["portfolio", "read"],
     ["memory_recall", "read"],
     ["tool_output_read", "read"],
     ["knowledge_recall", "read"],

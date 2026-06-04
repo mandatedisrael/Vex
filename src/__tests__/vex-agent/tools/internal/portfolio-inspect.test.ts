@@ -48,13 +48,13 @@ vi.mock("@vex-agent/db/client.js", () => ({
   execute: vi.fn(), query: vi.fn().mockResolvedValue([]), queryOne: vi.fn().mockResolvedValue(null),
 }));
 
-const { handlePortfolioInspect } = await import("../../../../vex-agent/tools/internal/portfolio-inspect.js");
+const { handlePortfolio } = await import("../../../../vex-agent/tools/internal/portfolio-inspect.js");
 import { makeTestContext } from "../_test-context.js";
 import { VexError, ErrorCodes } from "../../../../errors.js";
 
 const ctx = makeTestContext({ sessionId: "s1" });
 
-describe("portfolio_inspect tool", () => {
+describe("portfolio tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockResolvePortfolioChainIds.mockResolvedValue(new Map());
@@ -62,14 +62,14 @@ describe("portfolio_inspect tool", () => {
   });
 
   it("rejects invalid view", async () => {
-    const r = await handlePortfolioInspect({ view: "invalid" }, ctx);
+    const r = await handlePortfolio({ view: "invalid" }, ctx);
     expect(r.success).toBe(false);
     expect(r.output).toContain("Invalid view");
   });
 
   describe("open_positions", () => {
     it("returns empty when no positions", async () => {
-      const r = await handlePortfolioInspect({ view: "open_positions" }, ctx);
+      const r = await handlePortfolio({ view: "open_positions" }, ctx);
       expect(r.success).toBe(true);
       expect(r.data!.count).toBe(0);
     });
@@ -81,7 +81,7 @@ describe("portfolio_inspect tool", () => {
         entryPriceUsd: 150, currentValueUsd: 160, unrealizedPnlUsd: 10,
         status: "open", openedAt: "2026-03-29",
       }]);
-      const r = await handlePortfolioInspect({ view: "open_positions" }, ctx);
+      const r = await handlePortfolio({ view: "open_positions" }, ctx);
       expect(r.data!.count).toBe(1);
       const pos = (r.data!.positions as any[])[0];
       expect(pos.namespace).toBe("solana");
@@ -89,26 +89,26 @@ describe("portfolio_inspect tool", () => {
     });
 
     it("passes namespace filter", async () => {
-      await handlePortfolioInspect({ view: "open_positions", namespace: "solana" }, ctx);
+      await handlePortfolio({ view: "open_positions", namespace: "solana" }, ctx);
       expect(mockGetOpen).toHaveBeenCalledWith(["0xEVM", "SOL"], "solana");
     });
   });
 
   describe("activity", () => {
     it("passes the wallet set + filters to getActivities", async () => {
-      await handlePortfolioInspect({ view: "activity", namespace: "khalani", productType: "bridge", limit: 5 }, ctx);
+      await handlePortfolio({ view: "activity", namespace: "khalani", productType: "bridge", limit: 5 }, ctx);
       expect(mockGetActivities).toHaveBeenCalledWith({ addresses: ["0xEVM", "SOL"], namespace: "khalani", productType: "bridge", limit: 5 });
     });
   });
 
   describe("executions", () => {
     it("works without namespace (full history)", async () => {
-      const r = await handlePortfolioInspect({ view: "executions" }, ctx);
+      const r = await handlePortfolio({ view: "executions" }, ctx);
       expect(r.success).toBe(true);
     });
 
     it("passes namespace and limit", async () => {
-      await handlePortfolioInspect({ view: "executions", namespace: "solana", limit: 10 }, ctx);
+      await handlePortfolio({ view: "executions", namespace: "solana", limit: 10 }, ctx);
       expect(mockGetByNamespace).toHaveBeenCalledWith("solana", 10);
     });
   });
@@ -116,14 +116,14 @@ describe("portfolio_inspect tool", () => {
   describe("balances", () => {
     it("returns totalUsd", async () => {
       mockGetTotalUsd.mockResolvedValueOnce(1234.56);
-      const r = await handlePortfolioInspect({ view: "balances" }, ctx);
+      const r = await handlePortfolio({ view: "balances" }, ctx);
       expect(r.data!.totalUsd).toBe(1234.56);
     });
   });
 
   describe("snapshots", () => {
     it("calls getAggregateSnapshots with the wallet set + 7d", async () => {
-      await handlePortfolioInspect({ view: "snapshots" }, ctx);
+      await handlePortfolio({ view: "snapshots" }, ctx);
       expect(mockGetAggregateSnapshots).toHaveBeenCalledWith(["0xEVM", "SOL"], "7d");
     });
   });
@@ -144,7 +144,7 @@ describe("portfolio_inspect tool", () => {
       (query as any).mockResolvedValueOnce([{ count: "0" }]);
       // distinct spot lot chains
       (query as any).mockResolvedValueOnce([]);
-      const r = await handlePortfolioInspect({ view: "summary" }, ctx);
+      const r = await handlePortfolio({ view: "summary" }, ctx);
       expect(r.data!.totalBalanceUsd).toBe(5000);
       expect(r.data!.openPositionCount).toBe(2);
       expect(r.data!.openSpotLotCount).toBe(0);
@@ -161,14 +161,14 @@ describe("portfolio_inspect tool", () => {
       (query as any).mockResolvedValueOnce([{ total: null }]);
       (query as any).mockResolvedValueOnce([{ count: "0" }]);
       (query as any).mockResolvedValueOnce([]);
-      const r = await handlePortfolioInspect({ view: "summary" }, ctx);
+      const r = await handlePortfolio({ view: "summary" }, ctx);
       expect(r.data!.realizedPnlUsd).toBe(42.50);
     });
   });
 
   describe("lots", () => {
     it("returns empty lots list", async () => {
-      const r = await handlePortfolioInspect({ view: "lots" }, ctx);
+      const r = await handlePortfolio({ view: "lots" }, ctx);
       expect(r.success).toBe(true);
       expect(r.data!.view).toBe("lots");
       expect(r.data!.count).toBe(0);
@@ -182,7 +182,7 @@ describe("portfolio_inspect tool", () => {
         cost_basis_usd: "5.25", price_usd: "0.00000525", status: "partial",
         opened_at: "2026-04-01", closed_at: null,
       }]);
-      const r = await handlePortfolioInspect({ view: "lots", instrumentKey: "solana:BONK" }, ctx);
+      const r = await handlePortfolio({ view: "lots", instrumentKey: "solana:BONK" }, ctx);
       expect(r.success).toBe(true);
       expect(r.data!.count).toBe(1);
       const lot = (r.data!.lots as any[])[0];
@@ -194,7 +194,7 @@ describe("portfolio_inspect tool", () => {
 
   describe("profits", () => {
     it("returns empty profits list", async () => {
-      const r = await handlePortfolioInspect({ view: "profits" }, ctx);
+      const r = await handlePortfolio({ view: "profits" }, ctx);
       expect(r.success).toBe(true);
       expect(r.data!.view).toBe("profits");
       expect(r.data!.count).toBe(0);
@@ -208,7 +208,7 @@ describe("portfolio_inspect tool", () => {
         realized_pnl_usd: "1.25", total_cost_basis: "4.00", total_proceeds: "5.25",
         realized_pnl_native: null, benchmark_asset_key: "SOL",
       }]);
-      const r = await handlePortfolioInspect({ view: "profits", instrumentKey: "solana:BONK" }, ctx);
+      const r = await handlePortfolio({ view: "profits", instrumentKey: "solana:BONK" }, ctx);
       expect(r.success).toBe(true);
       expect(r.data!.count).toBe(1);
       const item = (r.data!.items as any[])[0];
@@ -220,7 +220,7 @@ describe("portfolio_inspect tool", () => {
 
   describe("closed_positions", () => {
     it("returns empty closed positions", async () => {
-      const r = await handlePortfolioInspect({ view: "closed_positions" }, ctx);
+      const r = await handlePortfolio({ view: "closed_positions" }, ctx);
       expect(r.success).toBe(true);
       expect(r.data!.view).toBe("closed_positions");
     });
@@ -233,7 +233,7 @@ describe("portfolio_inspect tool", () => {
         entry_price_usd: "0.65", notional_usd: "2.00", status: "closed",
         opened_at: "2026-04-01", closed_at: "2026-04-01",
       }]);
-      const r = await handlePortfolioInspect({ view: "closed_positions" }, ctx);
+      const r = await handlePortfolio({ view: "closed_positions" }, ctx);
       expect(r.data!.count).toBe(1);
       const pos = (r.data!.positions as any[])[0];
       expect(pos.entryPrice).toBe(0.65);
@@ -244,7 +244,7 @@ describe("portfolio_inspect tool", () => {
 
   describe("non_trading_history", () => {
     it("returns empty non-trading history", async () => {
-      const r = await handlePortfolioInspect({ view: "non_trading_history" }, ctx);
+      const r = await handlePortfolio({ view: "non_trading_history" }, ctx);
       expect(r.success).toBe(true);
       expect(r.data!.view).toBe("non_trading_history");
     });
@@ -256,7 +256,7 @@ describe("portfolio_inspect tool", () => {
         chain: "ethereum", wallet_address: "0x1", capture_status: "executed",
         created_at: "2026-04-01",
       }]);
-      const r = await handlePortfolioInspect({ view: "non_trading_history" }, ctx);
+      const r = await handlePortfolio({ view: "non_trading_history" }, ctx);
       expect(r.data!.count).toBe(1);
       const act = (r.data!.activities as any[])[0];
       expect(act.product).toBe("bridge");
@@ -272,7 +272,7 @@ describe("portfolio_inspect tool", () => {
         input_token: "USDC", input_amount: "1000000", output_token: "USDC",
         output_amount: "999000", capture_status: "executed", created_at: "2026-04-01",
       }]);
-      const r = await handlePortfolioInspect({ view: "bridges" }, ctx);
+      const r = await handlePortfolio({ view: "bridges" }, ctx);
       expect(r.success).toBe(true);
       expect(r.data!.view).toBe("bridges");
       expect(r.data!.count).toBe(1);
@@ -287,7 +287,7 @@ describe("portfolio_inspect tool", () => {
         position_key: "LP1", capture_status: "executed", meta: { action: "zap-in" },
         created_at: "2026-04-01",
       }]);
-      const r = await handlePortfolioInspect({ view: "lp_history" }, ctx);
+      const r = await handlePortfolio({ view: "lp_history" }, ctx);
       expect(r.success).toBe(true);
       expect(r.data!.view).toBe("lp_history");
       expect(r.data!.count).toBe(1);
@@ -301,7 +301,7 @@ describe("portfolio_inspect tool", () => {
         namespace: "kyberswap", chain: "polygon", instrument_key: "polygon:lo:0xA:0xB",
         position_key: "123", status: "open", opened_at: "2026-04-01", closed_at: null,
       }]);
-      const r = await handlePortfolioInspect({ view: "orders" }, ctx);
+      const r = await handlePortfolio({ view: "orders" }, ctx);
       expect(r.success).toBe(true);
       expect(r.data!.view).toBe("orders");
       expect(r.data!.count).toBe(1);
@@ -312,7 +312,7 @@ describe("portfolio_inspect tool", () => {
     it("returns empty when no open lots", async () => {
       const { query } = await import("@vex-agent/db/client.js");
       (query as any).mockResolvedValueOnce([]);
-      const r = await handlePortfolioInspect({ view: "unrealized" }, ctx);
+      const r = await handlePortfolio({ view: "unrealized" }, ctx);
       expect(r.success).toBe(true);
       expect(r.data!.view).toBe("unrealized");
       expect(r.data!.count).toBe(0);
@@ -335,7 +335,7 @@ describe("portfolio_inspect tool", () => {
       mockResolvePortfolioChainIds.mockResolvedValueOnce(new Map([["solana", 20011000000]]));
       (query as any).mockResolvedValueOnce([{ price_usd: "0.000002", decimals: 6 }]);
 
-      const r = await handlePortfolioInspect({ view: "unrealized" }, ctx);
+      const r = await handlePortfolio({ view: "unrealized" }, ctx);
 
       expect(r.success).toBe(true);
       expect((query as any).mock.calls[1][1]).toEqual(["SolWallet", "BonkMint", 20011000000]);
@@ -359,7 +359,7 @@ describe("portfolio_inspect tool", () => {
       }]);
       mockResolvePortfolioChainIds.mockResolvedValueOnce(new Map());
 
-      const r = await handlePortfolioInspect({ view: "unrealized" }, ctx);
+      const r = await handlePortfolio({ view: "unrealized" }, ctx);
 
       expect(r.success).toBe(true);
       expect((query as any).mock.calls).toHaveLength(1);
@@ -385,7 +385,7 @@ describe("portfolio_inspect tool", () => {
       mockResolvePortfolioChainIds.mockResolvedValueOnce(new Map([["solana", 20011000000]]));
       // spot unrealized aggregate
       (query as any).mockResolvedValueOnce([{ total: "7.25" }]);
-      const r = await handlePortfolioInspect({ view: "summary" }, ctx);
+      const r = await handlePortfolio({ view: "summary" }, ctx);
       expect(r.data!.unrealizedPnlUsd).toBe(19.75);
       expect(r.data!.openSpotLotCount).toBe(1);
     });
@@ -395,14 +395,14 @@ describe("portfolio_inspect tool", () => {
     it("scopes reads to ONLY the session's selected wallet set", async () => {
       mockResolveSet.mockReturnValueOnce({ evm: "0xEVM", solana: "SOL", all: ["0xEVM", "SOL"] });
       mockGetTotalUsd.mockResolvedValueOnce(777);
-      const r = await handlePortfolioInspect({ view: "balances" }, ctx);
+      const r = await handlePortfolio({ view: "balances" }, ctx);
       expect(mockGetTotalUsd).toHaveBeenCalledWith(["0xEVM", "SOL"]);
       expect(r.data!.totalUsd).toBe(777);
     });
 
     it("a session with no selected wallets passes an EMPTY set (never global)", async () => {
       mockResolveSet.mockReturnValueOnce({ evm: null, solana: null, all: [] });
-      await handlePortfolioInspect({ view: "summary" }, ctx);
+      await handlePortfolio({ view: "summary" }, ctx);
       expect(mockGetTotalUsd).toHaveBeenCalledWith([]);
     });
 
@@ -410,7 +410,7 @@ describe("portfolio_inspect tool", () => {
       mockResolveSet.mockImplementationOnce(() => {
         throw new VexError(ErrorCodes.WALLET_SCOPE_MISMATCH, "contract drift");
       });
-      const r = await handlePortfolioInspect({ view: "summary" }, ctx);
+      const r = await handlePortfolio({ view: "summary" }, ctx);
       expect(r.success).toBe(false);
       expect(mockGetTotalUsd).not.toHaveBeenCalled();
     });

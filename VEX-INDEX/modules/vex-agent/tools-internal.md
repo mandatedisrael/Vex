@@ -55,8 +55,8 @@ unless its tool is actually dispatched.
 - memory_recall, mark_outstanding_resolved, session memory, narrative chunks
 - mission_draft_update, mission_stop, mission signal
 - subagent_spawn, subagent_status, subagent disabled, TODO subagent-disabled
-- portfolio_inspect, inspect views, proj_balances, proj_pnl_lots
-- evm_read, wallet_read, discover_tools, execute_tool, protocol meta-tool
+- portfolio, inspect views, proj_balances, proj_pnl_lots
+- evm_read, wallet_balances, discover_tools, execute_tool, protocol meta-tool
 - pressureSafety, safe_at_barrier, read_only, mutating, compact_only
 - EngineSignal, stop_mission, defer_until, compact_committed, wait_for_parent
 - InternalToolContext, WalletResolution, WalletPolicy, sessionPermission
@@ -71,7 +71,7 @@ unless its tool is actually dispatched.
 - `knowledge_entries` DB table (via `@vex-agent/db/repos/knowledge/`) — knowledge_write/supersede/update_status mutate rows
 - `session_memories` DB table (via `@vex-agent/db/repos/session-memories/`) — mark_outstanding_resolved updates JSONB + re-embeds
 - `documents` / `folders` DB tables (via document_* handlers)
-- `protocol_executions` DB table (read-only in portfolio_inspect `executions` view)
+- `protocol_executions` DB table (read-only in portfolio `executions` view)
 - `proj_*` DB tables (proj_activity, proj_pnl_lots, proj_pnl_matches, proj_open_positions, proj_balances) — read-only in inspect-views
 - `tool_output_blobs` DB table — blob_key-keyed overflow blobs (tool_output_read)
 - `subagents` / `session_links` DB tables — in-memory `activeSubagents: Map` (lifecycle.ts) + DB rows (DISABLED path)
@@ -82,7 +82,7 @@ unless its tool is actually dispatched.
 - **DB (via engine pool)**: wallet_intents CAS (prepare + confirm), loop_wake_requests enqueue, knowledge CRUD+embed, session_memories mark-resolve+embed, documents CRUD, portfolio proj_* reads, blob reads
 - **External EVM RPC** (via viem + Khalani chain registry): `executeEvmTransfer` — `sendTransaction` / `writeContract`, `waitForTransactionReceipt`
 - **External Solana RPC**: `executeSolanaTransfer` — `signAndSubmitLegacyTxStaged`, SPL token ATA resolution
-- **External Khalani API**: wallet_read calls `getKhalaniClient().getChains()` for chain resolution; Khalani internal alias tools proxy to khalani protocol
+- **External Khalani API**: wallet_balances calls `getKhalaniClient().getChains()` for chain resolution; Khalani internal alias tools proxy to khalani protocol
 - **External Tavily API**: web_research (gated on `TAVILY_API_KEY`)
 - **External Rettiwt API**: twitter_account (gated on `RETTIWT_API_KEY`)
 - **Local EmbeddingGemma**: knowledge_write/supersede embed, knowledge_recall embed-query,
@@ -137,13 +137,13 @@ unless its tool is actually dispatched.
   document_delete (destructive/`mutating:false` as of the 2026-05-28 verification; this means
   restricted-mode approval is not triggered by `actionKind` alone).
 - `tools/registry/knowledge.ts:13` `KNOWLEDGE_TOOLS` — 8 tools; knowledge_write/supersede/update_status (local_write/mutating); knowledge_recall/recall_overflow/get/lineage/history (read/read_only); recall requires EMBEDDING service at runtime
-- `tools/registry/portfolio.ts:8` `PORTFOLIO_TOOLS` — `portfolio_inspect` (read/read_only); 14 views; wallet-scoped except `executions`
+- `tools/registry/portfolio.ts:8` `PORTFOLIO_TOOLS` — `portfolio` (read/read_only); 14 views; wallet-scoped except `executions`
 - `tools/registry/setup.ts:19` `SETUP_TOOLS` — `polymarket_setup` (local_write/mutating, excludeRoles:subagent); idempotent per-wallet EIP-712 credential derivation
 - `tools/registry/mission.ts:5` `MISSION_TOOLS` — `mission_draft_update` (local_write/mutating, requiresMissionSetup), `mission_stop` (local_write/safe_at_barrier, requiresMissionRun); both excludeRoles:subagent
 - `tools/registry/autonomy.ts:26` `AUTONOMY_TOOLS` — `tool_output_read` (read/read_only), `loop_defer` (schedule/mutating, requiresMissionActiveRun, excludeRoles:subagent)
 - `tools/registry/subagents.ts:14` `SUBAGENT_TOOLS` — empty array; all 6 entries commented out (`TODO(subagent-disabled)`)
 - `tools/registry/evm.ts:8` `EVM_TOOLS` — `evm_read` (read/read_only); 4 actions (tx_receipt, erc721_mint, erc20_metadata, balance)
-- `tools/registry/wallet.ts:10` `WALLET_TOOLS` — `wallet_read` (read/read_only), `wallet_send_prepare` (approval_prepare/mutating:false), `wallet_send_confirm` (user_wallet_broadcast/mutating:true)
+- `tools/registry/wallet.ts:10` `WALLET_TOOLS` — `wallet_balances` (read/read_only), `wallet_send_prepare` (approval_prepare/mutating:false), `wallet_send_confirm` (user_wallet_broadcast/mutating:true)
 - `tools/registry/compact.ts:15` `COMPACT_TOOLS` — `compact_now` (local_write/compact_only, visibility.band:barrier, excludeRoles:subagent)
 - `tools/registry/memory.ts:21` `MEMORY_TOOLS` — `memory_recall` (read/read_only), `mark_outstanding_resolved` (local_write/read_only — classified read_only for pressure because resolving items at barrier is productive pre-compact work)
 
@@ -155,7 +155,7 @@ unless its tool is actually dispatched.
 - `tools/internal/wallet/send-types.ts:43` `summarizeWalletError` — structural error fingerprint `{errorKind, errorHash}` via SHA-256; raw error messages NEVER surface in transcript or approval logs
 - `tools/internal/wallet/send-execute-evm.ts:22` `executeEvmTransfer` — Khalani chain registry → viem walletClient; native / ERC-20 / ERC-721; try/catch split pre-broadcast vs post-broadcast (chain_failed / confirmation_unknown)
 - `tools/internal/wallet/send-execute-solana.ts:54` `executeSolanaTransfer` — SOL / SPL token (Jupiter token resolve); ATA existence check + atomic create+transfer if needed; `signAndSubmitLegacyTxStaged` staged submission; no hidden side-effect `getOrCreateAssociatedTokenAccount`
-- `tools/internal/wallet/read.ts:41` `handleWalletRead` — Zod-validated args; calls `resolveSelectedAddress` per family; `getTokenBalancesAcrossChains` via Khalani; all-wallet snapshot aggregation
+- `tools/internal/wallet/read.ts:41` `handleWalletBalances` — Zod-validated args; calls `resolveSelectedAddress` per family; `getTokenBalancesAcrossChains` via Khalani; all-wallet snapshot aggregation
 - `tools/internal/wallet/resolve.ts:54` `resolveSelectedAddress` — address-only, no key decrypt; validates session selection + mission policy; throws VexError on drift/mismatch/policy violation
 - `tools/internal/wallet/resolve.ts:130` `resolveSigningWallet` — decrypts key; same selection + policy validation PLUS `loadWalletFromEntry`; only called in confirm AFTER approval gate
 - `tools/internal/wallet/resolve.ts:88` `resolveSelectedAddressSet` — resolves both EVM+Solana addresses for read-side scoping; empty set → no rows (never global); invalid policy fails closed first
@@ -201,7 +201,7 @@ unless its tool is actually dispatched.
 
 ### Internal handlers — portfolio inspect
 
-- `tools/internal/portfolio-inspect.ts:45` `handlePortfolioInspect` — 14-view router; wallet-scoped views (13) call `resolveSelectedAddressSet` first — empty set → zero rows, never global; `executions` view unscoped (global protocol audit log)
+- `tools/internal/portfolio-inspect.ts:45` `handlePortfolio` — 14-view router; wallet-scoped views (13) call `resolveSelectedAddressSet` first — empty set → zero rows, never global; `executions` view unscoped (global protocol audit log)
 - `tools/internal/inspect-views/portfolio.ts` — summary (FIFO lots + prediction MTM unrealized), balances, snapshots (7-day aggregate), executions (protocol_executions)
 - `tools/internal/inspect-views/positions.ts` — open_positions, closed_positions, orders (proj_open_positions)
 - `tools/internal/inspect-views/activity.ts` — activity, bridges, lp_history, non_trading_history (proj_activity)
@@ -231,7 +231,7 @@ unless its tool is actually dispatched.
 - **CAP-tools-core-pressure-deny**: Hard-deny mutating tools at band barrier/critical; hard-deny compact_only below barrier — `tools/dispatcher.ts:49 checkPressureDeny`
 - **CAP-tools-core-approval-gate**: Gate mutating internal tools on `sessionPermission === "restricted" && !approved`; return `pendingApproval:true` — `tools/dispatcher.ts:293 routeInternalTool`
 - **CAP-tools-core-action-kind-stamp**: Stamp `ToolResult.actionKind` from registry fallback when handler did not set it — `tools/dispatcher.ts:36 withActionKindFallback`
-- **CAP-tools-wallet-read**: Read live token balances across EVM+Solana via Khalani — `tools/internal/wallet/read.ts:41 handleWalletRead`
+- **CAP-tools-wallet-read**: Read live token balances across EVM+Solana via Khalani — `tools/internal/wallet/read.ts:41 handleWalletBalances`
 - **CAP-tools-wallet-prepare**: Create DB-backed transfer intent (no key decrypt, no broadcast); return intentId with TTL — `tools/internal/wallet/send.ts:57 handleWalletSendPrepare`
 - **CAP-tools-wallet-confirm**: Approval-gated, CAS-consuming transfer broadcast; EVM or Solana execution; raw errors fingerprinted — `tools/internal/wallet/send.ts:131 handleWalletSendConfirm`
 - **CAP-tools-wallet-resolve-address**: Resolve session-selected wallet address without key decrypt; enforce mission policy — `tools/internal/wallet/resolve.ts:54 resolveSelectedAddress`
@@ -249,7 +249,7 @@ unless its tool is actually dispatched.
 - **CAP-tools-mission-stop**: Authorize + signal mission stop; validates against accepted contract for non-emergency reasons — `tools/internal/mission.ts:90 handleMissionStop`
 - **CAP-tools-subagent-spawn**: Spawn child agent session with inherited permission; fire-and-forget execution — `tools/internal/subagent/parent.ts handleSubagentSpawn` (**DISABLED**)
 - **CAP-tools-subagent-lifecycle**: In-memory tracking, ownership guard, run/finalize of subagent sessions — `tools/internal/subagent/lifecycle.ts` (**DISABLED**)
-- **CAP-tools-portfolio-inspect**: 14-view read-only portfolio inspection; wallet-scoped except executions — `tools/internal/portfolio-inspect.ts:45 handlePortfolioInspect`
+- **CAP-tools-portfolio-inspect**: 14-view read-only portfolio inspection; wallet-scoped except executions — `tools/internal/portfolio-inspect.ts:45 handlePortfolio`
 
 ## Public API (consumed by)
 
@@ -391,7 +391,7 @@ Stale when any of the following change:
 
 2. **`tool_output_read` blob TTL**: The `tool_output_blobs` table is used for overflow storage but the TTL enforcement mechanism is not visible in this module scope. Callers receive `blob_key` stubs; handler reads the blob without checking expiry inline. Confirm TTL cleanup is handled elsewhere (Z4 or a scheduled cleanup job).
 
-3. **`portfolio_inspect` `executions` view is unscoped**: The `executions` view reads `protocol_executions` globally — no wallet_address filter. This is documented as a known design choice ("global protocol audit log") but may expose execution metadata from other sessions. Evaluate whether session-scoping is needed when privacy requirements are finalized.
+3. **`portfolio` `executions` view is unscoped**: The `executions` view reads `protocol_executions` globally — no wallet_address filter. This is documented as a known design choice ("global protocol audit log") but may expose execution metadata from other sessions. Evaluate whether session-scoping is needed when privacy requirements are finalized.
 
 4. **`mark_outstanding_resolved` actionKind is `local_write` but `pressureSafety` is `read_only`**: This is intentional — the pressure classification allows the tool at barrier/critical because closing outstanding items before compact is productive. Document this asymmetry explicitly for reviewers: `mutating:false, pressureSafety:read_only, actionKind:local_write` is a valid and deliberate combination.
 

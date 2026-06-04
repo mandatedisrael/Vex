@@ -33,7 +33,7 @@ describe("buildToolCatalogPrompt — visibility-aware Tool Map", () => {
 
       // Reads / orientation visible
       expect(out).toContain("**Protocol discovery/execution:** discover_tools, execute_tool");
-      expect(out).toContain("**Live state reads:** wallet_read, evm_read, portfolio_inspect");
+      expect(out).toContain("**Live state reads:** wallet_balances, evm_read, portfolio");
 
       // Memory + knowledge visible (read tools at normal band)
       expect(out).toContain("**Session memory — this conversation/mission only:** memory_recall, mark_outstanding_resolved");

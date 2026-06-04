@@ -83,7 +83,7 @@ describe("registry", () => {
     // "subagent_reply",
     // "subagent_request_parent",
     // "subagent_report_complete",
-    "wallet_read",
+    "wallet_balances",
     "wallet_send_prepare",
     "wallet_send_confirm",
     "khalani_chains_list",

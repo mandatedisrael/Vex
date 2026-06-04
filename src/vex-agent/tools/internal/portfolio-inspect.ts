@@ -42,7 +42,7 @@ const WALLET_SCOPED_VIEWS = new Set<string>([
   "activity", "bridges", "lp_history", "non_trading_history",
 ]);
 
-export async function handlePortfolioInspect(
+export async function handlePortfolio(
   params: Record<string, unknown>,
   context: InternalToolContext,
 ): Promise<ToolResult> {

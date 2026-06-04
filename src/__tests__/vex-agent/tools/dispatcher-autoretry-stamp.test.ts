@@ -37,11 +37,11 @@ vi.mock("../../../vex-agent/tools/internal/wallet/send.js", () => ({
     .mockResolvedValue({ success: true, output: "prepared" }),
 }));
 
-const handleWalletRead = vi
+const handleWalletBalances = vi
   .fn()
   .mockResolvedValue({ success: true, output: "read" });
 vi.mock("../../../vex-agent/tools/internal/wallet/read.js", () => ({
-  handleWalletRead: (...a: unknown[]) => handleWalletRead(...a),
+  handleWalletBalances: (...a: unknown[]) => handleWalletBalances(...a),
 }));
 
 const executeProtocolTool = vi
@@ -80,8 +80,8 @@ afterEach(() => vi.clearAllMocks());
 describe("dispatchTargetIsMutating", () => {
   it("internal mutating tool → true; read-only → false", () => {
     expect(dispatchTargetIsMutating({ name: "wallet_send_confirm", args: {} })).toBe(true);
-    expect(dispatchTargetIsMutating({ name: "wallet_read", args: {} })).toBe(false);
-    expect(dispatchTargetIsMutating({ name: "portfolio_inspect", args: {} })).toBe(false);
+    expect(dispatchTargetIsMutating({ name: "wallet_balances", args: {} })).toBe(false);
+    expect(dispatchTargetIsMutating({ name: "portfolio", args: {} })).toBe(false);
     // The execute_tool WRAPPER itself is mutating:false — never stamp on the name.
     expect(dispatchTargetIsMutating({ name: "execute_tool", args: {} })).toBe(false);
   });
@@ -115,9 +115,9 @@ describe("stamp on dispatch", () => {
   });
 
   it("does NOT stamp a read-only tool", async () => {
-    await dispatchTool({ name: "wallet_read", args: {} }, ctx("run-1"));
+    await dispatchTool({ name: "wallet_balances", args: {} }, ctx("run-1"));
     expect(markAutoRetryUnsafe).not.toHaveBeenCalled();
-    expect(handleWalletRead).toHaveBeenCalledTimes(1);
+    expect(handleWalletBalances).toHaveBeenCalledTimes(1);
   });
 
   it("does NOT stamp when there is no mission run (missionRunId null)", async () => {

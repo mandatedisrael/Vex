@@ -47,9 +47,9 @@ describe("dispatcher — subagent, wallet, unknown, no-stubs", () => {
 
   // ── Wallet ───────────────────────────────────────────────────────
 
-  it("routes wallet_read to live handler (not stub)", async () => {
+  it("routes wallet_balances to live handler (not stub)", async () => {
     const result = await dispatchTool(
-      { name: "wallet_read", args: { wallet: "eip155" }, toolCallId: "call_14" },
+      { name: "wallet_balances", args: { wallet: "eip155" }, toolCallId: "call_14" },
       baseContext,
     );
 

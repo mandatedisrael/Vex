@@ -46,7 +46,7 @@ describe("buildResumePacket", () => {
       }
       if (sql.includes("role = 'tool'")) {
         return [
-          { tool_call_id: "tc-3", content: "wallet_read returned allowance ok", created_at: "2026-05-01T00:00:06Z" },
+          { tool_call_id: "tc-3", content: "wallet_balances returned allowance ok", created_at: "2026-05-01T00:00:06Z" },
           { tool_call_id: "tc-2", content: "quote tool returned route candidate", created_at: "2026-05-01T00:00:05Z" },
           { tool_call_id: "tc-1", content: "risk check returned pass", created_at: "2026-05-01T00:00:04Z" },
         ];

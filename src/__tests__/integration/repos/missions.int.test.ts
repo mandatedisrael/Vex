@@ -23,7 +23,7 @@ describe("mission draft persistence (integration)", () => {
         allowedChains: ["solana"],
         allowedProtocols: ["solana", "dexscreener"],
         riskProfile: "aggressive",
-        successCriteria: ["Solana wallet total USD value >= 20 via wallet_read"],
+        successCriteria: ["Solana wallet total USD value >= 20 via wallet_balances"],
         stopConditions: ["6 hours elapsed from start", "Manual stop via /mission stop"],
         deadline: "2026-05-02T23:00:00Z",
       },

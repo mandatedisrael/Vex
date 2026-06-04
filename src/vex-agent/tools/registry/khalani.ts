@@ -54,7 +54,7 @@ function paramsToJsonSchema(params: readonly ProtocolParamDef[]): JsonSchema {
 
 function internalDescription(name: string, protocolDescription: string): string {
   if (name === "khalani_tokens_balances") {
-    return "Read your token balances on one wallet family (EVM or Solana) via Khalani. Defaults to your personal wallet — pass `address` only if you want to check a different one. Use wallet_read if you want all your wallet families in one call.";
+    return "Read your token balances on one wallet family (EVM or Solana) via Khalani. Defaults to your personal wallet — pass `address` only if you want to check a different one. Use wallet_balances if you want all your wallet families in one call.";
   }
   if (name === "token_find") {
     return "Resolve a token symbol/name to its exact on-chain contract address(es) + decimals per chain (the canonical EVM token resolver). Use BEFORE any swap or bridge.";
