@@ -278,7 +278,7 @@ export const TOOL_MAP_CATEGORIES: readonly ToolMapCategory[] = [
     toolNames: [
       "khalani_chains_list",
       "khalani_tokens_top",
-      "khalani_tokens_search",
+      "token_find",
       "khalani_tokens_balances",
     ],
   },

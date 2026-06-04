@@ -123,7 +123,7 @@ describe("ActionKind — pinned critical classifications", () => {
     // Khalani read-only aliases
     ["khalani_chains_list", "read"],
     ["khalani_tokens_top", "read"],
-    ["khalani_tokens_search", "read"],
+    ["token_find", "read"],
     ["khalani_tokens_balances", "read"],
   ];
 

@@ -60,7 +60,7 @@ Check balances, positions, and state before making changes. The dispatcher does 
 Before ANY mutating tool that takes a token address, symbol, or mint:
 
 1. Resolve via a read tool FIRST:
-   - Primary: \`khalani_tokens_search\` or \`khalani.tokens.search\` (symbol/name → address per chain, cross-chain; covers EVM).
+   - Primary: \`token_find\` or \`khalani.tokens.search\` (symbol/name → address per chain, cross-chain; covers EVM).
    - Solana: \`solana.tokens.search\` (verify mint on Solana).
 2. Use the address from the tool result — NOT from memory, knowledge, examples, or prior conversations.
 3. Never copy addresses from \`exampleParams\` — those demonstrate param format only.

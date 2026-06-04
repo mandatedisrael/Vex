@@ -186,7 +186,7 @@ it (see Related modules).
 | Consumer | Import | Usage |
 |----------|--------|-------|
 | `src/vex-agent/tools/registry/khalani.ts` | (indirect via manifest) | Validates that `KHALANI_INTERNAL_TO_PROTOCOL` entries map to non-mutating manifests; derives `ToolDef` shapes from `KHALANI_TOOLS` manifests |
-| `src/vex-agent/tools/internal/khalani.ts` | (no direct `@tools/khalani` import) | Thin alias shim: delegates `khalani_chains_list`, `khalani_tokens_top`, `khalani_tokens_search`, `khalani_tokens_balances` to `executeProtocolTool(KHALANI_INTERNAL_TO_PROTOCOL[name])` |
+| `src/vex-agent/tools/internal/khalani.ts` | (no direct `@tools/khalani` import) | Thin alias shim: delegates `khalani_chains_list`, `khalani_tokens_top`, `token_find`, `khalani_tokens_balances` to `executeProtocolTool(KHALANI_INTERNAL_TO_PROTOCOL[name])` |
 
 ### Test layer
 

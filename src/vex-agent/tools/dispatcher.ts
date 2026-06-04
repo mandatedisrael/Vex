@@ -275,7 +275,7 @@ export const INTERNAL_TOOL_LOADERS: Readonly<Record<string, InternalHandlerLoade
   // Khalani direct read aliases
   khalani_chains_list: async () => (await import("./internal/khalani.js")).handleKhalaniChainsList,
   khalani_tokens_top: async () => (await import("./internal/khalani.js")).handleKhalaniTokensTop,
-  khalani_tokens_search: async () => (await import("./internal/khalani.js")).handleKhalaniTokensSearch,
+  token_find: async () => (await import("./internal/khalani.js")).handleTokenFind,
   khalani_tokens_balances: async () => (await import("./internal/khalani.js")).handleKhalaniTokensBalances,
 
   // Setup / Configuration

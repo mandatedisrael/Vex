@@ -5,7 +5,7 @@ import type { ProtocolParamDef } from "../protocols/types.js";
 export const KHALANI_INTERNAL_TO_PROTOCOL = {
   khalani_chains_list: "khalani.chains.list",
   khalani_tokens_top: "khalani.tokens.top",
-  khalani_tokens_search: "khalani.tokens.search",
+  token_find: "khalani.tokens.search",
   khalani_tokens_balances: "khalani.tokens.balances",
 } as const;
 
@@ -55,6 +55,9 @@ function paramsToJsonSchema(params: readonly ProtocolParamDef[]): JsonSchema {
 function internalDescription(name: string, protocolDescription: string): string {
   if (name === "khalani_tokens_balances") {
     return "Read your token balances on one wallet family (EVM or Solana) via Khalani. Defaults to your personal wallet — pass `address` only if you want to check a different one. Use wallet_read if you want all your wallet families in one call.";
+  }
+  if (name === "token_find") {
+    return "Resolve a token symbol/name to its exact on-chain contract address(es) + decimals per chain (the canonical EVM token resolver). Use BEFORE any swap or bridge.";
   }
   return `${protocolDescription} Direct shortcut to ${KHALANI_INTERNAL_TO_PROTOCOL[name as KhalaniInternalToolName]}.`;
 }
