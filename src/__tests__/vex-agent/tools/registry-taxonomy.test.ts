@@ -84,19 +84,16 @@ describe("ActionKind — pinned critical classifications", () => {
     ["tool_output_read", "read"],
     ["knowledge_recall", "read"],
     ["knowledge_get", "read"],
-    ["document_read", "read"],
-    ["document_list", "read"],
 
     // External API calls — read-only per Codex bindings:
     // network egress / privacy is a separate dimension, not `external_post`.
     ["web_research", "read"],
     ["twitter_account", "read"],
 
-    // Local writes — knowledge, documents, mission draft, compaction
+    // Local writes — knowledge, mission draft, compaction
     ["knowledge_write", "local_write"],
     ["knowledge_supersede", "local_write"],
     ["knowledge_update_status", "local_write"],
-    ["document_write", "local_write"],
     ["mission_draft_update", "local_write"],
     ["mark_outstanding_resolved", "local_write"],
     ["compact_now", "local_write"],
@@ -108,12 +105,6 @@ describe("ActionKind — pinned critical classifications", () => {
 
     // Schedule — reserved for delayed / deferred execution (Codex Q2 ruling).
     ["loop_defer", "schedule"],
-
-    // Destructive — no expand-and-contract recovery. document_delete is a
-    // soft-delete in repo today but the taxonomy ranks reversibility risk;
-    // a delete operation gets `destructive` so the approval / audit layer
-    // can treat it as the high-risk class.
-    ["document_delete", "destructive"],
 
     // Protocol meta-tools — wrapper is read; protocol target classification
     // is derived dynamically in `executeProtocolTool` (see execute-tool-taxonomy test).

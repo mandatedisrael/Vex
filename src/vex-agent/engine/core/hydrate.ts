@@ -2,8 +2,8 @@
  * Session hydration — reconstruct engine state from DB.
  *
  * Loads session, messages, mission (if any), active run, summary.
- * loadedDocuments is populated by the caller (documents are keyed by
- * space, not session — the caller knows which docs to load).
+ * loadedDocuments starts empty and is populated at tool-dispatch time
+ * (e.g. knowledge_get injects fetched entry content under a `knowledge:{id}` key).
  */
 
 import { z } from "zod";
@@ -14,6 +14,8 @@ import * as messagesRepo from "@vex-agent/db/repos/messages.js";
 import * as missionsRepo from "@vex-agent/db/repos/missions.js";
 import * as missionRunsRepo from "@vex-agent/db/repos/mission-runs.js";
 import * as sessionLinksRepo from "@vex-agent/db/repos/session-links.js";
+import { loadPersona } from "../../../lib/persona.js";
+import { PERSONA_FILE } from "@config/paths.js";
 
 export interface HydratedSession {
   context: EngineContext;
@@ -27,8 +29,8 @@ export interface HydratedSession {
  * Hydrate an engine session from DB state.
  * Returns null if session doesn't exist.
  *
- * `loadedDocuments` is left empty — the caller populates it
- * (documents are keyed by space/folder, not session).
+ * `loadedDocuments` is left empty — it is populated at tool-dispatch time
+ * (e.g. knowledge_get injects fetched entry content).
  *
  * `sessionKind` and `sessionPermission` are immutable per session.
  * `sessionKind` defaults to `session.mode` from DB; if an active mission
@@ -107,6 +109,10 @@ export async function hydrateEngineSession(sessionId: string): Promise<HydratedS
   const sessionKind: SessionKind = mission ? "mission" : session.mode;
   const sessionPermission: Permission = session.permission;
 
+  // Local-first user persona (name + optional tone block). Best-effort read —
+  // a missing/malformed persona.md degrades to the default ("Vex", no block).
+  const persona = loadPersona(PERSONA_FILE);
+
   return {
     context: {
       sessionId,
@@ -122,6 +128,9 @@ export async function hydrateEngineSession(sessionId: string): Promise<HydratedS
       selectedSolanaWallet: session.selectedSolanaWallet,
       walletPolicy: resolveWalletPolicy(mission, activeRun),
       loadedDocuments: new Map(), // Populated by caller
+      personaName: persona.name,
+      personaBlock: persona.block,
+      personaConfigured: persona.configured,
     },
     messages,
     summary: session.summary ?? null,

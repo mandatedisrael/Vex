@@ -29,7 +29,7 @@ import type { InferenceProvider, InferenceConfig, ToolDefinition } from "@vex-ag
 import type { Message } from "@vex-agent/db/repos/messages.js";
 import type { PromptStackOptions } from "../prompts/index.js";
 import { executeTurn, saveAssistantMessage } from "./turn.js";
-import { type ContextUsageBand } from "./context-band.js";
+import type { ToolVisibilityBase } from "@vex-agent/tools/registry.js";
 import {
   appendPendingOperatorInstructions,
   maxOperatorInstructionId,
@@ -57,7 +57,13 @@ export interface TurnLoopConfig {
   maxIterations: number;
   timeoutMs: number;
   contextLimit: number;
-  buildToolsForBand?: (band: ContextUsageBand) => ToolDefinition[];
+  /**
+   * Static visibility axes (permission, role, sessionKind, missionRunActive)
+   * the runner knows up-front. `buildTurnPromptStack` augments this per turn
+   * with the live band + `hasSessionMemory` to build the SINGLE
+   * `ToolVisibilityContext` that drives BOTH the tools array and the Tool Map.
+   */
+  baseVisibility?: ToolVisibilityBase;
 }
 
 export interface TurnLoopResult {
@@ -243,8 +249,7 @@ export async function runTurnLoop(
       postCompactBridgeRemaining,
       basePromptOptions: promptOptions,
       memoryRoutingPrompt: MEMORY_ROUTING_PROMPT,
-      defaultTools: tools,
-      buildToolsForBand: loopConfig.buildToolsForBand,
+      baseVisibility: loopConfig.baseVisibility,
     });
     postCompactBridgeRemaining = stack.nextPostCompactBridgeRemaining;
 

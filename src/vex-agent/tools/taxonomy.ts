@@ -17,7 +17,7 @@
  *  - `read`                     — no side effect outside the read path
  *                                 (DB selects, RPC reads, external GETs).
  *  - `local_write`              — mutates Vex-local DB / file / memory state
- *                                 (knowledge, documents, mission draft, compact).
+ *                                 (knowledge, mission draft, compact).
  *  - `schedule`                 — defers / wakes engine execution
  *                                 (loop_defer); separate from local_write
  *                                 because policy gates may treat scheduling
@@ -34,9 +34,8 @@
  *                                 social post, etc.). Distinct from `read`
  *                                 even when no chain is touched.
  *  - `destructive`              — removes / overwrites data with no
- *                                 expand-and-contract path (document_delete,
- *                                 future hard-delete tools). High-risk class
- *                                 for approval policy.
+ *                                 expand-and-contract path (future hard-delete
+ *                                 tools). High-risk class for approval policy.
  *
  * Per Codex review (puzzle 5/1A plan GREEN LIGHT, 2026-05-23):
  * read-only external API calls (Tavily search, Twitter scrapes) classify as

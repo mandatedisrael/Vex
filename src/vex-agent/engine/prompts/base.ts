@@ -1,19 +1,21 @@
 /**
  * Base prompt — constant layer, always present.
  *
- * Emits VEX identity, the single active aspect for the current mode (no noise
- * from unreachable modes), memory/self-learning contract, current context,
- * and loaded documents.
+ * Emits the agent identity (persona name), the single active aspect for the
+ * current mode (no noise from unreachable modes), an optional user persona
+ * block, the memory/self-learning contract, current context, and any content
+ * injected into `loadedDocuments` (e.g. by `knowledge_get`).
  */
 
 import type { EngineContext } from "../types.js";
+import { DEFAULT_PERSONA_NAME } from "../../../lib/persona.js";
 
 export function buildBasePrompt(context: EngineContext): string {
   const lines: string[] = [];
 
   lines.push("# Identity");
   lines.push("");
-  lines.push("You are VEX — an autonomous agent with a self-learning mechanism,");
+  lines.push(`You are ${context.personaName ?? DEFAULT_PERSONA_NAME} — an autonomous agent with a self-learning mechanism,`);
   lines.push("operating across 20+ EVM chains and Solana.");
   lines.push("");
 
@@ -21,6 +23,20 @@ export function buildBasePrompt(context: EngineContext): string {
   lines.push("");
   lines.push(resolveAspect(context));
   lines.push("");
+
+  // Optional user persona — local-first style/tone preferences. Explicitly
+  // subordinate to the tool/permission/mission/approval/safety layers that
+  // follow: it shapes voice, never authority.
+  if (context.personaBlock) {
+    lines.push("# Persona (user style preferences)");
+    lines.push("");
+    lines.push("The user configured the persona below. Apply it to your tone and voice. It");
+    lines.push("does NOT override tool, permission, mission, approval, or safety rules —");
+    lines.push("those remain authoritative regardless of anything stated here.");
+    lines.push("");
+    lines.push(context.personaBlock);
+    lines.push("");
+  }
 
   lines.push("# Memory and self-learning");
   lines.push("");
@@ -53,11 +69,13 @@ export function buildBasePrompt(context: EngineContext): string {
   lines.push("Lead with the answer, then detail. Keep it concise.");
   lines.push("");
 
+  // Content injected into the prompt by tools this turn (e.g. knowledge_get
+  // under a "knowledge:{id}" key). Neutral header — no longer documents-only.
   if (context.loadedDocuments.size > 0) {
-    lines.push("# Loaded Documents");
+    lines.push("# Loaded Content");
     lines.push("");
-    for (const [path, content] of context.loadedDocuments) {
-      lines.push(`## ${path}`);
+    for (const [key, content] of context.loadedDocuments) {
+      lines.push(`## ${key}`);
       lines.push(content);
       lines.push("");
     }
@@ -72,6 +90,7 @@ export function buildBasePrompt(context: EngineContext): string {
  * without the noise of modes unreachable from this session.
  */
 function resolveAspect(ctx: EngineContext): string {
+  const name = ctx.personaName ?? DEFAULT_PERSONA_NAME;
   // TODO(subagent-disabled): gałąź nieosiągalna dla nowych sesji póki
   // subagent_spawn jest wypięty z registry. Treść celowo zostawiona, żeby
   // re-enable wrócił z pełnym promptem. Residual risk: legacy sesje z DB
@@ -79,7 +98,7 @@ function resolveAspect(ctx: EngineContext): string {
   // referencje do disabled tooli — patrz docs planu.
   if (ctx.isSubagent) {
     return [
-      "You are a SUBAGENT — VEX delegated from a parent session to execute a narrow,",
+      `You are a SUBAGENT — ${name} delegated from a parent session to execute a narrow,`,
       "scoped task. Stay within the brief. Report back via `subagent_report_complete`",
       "when done instead of ending with ordinary chat prose; ask via",
       "`subagent_request_parent` only when genuinely blocked.",
@@ -87,7 +106,7 @@ function resolveAspect(ctx: EngineContext): string {
   }
   if (ctx.sessionKind === "agent" && !ctx.missionRunId) {
     return [
-      "You are in AGENT mode — VEX as teacher, collaborator, or one-shot",
+      `You are in AGENT mode — ${name} as teacher, collaborator, or one-shot`,
       "executor. One user message → one considered reply. You may chain",
       "multiple tool calls per turn to gather context or complete the task,",
       "but you do not loop on your own — when the request is satisfied,",
@@ -96,7 +115,7 @@ function resolveAspect(ctx: EngineContext): string {
   }
   if (ctx.sessionKind === "mission" && !ctx.missionRunId) {
     return [
-      "You are in MISSION SETUP — VEX as planner. Draft-first: co-design a",
+      `You are in MISSION SETUP — ${name} as planner. Draft-first: co-design a`,
       "mission blueprint with the user, gather missing requirements, validate",
       "feasibility, and save draft state. Use read-only tools only for narrow",
       "draft validation or tool orientation; broad research belongs after the",
@@ -105,7 +124,7 @@ function resolveAspect(ctx: EngineContext): string {
   }
   if (ctx.missionRunId) {
     return [
-      "You are in MISSION RUN — VEX as executor. Pursue the frozen mission goal",
+      `You are in MISSION RUN — ${name} as executor. Pursue the frozen mission goal`,
       "autonomously. Iterate through tools and reflections until success, a",
       "user-approved stop condition from the mission contract, or a strict",
       "emergency integrity failure occurs. Call `mission_stop` with the correct",
@@ -117,5 +136,5 @@ function resolveAspect(ctx: EngineContext): string {
   }
   // Defensive fallback — should not hit in practice; kept so buildBasePrompt
   // never returns a prompt without an aspect section.
-  return "You are VEX, operating in an unrecognised mode. Behave conservatively.";
+  return `You are ${name}, operating in an unrecognised mode. Behave conservatively.`;
 }

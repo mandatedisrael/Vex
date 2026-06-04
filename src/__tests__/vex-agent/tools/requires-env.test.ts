@@ -55,9 +55,9 @@ describe("requiresEnv filtering", () => {
     it("non-ENV tools always present regardless of ENV state", async () => {
       const tools = getOpenAITools(defaultVisibilityContext());
       const hasDiscover = tools.some(t => t.function.name === "discover_tools");
-      const hasFileRead = tools.some(t => t.function.name === "document_read");
+      const hasKnowledgeRecall = tools.some(t => t.function.name === "knowledge_recall");
       expect(hasDiscover).toBe(true);
-      expect(hasFileRead).toBe(true);
+      expect(hasKnowledgeRecall).toBe(true);
     });
 
     it("all knowledge_* tools are visible without EMBEDDING_BASE_URL (decision #10: no requiresEnv)", async () => {

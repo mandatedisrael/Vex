@@ -24,8 +24,8 @@ import {
 } from "../../mission/setup.js";
 import { parseModelMissionOutput } from "../../mission/patch-parser.js";
 import type { PromptStackOptions } from "../../prompts/index.js";
-import { getOpenAITools } from "@vex-agent/tools/registry.js";
-import { computeBand, type ContextUsageBand } from "../context-band.js";
+import { getOpenAITools, type ToolVisibilityBase } from "@vex-agent/tools/registry.js";
+import { computeBand } from "../context-band.js";
 import { resolveProvider } from "@vex-agent/inference/registry.js";
 import { appendEngineMessage, appendMessage } from "@vex-agent/engine/events/index.js";
 import logger from "@utils/logger.js";
@@ -100,14 +100,19 @@ export async function processMissionSetupTurn(
     missionRunId: null,
   };
 
-  const buildToolsForBand = (contextUsageBand: ContextUsageBand) => toToolDefinitions(getOpenAITools({
+  const baseVisibility: ToolVisibilityBase = {
     permission: setupContext.sessionPermission,
     role: "parent",
     sessionKind: "mission",
     missionRunActive: false, // setup — no run yet
-    contextUsageBand,
+  };
+  // Seed tools — overridden per turn by buildTurnPromptStack with the live band
+  // + `hasSessionMemory`.
+  const tools = toToolDefinitions(getOpenAITools({
+    ...baseVisibility,
+    contextUsageBand: computeBand(hydrated.tokenCount, config.contextLimit),
+    hasSessionMemory: false,
   }));
-  const tools = buildToolsForBand(computeBand(hydrated.tokenCount, config.contextLimit));
 
   const loopConfig: TurnLoopConfig = {
     ...DEFAULT_LOOP_CONFIG,
@@ -116,7 +121,7 @@ export async function processMissionSetupTurn(
     // DEFAULT_LOOP_CONFIG.maxIterations=50 still dominates actual execution.
     maxIterations: 15,
     contextLimit: config.contextLimit,
-    buildToolsForBand,
+    baseVisibility,
   };
 
   const promptOptions: PromptStackOptions = {

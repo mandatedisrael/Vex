@@ -8,7 +8,7 @@
  * Rendering contract:
  *   - Categories listed in `TOOL_MAP_CATEGORIES` order (registry.ts) —
  *     order carries model-priority intent (orientation → reads → memory →
- *     compaction → knowledge → documents → mutations → mission control).
+ *     compaction → knowledge → mutations → mission control).
  *   - Tool names within a category preserve their declared order — NOT
  *     alphabetized, because PR3's GREEN-LIGHT design treats ordering as
  *     intent ("read before write" within Wallet, etc).

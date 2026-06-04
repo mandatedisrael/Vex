@@ -64,10 +64,6 @@ describe("registry", () => {
     "execute_tool",
     "web_research",
     "twitter_account",
-    "document_read",
-    "document_write",
-    "document_list",
-    "document_delete",
     "knowledge_write",
     "knowledge_recall",
     "knowledge_recall_overflow",
@@ -111,6 +107,12 @@ describe("registry", () => {
 
   it("does NOT have memory_manage (replaced by knowledge_*)", () => {
     expect(getToolDef("memory_manage")).toBeUndefined();
+  });
+
+  it("does NOT have document_* (scratchpad vertical removed)", () => {
+    for (const name of ["document_read", "document_write", "document_list", "document_delete"]) {
+      expect(getToolDef(name)).toBeUndefined();
+    }
   });
 
   it("does NOT have wallet_backup (deferred)", () => {
@@ -166,10 +168,9 @@ describe("registry", () => {
     expect(namespace?.description).toContain("khalani");
   });
 
-  it("mutating tools are document_delete, polymarket_setup, wallet_send_confirm", () => {
+  it("mutating tools are polymarket_setup, wallet_send_confirm", () => {
     const mutating = getAllTools().filter(t => t.mutating).map(t => t.name).sort();
     expect(mutating).toEqual([
-      "document_delete",
       "polymarket_setup",
       "wallet_send_confirm",
     ]);
@@ -288,7 +289,10 @@ describe("registry", () => {
       expect(names).toContain("wallet_send_confirm");
     });
 
-    it("read_only tools (memory_recall, mark_outstanding_resolved) are visible at every band", () => {
+    it("read_only tools (memory_recall, mark_outstanding_resolved) are visible at every band when the session has memory", () => {
+      // Isolates the pressure-band axis: these tools also require
+      // `hasSessionMemory` (see the gate test below), so this case pins a
+      // session that HAS narrative chunks and checks read_only survives bands.
       for (const band of ["normal", "warning", "barrier", "critical"] as const) {
         const tools = getOpenAITools(defaultVisibilityContext({
           permission: "full",
@@ -296,11 +300,31 @@ describe("registry", () => {
           sessionKind: "mission",
           missionRunActive: true,
           contextUsageBand: band,
+          hasSessionMemory: true,
         }));
         const names = tools.map(t => t.function.name);
         expect(names, `band=${band}`).toContain("memory_recall");
         expect(names, `band=${band}`).toContain("mark_outstanding_resolved");
       }
+    });
+
+    it("memory tools are gated by hasSessionMemory (hidden in a fresh session, shown once chunks exist)", () => {
+      const base = {
+        permission: "full" as const,
+        role: "parent" as const,
+        sessionKind: "mission" as const,
+        missionRunActive: true,
+        contextUsageBand: "normal" as const,
+      };
+      const fresh = getOpenAITools(defaultVisibilityContext({ ...base, hasSessionMemory: false }))
+        .map(t => t.function.name);
+      expect(fresh).not.toContain("memory_recall");
+      expect(fresh).not.toContain("mark_outstanding_resolved");
+
+      const withMemory = getOpenAITools(defaultVisibilityContext({ ...base, hasSessionMemory: true }))
+        .map(t => t.function.name);
+      expect(withMemory).toContain("memory_recall");
+      expect(withMemory).toContain("mark_outstanding_resolved");
     });
 
     it("mission_stop is hidden in agent sessions (hiddenInAgent visibility gate)", () => {

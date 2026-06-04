@@ -4,7 +4,8 @@
  * Returns both lineage directions (supersedesId + supersededBy) so the agent
  * can diagnose historical entries (supersededBy) and new-version entries
  * (supersedesId) symmetrically. Injects content_md into the engine's
- * loadedDocuments map under the "knowledge:{id}" prefix (mirrors document_read).
+ * loadedDocuments map under the "knowledge:{id}" prefix so it surfaces in the
+ * system prompt's loaded-content section.
  */
 
 import * as knowledgeRepo from "@vex-agent/db/repos/knowledge.js";
@@ -22,8 +23,8 @@ export async function handleKnowledgeGet(
   const entry = await knowledgeRepo.getById(id);
   if (!entry) return fail(`knowledge entry not found: ${id}`);
 
-  // Inject content_md into the engine's loadedDocuments map (mirrors document_read).
-  // Key uses the "knowledge:{id}" prefix so it never collides with document slugs.
+  // Inject content_md into the engine's loadedDocuments map so it surfaces in
+  // the system prompt. Key uses the "knowledge:{id}" prefix to namespace the entry.
   context.loadedDocuments.set(`knowledge:${entry.id}`, entry.contentMd);
 
   return ok({

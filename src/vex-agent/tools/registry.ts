@@ -39,7 +39,27 @@ export interface ToolVisibilityContext {
   /** True iff `missionRunId !== null`. Mission setup is `false` even when sessionKind="mission". */
   missionRunActive: boolean;
   contextUsageBand: ContextUsageBand;
+  /**
+   * True iff the session has at least one active narrative memory chunk
+   * (Track-2 compaction output). Gates `memory_recall` /
+   * `mark_outstanding_resolved` via `ToolVisibility.requiresSessionMemory` so a
+   * fresh session is never shown no-op memory tools. Recomputed per turn —
+   * chunks first appear after a compact, possibly mid-session.
+   */
+  hasSessionMemory: boolean;
 }
+
+/**
+ * The static visibility axes a runner knows up-front. The per-turn layer
+ * (`buildTurnPromptStack`) augments this with `contextUsageBand` +
+ * `hasSessionMemory` to form the single `ToolVisibilityContext` used for BOTH
+ * the OpenAI tools array AND the system-prompt Tool Map — so the two can never
+ * drift.
+ */
+export type ToolVisibilityBase = Omit<
+  ToolVisibilityContext,
+  "contextUsageBand" | "hasSessionMemory"
+>;
 
 /**
  * Convenience constructor for `ToolVisibilityContext` — agent-session
@@ -55,6 +75,7 @@ export function defaultVisibilityContext(
     sessionKind: "agent",
     missionRunActive: false,
     contextUsageBand: "normal",
+    hasSessionMemory: false,
     ...overrides,
   };
 }
@@ -63,7 +84,6 @@ import { PROTOCOL_TOOLS } from "./registry/protocol.js";
 import { KHALANI_INTERNAL_TOOLS } from "./registry/khalani.js";
 import { WEB_TOOLS } from "./registry/web.js";
 import { TWITTER_ACCOUNT_TOOLS } from "./registry/twitter-account.js";
-import { DOCUMENT_TOOLS } from "./registry/documents.js";
 import { KNOWLEDGE_TOOLS } from "./registry/knowledge.js";
 import { PORTFOLIO_TOOLS } from "./registry/portfolio.js";
 import { SETUP_TOOLS } from "./registry/setup.js";
@@ -83,7 +103,6 @@ const TOOLS: readonly ToolDef[] = [
   ...KHALANI_INTERNAL_TOOLS,
   ...WEB_TOOLS,
   ...TWITTER_ACCOUNT_TOOLS,
-  ...DOCUMENT_TOOLS,
   ...KNOWLEDGE_TOOLS,
   ...PORTFOLIO_TOOLS,
   ...SETUP_TOOLS,
@@ -237,6 +256,10 @@ function passesVisibility(
     return false;
   }
 
+  // Session-memory gate — hide memory tools until Track-2 chunks exist for the
+  // session (a fresh session has nothing to recall). Recomputed per turn.
+  if (v.requiresSessionMemory && !ctx.hasSessionMemory) return false;
+
   return true;
 }
 
@@ -302,14 +325,6 @@ export const TOOL_MAP_CATEGORIES: readonly ToolMapCategory[] = [
   {
     label: "Knowledge write/lifecycle",
     toolNames: ["knowledge_write", "knowledge_supersede", "knowledge_update_status"],
-  },
-  {
-    label: "Documents read — scratchpad, not semantic memory",
-    toolNames: ["document_read", "document_list"],
-  },
-  {
-    label: "Documents write — scratchpad, not semantic memory",
-    toolNames: ["document_write", "document_delete"],
   },
   { label: "Wallet transfers", toolNames: ["wallet_send_prepare", "wallet_send_confirm"] },
   { label: "Mission setup draft", toolNames: ["mission_draft_update"] },

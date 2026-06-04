@@ -46,7 +46,8 @@ describe("prompt-stack", () => {
 
           // Base prompt markers
           expect(joined).toContain("# Identity");
-          expect(joined).toContain("VEX");
+          // Default persona name (no persona.md configured in tests).
+          expect(joined).toContain("Vex");
           expect(joined).toContain("# Your current aspect");
           expect(joined).toContain("# Memory and self-learning");
           // Global output-format directive (batch 3) — present in every mode.
@@ -370,12 +371,13 @@ describe("prompt-stack", () => {
       expect(joined).toContain("loop_defer(after_ms, reason)");
     });
 
-    it("includes loaded documents", () => {
+    it("includes loaded content blocks (e.g. knowledge_get injections)", () => {
       const stack = buildPromptStack(makeContext({
-        loadedDocuments: new Map([["strategy.md", "# Strategy\nBuy low sell high"]]),
+        loadedDocuments: new Map([["knowledge:42", "# Strategy\nBuy low sell high"]]),
       }));
       const joined = stack.join("\n");
-      expect(joined).toContain("strategy.md");
+      expect(joined).toContain("# Loaded Content");
+      expect(joined).toContain("knowledge:42");
       expect(joined).toContain("Buy low sell high");
     });
   });
@@ -535,6 +537,42 @@ describe("prompt-stack", () => {
         expect(typeof section).toBe("string");
         expect(section.length).toBeGreaterThan(0);
       }
+    });
+  });
+
+  // ── Persona (user-configurable name + tone) ─────────────────
+  describe("persona", () => {
+    it("renders the configured persona name in identity + aspect (verbatim casing)", () => {
+      const joined = buildPromptStack(makeContext({ personaName: "Aria" })).join("\n");
+      expect(joined).toContain("You are Aria —");
+      expect(joined).toContain("Aria as teacher");
+      // Default brand name must NOT leak when a custom name is set.
+      expect(joined).not.toContain("You are Vex —");
+    });
+
+    it("renders the persona block as a subordinate section when configured", () => {
+      const joined = buildPromptStack(
+        makeContext({ personaBlock: "Tone: concise, dry, no emoji." }),
+      ).join("\n");
+      expect(joined).toContain("# Persona (user style preferences)");
+      expect(joined).toContain("Tone: concise, dry, no emoji.");
+      // Framed as subordinate to the authoritative rules.
+      expect(joined).toContain("does NOT override tool, permission, mission, approval, or safety rules");
+    });
+
+    it("omits the persona section when no block is configured", () => {
+      const joined = buildPromptStack(makeContext()).join("\n");
+      expect(joined).not.toContain("# Persona (user style preferences)");
+    });
+
+    it("renders the one-time persona-setup hint only when supplied via options", () => {
+      const withHint = buildPromptStack(makeContext(), {
+        personaSetupHint: "# Personalize me (optional)\n\noffer text",
+      }).join("\n");
+      expect(withHint).toContain("# Personalize me (optional)");
+
+      const without = buildPromptStack(makeContext()).join("\n");
+      expect(without).not.toContain("# Personalize me (optional)");
     });
   });
 });

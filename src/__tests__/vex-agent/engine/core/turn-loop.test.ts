@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { StreamChunk, ToolDefinition } from "@vex-agent/inference/types.js";
-import type { ContextUsageBand } from "@vex-agent/engine/core/context-band.js";
+import type { StreamChunk } from "@vex-agent/inference/types.js";
 
 // ── Mocks ─────────────────────────────────────────────────────
 
@@ -189,6 +188,21 @@ vi.mock("@vex-agent/tools/protocols/catalog.js", () => ({
   PROTOCOL_NAMESPACE_ALLOWLIST: [],
 }));
 
+// Spy on getOpenAITools (real impl preserved) so band-recompute tests can
+// observe the per-turn ToolVisibilityContext that buildTurnPromptStack now
+// projects the tools array from — replacing the removed per-band callback.
+const mockGetOpenAITools = vi.hoisted(() => vi.fn());
+vi.mock("@vex-agent/tools/registry.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@vex-agent/tools/registry.js")>();
+  return {
+    ...actual,
+    getOpenAITools: (ctx: Parameters<typeof actual.getOpenAITools>[0]) => {
+      mockGetOpenAITools(ctx);
+      return actual.getOpenAITools(ctx);
+    },
+  };
+});
+
 const { runTurnLoop } = await import("../../../../vex-agent/engine/core/turn-loop.js");
 
 describe("turn-loop", () => {
@@ -287,20 +301,6 @@ describe("turn-loop", () => {
     timeoutMs: 60000,
     contextLimit: 128000,
   };
-
-  function makeTool(name: string): ToolDefinition {
-    return {
-      type: "function",
-      function: {
-        name,
-        description: "test tool",
-        parameters: {
-          type: "object",
-          properties: {},
-        },
-      },
-    };
-  }
 
   // ── Chat mode ───────────────────────────────────────────────
 
@@ -1008,29 +1008,32 @@ describe("turn-loop", () => {
       // Start at critical (120_000 / 128_000 > 0.92). After forced fallback
       // commits, the handlePostCompactBookkeeping reset currentTokenCount=0
       // and the loop recomputes turnBand to normal. Without that recompute,
-      // `buildToolsForBand("critical")` would be called and the model would
-      // see the restricted (compact_only + read_only + safe_at_barrier)
-      // catalog AND the directive critical-pressure banner on the very
-      // first post-compact turn, wasting a turn.
-      const buildToolsForBand = vi.fn((_band: ContextUsageBand) => [] as ToolDefinition[]);
-
+      // buildTurnPromptStack would project the tools array at the "critical"
+      // band and the model would see the restricted (compact_only + read_only +
+      // safe_at_barrier) catalog AND the directive critical-pressure banner on
+      // the very first post-compact turn, wasting a turn.
+      mockGetOpenAITools.mockClear();
       const provider = makeProvider([{ content: "post-compact reply" }]);
 
       await runTurnLoop(
         makeContext({ sessionKind: "mission", missionRunId: "run-1" }),
         [], null, 120_000, provider as any, makeConfig() as any, [],
-        { ...defaultLoopConfig, maxIterations: 1, buildToolsForBand },
+        {
+          ...defaultLoopConfig,
+          maxIterations: 1,
+          baseVisibility: { permission: "restricted", role: "parent", sessionKind: "mission", missionRunActive: true },
+        },
       );
 
       // Forced fallback fired and committed.
       expect(mockForcedFallback).toHaveBeenCalledTimes(1);
-      // buildToolsForBand was called exactly once for the post-fallback turn.
-      expect(buildToolsForBand).toHaveBeenCalledTimes(1);
-      // CRITICAL invariant: the band passed to buildToolsForBand was NOT
-      // critical — it must be the recomputed post-compact band ("normal"
-      // because currentTokenCount was reset to 0 inside the bookkeeping).
-      const [bandUsed] = buildToolsForBand.mock.calls[0]!;
-      expect(bandUsed).toBe("normal");
+      // The per-turn tools projection (getOpenAITools inside buildTurnPromptStack)
+      // ran exactly once for the post-fallback turn.
+      expect(mockGetOpenAITools).toHaveBeenCalledTimes(1);
+      // CRITICAL invariant: the band in the visibility context was NOT critical
+      // — it must be the recomputed post-compact band ("normal" because
+      // currentTokenCount was reset to 0 inside the bookkeeping).
+      expect(mockGetOpenAITools.mock.calls[0]![0].contextUsageBand).toBe("normal");
     });
 
     it("two consecutive forced-fallback noops at critical escalate to compact_unable_at_critical", async () => {
@@ -1251,22 +1254,27 @@ describe("turn-loop", () => {
     });
 
     it("rebuilds tools for the next iteration from latest promptTokens", async () => {
+      mockGetOpenAITools.mockClear();
       const provider = makeProvider([
         { content: "working", promptTokens: 850 },
         { content: "still working", promptTokens: 850 },
       ]);
-      const toolsForBand = (band: ContextUsageBand): ToolDefinition[] => [makeTool(`tool_${band}`)];
-      const buildToolsForBand = vi.fn(toolsForBand);
 
       await runTurnLoop(
         makeContext({ sessionKind: "mission", missionRunId: "run-1" }),
-        [], null, 100, provider as any, makeConfig() as any, toolsForBand("normal"),
-        { ...defaultLoopConfig, maxIterations: 2, contextLimit: 1000, buildToolsForBand },
+        [], null, 100, provider as any, makeConfig() as any, [],
+        {
+          ...defaultLoopConfig,
+          maxIterations: 2,
+          contextLimit: 1000,
+          baseVisibility: { permission: "restricted", role: "parent", sessionKind: "mission", missionRunActive: true },
+        },
       );
 
-      expect(buildToolsForBand.mock.calls.map(([band]) => band)).toEqual(["normal", "warning"]);
-      const secondCallTools = provider.chatCompletion.mock.calls[1][1] as ToolDefinition[];
-      expect(secondCallTools[0].function.name).toBe("tool_warning");
+      // buildTurnPromptStack re-projects the tools array each turn from the live
+      // band: turn 1 at "normal" (tokenCount 100), turn 2 at "warning" (850/1000
+      // crosses the warning threshold).
+      expect(mockGetOpenAITools.mock.calls.map(c => c[0].contextUsageBand)).toEqual(["normal", "warning"]);
     });
   });
 

@@ -20,6 +20,10 @@ function makeCtx(overrides: Partial<ToolVisibilityContext> = {}): ToolVisibility
     sessionKind: "agent",
     missionRunActive: false,
     contextUsageBand: "normal",
+    // Default to a session that HAS narrative chunks so the existing
+    // "Session memory" category assertions exercise the populated case; the
+    // dedicated gate tests below flip this to false.
+    hasSessionMemory: true,
     ...overrides,
   };
 }
@@ -67,13 +71,11 @@ describe("buildToolCatalogPrompt — visibility-aware Tool Map", () => {
       // Mutating categories disappear
       expect(out).not.toContain("Wallet transfers");
       expect(out).not.toContain("Knowledge write/lifecycle");
-      expect(out).not.toContain("Documents write");
       expect(out).not.toContain("Setup/onboarding");
 
       // Reads remain
       expect(out).toContain("Live state reads");
       expect(out).toContain("Knowledge recall/history");
-      expect(out).toContain("Documents read");
       expect(out).toContain("Session memory");
     });
   });
@@ -140,7 +142,7 @@ describe("buildToolCatalogPrompt — visibility-aware Tool Map", () => {
       expect(out).not.toContain("Setup/onboarding");
     });
 
-    it("retains memory + knowledge + documents + reads", () => {
+    it("retains memory + knowledge + reads", () => {
       const out = buildToolCatalogPrompt(makeCtx({
         role: "subagent",
         sessionKind: "mission",
@@ -150,7 +152,6 @@ describe("buildToolCatalogPrompt — visibility-aware Tool Map", () => {
       expect(out).toContain("Session memory");
       expect(out).toContain("Knowledge recall/history");
       expect(out).toContain("Live state reads");
-      expect(out).toContain("Documents read");
     });
   });
 
@@ -183,6 +184,24 @@ describe("buildToolCatalogPrompt — visibility-aware Tool Map", () => {
       const out = buildToolCatalogPrompt(makeCtx({ role: "subagent" }));
       expect(out).not.toContain("Mission setup");
       expect(out).not.toContain("Mission run");
+    });
+  });
+
+  describe("session-memory gate (requiresSessionMemory)", () => {
+    it("hides the Session memory category when the session has no narrative chunks", () => {
+      const out = buildToolCatalogPrompt(makeCtx({ hasSessionMemory: false }));
+      expect(out).not.toContain("Session memory");
+      expect(out).not.toContain("memory_recall");
+      expect(out).not.toContain("mark_outstanding_resolved");
+      // Only the memory tools are gated — other read categories remain.
+      expect(out).toContain("Knowledge recall/history");
+    });
+
+    it("shows the Session memory category once the session has narrative chunks", () => {
+      const out = buildToolCatalogPrompt(makeCtx({ hasSessionMemory: true }));
+      expect(out).toContain(
+        "**Session memory — this conversation/mission only:** memory_recall, mark_outstanding_resolved",
+      );
     });
   });
 });

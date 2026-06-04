@@ -14,21 +14,18 @@ import type { Message } from "@vex-agent/db/repos/messages.js";
 import { buildPromptStack, type PromptStackOptions } from "../prompts/index.js";
 import { formatActiveKnowledgeBlock } from "../prompts/knowledge.js";
 import { buildKnowledgeStateBanner } from "../prompts/knowledge-state.js";
-import { buildMemoryStateBanner } from "../prompts/memory-state.js";
 import { sanitizeForSystemPrompt } from "../prompts/sanitize.js";
 import { repairOrphanedToolCalls } from "./transcript-integrity.js";
 import { appendMessage, streamDeltaBus, toStreamDeltaEvent } from "@vex-agent/engine/events/index.js";
 import * as usageRepo from "@vex-agent/db/repos/usage.js";
 import * as sessionsRepo from "@vex-agent/db/repos/sessions.js";
 import * as knowledgeRepo from "@vex-agent/db/repos/knowledge.js";
-import { getSessionMemoryStats } from "@vex-agent/db/repos/session-memories/index.js";
 import {
   ACTIVE_KNOWLEDGE_ENTRY_LIMIT,
   KNOWN_KINDS_LIMIT,
 } from "@vex-agent/knowledge/policy.js";
 import {
   KNOWLEDGE_BANNER_TOP_KINDS_LIMIT,
-  MEMORY_BANNER_RECENT_THEMES_LIMIT,
 } from "@vex-agent/memory/policy.js";
 import logger from "@utils/logger.js";
 
@@ -96,30 +93,14 @@ export async function executeTurn(
     });
   }
 
-  // Pre-fetch per-session narrative-memory stats for the memory-state banner.
-  // Single CTE round-trip — `getSessionMemoryStats` returns activeCount,
-  // compactCount (from sessions.checkpoint_generation), recentThemes and
-  // unresolvedOutstandingCount in one query. Failure → empty banner.
-  let memoryStateBanner = "";
-  try {
-    const memStats = await getSessionMemoryStats(
-      context.sessionId,
-      MEMORY_BANNER_RECENT_THEMES_LIMIT,
-    );
-    memoryStateBanner = buildMemoryStateBanner(memStats);
-  } catch (err) {
-    logger.warn("turn.memory_state.fetch_failed", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-
   // Build prompt — banners passed through promptOptions; the caller (turn-loop)
-  // may have already supplied `contextPressureBanner` and `resumePacket`.
+  // supplies `contextPressureBanner`, `resumePacket`, and the `memoryStateBanner`
+  // (produced once per turn in buildTurnPromptStack alongside the
+  // `hasSessionMemory` tool-visibility signal — a single pre-inference memory read).
   const promptLayers = buildPromptStack(context, {
     ...promptOptions,
     activeKnowledgeBlock,
     knowledgeStateBanner,
-    memoryStateBanner,
   });
   const systemPrompt = promptLayers.join("\n\n---\n\n");
 

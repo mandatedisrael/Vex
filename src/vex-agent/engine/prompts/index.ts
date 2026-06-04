@@ -32,6 +32,13 @@ export interface PromptStackOptions {
   /** Optional test/host override; production builds this from EngineContext. */
   runtimeClock?: RuntimeClockSnapshot;
   /**
+   * Optional one-time persona setup hint. Set by the agent runner ONLY on the
+   * first reply of a session that has no configured persona (transcript-gated
+   * so it never repeats). Prompts the agent to briefly offer to personalize its
+   * name/tone. Empty/undefined omits it.
+   */
+  personaSetupHint?: string;
+  /**
    * Pre-formatted Active Knowledge block (hot context entries + Known kinds).
    * Built by `formatActiveKnowledgeBlock` after pre-fetching repo state in
    * `executeTurn`. Empty string omits the section entirely.
@@ -52,10 +59,10 @@ export interface PromptStackOptions {
    */
   resumePacket?: string;
   /**
-   * Pre-formatted memory-state banner from `buildMemoryStateBanner`. Always
-   * present (renders an explicit empty-state message when the session has
-   * zero compacts / zero chunks). Built async in `executeTurn` from
-   * `getSessionMemoryStats`.
+   * Pre-formatted memory-state banner from `buildMemoryStateBanner`. Built
+   * async in `buildTurnPromptStack` from `getSessionMemoryStats` — a single
+   * per-turn read shared with the `hasSessionMemory` tool-visibility signal.
+   * Empty/undefined omits the section.
    */
   memoryStateBanner?: string;
   /**
@@ -74,11 +81,10 @@ export interface PromptStackOptions {
   memoryRoutingPrompt?: string;
   /**
    * Pre-rendered Tool Map for the current `ToolVisibilityContext` from
-   * `buildToolCatalogPrompt`. Built in `runTurnLoop` using the SAME
-   * visibility context that drives `loopConfig.buildToolsForBand`, so
-   * the LLM-visible tool catalog and the system-prompt Tool Map stay
-   * in lockstep. Empty string omits the section (e.g. no agent-surface
-   * tools visible).
+   * `buildToolCatalogPrompt`. Built in `buildTurnPromptStack` using the SAME
+   * visibility context the OpenAI tools array is projected from, so the
+   * LLM-visible tool catalog and the system-prompt Tool Map stay in lockstep.
+   * Empty string omits the section (e.g. no agent-surface tools visible).
    */
   toolCatalogPrompt?: string;
 }
@@ -96,6 +102,10 @@ export function buildPromptStack(
 
   // ── CONSTANT — always present ─────────────────────────────
   layers.push(buildBasePrompt(context));
+  // One-time persona-setup offer (first reply, unconfigured persona only).
+  if (options.personaSetupHint && options.personaSetupHint.length > 0) {
+    layers.push(options.personaSetupHint);
+  }
   layers.push(buildRuntimeClockPrompt(options.runtimeClock ?? buildRuntimeClockSnapshot({
     sessionStartedAt: context.sessionStartedAt ?? null,
     missionRunStartedAt: context.missionRunStartedAt ?? null,
@@ -127,10 +137,10 @@ export function buildPromptStack(
   if (options.memoryRoutingPrompt && options.memoryRoutingPrompt.length > 0) {
     layers.push(options.memoryRoutingPrompt);
   }
-  // Visibility-aware Tool Map — built in turn-loop from the same
-  // `ToolVisibilityContext` that drives `loopConfig.buildToolsForBand`,
-  // so the catalog the LLM sees in the `tools` array and the map it
-  // sees in the prompt cannot drift.
+  // Visibility-aware Tool Map — built in buildTurnPromptStack from the same
+  // `ToolVisibilityContext` the OpenAI `tools` array is projected from, so the
+  // catalog the LLM sees in the `tools` array and the map it sees in the prompt
+  // cannot drift.
   if (options.toolCatalogPrompt && options.toolCatalogPrompt.length > 0) {
     layers.push(options.toolCatalogPrompt);
   }

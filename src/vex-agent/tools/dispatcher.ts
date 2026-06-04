@@ -253,12 +253,6 @@ export const INTERNAL_TOOL_LOADERS: Readonly<Record<string, InternalHandlerLoade
   // Twitter/X account research
   twitter_account: async () => (await import("./internal/twitter-account.js")).handleTwitterAccount,
 
-  // Documents (replaces file_*)
-  document_read: async () => (await import("./internal/documents.js")).handleDocumentRead,
-  document_write: async () => (await import("./internal/documents.js")).handleDocumentWrite,
-  document_list: async () => (await import("./internal/documents.js")).handleDocumentList,
-  document_delete: async () => (await import("./internal/documents.js")).handleDocumentDelete,
-
   // Knowledge — canonical agent memory layer
   knowledge_write: async () => (await import("./internal/knowledge.js")).handleKnowledgeWrite,
   knowledge_recall: async () => (await import("./internal/knowledge.js")).handleKnowledgeRecall,

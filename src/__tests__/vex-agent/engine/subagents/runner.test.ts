@@ -241,14 +241,13 @@ describe("subagent runner", () => {
     expect(context.isSubagent).toBe(true);
   });
 
-  it("passes buildToolsForBand to runTurnLoop so Tool Map + catalog stay in sync under pressure", async () => {
-    // PR3-clarity catalog/Tool Map invariant: subagents must rebuild the
-    // OpenAI tools array per-band, otherwise the system-prompt Tool Map
-    // (rendered per-iteration from live band) and the actual visible
-    // tools array (rendered once at startup) drift at barrier/critical.
-    // The dispatcher hard-deny still backstops safety, but the contract
-    // is that what the agent SEES in the Tool Map matches what it can
-    // CALL — that invariant has to hold for subagents too.
+  it("passes baseVisibility to runTurnLoop so Tool Map + catalog stay in sync under pressure", async () => {
+    // PR3-clarity catalog/Tool Map invariant: buildTurnPromptStack projects
+    // BOTH the OpenAI tools array AND the system-prompt Tool Map per turn from
+    // the SINGLE ToolVisibilityContext built from the runner's baseVisibility +
+    // the live band, so the catalog and the actual visible tools cannot drift
+    // at barrier/critical. The subagent must supply its static axes
+    // (role=subagent, agent-like session). Dispatcher hard-deny still backstops.
     mockRunTurnLoop.mockResolvedValue({
       text: "Done",
       toolCallsMade: 0,
@@ -261,7 +260,13 @@ describe("subagent runner", () => {
     // runTurnLoop(context, messages, summary, tokenCount, provider,
     // config, tools, loopConfig, promptOptions?, signal?)
     const args = mockRunTurnLoop.mock.calls[0];
-    const loopConfig = args[7] as { buildToolsForBand?: unknown };
-    expect(loopConfig.buildToolsForBand).toBeTypeOf("function");
+    const loopConfig = args[7] as {
+      baseVisibility?: { role?: string; sessionKind?: string; missionRunActive?: boolean };
+    };
+    expect(loopConfig.baseVisibility).toMatchObject({
+      role: "subagent",
+      sessionKind: "agent",
+      missionRunActive: false,
+    });
   });
 });

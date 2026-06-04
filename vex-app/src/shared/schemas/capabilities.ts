@@ -39,7 +39,6 @@ export const capabilitiesSchema = z
         portfolio: z.boolean(),
         memory: z.boolean(),
         tools: z.boolean(),
-        documents: z.boolean(),
       })
       .strict(),
   })

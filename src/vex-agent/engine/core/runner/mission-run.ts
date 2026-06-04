@@ -37,10 +37,9 @@ import {
   resolveMissionPromptContext,
 } from "../../mission/run-contract.js";
 import type { PromptStackOptions } from "../../prompts/index.js";
-import { getOpenAITools } from "@vex-agent/tools/registry.js";
+import { getOpenAITools, type ToolVisibilityBase } from "@vex-agent/tools/registry.js";
 import {
   computeBand,
-  type ContextUsageBand,
 } from "../context-band.js";
 import type { resolveProvider } from "@vex-agent/inference/registry.js";
 import { appendEngineMessage } from "@vex-agent/engine/events/index.js";
@@ -121,24 +120,26 @@ export async function runPreparedMissionStart(
       },
     };
 
-    const buildToolsForBand = (band: ContextUsageBand) =>
-      toToolDefinitions(
-        getOpenAITools({
-          permission: prepared.permission,
-          role: "parent",
-          sessionKind: "mission",
-          missionRunActive: true,
-          contextUsageBand: band,
-        }),
-      );
-    const tools = buildToolsForBand(
-      computeBand(hydrated.tokenCount, prepared.config.contextLimit),
+    const baseVisibility: ToolVisibilityBase = {
+      permission: prepared.permission,
+      role: "parent",
+      sessionKind: "mission",
+      missionRunActive: true,
+    };
+    // Seed tools — overridden per turn by buildTurnPromptStack with the live
+    // band + `hasSessionMemory`.
+    const tools = toToolDefinitions(
+      getOpenAITools({
+        ...baseVisibility,
+        contextUsageBand: computeBand(hydrated.tokenCount, prepared.config.contextLimit),
+        hasSessionMemory: false,
+      }),
     );
 
     const loopConfig: TurnLoopConfig = {
       ...DEFAULT_LOOP_CONFIG,
       contextLimit: prepared.config.contextLimit,
-      buildToolsForBand,
+      baseVisibility,
     };
 
     const result = await runTurnLoop(
@@ -236,24 +237,26 @@ export async function resumePreparedMissionRun(
       },
     };
 
-    const buildToolsForBand = (band: ContextUsageBand) =>
-      toToolDefinitions(
-        getOpenAITools({
-          permission,
-          role: "parent",
-          sessionKind: "mission",
-          missionRunActive: true,
-          contextUsageBand: band,
-        }),
-      );
-    const tools = buildToolsForBand(
-      computeBand(hydrated.tokenCount, prepared.config.contextLimit),
+    const baseVisibility: ToolVisibilityBase = {
+      permission,
+      role: "parent",
+      sessionKind: "mission",
+      missionRunActive: true,
+    };
+    // Seed tools — overridden per turn by buildTurnPromptStack with the live
+    // band + `hasSessionMemory`.
+    const tools = toToolDefinitions(
+      getOpenAITools({
+        ...baseVisibility,
+        contextUsageBand: computeBand(hydrated.tokenCount, prepared.config.contextLimit),
+        hasSessionMemory: false,
+      }),
     );
 
     const loopConfig: TurnLoopConfig = {
       ...DEFAULT_LOOP_CONFIG,
       contextLimit: prepared.config.contextLimit,
-      buildToolsForBand,
+      baseVisibility,
     };
 
     const result = await runTurnLoop(

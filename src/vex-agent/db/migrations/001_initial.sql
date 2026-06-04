@@ -69,48 +69,12 @@ CREATE INDEX idx_ke_source_surface ON knowledge_entries(source_surface);
 -- No vector index in MVP. Exact cosine scan after status/kind/validity prefilter is OK to ~5k entries.
 -- The vector column uses no typmod; adding ANN (ivfflat/hnsw) later requires re-typing the column.
 
--- Folders — first-class directory tree
--- Default space 'notes' (canonical knowledge layer is now knowledge_entries, not documents).
-CREATE TABLE folders (
-  id SERIAL PRIMARY KEY,
-  space TEXT NOT NULL DEFAULT 'notes',
-  parent_id INTEGER REFERENCES folders(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  slug TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
--- Split unique indexes: Postgres NULL ≠ NULL in unique constraints
-CREATE UNIQUE INDEX idx_folders_slug_root ON folders(space, slug)
-  WHERE parent_id IS NULL;
-CREATE UNIQUE INDEX idx_folders_slug_nested ON folders(space, parent_id, slug)
-  WHERE parent_id IS NOT NULL;
-CREATE INDEX idx_folders_space ON folders(space);
-CREATE INDEX idx_folders_parent ON folders(parent_id);
-
--- Documents — DB-first markdown content with folder FK
--- Default space 'notes' (freeform agent scratchpad). Canonical structured wisdom lives in knowledge_entries.
--- Recall overflow cache lives in its own dedicated table (recall_cache_entries), not here.
-CREATE TABLE documents (
-  id SERIAL PRIMARY KEY,
-  space TEXT NOT NULL DEFAULT 'notes',
-  folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL,
-  title TEXT NOT NULL,
-  slug TEXT NOT NULL,
-  content_md TEXT NOT NULL DEFAULT '',
-  size_bytes INTEGER NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  archived_at TIMESTAMPTZ
-);
--- Split unique indexes for NULL folder_id (root documents)
-CREATE UNIQUE INDEX idx_documents_slug_root ON documents(space, slug)
-  WHERE folder_id IS NULL AND archived_at IS NULL;
-CREATE UNIQUE INDEX idx_documents_slug_folder ON documents(space, folder_id, slug)
-  WHERE folder_id IS NOT NULL AND archived_at IS NULL;
-CREATE INDEX idx_documents_space ON documents(space);
-CREATE INDEX idx_documents_folder ON documents(folder_id);
-CREATE INDEX idx_documents_updated ON documents(updated_at DESC);
+-- (Removed: the `folders` + `documents` freeform-scratchpad tables. The
+--  scratchpad tool vertical (document_*) was retired in favour of the
+--  canonical knowledge layer (knowledge_entries) + per-session narrative
+--  memory. Pre-production edit — no production data existed. Fresh DBs never
+--  create these tables; existing dev DBs keep orphan unused tables until a
+--  recreate. See branch feat/agent-tool-resolution-safety.)
 
 -- Recall overflow cache — dedicated system store for knowledge_recall overflow.
 -- Replaces the former documents(space='cache') hack. Pure system surface — agents

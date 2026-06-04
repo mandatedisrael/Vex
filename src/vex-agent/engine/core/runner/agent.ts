@@ -12,12 +12,13 @@ import type { TurnResult } from "../../types.js";
 import { hydrateEngineSession } from "../hydrate.js";
 import type { TurnLoopConfig } from "../turn-loop.js";
 import { runTurnLoop } from "../turn-loop.js";
-import { getOpenAITools } from "@vex-agent/tools/registry.js";
-import { computeBand, type ContextUsageBand } from "../context-band.js";
+import { getOpenAITools, type ToolVisibilityBase } from "@vex-agent/tools/registry.js";
+import { computeBand } from "../context-band.js";
 import { resolveProvider } from "@vex-agent/inference/registry.js";
 import { appendMessage } from "@vex-agent/engine/events/index.js";
 import logger from "@utils/logger.js";
 import { toToolDefinitions, DEFAULT_LOOP_CONFIG } from "./shared.js";
+import { buildPersonaSetupHint } from "@vex-agent/engine/prompts/persona-setup.js";
 
 // ── processAgentTurn ────────────────────────────────────────────
 
@@ -79,14 +80,28 @@ export async function processAgentTurn(
   // entry point always processes a single agent turn (no mission loop).
   const agentContext = { ...hydrated.context, sessionKind: "agent" as const };
 
-  const buildToolsForBand = (contextUsageBand: ContextUsageBand) => toToolDefinitions(getOpenAITools({
+  // One-time persona-setup offer: only when the persona is unconfigured AND
+  // this is the session's first reply (no prior assistant turn). Transcript-
+  // gated so it never repeats once the agent has spoken or a persona is set.
+  const personaSetupHint =
+    !agentContext.personaConfigured
+    && !hydrated.messages.some(m => m.role === "assistant")
+      ? buildPersonaSetupHint(agentContext.personaName)
+      : undefined;
+
+  const baseVisibility: ToolVisibilityBase = {
     permission: agentContext.sessionPermission,
     role: "parent",
     sessionKind: "agent",
     missionRunActive: false,
-    contextUsageBand,
+  };
+  // Seed tools — overridden per turn by buildTurnPromptStack with the live band
+  // + `hasSessionMemory`; a fresh agent turn has no narrative chunks yet.
+  const tools = toToolDefinitions(getOpenAITools({
+    ...baseVisibility,
+    contextUsageBand: computeBand(hydrated.tokenCount, config.contextLimit),
+    hasSessionMemory: false,
   }));
-  const tools = buildToolsForBand(computeBand(hydrated.tokenCount, config.contextLimit));
 
   const loopConfig: TurnLoopConfig = {
     ...DEFAULT_LOOP_CONFIG,
@@ -96,7 +111,7 @@ export async function processAgentTurn(
     // summarising.
     maxIterations: 10,
     contextLimit: config.contextLimit,
-    buildToolsForBand,
+    baseVisibility,
   };
 
   const result = await runTurnLoop(
@@ -108,7 +123,7 @@ export async function processAgentTurn(
     config,
     tools,
     loopConfig,
-    {}, // promptOptions (default)
+    { personaSetupHint }, // promptOptions
     undefined, // abortSignal — chat turns have no mission-boundary controller
     signal, // inferenceAbortSignal (9-5a) — chat-turn "stop generating"
   );

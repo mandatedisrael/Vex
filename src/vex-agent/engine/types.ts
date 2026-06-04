@@ -262,6 +262,26 @@ export interface EngineContext {
   /** Mission wallet policy (snapshot-derived); enforced at wallet resolution. */
   walletPolicy: WalletPolicy;
   loadedDocuments: Map<string, string>;
+  /**
+   * Agent display/identity name from the user persona file. Set by hydration;
+   * optional so non-hydrated/test contexts fall back to the default ("Vex") in
+   * `buildBasePrompt`. Local-first user config — never widens permissions
+   * (style/name only).
+   */
+  personaName?: string;
+  /**
+   * Free-form persona/tone block from the user persona file, or null when
+   * unconfigured. Optional for the same reason as `personaName`. Rendered as
+   * subordinate style guidance in the prompt (after the authoritative
+   * safety/permission layers).
+   */
+  personaBlock?: string | null;
+  /**
+   * True when the user configured a persona (custom name OR block). Set by
+   * hydration. Gates the one-time persona-setup offer so a name-only persona is
+   * not treated as "unconfigured". Optional → `undefined` is treated as false.
+   */
+  personaConfigured?: boolean;
 }
 
 // ── Turn result ─────────────────────────────────────────────────

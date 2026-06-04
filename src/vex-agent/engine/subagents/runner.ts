@@ -16,9 +16,8 @@
 import type { EngineContext, StopReason } from "../types.js";
 import { hydrateEngineSession } from "../core/hydrate.js";
 import { runTurnLoop, type TurnLoopConfig } from "../core/turn-loop.js";
-import { getOpenAITools } from "@vex-agent/tools/registry.js";
-import type { ToolDefinition } from "@vex-agent/inference/types.js";
-import { computeBand, type ContextUsageBand } from "../core/context-band.js";
+import { getOpenAITools, type ToolVisibilityBase } from "@vex-agent/tools/registry.js";
+import { computeBand } from "../core/context-band.js";
 import { resolveProvider } from "@vex-agent/inference/registry.js";
 import { loadEnvConfig, loadSubagentConfig } from "@vex-agent/inference/config.js";
 import * as subagentsRepo from "@vex-agent/db/repos/subagents.js";
@@ -120,34 +119,32 @@ export async function runSubagentEngine(
   const envConfig = loadEnvConfig();
   const subConfig = loadSubagentConfig(envConfig);
 
-  // PR3-clarity: build OpenAI tools PER-BAND, same shape as the agent /
-  // mission runners. Without this, the subagent's `tools` array stays at
-  // normal-band for the lifetime of the run while the Tool Map (rendered
-  // per-iteration from the live band by `runTurnLoop`) reflects
-  // barrier/critical-band restrictions — catalog and map drift. Dispatcher
-  // hard-deny would still backstop safety, but PR3's contract is "Tool Map
-  // matches the actual visible catalog". Codex P1, PR3 final review.
-  function buildSubagentToolsForBand(band: ContextUsageBand): ToolDefinition[] {
-    const openAITools = getOpenAITools({
-      permission: effectivePermission,
-      role: "subagent",
-      sessionKind: "agent", // subagents run in isolated agent-like sessions
-      missionRunActive: false,
-      contextUsageBand: band,
-    });
-    return openAITools.map(t => ({
-      type: "function" as const,
-      function: { name: t.function.name, description: t.function.description, parameters: t.function.parameters },
-    }));
-  }
+  // Static visibility axes for this subagent run. buildTurnPromptStack layers
+  // the live band + `hasSessionMemory` on top per turn and projects BOTH the
+  // tools array AND the Tool Map from the single resulting context, so the
+  // catalog and the visible tool set cannot drift (PR3 contract).
+  const baseVisibility: ToolVisibilityBase = {
+    permission: effectivePermission,
+    role: "subagent",
+    sessionKind: "agent", // subagents run in isolated agent-like sessions
+    missionRunActive: false,
+  };
+  // Seed tools — overridden per turn by buildTurnPromptStack.
   const initialBand = computeBand(hydrated.tokenCount, subConfig.contextLimit);
-  const tools = buildSubagentToolsForBand(initialBand);
+  const tools = getOpenAITools({
+    ...baseVisibility,
+    contextUsageBand: initialBand,
+    hasSessionMemory: false,
+  }).map(t => ({
+    type: "function" as const,
+    function: { name: t.function.name, description: t.function.description, parameters: t.function.parameters },
+  }));
 
   const loopConfig: TurnLoopConfig = {
     maxIterations: subagent.maxIterations || subConfig.maxIterations,
     timeoutMs: subConfig.timeoutMs,
     contextLimit: subConfig.contextLimit,
-    buildToolsForBand: buildSubagentToolsForBand,
+    baseVisibility,
   };
 
   // Runner does NOT manage lifecycle status — caller (subagent.ts) does.

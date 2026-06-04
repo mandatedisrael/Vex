@@ -107,21 +107,6 @@ vi.mock("@vex-agent/db/repos/search.js", () => ({
   cacheFetchResult: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("@vex-agent/db/repos/documents.js", () => ({
-  getDocument: vi.fn().mockResolvedValue(null),
-  upsertDocument: vi.fn().mockResolvedValue({ id: 1, space: "notes", folderId: null, title: "test", slug: "test", contentMd: "content", sizeBytes: 7, createdAt: "2024-01-01", updatedAt: "2024-01-01" }),
-  listDocuments: vi.fn().mockResolvedValue([]),
-  softDeleteDocument: vi.fn().mockResolvedValue(true),
-  countDocuments: vi.fn().mockResolvedValue(1),
-}));
-
-vi.mock("@vex-agent/db/repos/folders.js", () => ({
-  getFolderBySlug: vi.fn().mockResolvedValue(null),
-  createFolder: vi.fn().mockResolvedValue({ id: 1, space: "notes", parentId: null, name: "test", slug: "test", createdAt: "2024-01-01" }),
-  listFolders: vi.fn().mockResolvedValue([]),
-  deleteFolder: vi.fn().mockResolvedValue(true),
-}));
-
 export const mockKnowledgeInsert = vi.fn().mockResolvedValue({
   entry: {
     id: 42, kind: "memo", title: "test", summary: "test", contentMd: "test",

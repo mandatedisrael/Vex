@@ -13,6 +13,7 @@ import { getProtocolHandler, getProtocolManifest } from "./catalog.js";
 import { isPreviewExecution, validateCaptureContract } from "./capture-validator.js";
 import { extractExternalRefs, populateCaptureItems } from "./capture-pipeline.js";
 import { MUTATION_MATRIX } from "./mutation-matrix.js";
+import { PREQUOTE_QUOTE_TOOLS, recordPrequoteFromQuote } from "./swap-prequote.js";
 import { isExecutableNamespace, NAMESPACE_LIFECYCLE } from "./lifecycle.js";
 import { sanitizeJsonbValue } from "@vex-agent/db/params.js";
 import type { ContextUsageBand } from "@vex-agent/engine/core/context-band.js";
@@ -213,6 +214,23 @@ export async function executeProtocolTool(
       success: result.success,
       durationMs,
     });
+
+    // Record a swap prequote on a successful QUOTE (Stage 6c). Quote tools are
+    // `mutating:false`, so the `shouldCapture` pipeline below never fires for
+    // them — this is a SEPARATE best-effort block gated on the quote-tool set +
+    // `result.success`. A recording failure MUST NOT change the quote's
+    // ToolResult; a missing prequote is safe (the Stage-7 gate fails closed).
+    // Awaited (deterministic for tests) but fully isolated by try/catch.
+    if (result.success && request.toolId in PREQUOTE_QUOTE_TOOLS) {
+      try {
+        await recordPrequoteFromQuote(request.toolId, params, result.data ?? {}, scopedContext);
+      } catch (err) {
+        logger.warn("protocol.execute.prequote_record_failed", {
+          toolId: request.toolId,
+          reason: err instanceof Error ? err.constructor.name : typeof err,
+        });
+      }
+    }
 
     // Capture mutating execution — awaited inline for deterministic projection readiness
     // protocol_executions: ALL mutations (success + failure) for audit

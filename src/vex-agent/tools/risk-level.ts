@@ -8,7 +8,7 @@
  * action kind is WHAT KIND of side effect it produces. The two are
  * separate axes — adding a new chain mutation tool (`user_wallet_broadcast`)
  * is `high` risk; a knowledge write (`local_write`) is `low`; a
- * documents delete (`destructive`) is `critical`.
+ * future hard-delete (`destructive`) is `critical`.
  *
  * The mapping below is the puzzle 5 phase 2 Codex GREEN LIGHT (2026-05-23):
  *   - `read`                     → "info"      (no side effect)

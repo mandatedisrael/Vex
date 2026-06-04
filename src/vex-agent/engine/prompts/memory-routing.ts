@@ -7,8 +7,7 @@
  * Codex design recommendation (PR2/PR3 thread `019e3688-...`): a
  * compact ordered rule is more valuable than another prose paragraph,
  * and resolves the substrate-confusion failure mode (model reaching for
- * `knowledge_recall` when it should be reading live state, or
- * `document_read` when it needs semantic recall).
+ * `knowledge_recall` when it should be reading live state, or vice versa).
  *
  * Static content — no context input. Both agent and mission modes see
  * the same four lines; the substrates themselves don't change shape
@@ -22,6 +21,5 @@ export function buildMemoryRoutingRule(): string {
     "- Current state (balances, prices, gas, positions, quotes) → live tools (`wallet_balances`, `khalani_tokens_balances`, `portfolio`).",
     "- Something earlier in THIS conversation/mission → `memory_recall` (per-session narrative).",
     "- Durable cross-session lessons / strategies / observed preferences → `knowledge_recall` (curated, cross-session).",
-    "- Freeform scratchpad by slug → `document_read` (NOT semantic; exact slug lookup only).",
   ].join("\n");
 }

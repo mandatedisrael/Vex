@@ -57,7 +57,6 @@ export function registerCapabilitiesHandler(): () => void {
           portfolio: false,
           memory: true, // stage 7-2a: read-only knowledge & memory panel
           tools: false,
-          documents: false,
         },
       });
       return ok(caps);
