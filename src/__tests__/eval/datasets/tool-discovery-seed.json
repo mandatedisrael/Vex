@@ -15,7 +15,7 @@
 
     { "query": "what EVM chains can I trade on", "awareness": "blind", "scenario": "evm_swap", "intentShape": "single", "expectedToolIds": ["kyberswap.chains"], "expectedCoverageGroups": [["kyberswap.chains"]] },
     { "query": "is BNB Chain currently active for swaps", "awareness": "blind", "scenario": "evm_swap", "intentShape": "single", "expectedToolIds": ["kyberswap.chains.supported"], "expectedCoverageGroups": [["kyberswap.chains.supported"]] },
-    { "query": "find the PEPE token address on Base before trading", "awareness": "blind", "scenario": "evm_swap", "intentShape": "single", "expectedToolIds": ["kyberswap.tokens.search", "khalani.tokens.search"], "expectedCoverageGroups": [["kyberswap.tokens.search", "khalani.tokens.search"]] },
+    { "query": "find the PEPE token address on Base before trading", "awareness": "blind", "scenario": "evm_swap", "intentShape": "single", "expectedToolIds": ["khalani.tokens.search"], "expectedCoverageGroups": [["khalani.tokens.search"]] },
     { "query": "check whether this new Base token is a honeypot", "awareness": "blind", "scenario": "token_safety", "intentShape": "single", "expectedToolIds": ["kyberswap.tokens.check"], "expectedCoverageGroups": [["kyberswap.tokens.check"]] },
     { "query": "preview a USDC to ETH swap on Base", "awareness": "blind", "scenario": "evm_swap", "intentShape": "single", "expectedToolIds": ["kyberswap.swap.quote"], "expectedCoverageGroups": [["kyberswap.swap.quote"]] },
     { "query": "buy a Base token using USDC", "awareness": "blind", "scenario": "evm_swap", "intentShape": "single", "expectedToolIds": ["kyberswap.swap.buy"], "expectedCoverageGroups": [["kyberswap.swap.buy"]] },
@@ -37,7 +37,7 @@
     { "query": "migrate my LP position to a better pool", "awareness": "blind", "scenario": "evm_lp", "intentShape": "single", "expectedToolIds": ["kyberswap.zap.migrate"], "expectedCoverageGroups": [["kyberswap.zap.migrate"]] },
     { "query": "research a pool then add liquidity on Base", "awareness": "blind", "scenario": "workflow", "intentShape": "workflow", "expectedToolIds": ["dexscreener.tokenPairs", "kyberswap.zap.in"], "expectedCoverageGroups": [["dexscreener.tokenPairs"], ["kyberswap.zap.in"]] },
     { "query": "check token safety before buying on Base", "awareness": "blind", "scenario": "workflow", "intentShape": "workflow", "expectedToolIds": ["kyberswap.tokens.check", "kyberswap.swap.buy"], "expectedCoverageGroups": [["kyberswap.tokens.check"], ["kyberswap.swap.buy"]] },
-    { "query": "find a token address and get a swap route on BNB", "awareness": "blind", "scenario": "workflow", "intentShape": "workflow", "expectedToolIds": ["kyberswap.tokens.search", "kyberswap.swap.quote"], "expectedCoverageGroups": [["kyberswap.tokens.search", "khalani.tokens.search"], ["kyberswap.swap.quote"]] },
+    { "query": "find a token address and get a swap route on BNB", "awareness": "blind", "scenario": "workflow", "intentShape": "workflow", "expectedToolIds": ["khalani.tokens.search", "kyberswap.swap.quote"], "expectedCoverageGroups": [["khalani.tokens.search"], ["kyberswap.swap.quote"]] },
     { "query": "sell a Base token then bridge USDC to Solana", "awareness": "blind", "scenario": "workflow", "intentShape": "workflow", "expectedToolIds": ["kyberswap.swap.sell", "khalani.bridge"], "expectedCoverageGroups": [["kyberswap.swap.sell"], ["khalani.bridge"]] },
 
     { "query": "what is the current price of BONK on Solana", "awareness": "blind", "scenario": "solana_swap", "intentShape": "single", "expectedToolIds": ["solana.prices"], "expectedCoverageGroups": [["solana.prices"]] },
@@ -129,7 +129,7 @@
 
     { "query": "use KyberSwap to list EVM networks for trading", "awareness": "protocol-aware", "scenario": "evm_swap", "intentShape": "single", "expectedToolIds": ["kyberswap.chains"], "expectedCoverageGroups": [["kyberswap.chains"]] },
     { "query": "use KyberSwap to check if Base swaps are live", "awareness": "protocol-aware", "scenario": "evm_swap", "intentShape": "single", "expectedToolIds": ["kyberswap.chains.supported"], "expectedCoverageGroups": [["kyberswap.chains.supported"]] },
-    { "query": "use KyberSwap to find PEPE on BNB Chain", "awareness": "protocol-aware", "scenario": "evm_swap", "intentShape": "single", "expectedToolIds": ["kyberswap.tokens.search"], "expectedCoverageGroups": [["kyberswap.tokens.search"]] },
+    { "query": "use KyberSwap to find PEPE on BNB Chain", "awareness": "protocol-aware", "scenario": "evm_swap", "intentShape": "single", "expectedToolIds": ["khalani.tokens.search"], "expectedCoverageGroups": [["khalani.tokens.search"]] },
     { "query": "use KyberSwap to check a token before buying", "awareness": "protocol-aware", "scenario": "token_safety", "intentShape": "single", "expectedToolIds": ["kyberswap.tokens.check"], "expectedCoverageGroups": [["kyberswap.tokens.check"]] },
     { "query": "use KyberSwap to estimate USDC to ETH on Base", "awareness": "protocol-aware", "scenario": "evm_swap", "intentShape": "single", "expectedToolIds": ["kyberswap.swap.quote"], "expectedCoverageGroups": [["kyberswap.swap.quote"]] },
     { "query": "use KyberSwap to buy a Base token with USDC", "awareness": "protocol-aware", "scenario": "evm_swap", "intentShape": "single", "expectedToolIds": ["kyberswap.swap.buy"], "expectedCoverageGroups": [["kyberswap.swap.buy"]] },

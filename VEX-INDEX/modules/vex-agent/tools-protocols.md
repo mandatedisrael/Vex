@@ -114,9 +114,9 @@ behind those two entry points.
 
 ### Protocol: kyberswap (EVM trading: swaps, limit orders, zap/LP)
 
-- `protocols/kyberswap/manifest.ts:15` `KYBERSWAP_TOOLS` — 21 tools across 5 sub-modules:
+- `protocols/kyberswap/manifest.ts:15` `KYBERSWAP_TOOLS` — 20 tools across 5 sub-modules:
   - `manifests/chains.ts` (2): `kyberswap.chains.list`, `kyberswap.chains.get`
-  - `manifests/tokens.ts` (2): `kyberswap.tokens.search`, `kyberswap.tokens.check`
+  - `manifests/tokens.ts` (1): `kyberswap.tokens.check`
   - `manifests/swap.ts` (3): `kyberswap.swap.quote` (read), `kyberswap.swap.sell` (mutating, pnl_spot), `kyberswap.swap.buy` (mutating, pnl_spot) — both support `dryRun`
   - `manifests/limit-order.ts` (10): `kyberswap.limitOrder.{create,list,get,cancel,hardCancel,fill,batchFill,cancelAll,getActiveOrders,getFilledOrders}` — `create/fill/batchFill` support dryRun; capture role `projection`
   - `manifests/zap.ts` (4): `kyberswap.zap.{pools,in,out,migrate}` — `in/out/migrate` are mutating, support dryRun, role `projection`

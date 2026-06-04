@@ -131,17 +131,6 @@ export const SWAP_HANDLERS: Record<string, ProtocolHandler> = {
   "kyberswap.chains.supported": async () => ok(await getKyberCommonClient().getSupportedChains()),
 
   // ── Tokens ───────────────────────────────────────────────────────
-  "kyberswap.tokens.search": async (p) => {
-    const chain = str(p, "chain");
-    if (!chain) return fail("Missing required: chain");
-    const { chainId } = resolveChainWithId(chain);
-    const tokens = await getKyberTokenApiClient().searchTokens(String(chainId), {
-      name: str(p, "query") || undefined,
-      isWhitelisted: p.whitelisted === true ? true : undefined,
-      pageSize: num(p, "limit"),
-    });
-    return ok({ chain, chainId, count: tokens.length, tokens });
-  },
   "kyberswap.tokens.check": async (p) => {
     const chain = str(p, "chain"), address = str(p, "address");
     if (!chain || !address) return fail("Missing required: chain, address");

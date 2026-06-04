@@ -101,8 +101,8 @@ describe("kyberswap handlers", () => {
     expect(extra).toEqual([]);
   });
 
-  it("handler count matches manifest count (21)", () => {
-    expect(Object.keys(KYBERSWAP_HANDLERS)).toHaveLength(21);
+  it("handler count matches manifest count (20)", () => {
+    expect(Object.keys(KYBERSWAP_HANDLERS)).toHaveLength(20);
   });
 
   it("every handler is a function", () => {
@@ -112,15 +112,6 @@ describe("kyberswap handlers", () => {
   });
 
   // ── Required param validation ────────────────────────────────────
-
-  it("kyberswap.tokens.search fails without chain", async () => {
-    const result = await KYBERSWAP_HANDLERS["kyberswap.tokens.search"]!(
-      {},
-      ctx({ sessionPermission: "restricted", approved: false }),
-    );
-    expect(result.success).toBe(false);
-    expect(result.output).toContain("chain");
-  });
 
   it("kyberswap.tokens.check fails without chain and address", async () => {
     const result = await KYBERSWAP_HANDLERS["kyberswap.tokens.check"]!(

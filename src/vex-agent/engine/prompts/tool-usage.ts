@@ -60,8 +60,7 @@ Check balances, positions, and state before making changes. The dispatcher does 
 Before ANY mutating tool that takes a token address, symbol, or mint:
 
 1. Resolve via a read tool FIRST:
-   - Primary: \`khalani_tokens_search\` or \`khalani.tokens.search\` (symbol/name → address per chain, cross-chain).
-   - EVM confirmation: \`kyberswap.tokens.search\` (verify token visible on target chain).
+   - Primary: \`khalani_tokens_search\` or \`khalani.tokens.search\` (symbol/name → address per chain, cross-chain; covers EVM).
    - Solana: \`solana.tokens.search\` (verify mint on Solana).
 2. Use the address from the tool result — NOT from memory, knowledge, examples, or prior conversations.
 3. Never copy addresses from \`exampleParams\` — those demonstrate param format only.
@@ -75,7 +74,7 @@ This is behavioral guidance. The runtime validates tokens where possible but can
 
 2. **Fresh balance before each mutation.** After a successful swap/bridge/zap, read fresh live balances before the next mutation. Use \`wallet_read\` for the full picture, or \`khalani_tokens_balances\` for a single family. Never chain multiple swaps based on estimated post-tx balances.
 
-3. **Address-first for EVM mutations.** Resolve exact token contract addresses via \`khalani.tokens.search(query, chainIds)\` BEFORE passing to kyberswap/khalani.bridge/zap. Pass the address, not the symbol. \`kyberswap.tokens.search\` is a visibility check only.
+3. **Address-first for EVM mutations.** Resolve exact token contract addresses via \`khalani.tokens.search(query, chainIds)\` BEFORE passing to kyberswap/khalani.bridge/zap. Pass the address, not the symbol.
 
 4. **Check before swap.** Before any \`kyberswap.swap.sell\` or \`kyberswap.swap.buy\`, run \`kyberswap.tokens.check\` on BOTH tokenIn and tokenOut to verify they are not honeypots and check fee-on-transfer tax. The runtime enforces this gate, but discovering issues early gives better error messages. Skip for native tokens (ETH / POL / BNB / etc).
 

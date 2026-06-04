@@ -4,16 +4,15 @@ import { KYBERSWAP_TOOLS } from "../../../vex-agent/tools/protocols/kyberswap/ma
 describe("kyberswap manifest", () => {
   // ── Completeness ─────────────────────────────────────────────────
 
-  it("has 21 tools total", () => {
-    expect(KYBERSWAP_TOOLS).toHaveLength(21);
+  it("has 20 tools total", () => {
+    expect(KYBERSWAP_TOOLS).toHaveLength(20);
   });
 
   const EXPECTED_TOOL_IDS = [
     // Chains (2)
     "kyberswap.chains",
     "kyberswap.chains.supported",
-    // Tokens (2)
-    "kyberswap.tokens.search",
+    // Tokens (1)
     "kyberswap.tokens.check",
     // Swap (3)
     "kyberswap.swap.quote",
@@ -40,7 +39,7 @@ describe("kyberswap manifest", () => {
   ];
 
   it("expected toolId count matches manifest count", () => {
-    expect(EXPECTED_TOOL_IDS).toHaveLength(21);
+    expect(EXPECTED_TOOL_IDS).toHaveLength(20);
   });
 
   for (const toolId of EXPECTED_TOOL_IDS) {
