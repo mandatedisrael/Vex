@@ -1,7 +1,7 @@
 /**
  * Mutating protocol-alias routers (Stage 8b).
  *
- * A MUTATING action-named alias (today only `swap`) resolves to a TARGET
+ * A MUTATING action-named alias (`swap`, `bridge`) resolves to a TARGET
  * protocol toolId + translated params, then is dispatched DIRECTLY through
  * `executeProtocolTool` by the dispatcher's dedicated branch. This is the whole
  * point of the dedicated path: a mutating alias must NOT travel through the
@@ -151,6 +151,83 @@ function routeSwap(args: Record<string, unknown>): ResolvedAliasTarget {
   return { toolId, params };
 }
 
+// ── bridge — Khalani cross-chain bridge EXECUTE router ─────────────────────
+
+/**
+ * `bridge` alias args. Mirrors the read-only `bridge_quote` shape (Stage 8a) so
+ * the agent presents ONE bridge surface: preview with `bridge_quote`, execute
+ * with `bridge`. Translation is a pass-through to `khalani.bridge`'s EXACT param
+ * keys (verified against the khalani manifest:
+ * fromChain/fromToken/toChain/toToken/amount + the optional overrides). `dryRun`
+ * is intentionally NOT accepted — the alias is the real broadcast; a dry run is
+ * reached via `execute_tool({ toolId:"khalani.bridge", params:{ dryRun:true }})`.
+ * The EXECUTE-ONLY `routeId`/`depositMethod` knobs are ALSO not accepted (8c
+ * security fix): the quote can never bind them, so the bridge auto-selects the
+ * best route and the execute gate fail-closes them on the direct path.
+ *
+ * Units: `amount` is in SMALLEST units (wei/lamports), matching the khalani
+ * bridge manifest — translation preserves the value, it does not convert.
+ */
+// `routeId` / `depositMethod` are deliberately ABSENT (8c security fix). They are
+// EXECUTE-ONLY khalani.bridge knobs with NO counterpart in the bridge quote, so
+// they can never be bound to a quote — the bridge auto-selects the best route.
+// `.strict()` REJECTS them (and any other unknown key) at the alias boundary so
+// the agent cannot smuggle them through the menu; the execute gate independently
+// fail-closes them on the direct execute_tool path.
+const BridgeArgs = z
+  .object({
+    fromChain: z.string().min(1, { message: "fromChain is required" }),
+    fromToken: z.string().min(1, { message: "fromToken is required" }),
+    toChain: z.string().min(1, { message: "toChain is required" }),
+    toToken: z.string().min(1, { message: "toToken is required" }),
+    amount: z.string().min(1, { message: "amount is required (smallest units)" }),
+    tradeType: z.string().min(1).optional(),
+    fromAddress: z.string().min(1).optional(),
+    recipient: z.string().min(1).optional(),
+    refundTo: z.string().min(1).optional(),
+    referrer: z.string().min(1).optional(),
+    referrerFeeBps: z.string().min(1).optional(),
+    filler: z.string().min(1).optional(),
+  })
+  .strict();
+
+type BridgeArgs = z.infer<typeof BridgeArgs>;
+
+/**
+ * Resolve the `bridge` alias to `khalani.bridge` + translated params. Throws
+ * `MutatingAliasRouteError` on invalid args. The dedicated dispatcher branch
+ * routes the result through `executeProtocolTool`, which runs the bridge
+ * prequote gate (kind 'bridge') → approval gate → capture.
+ */
+function routeBridge(args: Record<string, unknown>): ResolvedAliasTarget {
+  const parsed = BridgeArgs.safeParse(args);
+  if (!parsed.success) {
+    throw new MutatingAliasRouteError(
+      `bridge: ${parsed.error.issues
+        .map((i) => (i.path.length > 0 ? `${i.path.join(".")}: ${i.message}` : i.message))
+        .join("; ")}`,
+    );
+  }
+  const a: BridgeArgs = parsed.data;
+  const params: Record<string, unknown> = {
+    fromChain: a.fromChain,
+    fromToken: a.fromToken,
+    toChain: a.toChain,
+    toToken: a.toToken,
+    amount: a.amount,
+  };
+  if (a.tradeType !== undefined) params.tradeType = a.tradeType;
+  if (a.fromAddress !== undefined) params.fromAddress = a.fromAddress;
+  if (a.recipient !== undefined) params.recipient = a.recipient;
+  if (a.refundTo !== undefined) params.refundTo = a.refundTo;
+  if (a.referrer !== undefined) params.referrer = a.referrer;
+  if (a.referrerFeeBps !== undefined) params.referrerFeeBps = a.referrerFeeBps;
+  if (a.filler !== undefined) params.filler = a.filler;
+  // routeId / depositMethod are NOT forwarded — they are absent from BridgeArgs
+  // (.strict() rejects them). See the BridgeArgs schema note (8c security fix).
+  return { toolId: "khalani.bridge", params };
+}
+
 // ── Registry ──────────────────────────────────────────────────────────────
 
 /**
@@ -166,6 +243,7 @@ function routeSwap(args: Record<string, unknown>): ResolvedAliasTarget {
  */
 export const MUTATING_PROTOCOL_ALIAS_ROUTERS: Readonly<Record<string, MutatingAliasRouter>> = {
   swap: routeSwap,
+  bridge: routeBridge,
 };
 
 /** True iff `name` is a registered mutating protocol-alias (dedicated dispatch). */

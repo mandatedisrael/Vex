@@ -331,6 +331,7 @@ describe("verdict — Solana (solana.swap.quote)", () => {
 
 describe("computePrequoteMatchHash", () => {
   const base = {
+    kind: "swap" as const,
     sessionId: SESSION_ID,
     family: "eip155" as const,
     chainId: 8453,
@@ -361,6 +362,7 @@ describe("computePrequoteMatchHash", () => {
 
   it("Solana preserves mint case (base58 is case-sensitive)", () => {
     const solBase = {
+      kind: "swap" as const,
       sessionId: SESSION_ID,
       family: "solana" as const,
       chainId: null,
@@ -411,6 +413,7 @@ describe("computePrequoteMatchHash", () => {
     const expected = createHash("sha256")
       .update(
         [
+          "swap",
           SESSION_ID,
           "eip155",
           "8453",
@@ -458,6 +461,7 @@ describe("recordPrequoteFromQuote", () => {
     // match_hash must equal the exported pure function on the SAME identity.
     expect(input.matchHash).toBe(
       mod.computePrequoteMatchHash({
+        kind: "swap",
         sessionId: SESSION_ID,
         family: "eip155",
         chainId: 8453,
@@ -682,6 +686,7 @@ describe("evaluateSwapPrequoteGate", () => {
     // And both equal the recorder-side hash for a native-sentinel leg.
     expect(hashFromKeyword).toBe(
       mod.computePrequoteMatchHash({
+        kind: "swap",
         sessionId: SESSION_ID,
         family: "eip155",
         chainId: 8453,
@@ -711,6 +716,7 @@ describe("evaluateSwapPrequoteGate", () => {
     mockExistsFail.mockResolvedValue(false);
     mockFindLatest.mockResolvedValue(prequoteRow("pass"));
     const matchHash = mod.computePrequoteMatchHash({
+      kind: "swap",
       sessionId: SESSION_ID,
       family: "eip155",
       chainId: 8453,
@@ -747,6 +753,7 @@ describe("evaluateSwapPrequoteGate", () => {
     expect(d.kind).toBe("allow");
     // Hash must equal the recorder hash for the RESOLVED mint (not the symbol).
     const expected = mod.computePrequoteMatchHash({
+      kind: "swap",
       sessionId: SESSION_ID,
       family: "solana",
       chainId: null,

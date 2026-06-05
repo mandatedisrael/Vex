@@ -11,14 +11,17 @@
  *   bridge_quote → khalani.quote.get        (read-only bridge preview)
  *   swap         → MUTATING family router (Stage 8b): EVM → kyberswap.swap.buy /
  *                  kyberswap.swap.sell, Solana → solana.swap.execute
+ *   bridge       → MUTATING router (Stage 8c): → khalani.bridge (cross-chain)
  *
  * The four 8a aliases are non-mutating, so dispatching them through
- * `executeProtocolTool` fires no approval gate. `swap` (8b) IS mutating: it is
- * dispatched through a DEDICATED dispatcher branch (`mutating-aliases.ts`) that
- * resolves the target and calls `executeProtocolTool` directly — letting that
- * function SOLELY own the ordering (Stage-7 prequote gate → approval gate →
- * capture). `swap` MUST NOT travel through the dispatcher's internal
- * mutating-approval gate (that would enqueue approval BEFORE the prequote gate).
+ * `executeProtocolTool` fires no approval gate. `swap` (8b) and `bridge` (8c)
+ * ARE mutating: each is dispatched through a DEDICATED dispatcher branch
+ * (`mutating-aliases.ts`) that resolves the target and calls `executeProtocolTool`
+ * directly — letting that function SOLELY own the ordering (prequote gate →
+ * approval gate → capture). A mutating alias MUST NOT travel through the
+ * dispatcher's internal mutating-approval gate (that would enqueue approval
+ * BEFORE the prequote gate). `bridge` REQUIRES a fresh `bridge_quote` first — the
+ * bridge prequote (kind 'bridge', verdict always 'unknown') seeds the gate.
  *
  * `swap_quote` routes to the kyber/solana quote toolIds that already record a
  * Stage-6c prequote via the hook in `executeProtocolTool` — calling a quote
@@ -122,6 +125,46 @@ export const ACTION_ALIAS_TOOLS: readonly ToolDef[] = [
         },
       },
       required: ["chain", "tokenIn", "tokenOut", "amount"],
+    },
+  },
+  {
+    name: "bridge",
+    kind: "internal",
+    mutating: true,
+    // Mirrors the TARGET khalani.bridge manifest (mutating). At context pressure
+    // barrier+ the dispatcher hard-denies the alias before the router resolves —
+    // conservative and equivalent to denying the mutating target directly.
+    pressureSafety: "mutating",
+    // SAME actionKind the target khalani.bridge manifest carries
+    // (user_wallet_broadcast) — do NOT invent one. Used as the dispatcher
+    // fallback stamp; on dispatch the result already carries the target's
+    // actionKind from executeProtocolTool.
+    actionKind: "user_wallet_broadcast",
+    description:
+      "Execute a REAL cross-chain bridge via Khalani (spends funds, signs + broadcasts a deposit on the source chain). REQUIRES a fresh matching bridge_quote FIRST — the execute gate blocks a bridge that has no fresh quote for these exact params, so always preview with bridge_quote before calling this. Resolve fromToken/toToken addresses via token_find first. `amount` is in SMALLEST units (wei/lamports), matching the bridge quote.",
+    parameters: {
+      type: "object",
+      properties: {
+        fromChain: { type: "string", description: "Source chain ID or alias." },
+        fromToken: { type: "string", description: "Source token address." },
+        toChain: { type: "string", description: "Destination chain ID or alias." },
+        toToken: { type: "string", description: "Destination token address." },
+        amount: { type: "string", description: "Amount in smallest units (wei/lamports)." },
+        tradeType: { type: "string", description: "EXACT_INPUT or EXACT_OUTPUT (default: EXACT_INPUT)." },
+        fromAddress: { type: "string", description: "Source wallet address override." },
+        recipient: { type: "string", description: "Destination recipient override (defaults to your dest-chain wallet)." },
+        refundTo: { type: "string", description: "Refund address override (defaults to fromAddress)." },
+        referrer: { type: "string", description: "EVM referrer address for fee sharing." },
+        referrerFeeBps: { type: "string", description: "Referrer fee in basis points (0-9999)." },
+        filler: { type: "string", description: "Restrict quotes to a specific filler." },
+        // NOTE: routeId / depositMethod are intentionally NOT exposed. They are
+        // EXECUTE-ONLY (the bridge quote has no counterpart), so they can never be
+        // bound to a quote — the bridge auto-selects the best route. The execute
+        // gate fail-closes (block "unbindable_param") if they reach khalani.bridge
+        // via the direct execute_tool path, so dropping them here is the menu half
+        // of a defense-in-depth pair (8c security fix).
+      },
+      required: ["fromChain", "fromToken", "toChain", "toToken", "amount"],
     },
   },
   {

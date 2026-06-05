@@ -168,10 +168,14 @@ describe("registry", () => {
     expect(namespace?.description).toContain("khalani");
   });
 
-  it("mutating tools are polymarket_setup, wallet_send_confirm", () => {
+  it("mutating tools are bridge, polymarket_setup, swap, wallet_send_confirm", () => {
+    // `swap` (Stage 8b) and `bridge` (Stage 8c) are MUTATING action-aliases that
+    // dispatch through the dedicated branch (executeProtocolTool owns approval).
     const mutating = getAllTools().filter(t => t.mutating).map(t => t.name).sort();
     expect(mutating).toEqual([
+      "bridge",
       "polymarket_setup",
+      "swap",
       "wallet_send_confirm",
     ]);
   });

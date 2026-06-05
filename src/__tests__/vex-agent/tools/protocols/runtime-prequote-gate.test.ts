@@ -166,14 +166,16 @@ describe("executeProtocolTool — Stage 7 prequote gate", () => {
   });
 
   it("does NOT gate a non-EXECUTE_GATE_TOOLS mutating tool (no repo reads)", async () => {
+    // A mutating tool that is NOT in EXECUTE_GATE_TOOLS (swap executes + the
+    // Khalani bridge are gated; a Polymarket order is not).
     vi.mocked(catalog.getProtocolManifest).mockReturnValue({
       ...swapManifest(),
-      toolId: "khalani.bridge",
-      namespace: "khalani",
+      toolId: "polymarket.clob.buy",
+      namespace: "polymarket",
       params: [],
     });
-    const result = await executeProtocolTool({ toolId: "khalani.bridge", params: {} }, restrictedCtx);
-    // Reaches the approval gate WITHOUT a prequote binding (not a gated swap).
+    const result = await executeProtocolTool({ toolId: "polymarket.clob.buy", params: {} }, restrictedCtx);
+    // Reaches the approval gate WITHOUT a prequote binding (not a gated tool).
     expect(result.pendingApproval).toBe(true);
     expect(result.prequote).toBeUndefined();
     expect(mockExistsFail).not.toHaveBeenCalled();

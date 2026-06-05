@@ -17,7 +17,7 @@ import {
   PREQUOTE_QUOTE_TOOLS,
   recordPrequoteFromQuote,
   EXECUTE_GATE_TOOLS,
-  evaluateSwapPrequoteGate,
+  evaluatePrequoteGate,
 } from "./swap-prequote.js";
 import type { SafetyVerdict } from "@vex-agent/db/repos/swap-prequotes.js";
 import { isExecutableNamespace, NAMESPACE_LIFECYCLE } from "./lifecycle.js";
@@ -194,15 +194,17 @@ export async function executeProtocolTool(
     }, effectiveActionKind);
   }
 
-  // ── Stage-7 prequote gate — quote-before-transaction on the swap BROADCAST
-  // path. Runs BEFORE the approval gate (a block must short-circuit even a
-  // call that would otherwise be enqueued for approval). Only the three swap
-  // EXECUTE tools are gated; preview/dryRun is read-only simulation and is
-  // never gated. The gate is fail-closed: any error → BLOCK. On ALLOW it yields
-  // the matched prequote's safety verdict, carried to the approval preview (R5).
+  // ── Prequote gate — quote-before-transaction on the BROADCAST path. Runs
+  // BEFORE the approval gate (a block must short-circuit even a call that would
+  // otherwise be enqueued for approval). Gated tools are the three swap EXECUTEs
+  // (kind 'swap', Stage 7) and the Khalani bridge EXECUTE (kind 'bridge', Stage
+  // 8c); preview/dryRun is read-only simulation and is never gated (the bridge's
+  // `dryRun` is `isPreviewExecution`-true, so a bridge preview is excluded here).
+  // Fail-closed: any error → BLOCK. On ALLOW it yields the matched prequote's
+  // safety verdict, carried to the approval preview (R5; bridge is 'unknown').
   let prequoteVerdict: SafetyVerdict | undefined;
   if (request.toolId in EXECUTE_GATE_TOOLS && !isPreviewExecution(request.toolId, params)) {
-    const decision = await evaluateSwapPrequoteGate(request.toolId, params, scopedContext);
+    const decision = await evaluatePrequoteGate(request.toolId, params, scopedContext);
     if (decision.kind === "block") {
       logger.info("protocol.execute.prequote_gate_blocked", {
         toolId: request.toolId,

@@ -13,8 +13,13 @@ const { executeProtocolTool } = await import("../../../vex-agent/tools/protocols
 
 describe("runtime approval gate", () => {
   it("blocks mutating tool in restricted permission → pendingApproval", async () => {
+    // Use a mutating tool that is NOT prequote-gated (kyberswap.limitOrder.cancelAll).
+    // khalani.bridge + the swap executes are now prequote-gated (Stage 7/8c): with
+    // no fresh quote they BLOCK at the prequote gate BEFORE the approval gate, so
+    // they no longer surface `pendingApproval` here — the approval-gate behavior is
+    // proven with an ungated mutating tool instead.
     const result = await executeProtocolTool(
-      { toolId: "khalani.bridge", params: { fromChain: "ethereum", toChain: "solana", fromToken: "0x", toToken: "0x", amount: "1" } },
+      { toolId: "kyberswap.limitOrder.cancelAll", params: { chain: "ethereum" } },
       { sessionPermission: "restricted", approved: false },
     );
 
