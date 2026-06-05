@@ -1,0 +1,114 @@
+/**
+ * Prequote-gate + approval-gate invocation for the protocol runtime.
+ *
+ * Extracted verbatim from `../runtime.ts` as part of a façade-preserving
+ * structural split. `executeProtocolTool` (in the runtime façade) stays the
+ * orchestration owner: it calls these helpers in the SAME order as before
+ * (prequote gate BEFORE approval gate) and performs the actual `return`. Each
+ * helper produces a discriminated decision and emits the SAME log call at the
+ * SAME point it previously ran inline — no ordering or side-effect change.
+ */
+
+import type { ProtocolExecutionContext, ProtocolToolManifest } from "../types.js";
+import type { ToolResult } from "../../types.js";
+import {
+  EXECUTE_GATE_TOOLS,
+  evaluatePrequoteGate,
+} from "../swap-prequote.js";
+import type { SafetyVerdict } from "@vex-agent/db/repos/swap-prequotes.js";
+import { isPreviewExecution } from "../capture-validator.js";
+import logger from "@utils/logger.js";
+
+/**
+ * Outcome of the prequote gate. `allow` carries the matched prequote's safety
+ * verdict (and optional fee-on-transfer tax) for the approval preview; `block`
+ * carries the agent-facing message the orchestrator surfaces as the failure
+ * output. The orchestrator stamps `effectiveActionKind` on the returned
+ * `ToolResult` itself — this helper never builds the final `ToolResult`.
+ */
+export type PrequoteGateDecision =
+  | {
+      readonly kind: "allow";
+      readonly verdict: SafetyVerdict | undefined;
+      readonly fotTax: number | undefined;
+    }
+  | { readonly kind: "block"; readonly message: string };
+
+/**
+ * Prequote gate — quote-before-transaction on the BROADCAST path. Runs BEFORE
+ * the approval gate (a block must short-circuit even a call that would otherwise
+ * be enqueued for approval). Gated tools are the three swap EXECUTEs (kind
+ * 'swap', Stage 7) and the Khalani bridge EXECUTE (kind 'bridge', Stage 8c);
+ * preview/dryRun is read-only simulation and is never gated (the bridge's
+ * `dryRun` is `isPreviewExecution`-true, so a bridge preview is excluded here).
+ * Fail-closed: any error → BLOCK. On ALLOW it yields the matched prequote's
+ * safety verdict, carried to the approval preview (R5; bridge is 'unknown').
+ *
+ * Returns `{ kind: "allow", verdict: undefined, fotTax: undefined }` when the
+ * tool is not gated (or is a preview) — i.e. the pre-split path that never
+ * entered the inline `if` block and left both locals undefined.
+ */
+export async function evaluatePrequoteGateDecision(
+  toolId: string,
+  params: Record<string, unknown>,
+  scopedContext: ProtocolExecutionContext,
+): Promise<PrequoteGateDecision> {
+  if (toolId in EXECUTE_GATE_TOOLS && !isPreviewExecution(toolId, params)) {
+    const decision = await evaluatePrequoteGate(toolId, params, scopedContext);
+    if (decision.kind === "block") {
+      logger.info("protocol.execute.prequote_gate_blocked", {
+        toolId,
+        reason: decision.reason,
+      });
+      return { kind: "block", message: decision.message };
+    }
+    return {
+      kind: "allow",
+      verdict: decision.verdict,
+      // Fee-on-transfer tax (if any) rides the same TYPED channel for the preview.
+      fotTax: decision.fotTax,
+    };
+  }
+  return { kind: "allow", verdict: undefined, fotTax: undefined };
+}
+
+/**
+ * Approval gate — mutating tools require approval under restricted permission.
+ * Preview (dryRun) is read-only simulation — skip approval.
+ *
+ * When the gate fires, builds the SAME pending `ToolResult` as the pre-split
+ * inline block (including the typed `prequote` carry of verdict + optional
+ * fee-on-transfer tax) and emits the SAME `protocol.execute.approval_required`
+ * log. Returns `undefined` when the gate does not apply, so the orchestrator
+ * proceeds to the handler. `actionKind` stamping stays the orchestrator's job.
+ */
+export function evaluateApprovalGate(
+  manifest: ProtocolToolManifest,
+  request: { readonly toolId: string },
+  params: Record<string, unknown>,
+  context: ProtocolExecutionContext,
+  prequoteVerdict: SafetyVerdict | undefined,
+  prequoteFotTax: number | undefined,
+): ToolResult | undefined {
+  if (manifest.mutating && !context.approved && context.sessionPermission === "restricted" && !isPreviewExecution(request.toolId, params)) {
+    logger.info("protocol.execute.approval_required", { toolId: request.toolId, permission: context.sessionPermission });
+    // Carry the gate-matched prequote verdict to the restricted-mode approval
+    // preview via the TYPED `prequote` field (NOT raw args) so the human sees
+    // the safety verdict — especially `unknown` — before approving (R5). A
+    // fee-on-transfer tax (when the gate provided one) rides the same typed
+    // field so the human still sees a high tax even though FoT is now `pass`.
+    const pending: ToolResult = {
+      success: false,
+      output: `${request.toolId} requires approval — mutating tool in restricted permission mode.`,
+      pendingApproval: true,
+    };
+    if (prequoteVerdict !== undefined) {
+      pending.prequote =
+        prequoteFotTax !== undefined
+          ? { verdict: prequoteVerdict, fotTax: prequoteFotTax }
+          : { verdict: prequoteVerdict };
+    }
+    return pending;
+  }
+  return undefined;
+}
