@@ -1,0 +1,242 @@
+/**
+ * Swap/bridge prequote recording (Stage 6c / 8c).
+ *
+ * RECORDER — for a SUCCESSFUL swap QUOTE this module computes:
+ *   1. a deterministic match-hash over the trade identity (reused verbatim by
+ *      the Stage-7 execute gate so record-time and gate-time hashes collide),
+ *   2. a 3-state token-safety verdict (`pass` | `fail` | `unknown`),
+ *   3. a bounded, structural-only `safetyDetail` payload,
+ * then records a `swap_prequotes` row. Recording is best-effort: any failure is
+ * swallowed (logged structurally) so it never alters the quote's ToolResult. A
+ * missing prequote is safe — the Stage-7 gate blocks the execute instead.
+ *
+ * NEVER persist or log raw provider/HTTP/DB/error text — only bounded structural
+ * labels.
+ */
+
+import { randomUUID } from "node:crypto";
+
+import type { ChainFamily } from "@tools/khalani/types.js";
+import { resolveSelectedAddress } from "@vex-agent/tools/internal/wallet/resolve.js";
+import logger from "@utils/logger.js";
+
+import { VexError } from "../../../../errors.js";
+import type { ProtocolExecutionContext } from "../types.js";
+import * as prequoteRepo from "@vex-agent/db/repos/swap-prequotes.js";
+import type {
+  CreatePrequoteInput,
+  PrequoteFamily,
+} from "@vex-agent/db/repos/swap-prequotes.js";
+
+import { PREQUOTE_QUOTE_TOOLS, PREQUOTE_MAX_AGE_MS } from "./registry.js";
+import { computePrequoteMatchHash } from "./identity/hash.js";
+import type { BridgeMatchInput } from "./identity/hash.js";
+import { buildBridgeIdentity } from "./identity/bridge.js";
+import { extractQuote } from "./safety/extract.js";
+import { canonSlippageBps, readParamSlippageBps } from "./slippage.js";
+
+// ── Recorder ──────────────────────────────────────────────────────────────
+
+function familyToChainFamily(family: PrequoteFamily): ChainFamily {
+  // PrequoteFamily and ChainFamily share the same inhabitants; keep them
+  // separate types but bridge here at the single call site.
+  return family;
+}
+
+/**
+ * Best-effort `swap_prequotes` write. The DB call is the only throw site left in
+ * the recorder, so it is isolated here to honour the "never throws to caller"
+ * contract. Only a bounded structural reason is logged — never raw provider/DB
+ * text. Returns true on a successful write.
+ */
+async function writePrequoteRow(toolId: string, input: CreatePrequoteInput): Promise<boolean> {
+  try {
+    await prequoteRepo.create(input);
+    return true;
+  } catch (err) {
+    const reason =
+      err instanceof VexError
+        ? err.code
+        : err instanceof Error
+          ? err.constructor.name
+          : "write_failed";
+    logger.warn("protocol.prequote.skipped", { toolId, reason });
+    return false;
+  }
+}
+
+/**
+ * Record a prequote from a successful quote. Best-effort: resolves the would-be
+ * signing address (skips on a wallet-scope throw — never fabricates an address),
+ * validates + extracts the quote, computes the match-hash + verdict, and writes
+ * the row. Never throws to the caller; structural logs only. Dispatches by the
+ * registered `kind`: a `swap` quote records a token-safety verdict; a `bridge`
+ * quote always records verdict `unknown` (a Khalani route proves availability,
+ * NOT token safety — Codex requirement #3).
+ */
+export async function recordPrequoteFromQuote(
+  toolId: string,
+  params: Record<string, unknown>,
+  resultData: Record<string, unknown>,
+  context: ProtocolExecutionContext,
+): Promise<void> {
+  const registered = PREQUOTE_QUOTE_TOOLS[toolId];
+  if (!registered) return;
+
+  const sessionId = context.sessionId;
+  if (!sessionId) {
+    logger.warn("protocol.prequote.skipped", { toolId, reason: "no_session" });
+    return;
+  }
+
+  if (registered.kind === "bridge") {
+    await recordBridgePrequote(toolId, sessionId, registered.provider, params, context);
+    return;
+  }
+  await recordSwapPrequote(toolId, sessionId, registered, params, resultData, context);
+}
+
+async function recordSwapPrequote(
+  toolId: string,
+  sessionId: string,
+  registered: { readonly family: PrequoteFamily; readonly provider: string },
+  params: Record<string, unknown>,
+  resultData: Record<string, unknown>,
+  context: ProtocolExecutionContext,
+): Promise<void> {
+  // Resolve the SELECTED address (never decrypts a key). A wallet-scope throw
+  // (no wallet selected for this family) is a valid skip — fail-closed, never
+  // fabricate.
+  let walletAddress: string;
+  try {
+    walletAddress = resolveSelectedAddress(
+      context.walletResolution,
+      context.walletPolicy,
+      familyToChainFamily(registered.family),
+    );
+  } catch (err) {
+    const reason = err instanceof VexError ? err.code : "wallet_unresolved";
+    logger.warn("protocol.prequote.skipped", { toolId, reason });
+    return;
+  }
+
+  const extracted = extractQuote(toolId, params, resultData);
+  if (!extracted) {
+    logger.warn("protocol.prequote.skipped", { toolId, reason: "shape_invalid" });
+    return;
+  }
+
+  // Stage 9: bind the execute-only money/safety leg. The QUOTE carries none of
+  // recipient/approveExact, so default them to what the executor uses when they
+  // are omitted (output-to-self == the resolved selected wallet; approveExact
+  // false). `slippageBps` is read from the QUOTE PARAMS (not the echoed quote
+  // response) so it stays in lockstep with the gate, which reads it from the
+  // execute params. Solana has no recipient/approveExact concept — self/false
+  // are inert constants there.
+  const matchHash = computePrequoteMatchHash({
+    kind: "swap",
+    sessionId,
+    family: registered.family,
+    chainId: extracted.chainId,
+    walletAddress,
+    tokenIn: extracted.tokenIn,
+    tokenOut: extracted.tokenOut,
+    amount: extracted.amount,
+    recipient: walletAddress,
+    approveExact: false,
+    slippageBps: canonSlippageBps(readParamSlippageBps(params)),
+  });
+
+  const input: CreatePrequoteInput = {
+    prequoteId: `prequote-${randomUUID()}`,
+    sessionId,
+    matchHash,
+    kind: "swap",
+    family: registered.family,
+    provider: registered.provider,
+    chainId: extracted.chainId,
+    walletAddress,
+    tokenIn: extracted.tokenIn,
+    tokenOut: extracted.tokenOut,
+    amount: extracted.amount,
+    slippageBps: extracted.slippageBps,
+    safetyVerdict: extracted.verdict,
+    safetyDetail: extracted.safetyDetail,
+    routeRef: null,
+    expiresAt: new Date(Date.now() + PREQUOTE_MAX_AGE_MS).toISOString(),
+  };
+
+  if (await writePrequoteRow(toolId, input)) {
+    logger.info("protocol.prequote.recorded", {
+      toolId,
+      family: registered.family,
+      verdict: extracted.verdict,
+    });
+  }
+}
+
+/**
+ * Bounded structural-only safetyDetail for a bridge prequote. A successful
+ * Khalani quote proves route availability, NOT token safety — so the verdict is
+ * ALWAYS `unknown` and the detail says exactly that (object shape, no raw text).
+ */
+const BRIDGE_SAFETY_DETAIL: Record<string, unknown> = {
+  bridge: true,
+  note: "route-only; no token-safety check",
+};
+
+/**
+ * Record a bridge prequote from a successful `khalani.quote.get`. The identity
+ * comes from the QUOTE params via the SHARED `buildBridgeIdentity` (the same
+ * builder the execute gate uses), so quote↔execute hashes collide. Verdict is
+ * ALWAYS `unknown`. Best-effort: an identity-build throw (unresolved chain /
+ * wallet-scope) is a bounded skip, never a fabricated row.
+ */
+async function recordBridgePrequote(
+  toolId: string,
+  sessionId: string,
+  provider: string,
+  params: Record<string, unknown>,
+  context: ProtocolExecutionContext,
+): Promise<void> {
+  let identity: BridgeMatchInput;
+  try {
+    identity = await buildBridgeIdentity(sessionId, params, context);
+  } catch (err) {
+    const reason = err instanceof VexError ? err.code : "bridge_identity_failed";
+    logger.warn("protocol.prequote.skipped", { toolId, reason });
+    return;
+  }
+
+  const matchHash = computePrequoteMatchHash(identity);
+  const input: CreatePrequoteInput = {
+    prequoteId: `prequote-${randomUUID()}`,
+    sessionId,
+    matchHash,
+    kind: "bridge",
+    // Bridge prequote `family` is the SOURCE family (where the signer lives) —
+    // mirrors the verdict provider/family pairing the gate reads back by kind.
+    family: identity.sourceFamily,
+    provider,
+    // Bridge rows have two chain ids; only the SOURCE id maps onto the single
+    // `chain_id` column (the dest id is part of the match-hash, not a column).
+    chainId: identity.fromChainId,
+    walletAddress: identity.sourceWallet,
+    tokenIn: identity.fromToken,
+    tokenOut: identity.toToken,
+    amount: identity.amount,
+    slippageBps: null,
+    safetyVerdict: "unknown",
+    safetyDetail: BRIDGE_SAFETY_DETAIL,
+    routeRef: null,
+    expiresAt: new Date(Date.now() + PREQUOTE_MAX_AGE_MS).toISOString(),
+  };
+
+  if (await writePrequoteRow(toolId, input)) {
+    logger.info("protocol.prequote.recorded", {
+      toolId,
+      family: identity.sourceFamily,
+      verdict: "unknown",
+    });
+  }
+}
