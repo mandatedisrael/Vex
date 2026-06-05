@@ -157,11 +157,19 @@ export type VexErrorCode =
    *  - `approvals.dispatch_failed`   — approved tool dispatch threw an
    *                                    unhandled exception; run flipped to
    *                                    `paused_error`.
+   *  - `approvals.policy_drift_blocked` — B-001: the live session permission
+   *                                    became MORE restrictive after the
+   *                                    approval was enqueued, so the action is
+   *                                    no longer permitted. The approve failed
+   *                                    closed (queue+intent rejected, NO tool
+   *                                    dispatch); the run resumed to observe
+   *                                    the rejection.
    */
   | "approvals.expired"
   | "approvals.already_resolved"
   | "approvals.run_terminated"
   | "approvals.dispatch_failed"
+  | "approvals.policy_drift_blocked"
   /**
    * Stage 7-2b — knowledge disable/archive mutation
    * (`knowledge.updateStatus`). `not_found` = entry gone; `invalid_state` =
@@ -267,6 +275,7 @@ export const VEX_ERROR_CODES = [
   "approvals.already_resolved",
   "approvals.run_terminated",
   "approvals.dispatch_failed",
+  "approvals.policy_drift_blocked",
   "knowledge.not_found",
   "knowledge.invalid_state",
   "compaction.not_found",

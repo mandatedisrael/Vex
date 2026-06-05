@@ -8,10 +8,51 @@
 
 import { createHash } from "node:crypto";
 
+import type { Permission } from "../../types.js";
+
+/**
+ * Ordinal rank for the 2-level `Permission` lattice. Higher rank = MORE
+ * permissive (`full` > `restricted`). Used by the approve-time drift gate to
+ * decide whether the live session permission became strictly more restrictive
+ * than the snapshot captured at enqueue.
+ */
+const PERMISSION_RANK: Readonly<Record<Permission, number>> = {
+  restricted: 0,
+  full: 1,
+};
+
+/**
+ * True when `live` is strictly MORE restrictive than `atEnqueue` — i.e. an
+ * action authorized under a looser policy at enqueue would no longer be
+ * permitted to auto-dispatch under the current policy. This is the only
+ * direction the approve path fails closed on; unchanged or looser live
+ * permission keeps the existing approve+dispatch path byte-identical.
+ */
+export function isPermissionMoreRestrictive(
+  live: Permission,
+  atEnqueue: Permission,
+): boolean {
+  return PERMISSION_RANK[live] < PERMISSION_RANK[atEnqueue];
+}
+
 export const TOOL_RESULT_REJECTED_DEFAULT_REASON = "No reason provided";
 export const TOOL_RESULT_EXPIRED_REASON = "expired_ttl";
 export const TOOL_RESULT_EXPIRED_MESSAGE =
   "Tool call auto-rejected: approval expired before user action.";
+
+/**
+ * B-001 — approve-time live-policy re-enforcement. When the live session
+ * permission has drifted MORE restrictive than the permission snapshot
+ * captured at enqueue, the approve fails closed BEFORE any dispatch: the
+ * queue+intent are flipped to `rejected` in the same locked tx (no approved
+ * decision, no dispatch, no approved tool-result). These constants name that
+ * outcome so the auto-rejection tool-result + audit reason stay structural.
+ */
+export const TOOL_RESULT_POLICY_DRIFT_REASON = "policy_drift_blocked";
+export const TOOL_RESULT_POLICY_DRIFT_MESSAGE =
+  "Tool call auto-rejected: session permission became more restrictive " +
+  "after this approval was requested. Re-issue the action under the current " +
+  "permission policy.";
 
 export const LEASE_TTL_MS = 5 * 60_000;
 export const SWEEP_BATCH_LIMIT = 50;
@@ -49,6 +90,10 @@ export function buildDispatchFailedToolResultContent(
   errorHash: string,
 ): string {
   return `Tool dispatch failed: ${errorKind}. Error hash: ${errorHash}.`;
+}
+
+export function buildPolicyDriftToolResultContent(): string {
+  return TOOL_RESULT_POLICY_DRIFT_MESSAGE;
 }
 
 export function buildRejectedToolResultContent(reason: string | null): string {

@@ -85,6 +85,20 @@ export async function approveAndResume(
       );
     }
 
+    case "policy_drift_blocked": {
+      // B-001 — live permission drifted more restrictive after enqueue; the
+      // action was rejected before dispatch. Mirror the `expired` path: the
+      // auto-rejection already wrote tool-result + claim+flip, so consume any
+      // continuation here (else the lease leaks) before throwing.
+      if (outcome.continuation !== null) {
+        await runResumeAfterDecision(outcome.continuation);
+      }
+      throw new Error(
+        `Approval ${approvalId} cannot be applied: session permission became more restrictive ` +
+          `(enqueue=${outcome.permissionAtEnqueue}, live=${outcome.livePermission}) — auto-rejected`,
+      );
+    }
+
     case "already_rejected":
       throw new Error(
         `Approval ${approvalId} cannot be applied: already ${outcome.decision}`,

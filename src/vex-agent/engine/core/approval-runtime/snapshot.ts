@@ -1,10 +1,14 @@
 /**
  * Approval runtime — locked-tx snapshot phase.
  *
- * The tx locks BOTH `approval_intents` and `approval_queue` rows
- * (`FOR UPDATE OF i, q`) and decides which path the post-tx side-effects
- * will run. The TTL gate uses DB-side `NOW()` so an approve that races
- * the TTL boundary observes a single committed truth.
+ * The tx locks the `approval_intents`, `approval_queue`, AND `sessions` rows
+ * (`FOR UPDATE OF i, q, s`) and decides which path the post-tx side-effects
+ * will run. Locking `sessions s` serializes the LIVE permission read
+ * (`s.permission`) against a concurrent permission-downgrade tx, so the
+ * approve-time re-enforcement (B-001) compares the enqueue snapshot against a
+ * permission value that cannot change underneath this approve until it commits.
+ * The TTL gate uses DB-side `NOW()` so an approve that races the TTL boundary
+ * observes a single committed truth.
  *
  * Codex puzzle-5 phase-3 review point 4 — atomic TTL gate inside the same
  * locked tx as the queue CAS.
@@ -26,7 +30,9 @@ import {
 } from "../../types.js";
 import { ApprovalDecisionInconsistencyError } from "./types.js";
 import {
+  isPermissionMoreRestrictive,
   TOOL_RESULT_EXPIRED_REASON,
+  TOOL_RESULT_POLICY_DRIFT_REASON,
   toIso,
   toIsoNow,
 } from "./helpers.js";
@@ -55,6 +61,12 @@ export interface IntentSnapshotRow {
   queue_tool_call: Record<string, unknown>;
   queue_tool_call_id: string | null;
   queue_permission_at_enqueue: Permission;
+  // LIVE session permission (B-001 — approve-time re-enforcement). Read from
+  // `sessions.permission` in the same snapshot SELECT, which locks the joined
+  // `sessions s` row (`FOR UPDATE OF i, q, s`) so the approve gate compares the
+  // captured enqueue snapshot against a live policy value that a concurrent
+  // permission-downgrade tx cannot change until this approve commits.
+  session_permission_live: Permission;
 }
 
 const SNAPSHOT_SELECT_SQL = `SELECT
@@ -73,11 +85,13 @@ const SNAPSHOT_SELECT_SQL = `SELECT
     q.created_at        AS queue_created_at,
     q.tool_call         AS queue_tool_call,
     q.tool_call_id      AS queue_tool_call_id,
-    q.permission_at_enqueue AS queue_permission_at_enqueue
+    q.permission_at_enqueue AS queue_permission_at_enqueue,
+    s.permission        AS session_permission_live
   FROM approval_intents i
   JOIN approval_queue q ON q.id = i.approval_id
+  JOIN sessions s ON s.id = i.session_id
   WHERE i.approval_id = $1
-  FOR UPDATE OF i, q`;
+  FOR UPDATE OF i, q, s`;
 
 async function lockAndLoadSnapshot(
   client: PoolClient,
@@ -108,6 +122,18 @@ export type ApproveSnapshot =
       row: IntentSnapshotRow;
       expiredAt: string;
       queueResolvedAt: string;
+    }
+  | {
+      // B-001 — live permission drifted MORE restrictive than the snapshot
+      // captured at enqueue. Queue+intent were flipped to `rejected` in-tx
+      // (NOT approved, NOT pending); the approve fails closed before any
+      // dispatch state transition.
+      type: "policy_drift_blocked";
+      row: IntentSnapshotRow;
+      queueResolvedAt: string;
+      reason: string;
+      permissionAtEnqueue: Permission;
+      livePermission: Permission;
     }
   | {
       type: "approved_in_tx";
@@ -186,6 +212,24 @@ export async function buildApproveSnapshot(
     }
   }
 
+  // B-001 — re-enforce the live permission policy at approve time. The
+  // permission captured at enqueue (`queue_permission_at_enqueue`) is a
+  // snapshot; if the LIVE `sessions.permission` (read above under the same
+  // lock) drifted strictly MORE restrictive, an action authorized under the
+  // looser policy must NOT dispatch. Fail closed BEFORE the approve CAS:
+  // flip queue+intent to `rejected` in-tx so the post-tx side effects take
+  // the reject path (no approved decision, no dispatch, no approved
+  // tool-result). Unchanged or looser live permission falls through to the
+  // byte-identical happy path below.
+  if (
+    isPermissionMoreRestrictive(
+      row.session_permission_live,
+      row.queue_permission_at_enqueue,
+    )
+  ) {
+    return policyDriftRejectInTx(client, row, approvalId);
+  }
+
   // Happy path — CAS queue.approve + CAS intent.decision='approved' in tx.
   const queueRow = await approvalsRepo.approveWith(client, approvalId);
   if (queueRow === null) {
@@ -242,6 +286,48 @@ async function autoRejectInTx(
     row,
     expiredAt: expiresAt.toISOString(),
     queueResolvedAt: toIso(queueRow.resolvedAt ?? toIsoNow()),
+  };
+}
+
+/**
+ * B-001 — flip queue+intent to `rejected` in the SAME locked tx that read the
+ * drifted permission, then return the `policy_drift_blocked` snapshot. Mirrors
+ * `autoRejectInTx` (expired path) — the row is locked `FOR UPDATE`, so the
+ * `decision IS NULL` / `status='pending'` CAS predicates hold and a missed CAS
+ * is a real inconsistency. No approved decision is ever written; the post-tx
+ * side effects render a rejection tool-result, never an approved dispatch.
+ */
+async function policyDriftRejectInTx(
+  client: PoolClient,
+  row: IntentSnapshotRow,
+  approvalId: string,
+): Promise<ApproveSnapshot> {
+  const queueRow = await approvalsRepo.rejectWith(client, approvalId);
+  if (queueRow === null) {
+    throw new ApprovalDecisionInconsistencyError(
+      approvalId,
+      "policy-drift queue CAS missed despite FOR UPDATE",
+    );
+  }
+  const ok = await approvalIntentsRepo.markDecisionWith(client, {
+    approvalId,
+    kind: "rejected",
+    reason: TOOL_RESULT_POLICY_DRIFT_REASON,
+    idempotencyKey: approvalId,
+  });
+  if (!ok) {
+    throw new ApprovalDecisionInconsistencyError(
+      approvalId,
+      "policy-drift intent CAS missed despite decision=null",
+    );
+  }
+  return {
+    type: "policy_drift_blocked",
+    row,
+    queueResolvedAt: toIso(queueRow.resolvedAt ?? toIsoNow()),
+    reason: TOOL_RESULT_POLICY_DRIFT_REASON,
+    permissionAtEnqueue: row.queue_permission_at_enqueue,
+    livePermission: row.session_permission_live,
   };
 }
 

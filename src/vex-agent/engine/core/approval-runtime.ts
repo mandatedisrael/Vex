@@ -31,9 +31,11 @@ import {
 } from "./approval-runtime/snapshot.js";
 import {
   applyApproveSideEffects,
+  applyPolicyDriftSideEffects,
   applyRejectSideEffects,
 } from "./approval-runtime/post-tx.js";
 import {
+  buildPolicyDriftToolResultContent,
   buildRejectedToolResultContent,
   toIsoNow,
   toIsoOrNull,
@@ -129,6 +131,16 @@ export async function prepareApprove(
         autoRejection,
       };
     }
+
+    case "policy_drift_blocked":
+      // B-001 — live permission drifted MORE restrictive after enqueue. The
+      // snapshot tx already flipped queue+intent to `rejected` (no approved
+      // decision); render the rejection tool-result and resume. NO dispatch.
+      return applyPolicyDriftSideEffects(
+        approvalId,
+        snapshot,
+        buildPolicyDriftToolResultContent(),
+      );
 
     case "approved_in_tx":
       return applyApproveSideEffects(approvalId, snapshot);

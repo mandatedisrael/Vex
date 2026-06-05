@@ -50,7 +50,11 @@ import {
   toIsoNow,
   TOOL_RESULT_EXPIRED_REASON,
 } from "./helpers.js";
-import type { ApproveSnapshot, RejectSnapshot } from "./snapshot.js";
+import type {
+  ApproveSnapshot,
+  IntentSnapshotRow,
+  RejectSnapshot,
+} from "./snapshot.js";
 import {
   ApprovalDispatchError,
   ApprovalPostDecisionError,
@@ -325,24 +329,32 @@ async function onDispatchThrow(
 }
 
 /**
- * Side effects after `rejected_in_tx` snapshot — write the rejection
- * tool-result to transcript, optionally claim+flip the mission run, return
- * the IPC outcome.
+ * Shared rejection side-effects core (reject / expire / B-001 policy-drift):
+ * write the structural rejection tool-result, optionally claim+flip the
+ * mission run, and translate any post-decision failure into a `paused_error`
+ * flip + `ApprovalPostDecisionError`. Returns the claimed continuation (or
+ * `null` for a chat session). NEVER dispatches a tool and NEVER appends an
+ * approved tool-result — the appended message is always `rejected: true`.
  *
- * `toolResultContent` is built by the caller because the reject path and
- * the expire path render different messages even though the snapshot type
- * is the same.
+ * `ownerPrefix` lets the caller tag the lease owner (`reject`/`expire`/
+ * `policy_drift`); `recoveryEvidence` is folded into the `paused_error` audit.
  */
-export async function applyRejectSideEffects(
+async function runRejectionSideEffects(
   approvalId: string,
-  snapshot: Extract<RejectSnapshot, { type: "rejected_in_tx" }>,
+  row: IntentSnapshotRow,
+  resolvedAt: string,
   toolResultContent: string,
-): Promise<RejectPrepareOutcome> {
-  const row = snapshot.row;
+  ownerPrefix: string,
+  recoveryEvidence: Record<string, unknown>,
+): Promise<{
+  readonly resolvedAt: string;
+  readonly sessionId: string;
+  readonly missionRunId: string | null;
+  readonly continuation: PreparedContinuation | null;
+}> {
   const sessionId = row.session_id;
   const missionRunId = row.mission_run_id;
-  const toolCallId =
-    row.queue_tool_call_id ?? row.tool_call_id ?? approvalId;
+  const toolCallId = row.queue_tool_call_id ?? row.tool_call_id ?? approvalId;
 
   try {
     await refreshBlobTtlForRecentMessages(sessionId);
@@ -365,8 +377,6 @@ export async function applyRejectSideEffects(
 
     let continuation: PreparedContinuation | null = null;
     if (missionRunId !== null) {
-      const ownerPrefix =
-        snapshot.reason === TOOL_RESULT_EXPIRED_REASON ? "expire" : "reject";
       continuation = await claimResumeContinuation(
         sessionId,
         missionRunId,
@@ -381,24 +391,14 @@ export async function applyRejectSideEffects(
       }
     }
 
-    return {
-      kind: "rejected",
-      approvalId,
-      resolvedAt: snapshot.queueResolvedAt,
-      sessionId,
-      missionRunId,
-      reason: snapshot.reason,
-      continuation,
-    };
+    return { resolvedAt, sessionId, missionRunId, continuation };
   } catch (cause) {
     if (cause instanceof ApprovalPostDecisionError) {
       if (missionRunId !== null) {
-        await flipRunToPausedError(
-          approvalId,
-          missionRunId,
-          cause.errorKind,
-          { errorHash: cause.errorHash, reason: snapshot.reason },
-        );
+        await flipRunToPausedError(approvalId, missionRunId, cause.errorKind, {
+          errorHash: cause.errorHash,
+          ...recoveryEvidence,
+        });
       }
       throw cause;
     }
@@ -409,15 +409,13 @@ export async function applyRejectSideEffects(
       missionRunId,
       errorKind: errSummary.errorKind,
       errorHash: errSummary.errorHash,
-      side: "reject",
+      side: ownerPrefix,
     });
     if (missionRunId !== null) {
-      await flipRunToPausedError(
-        approvalId,
-        missionRunId,
-        errSummary.errorKind,
-        { errorHash: errSummary.errorHash, reason: snapshot.reason },
-      );
+      await flipRunToPausedError(approvalId, missionRunId, errSummary.errorKind, {
+        errorHash: errSummary.errorHash,
+        ...recoveryEvidence,
+      });
     }
     throw new ApprovalPostDecisionError(
       approvalId,
@@ -425,4 +423,80 @@ export async function applyRejectSideEffects(
       errSummary.errorHash,
     );
   }
+}
+
+/**
+ * Side effects after `rejected_in_tx` snapshot — write the rejection
+ * tool-result to transcript, optionally claim+flip the mission run, return
+ * the IPC outcome.
+ *
+ * `toolResultContent` is built by the caller because the reject path and
+ * the expire path render different messages even though the snapshot type
+ * is the same.
+ */
+export async function applyRejectSideEffects(
+  approvalId: string,
+  snapshot: Extract<RejectSnapshot, { type: "rejected_in_tx" }>,
+  toolResultContent: string,
+): Promise<RejectPrepareOutcome> {
+  const ownerPrefix =
+    snapshot.reason === TOOL_RESULT_EXPIRED_REASON ? "expire" : "reject";
+  const { resolvedAt, sessionId, missionRunId, continuation } =
+    await runRejectionSideEffects(
+      approvalId,
+      snapshot.row,
+      snapshot.queueResolvedAt,
+      toolResultContent,
+      ownerPrefix,
+      { reason: snapshot.reason },
+    );
+
+  return {
+    kind: "rejected",
+    approvalId,
+    resolvedAt,
+    sessionId,
+    missionRunId,
+    reason: snapshot.reason,
+    continuation,
+  };
+}
+
+/**
+ * B-001 — side effects after a `policy_drift_blocked` snapshot. The queue +
+ * intent were already flipped to `rejected` inside the locked snapshot tx
+ * (before any approve CAS), so this NEVER dispatches a tool, NEVER marks
+ * `dispatching`, and NEVER appends an approved tool-result. It writes the
+ * structural drift rejection tool-result and resumes the mission run so the
+ * agent observes the failed-closed action.
+ */
+export async function applyPolicyDriftSideEffects(
+  approvalId: string,
+  snapshot: Extract<ApproveSnapshot, { type: "policy_drift_blocked" }>,
+  toolResultContent: string,
+): Promise<Extract<ApprovePrepareOutcome, { kind: "policy_drift_blocked" }>> {
+  const { resolvedAt, sessionId, missionRunId, continuation } =
+    await runRejectionSideEffects(
+      approvalId,
+      snapshot.row,
+      snapshot.queueResolvedAt,
+      toolResultContent,
+      "policy_drift",
+      {
+        reason: snapshot.reason,
+        permissionAtEnqueue: snapshot.permissionAtEnqueue,
+        livePermission: snapshot.livePermission,
+      },
+    );
+
+  return {
+    kind: "policy_drift_blocked",
+    approvalId,
+    resolvedAt,
+    sessionId,
+    missionRunId,
+    permissionAtEnqueue: snapshot.permissionAtEnqueue,
+    livePermission: snapshot.livePermission,
+    continuation,
+  };
 }

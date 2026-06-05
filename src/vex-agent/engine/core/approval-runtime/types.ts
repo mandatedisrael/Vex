@@ -55,6 +55,25 @@ export type ApprovePrepareOutcome =
       readonly autoRejection: RejectPrepareOutcome;
     }
   | {
+      /**
+       * B-001 — the live session permission drifted strictly MORE restrictive
+       * than the permission captured at enqueue, so the approved action is no
+       * longer permitted to dispatch. The approve FAILED CLOSED: queue+intent
+       * are `rejected` (NOT approved, NOT pending), NO tool was dispatched, and
+       * the appended tool-result is a rejection (not an approved result). The
+       * mission run resumes via `continuation` to observe the rejection. IPC
+       * maps this to `approvals.policy_drift_blocked`.
+       */
+      readonly kind: "policy_drift_blocked";
+      readonly approvalId: string;
+      readonly resolvedAt: string;
+      readonly sessionId: string;
+      readonly missionRunId: string | null;
+      readonly permissionAtEnqueue: "restricted" | "full";
+      readonly livePermission: "restricted" | "full";
+      readonly continuation: PreparedContinuation | null;
+    }
+  | {
       readonly kind: "already_rejected";
       readonly approvalId: string;
       readonly resolvedAt: string;

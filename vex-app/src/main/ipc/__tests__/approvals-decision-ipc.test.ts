@@ -363,6 +363,49 @@ describe("approve handler decision outcome mapping", () => {
     expect(mocks.dispatchPreparedMission).not.toHaveBeenCalled();
   });
 
+  it("policy_drift_blocked (B-001) → err approvals.policy_drift_blocked; continuation IS dispatched (run resumes to see rejection)", async () => {
+    mocks.prepareApprove.mockResolvedValue({
+      kind: "policy_drift_blocked",
+      approvalId: "a-7b",
+      resolvedAt: "2026-05-23T20:00:00.000Z",
+      sessionId: SESSION,
+      missionRunId: "run-1",
+      permissionAtEnqueue: "full",
+      livePermission: "restricted",
+      continuation: STUB_CONTINUATION,
+    });
+
+    const result = await call(CH.approvals.approve, { id: "a-7b" });
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("approvals.policy_drift_blocked");
+    // Fail-closed but the mission still resumes so the agent observes the
+    // auto-rejection rather than stranding in paused_approval.
+    expect(mocks.dispatchPreparedMission).toHaveBeenCalledTimes(1);
+    expect(mocks.dispatchPreparedMission.mock.calls[0][1]).toMatchObject({
+      channelLabel: "vex:approvals:approve",
+    });
+  });
+
+  it("policy_drift_blocked (B-001) chat session (no mission) → err policy_drift_blocked; NO background dispatch", async () => {
+    mocks.prepareApprove.mockResolvedValue({
+      kind: "policy_drift_blocked",
+      approvalId: "a-7c",
+      resolvedAt: "2026-05-23T20:00:00.000Z",
+      sessionId: SESSION,
+      missionRunId: null,
+      permissionAtEnqueue: "full",
+      livePermission: "restricted",
+      continuation: null,
+    });
+
+    const result = await call(CH.approvals.approve, { id: "a-7c" });
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("approvals.policy_drift_blocked");
+    expect(mocks.dispatchPreparedMission).not.toHaveBeenCalled();
+  });
+
   it("ApprovalDispatchError thrown → err approvals.dispatch_failed", async () => {
     mocks.prepareApprove.mockRejectedValue(
       new FakeApprovalDispatchError("a-8", "TypeError", "abc123"),

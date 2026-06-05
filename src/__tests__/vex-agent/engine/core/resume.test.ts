@@ -162,6 +162,42 @@ describe("approveAndResume back-compat wrapper", () => {
     expect(mockRunResumeAfterDecision).toHaveBeenCalledWith(STUB_CONTINUATION);
   });
 
+  it("policy_drift_blocked (B-001) → consumes continuation then throws; NO re-dispatch of the tool", async () => {
+    mockPrepareApprove.mockResolvedValueOnce({
+      kind: "policy_drift_blocked",
+      approvalId: "a-4b",
+      resolvedAt: "2026-05-23T20:03:00.000Z",
+      sessionId: "session-1",
+      missionRunId: "run-1",
+      permissionAtEnqueue: "full",
+      livePermission: "restricted",
+      continuation: STUB_CONTINUATION,
+    });
+
+    await expect(approveAndResume("a-4b")).rejects.toThrow(
+      /more restrictive/,
+    );
+    // Mirror the expired path: the continuation is consumed (no lease leak)
+    // but the original tool is NEVER re-dispatched.
+    expect(mockRunResumeAfterDecision).toHaveBeenCalledWith(STUB_CONTINUATION);
+  });
+
+  it("policy_drift_blocked (B-001) chat session (no continuation) → throws, no resume", async () => {
+    mockPrepareApprove.mockResolvedValueOnce({
+      kind: "policy_drift_blocked",
+      approvalId: "a-4c",
+      resolvedAt: "2026-05-23T20:03:00.000Z",
+      sessionId: "session-1",
+      missionRunId: null,
+      permissionAtEnqueue: "full",
+      livePermission: "restricted",
+      continuation: null,
+    });
+
+    await expect(approveAndResume("a-4c")).rejects.toThrow(/more restrictive/);
+    expect(mockRunResumeAfterDecision).not.toHaveBeenCalled();
+  });
+
   it("already_rejected → throws without consuming any continuation", async () => {
     mockPrepareApprove.mockResolvedValueOnce({
       kind: "already_rejected",

@@ -198,13 +198,17 @@ function registerApproveHandler(): () => void {
 
         // Dispatch background continuation when a mission resume was claimed.
         // Cached/already_*/run_terminated NEVER carry a continuation by design.
+        // `policy_drift_blocked` (B-001) is a fail-closed rejection that still
+        // resumes the run so the agent observes the auto-rejection.
         const continuation =
           outcome.kind === "dispatched"
             ? outcome.continuation
-            : outcome.kind === "expired"
-              && outcome.autoRejection.kind === "rejected"
-              ? outcome.autoRejection.continuation
-              : null;
+            : outcome.kind === "policy_drift_blocked"
+              ? outcome.continuation
+              : outcome.kind === "expired"
+                && outcome.autoRejection.kind === "rejected"
+                ? outcome.autoRejection.continuation
+                : null;
         if (continuation !== null) {
           dispatchPreparedMission(
             () => runResumeAfterDecision(continuation),

@@ -15,6 +15,7 @@ import { log } from "../../logger/index.js";
 import {
   approvalsAlreadyResolvedError,
   approvalsExpiredError,
+  approvalsPolicyDriftBlockedError,
   approvalsRunTerminatedError,
 } from "./_errors.js";
 
@@ -78,6 +79,18 @@ export function mapApproveOutcome(
       });
     case "expired":
       return err(approvalsExpiredError(correlationId, outcome.expiresAt));
+    case "policy_drift_blocked":
+      // B-001 — fail closed: the approved action was rejected before dispatch
+      // because the live permission drifted more restrictive. Surface a
+      // non-actionable error (renderer toasts "cannot proceed").
+      log.warn(
+        `[ipc:vex:approvals:approve] policy_drift_blocked id=${id} ` +
+          `permissionAtEnqueue=${outcome.permissionAtEnqueue} ` +
+          `livePermission=${outcome.livePermission} ` +
+          `missionRunId=${outcome.missionRunId ?? "<none>"} ` +
+          `correlationId=${correlationId}`,
+      );
+      return err(approvalsPolicyDriftBlockedError(correlationId));
     case "already_rejected":
       return err(
         approvalsAlreadyResolvedError(correlationId, outcome.decision),

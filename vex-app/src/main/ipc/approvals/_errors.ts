@@ -76,6 +76,30 @@ export function approvalsDispatchFailedError(correlationId: string): VexError {
   };
 }
 
+/**
+ * B-001 — the live session permission became MORE restrictive between enqueue
+ * and approve, so the action was no longer permitted. The approve failed
+ * closed: queue+intent were rejected and NO tool was dispatched. `retryable:
+ * false` (re-approving the same intent will hit the same drift); the user must
+ * re-issue the action under the current permission policy.
+ */
+export function approvalsPolicyDriftBlockedError(
+  correlationId: string,
+): VexError {
+  return {
+    code: "approvals.policy_drift_blocked",
+    domain: "approvals",
+    message:
+      "This action can no longer run: the session permission became more " +
+      "restrictive after approval was requested. Re-issue the action under " +
+      "the current permission policy.",
+    retryable: false,
+    userActionable: true,
+    redacted: true,
+    correlationId,
+  };
+}
+
 export function approvalsUnexpectedError(correlationId: string): VexError {
   return {
     code: "internal.unexpected",

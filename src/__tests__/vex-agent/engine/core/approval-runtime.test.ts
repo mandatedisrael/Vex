@@ -3,6 +3,9 @@
  *
  * Pinned invariants:
  *   - FOR UPDATE locked snapshot tx (single client.query for snapshot SQL).
+ *   - Snapshot SELECT locks i, q AND s (sessions) — `FOR UPDATE OF i, q, s` —
+ *     so the LIVE session permission read is serialized against a concurrent
+ *     permission-downgrade tx (B-001-fix).
  *   - DB-side NOW() used for TTL gate (NOT JS Date.now()).
  *   - Atomic auto-reject INSIDE tx for expired_in_tx path (queue + intent
  *     CAS in same client before commit).
@@ -172,6 +175,11 @@ interface SnapshotRowOverrides {
   mission_run_id?: string | null;
   execution_status?: string | null;
   queue_tool_call?: Record<string, unknown>;
+  // B-001 — permission snapshot at enqueue vs LIVE session permission read in
+  // the same snapshot SELECT. Default both to "restricted" so the existing
+  // approve/dispatch characterization stays byte-identical (no drift).
+  queue_permission_at_enqueue?: "restricted" | "full";
+  session_permission_live?: "restricted" | "full";
 }
 
 function buildSnapshotRow(o: SnapshotRowOverrides = {}): Record<string, unknown> {
@@ -194,7 +202,8 @@ function buildSnapshotRow(o: SnapshotRowOverrides = {}): Record<string, unknown>
       args: { to: "0xabc", amount: "1.0" },
     },
     queue_tool_call_id: "call-1",
-    queue_permission_at_enqueue: "restricted",
+    queue_permission_at_enqueue: o.queue_permission_at_enqueue ?? "restricted",
+    session_permission_live: o.session_permission_live ?? "restricted",
   };
 }
 
@@ -592,6 +601,178 @@ describe("prepareApprove", () => {
     expect(outcome.continuation).toBeNull();
     expect(outcome.missionRunId).toBeNull();
     expect(mockClaimRunLeaseAndFlipToRunning).not.toHaveBeenCalled();
+  });
+
+  // ── B-001 — approve-time live-policy re-enforcement (fail-closed) ────────
+  //
+  // Drift = the live session permission became strictly MORE restrictive than
+  // the permission snapshot captured at enqueue. The approve MUST fail closed
+  // BEFORE any dispatch state transition: no dispatch, no `dispatching` mark,
+  // no approved tool-result, and queue+intent flip to `rejected` (not pending,
+  // not approved). Unchanged / looser permission must stay byte-identical.
+
+  describe("B-001 policy-drift re-enforcement", () => {
+    it("enqueue=full, live=restricted (drifted MORE restrictive) → policy_drift_blocked: NO dispatch, NO dispatching mark, NO approved tool-result", async () => {
+      programSnapshotOnly(
+        buildSnapshotRow({
+          queue_permission_at_enqueue: "full",
+          session_permission_live: "restricted",
+        }),
+      );
+      // Make dispatch loud so a regression that DID dispatch would be obvious.
+      mockDispatchTool.mockResolvedValue({ success: true, output: "SHOULD NOT RUN" });
+
+      const outcome = await prepareApprove(APPROVAL_ID);
+
+      expect(outcome.kind).toBe("policy_drift_blocked");
+      if (outcome.kind !== "policy_drift_blocked") throw new Error("kind mismatch");
+      expect(outcome.permissionAtEnqueue).toBe("full");
+      expect(outcome.livePermission).toBe("restricted");
+
+      // (c) Dispatcher NEVER called.
+      expect(mockDispatchTool).not.toHaveBeenCalled();
+
+      // (a) Intent NEVER marked dispatching (nor succeeded/failed execution).
+      const dispatchingMark = mockMarkExecutionStatus.mock.calls.find(
+        (c) => c[1] === "dispatching",
+      );
+      expect(dispatchingMark).toBeUndefined();
+      expect(mockMarkExecutionStatus).not.toHaveBeenCalled();
+
+      // (b) NO approved tool-result appended — the only tool message is the
+      //     structural rejection (payload.rejected === true, success false).
+      const toolAppends = mockAppendMessage.mock.calls.filter(
+        (c) => (c[1] as { role?: string }).role === "tool",
+      );
+      expect(toolAppends).toHaveLength(1);
+      // appendMessage(sessionId, message, metadata) — message is arg[1], the
+      // metadata (with payload) is arg[2].
+      const msg = toolAppends[0][1] as { content: string };
+      const meta = toolAppends[0][2] as {
+        payload?: { success?: boolean; rejected?: boolean };
+      };
+      expect(meta.payload).toEqual({ success: false, rejected: true });
+      expect(msg.content).toContain("more restrictive");
+
+      // Queue+intent were flipped to 'rejected' IN-TX, and the 'approved' CAS
+      // never fired (decision can never be approved on the drift path).
+      const approveCas = clientQueryLog.find(
+        (c) => c.sql.includes("UPDATE approval_queue") && c.sql.includes("'approved'"),
+      );
+      expect(approveCas).toBeUndefined();
+      const rejectCas = clientQueryLog.find(
+        (c) => c.sql.includes("UPDATE approval_queue") && c.sql.includes("'rejected'"),
+      );
+      expect(rejectCas).toBeDefined();
+    });
+
+    it("drift on a mission run → run resumes via continuation (so the agent observes the auto-rejection), NOT stranded pending", async () => {
+      programSnapshotOnly(
+        buildSnapshotRow({
+          queue_permission_at_enqueue: "full",
+          session_permission_live: "restricted",
+        }),
+      );
+
+      const outcome = await prepareApprove(APPROVAL_ID);
+      if (outcome.kind !== "policy_drift_blocked") throw new Error("kind mismatch");
+
+      // Continuation claimed (mission resumes); dispatcher still untouched.
+      expect(outcome.continuation).not.toBeNull();
+      expect(mockClaimRunLeaseAndFlipToRunning).toHaveBeenCalled();
+      expect(mockDispatchTool).not.toHaveBeenCalled();
+    });
+
+    it("INVARIANT GUARD: unchanged permission (enqueue=restricted, live=restricted) still approves + dispatches exactly as before", async () => {
+      programSnapshotOnly(
+        buildSnapshotRow({
+          queue_permission_at_enqueue: "restricted",
+          session_permission_live: "restricted",
+        }),
+      );
+      mockDispatchTool.mockResolvedValue({ success: true, output: "Tx hash 0xabc" });
+
+      const outcome = await prepareApprove(APPROVAL_ID);
+
+      expect(outcome.kind).toBe("dispatched");
+      if (outcome.kind !== "dispatched") throw new Error("kind mismatch");
+      expect(outcome.executionStatus).toBe("succeeded");
+      expect(mockDispatchTool).toHaveBeenCalledTimes(1);
+      expect(mockMarkExecutionStatus).toHaveBeenCalledWith(APPROVAL_ID, "dispatching");
+
+      // Approve CAS fired; reject CAS did not.
+      const approveCas = clientQueryLog.find(
+        (c) => c.sql.includes("UPDATE approval_queue") && c.sql.includes("'approved'"),
+      );
+      expect(approveCas).toBeDefined();
+    });
+
+    it("INVARIANT GUARD: LOOSER live permission (enqueue=restricted, live=full) does NOT block — approves + dispatches", async () => {
+      programSnapshotOnly(
+        buildSnapshotRow({
+          queue_permission_at_enqueue: "restricted",
+          session_permission_live: "full",
+        }),
+      );
+      mockDispatchTool.mockResolvedValue({ success: true, output: "ok" });
+
+      const outcome = await prepareApprove(APPROVAL_ID);
+
+      expect(outcome.kind).toBe("dispatched");
+      expect(mockDispatchTool).toHaveBeenCalledTimes(1);
+    });
+
+    it("snapshot SELECT joins sessions for the live permission (single locked read)", async () => {
+      programSnapshotOnly(
+        buildSnapshotRow({
+          queue_permission_at_enqueue: "full",
+          session_permission_live: "restricted",
+        }),
+      );
+
+      await prepareApprove(APPROVAL_ID);
+
+      const snapshotCall = clientQueryLog.find((c) =>
+        c.sql.includes("FOR UPDATE OF i, q"),
+      );
+      expect(snapshotCall).toBeDefined();
+      expect(snapshotCall!.sql).toContain("JOIN sessions s");
+      expect(snapshotCall!.sql).toContain("s.permission");
+    });
+
+    it("snapshot SELECT LOCKS the sessions row (FOR UPDATE OF i, q, s) so the live permission read is serialized against a concurrent downgrade", async () => {
+      // Codex blocker B-001-fix: reading s.permission is not enough — the
+      // joined sessions row must be locked in the SAME approve tx, otherwise a
+      // concurrent permission-downgrade tx can race the live read. Assert the
+      // emitted FOR UPDATE OF clause includes `s` (the sessions alias), not
+      // just `i, q`.
+      programSnapshotOnly(
+        buildSnapshotRow({
+          queue_permission_at_enqueue: "full",
+          session_permission_live: "restricted",
+        }),
+      );
+
+      await prepareApprove(APPROVAL_ID);
+
+      const snapshotCall = clientQueryLog.find((c) =>
+        c.sql.includes("FOR UPDATE OF"),
+      );
+      expect(snapshotCall).toBeDefined();
+      // The lock list must name the sessions alias `s`. A regression back to
+      // `FOR UPDATE OF i, q` (sessions unlocked) fails this assertion.
+      expect(snapshotCall!.sql).toContain("FOR UPDATE OF i, q, s");
+      // Parse the actual FOR UPDATE OF target list and assert `s` is a locked
+      // table (defensive against whitespace/order drift in the clause).
+      const lockMatch = snapshotCall!.sql.match(/FOR UPDATE OF\s+([^\n]+)/);
+      expect(lockMatch).not.toBeNull();
+      const lockedTables = lockMatch![1]
+        .split(",")
+        .map((t) => t.trim());
+      expect(lockedTables).toContain("s");
+      expect(lockedTables).toContain("i");
+      expect(lockedTables).toContain("q");
+    });
   });
 });
 
