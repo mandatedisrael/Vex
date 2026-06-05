@@ -10,186 +10,49 @@
  * + WSL2 backend the absolute Windows path gets concatenated through
  * a bug class (`docker/compose#12669`, `#7101`) that resulted in the
  * silent `getServiceState` failure of the M11.5.3 attempt.
+ *
+ * Structural note: this file is the public façade. The pre-flight,
+ * project-contract, pull/up, health, stale-secret recovery, and down
+ * internals live in dedicated sibling modules; `composeUp`/`composeDown`
+ * stay here as the orchestrators that wire them together.
  */
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { runSpawn } from "../docker/spawn-runner.js";
-import {
-  isPortFree,
-  parseComposeVersion,
-  semverGte,
-  COMPOSE_VERSION_FLOOR,
-} from "../docker/probe.js";
-import { ensureDockerDaemonReady } from "../docker/daemon.js";
-import { inspectDockerEndpointPolicy } from "../docker/endpoint-policy.js";
 import { DEFAULT_EMBED_PORT } from "../onboarding/embedding-defaults.js";
 import { DEFAULT_PG_PORT } from "@shared/local-service-ports.js";
-import { wizardStateStore } from "../onboarding/wizard-state-store.js";
-import { SETUP_COMPLETE_FILE } from "../paths/config-dir.js";
-import { pgConnectProbe } from "./pg-health.js";
 import {
   waitForEmbeddingsRuntimeReady,
   type EmbeddingsReadinessKind,
 } from "./embeddings-health.js";
 import { renderCompose, type RenderDeps } from "./render.js";
-
-const STALE_BIND_MOUNT_RE = /docker-desktop-bind-mounts.*no such file/i;
-
-/**
- * Pre-flight that `docker compose` is at the inline-`configs.content:`
- * floor (`COMPOSE_VERSION_FLOOR`). Returning a non-null message means
- * we MUST abort `composeUp` — the template would otherwise error with
- * "unknown field: content" deep into the call. Codex turn 1 YELLOW —
- * use a real semver comparison so `v2.23.1-desktop.1` is accepted.
- */
-async function checkComposeFloor(
-  signal?: AbortSignal
-): Promise<string | null> {
-  const result = await runSpawn(
-    "docker",
-    ["compose", "version"],
-    signal !== undefined ? { signal } : {}
-  );
-  if (result.code !== 0) {
-    return "Docker Compose is not installed or not on PATH.";
-  }
-  const version = parseComposeVersion(result.stdout);
-  if (!semverGte(version, COMPOSE_VERSION_FLOOR)) {
-    return `Docker Compose ${
-      version ?? "(unknown)"
-    } is below the minimum supported version ${COMPOSE_VERSION_FLOOR}. Update Docker Desktop or the standalone compose plugin and retry.`;
-  }
-  return null;
-}
-
-interface ClearStaleSecretCacheResult {
-  readonly wiped: boolean;
-}
-
-/**
- * Fail-safe "setup completed" gate (codex round 3 RED #1). Returns
- * true if ANY signal indicates the user finalized setup OR if the
- * state is unknown — only the explicit pre-setup combination
- * (wizard.completed===false AND no `.setup-complete` marker) permits
- * the destructive wipe path. `wizardState.completed` is the
- * authoritative source per `finalize.ts`; the marker file is
- * belt-and-suspenders.
- */
-async function isSetupLikelyCompleted(): Promise<boolean> {
-  let markerPresent = false;
-  try {
-    await fs.access(SETUP_COMPLETE_FILE);
-    markerPresent = true;
-  } catch {
-    // marker absent — fall through to wizardState check
-  }
-  if (markerPresent) return true;
-  // peekCompleted does NOT create defaults; null = unknown.
-  const wizardCompleted = await wizardStateStore.peekCompleted();
-  // Fail-safe: only the explicit `false` permits the wipe; null
-  // (unknown / corrupt) is treated as "assume completed" so we never
-  // destroy data when we cannot prove the operator is still in setup.
-  return wizardCompleted !== false;
-}
-
-async function clearStaleSecretCache(
-  deps: RenderDeps,
-  outPath: string,
-  installId: string,
-  onLogLine?: (stream: "stdout" | "stderr", line: string) => void,
-  signal?: AbortSignal
-): Promise<ClearStaleSecretCacheResult> {
-  // Codex review round 2 RED #1 + round 3 RED #1 — destructive
-  // recovery gate. The original M5 logic tears the project down
-  // INCLUDING its volumes (Postgres data, embeddings cache, knowledge
-  // entries) because pre-M7 there was no user data worth preserving.
-  // Post-setup we MUST refuse to wipe; the caller surfaces a
-  // non-destructive manual recovery message instead of silently
-  // destroying user state.
-  if (await isSetupLikelyCompleted()) {
-    onLogLine?.(
-      "stderr",
-      "[recovery] Stale bind-mount cache detected, but setup is already complete (or its status cannot be confirmed) — refusing to wipe user data."
-    );
-    return { wiped: false };
-  }
-  // Codex turn 14 RED #2 — destructive path must honour cancellation.
-  // If the user cancelled before we enter the wipe stage, bail without
-  // touching anything; the caller will surface internal.cancelled.
-  if (signal?.aborted === true) {
-    return { wiped: false };
-  }
-
-  // Pre-setup wipe is safe — no user-owned state yet. Regenerating the
-  // password forces a new Docker bind-mount hash (so the stale-cache
-  // symptom clears); the existing empty volume would otherwise still
-  // hold `pg_authid` with the OLD password and authentication would
-  // fail with `password authentication failed for user "vex"`.
-  // `outPath` lives inside `composeDir`; pass `cwd` so Compose
-  // auto-discovers `docker-compose.yml` instead of going through the
-  // path-concatenation bugs in `docker/compose#12669` / `#7101`.
-  await runSpawn(
-    "docker",
-    [
-      "compose",
-      "-p",
-      `vex-${installId}`,
-      "down",
-      "--remove-orphans",
-      "--volumes",
-    ],
-    {
-      cwd: path.dirname(outPath),
-      timeoutMs: 30_000,
-      ...(signal !== undefined ? { signal } : {}),
-      onStdoutLine: (line) => onLogLine?.("stdout", `[recovery] ${line}`),
-      onStderrLine: (line) => onLogLine?.("stderr", `[recovery] ${line}`),
-    }
-  );
-  // Bail BEFORE any file removal if the user cancelled while the
-  // `compose down` subprocess was running. Removing the install-id /
-  // secrets / compose tree is the destructive part — refusing here
-  // keeps the on-disk state recoverable.
-  if (signal?.aborted === true) {
-    return { wiped: false };
-  }
-  // Reset all per-install state so the next render regenerates a fresh
-  // install_id, password, and compose YAML. The new install_id yields
-  // a brand-new volume namespace, and the new password hash forces
-  // Docker Desktop to recompute its bind-mount cache.
-  const installIdPath = path.join(deps.userDataDir, ".install-id");
-  const secretsDir = path.join(deps.userDataDir, "local-infra", "secrets");
-  const composeDir = path.join(deps.userDataDir, "compose");
-  for (const target of [installIdPath, secretsDir, composeDir]) {
-    if (signal?.aborted === true) {
-      // Stop mid-loop — partial wipe is still safe (the next composeUp
-      // run will detect the incomplete state and re-clear on retry).
-      return { wiped: false };
-    }
-    try {
-      await fs.rm(target, { recursive: true, force: true });
-      onLogLine?.("stdout", `[recovery] Cleared ${target}`);
-    } catch (err: unknown) {
-      onLogLine?.(
-        "stderr",
-        `[recovery] Failed to clear ${target}: ${
-          err instanceof Error ? err.message : "unknown"
-        }`
-      );
-    }
-  }
-  return { wiped: true };
-}
-
-const HEALTH_POLL_INTERVAL_MS = 2_000;
-const HEALTH_TIMEOUT_MS = 60_000;
-const PULL_TIMEOUT_MS = 10 * 60_000;   // 10 min for first pull on slow networks
-// First-run `up -d` triggers the init container's ~333 MB GGUF download
-// from HuggingFace; on slow connections this can exceed the old 2 min
-// budget. 15 min covers a 350 KB/s tail. Subsequent runs return in
-// seconds (sha256-verified cache short-circuits the download).
-const UP_TIMEOUT_MS = 15 * 60_000;
+import {
+  checkComposeFloor,
+  ensureDockerDaemonReady,
+  inspectDockerEndpointPolicy,
+  isPortFree,
+} from "./preflight.js";
+import {
+  HEALTH_TIMEOUT_MS,
+  isOurProjectActive,
+  waitForHealth,
+} from "./health.js";
+import {
+  clearStaleSecretCache,
+  STALE_BIND_MOUNT_RE,
+} from "./stale-secret-recovery.js";
+import {
+  PULL_TIMEOUT_MS,
+  UP_TIMEOUT_MS,
+  composePull,
+  composeUpDetached,
+} from "./up.js";
+import {
+  COMPOSE_FILE_MISSING_RE,
+  composeStop,
+  listRunningProjectContainers,
+  stopContainers,
+} from "./down.js";
 
 export type ComposeUpKind =
   | "running"
@@ -243,90 +106,6 @@ export interface ComposeUpOptions {
   readonly embedPort?: number;
   readonly signal?: AbortSignal;
   readonly onLogLine?: (stream: "stdout" | "stderr", line: string) => void;
-}
-
-async function isOurProjectActive(
-  installId: string,
-  signal?: AbortSignal
-): Promise<boolean> {
-  const project = `vex-${installId}`;
-  // `docker ps --filter label=com.docker.compose.project=...` is the
-  // skill-recommended detection (label survives daemon restarts; less
-  // brittle than parsing `docker compose ls` JSON).
-  const result = await runSpawn(
-    "docker",
-    [
-      "ps",
-      "--filter",
-      `label=com.docker.compose.project=${project}`,
-      "--format",
-      "{{.ID}}",
-    ],
-    { signal }
-  );
-  if (result.code !== 0) return false;
-  return result.stdout.trim().length > 0;
-}
-
-interface HealthProbeArgs {
-  readonly pgPort: number;
-  readonly pgPasswordPath: string;
-  readonly attempt: number;
-  readonly signal?: AbortSignal;
-  readonly onLogLine?: (stream: "stdout" | "stderr", line: string) => void;
-}
-
-async function probeDbHealth(args: HealthProbeArgs): Promise<boolean> {
-  args.onLogLine?.(
-    "stdout",
-    `Postgres health probe #${args.attempt}: connecting on 127.0.0.1:${args.pgPort}…`
-  );
-  const result = await pgConnectProbe({
-    host: "127.0.0.1",
-    port: args.pgPort,
-    database: "vex",
-    user: "vex",
-    pgPasswordPath: args.pgPasswordPath,
-    ...(args.signal !== undefined ? { signal: args.signal } : {}),
-  });
-  if (result.ok) {
-    args.onLogLine?.("stdout", `Postgres health probe #${args.attempt}: ready.`);
-    return true;
-  }
-  args.onLogLine?.(
-    "stderr",
-    `Postgres health probe #${args.attempt}: ${result.message}`
-  );
-  return false;
-}
-
-interface WaitForHealthArgs {
-  readonly pgPort: number;
-  readonly pgPasswordPath: string;
-  readonly signal?: AbortSignal;
-  readonly onLogLine?: (stream: "stdout" | "stderr", line: string) => void;
-}
-
-async function waitForHealth(args: WaitForHealthArgs): Promise<boolean> {
-  const deadline = Date.now() + HEALTH_TIMEOUT_MS;
-  let attempt = 0;
-  while (Date.now() < deadline) {
-    if (args.signal?.aborted) return false;
-    attempt += 1;
-    if (
-      await probeDbHealth({
-        pgPort: args.pgPort,
-        pgPasswordPath: args.pgPasswordPath,
-        attempt,
-        ...(args.signal !== undefined ? { signal: args.signal } : {}),
-        ...(args.onLogLine !== undefined ? { onLogLine: args.onLogLine } : {}),
-      })
-    ) {
-      return true;
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, HEALTH_POLL_INTERVAL_MS));
-  }
-  return false;
 }
 
 export async function composeUp(
@@ -422,12 +201,10 @@ export async function composeUp(
         "stdout",
         `Detected existing vex-${rendered.installId} stack — re-running compose up to converge service state…`
       );
-      const reuseUp = await runSpawn("docker", ["compose", "up", "-d"], {
-        cwd: composeDir,
-        timeoutMs: UP_TIMEOUT_MS,
+      const reuseUp = await composeUpDetached({
+        composeDir,
         ...(signal !== undefined ? { signal } : {}),
-        onStdoutLine: (line) => onLogLine?.("stdout", line),
-        onStderrLine: (line) => onLogLine?.("stderr", line),
+        ...(onLogLine !== undefined ? { onLogLine } : {}),
       });
       // Failure here is non-fatal for the reuse path: we still try to
       // poll health and let the user see service-by-service what's
@@ -507,12 +284,10 @@ export async function composeUp(
     "stdout",
     "Pulling images (first run can take several minutes)…"
   );
-  const pullResult = await runSpawn("docker", ["compose", "pull"], {
-    cwd: composeDir,
-    timeoutMs: PULL_TIMEOUT_MS,
+  const pullResult = await composePull({
+    composeDir,
     ...(signal !== undefined ? { signal } : {}),
-    onStdoutLine: (line) => onLogLine?.("stdout", line),
-    onStderrLine: (line) => onLogLine?.("stderr", line),
+    ...(onLogLine !== undefined ? { onLogLine } : {}),
   });
   if (pullResult.timedOut) {
     return {
@@ -547,12 +322,10 @@ export async function composeUp(
     "stdout",
     "Starting Vex stack (first run downloads the embeddings model, ~333 MB)…"
   );
-  let upResult = await runSpawn("docker", ["compose", "up", "-d"], {
-    cwd: composeDir,
-    timeoutMs: UP_TIMEOUT_MS,
+  let upResult = await composeUpDetached({
+    composeDir,
     ...(signal !== undefined ? { signal } : {}),
-    onStdoutLine: (line) => onLogLine?.("stdout", line),
-    onStderrLine: (line) => onLogLine?.("stderr", line),
+    ...(onLogLine !== undefined ? { onLogLine } : {}),
   });
 
   // Detect Docker Desktop's stale bind-mount cache failure. After a
@@ -602,12 +375,10 @@ export async function composeUp(
     }
     renderedAfterRecovery = await renderCompose(deps, renderOptions);
     composeDirAfterRecovery = path.dirname(renderedAfterRecovery.outPath);
-    upResult = await runSpawn("docker", ["compose", "up", "-d"], {
-      cwd: composeDirAfterRecovery,
-      timeoutMs: UP_TIMEOUT_MS,
+    upResult = await composeUpDetached({
+      composeDir: composeDirAfterRecovery,
       ...(signal !== undefined ? { signal } : {}),
-      onStdoutLine: (line) => onLogLine?.("stdout", line),
-      onStderrLine: (line) => onLogLine?.("stderr", line),
+      ...(onLogLine !== undefined ? { onLogLine } : {}),
     });
   }
 
@@ -701,7 +472,6 @@ export async function composeDown(
   installId: string,
   signal?: AbortSignal
 ): Promise<ComposeDownResult> {
-  const project = `vex-${installId}`;
   const composeDir = path.dirname(composeOutPath);
   const endpoint = await inspectDockerEndpointPolicy(signal);
   if (!endpoint.accepted) {
@@ -727,17 +497,8 @@ export async function composeDown(
   // "no compose file" error if the YAML disappeared while the dir
   // still exists. In that case, fall through to the label-based path
   // — it does not need a compose file.
-  const COMPOSE_FILE_MISSING_RE =
-    /no configuration file|no compose file|does not exist|compose\.ya?ml.*not found/i;
   if (dirExists) {
-    const result = await runSpawn(
-      "docker",
-      ["compose", "-p", project, "stop"],
-      {
-        cwd: composeDir,
-        ...(signal !== undefined ? { signal } : {}),
-      }
-    );
+    const result = await composeStop(installId, composeDir, signal);
     if (result.code === 0) {
       return {
         kind: "stopped",
@@ -762,19 +523,7 @@ export async function composeDown(
   // the project label and stop them directly via the engine. `-a`
   // would include exited init containers; we filter to `status=running`
   // because `docker stop` errors on already-exited containers.
-  const list = await runSpawn(
-    "docker",
-    [
-      "ps",
-      "--filter",
-      `label=com.docker.compose.project=${project}`,
-      "--filter",
-      "status=running",
-      "--format",
-      "{{.ID}}",
-    ],
-    signal !== undefined ? { signal } : {}
-  );
+  const list = await listRunningProjectContainers(installId, signal);
   // Codex review turn 2 YELLOW #6: distinguish a docker ps failure
   // (engine down, permission denied) from "ps succeeded but no
   // containers matched the label". The former MUST be a failure
@@ -801,11 +550,7 @@ export async function composeDown(
         "No running containers carry the project label; nothing to stop.",
     };
   }
-  const stopResult = await runSpawn(
-    "docker",
-    ["stop", ...ids],
-    signal !== undefined ? { signal } : {}
-  );
+  const stopResult = await stopContainers(ids, signal);
   if (stopResult.code === 0) {
     return {
       kind: "stopped",
