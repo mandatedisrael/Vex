@@ -1,0 +1,82 @@
+/**
+ * Compatibility-façade surface test for `solana-transaction.ts` after the
+ * structural split into `./solana-transaction/` modules (connection /
+ * deserialize / sign / send / confirm / staged).
+ *
+ * Pins the EXACT runtime export set of the façade + each export's typeof, so a
+ * caller importing from the old path (jupiter earn/prediction/swaps services,
+ * solana-account, solana-transfer, internal/wallet/send-execute-solana) sees no
+ * difference. Type-only imports of the exported types must also compile against
+ * the façade.
+ *
+ * CODEX extra guard: the cached `Connection` singleton must be single-instanced
+ * — `getSolanaConnection()` returns the SAME object until `resetSolanaConnection()`,
+ * then a NEW object.
+ */
+
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@config/store.js", () => ({
+  loadConfig: () => ({
+    solana: {
+      rpcUrl: "http://localhost:8899",
+      commitment: "confirmed",
+      explorerUrl: "https://explorer.solana.com",
+      cluster: "mainnet-beta",
+    },
+  }),
+}));
+
+import * as txMod from "../../tools/solana-ecosystem/shared/solana-transaction.js";
+
+// Type-only imports of the 2 exported types must compile against the façade.
+type _Phase = import("../../tools/solana-ecosystem/shared/solana-transaction.js").StagedSubmissionPhase;
+type _Result = import("../../tools/solana-ecosystem/shared/solana-transaction.js").StagedSubmissionResult;
+
+describe("solana-transaction façade surface", () => {
+  it("exposes exactly the expected runtime exports with correct typeof", () => {
+    // The exact set of RUNTIME export keys (the 2 types are erased at runtime).
+    const keys = Object.keys(txMod).sort();
+    expect(keys).toEqual([
+      "confirmVersionedTx",
+      "deserializeVersionedTx",
+      "getSolanaConnection",
+      "resetSolanaConnection",
+      "sendSignedVersionedTx",
+      "signAndSendLegacyTx",
+      "signAndSendVersionedTx",
+      "signAndSubmitLegacyTxStaged",
+      "signAndSubmitVersionedTxStaged",
+      "signVersionedTx",
+    ]);
+
+    expect(typeof txMod.deserializeVersionedTx).toBe("function");
+    expect(typeof txMod.sendSignedVersionedTx).toBe("function");
+    expect(typeof txMod.confirmVersionedTx).toBe("function");
+    expect(typeof txMod.signAndSubmitVersionedTxStaged).toBe("function");
+    expect(typeof txMod.signAndSendVersionedTx).toBe("function");
+    expect(typeof txMod.signVersionedTx).toBe("function");
+    expect(typeof txMod.getSolanaConnection).toBe("function");
+    expect(typeof txMod.resetSolanaConnection).toBe("function");
+    expect(typeof txMod.signAndSendLegacyTx).toBe("function");
+    expect(typeof txMod.signAndSubmitLegacyTxStaged).toBe("function");
+
+    // Keep the type-only imports referenced so they are not elided as unused.
+    const _typeProbe: ReadonlyArray<_Phase | _Result> = [];
+    void _typeProbe;
+  });
+
+  it("caches the Connection singleton until reset (single-instanced)", () => {
+    txMod.resetSolanaConnection();
+
+    const first = txMod.getSolanaConnection();
+    const second = txMod.getSolanaConnection();
+    // Same cached object across calls until reset.
+    expect(second).toBe(first);
+
+    txMod.resetSolanaConnection();
+    const third = txMod.getSolanaConnection();
+    // A fresh object after reset.
+    expect(third).not.toBe(first);
+  });
+});
