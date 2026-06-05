@@ -45,7 +45,7 @@ export const ACTION_ALIAS_TOOLS: readonly ToolDef[] = [
     pressureSafety: "read_only",
     actionKind: "read",
     description:
-      "Preview a token swap WITHOUT executing — best route, expected output, price impact, and (EVM) token-safety legs. Auto-routes by chain: any EVM chain (ethereum, base, arbitrum, …) → KyberSwap aggregator across 400+ DEXs; chain \"solana\" → Jupiter. Resolve token addresses via token_find first. `amount` is the HUMAN decimal of tokenIn (e.g. \"1.5\", not wei/lamports). Call this BEFORE any swap: a fresh matching quote is what unlocks execution.",
+      "Preview a token swap WITHOUT executing — best route, expected output, price impact, and (EVM) token-safety legs. Auto-routes by chain: any EVM chain (ethereum, base, arbitrum, …) → KyberSwap aggregator across 400+ DEXs; chain \"solana\" → Jupiter. EVM tokens must be a CONTRACT ADDRESS (resolve a symbol with token_find first) or native ETH/native — EVM symbol resolution is disabled here to avoid wrong-contract matches; Solana accepts a symbol or mint. `amount` is the HUMAN decimal of tokenIn (e.g. \"1.5\", not wei/lamports). Call this BEFORE any swap: a fresh matching quote is what unlocks execution.",
     parameters: {
       type: "object",
       properties: {
@@ -56,11 +56,11 @@ export const ACTION_ALIAS_TOOLS: readonly ToolDef[] = [
         },
         tokenIn: {
           type: "string",
-          description: "Input token — contract address (EVM) / mint (Solana), or a symbol the provider can resolve.",
+          description: "Input token. EVM: the token CONTRACT ADDRESS (resolve a symbol with token_find first) or native ETH/native. Solana: symbol or mint.",
         },
         tokenOut: {
           type: "string",
-          description: "Output token — contract address (EVM) / mint (Solana), or a symbol the provider can resolve.",
+          description: "Output token. EVM: the token CONTRACT ADDRESS (resolve a symbol with token_find first) or native ETH/native. Solana: symbol or mint.",
         },
         amount: {
           type: "string",
@@ -88,7 +88,7 @@ export const ACTION_ALIAS_TOOLS: readonly ToolDef[] = [
     // result already carries the target's actionKind from executeProtocolTool.
     actionKind: "user_wallet_broadcast",
     description:
-      "Execute a REAL on-chain token swap (spends funds, broadcasts a signed transaction). Auto-routes by chain: any EVM chain (ethereum, base, arbitrum, …) → KyberSwap; chain \"solana\" → Jupiter. REQUIRES a fresh matching swap_quote FIRST — the execute gate blocks a swap that has no fresh quote for these exact params, so always preview with swap_quote before calling this. `amount` is the HUMAN decimal of tokenIn (e.g. \"1.5\", not wei/lamports). `side` (\"sell\"/\"buy\") is EVM-only; it tags the trade for portfolio tracking and does not apply to Solana. Resolve token addresses via token_find first.",
+      "Execute a REAL on-chain token swap (spends funds, broadcasts a signed transaction). Auto-routes by chain: any EVM chain (ethereum, base, arbitrum, …) → KyberSwap; chain \"solana\" → Jupiter. REQUIRES a fresh matching swap_quote FIRST — the execute gate blocks a swap that has no fresh quote for these exact params, so always preview with swap_quote before calling this. EVM tokens must be a CONTRACT ADDRESS (resolve a symbol with token_find first) or native ETH/native — EVM symbol resolution is disabled to avoid wrong-contract matches; Solana accepts a symbol or mint. `amount` is the HUMAN decimal of tokenIn (e.g. \"1.5\", not wei/lamports). `side` (\"sell\"/\"buy\") is EVM-only; it tags the trade for portfolio tracking and does not apply to Solana.",
     parameters: {
       type: "object",
       properties: {
@@ -99,11 +99,11 @@ export const ACTION_ALIAS_TOOLS: readonly ToolDef[] = [
         },
         tokenIn: {
           type: "string",
-          description: "Input token — contract address (EVM) / mint (Solana), or a symbol the provider can resolve.",
+          description: "Input token. EVM: the token CONTRACT ADDRESS (resolve a symbol with token_find first) or native ETH/native. Solana: symbol or mint.",
         },
         tokenOut: {
           type: "string",
-          description: "Output token — contract address (EVM) / mint (Solana), or a symbol the provider can resolve.",
+          description: "Output token. EVM: the token CONTRACT ADDRESS (resolve a symbol with token_find first) or native ETH/native. Solana: symbol or mint.",
         },
         amount: {
           type: "string",

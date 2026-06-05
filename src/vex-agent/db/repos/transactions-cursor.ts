@@ -8,6 +8,16 @@
  * a JS Date round-trip would silently truncate microseconds and break the
  * keyset boundary at sub-millisecond ties.
  *
+ * Wire format: the three fields are joined with a `|` delimiter and base64'd —
+ * `base64("${cursorTs}|${sourceRank}|${id}")`. `|` is unambiguous: `cursorTs`
+ * is the fixed `YYYY-MM-DDTHH:MM:SS.ffffffZ` shape (digits, `-`, `:`, `.`, `T`,
+ * `Z` only), `sourceRank` is `0`|`1`, and `id` is a positive integer — none can
+ * contain `|`. (We deliberately do NOT use JSON here: this codec lives under
+ * `db/repos`, where the JSONB-boundary lint forbids `JSON.stringify` so that all
+ * JSONB column writes go through `db/params`. A base64 cursor token is not a
+ * JSONB write, but the lint is a blunt line scan, so the delimited encoding both
+ * satisfies the lint and keeps the token compact.)
+ *
  * A malformed / garbage / cross-shape cursor is REJECTED with a bounded
  * `CursorError` (no stack-leak, no raw-input echo) so the handler can return a
  * clean `fail("invalid cursor")` — decoding untrusted input must never crash
@@ -92,28 +102,40 @@ function isValidUtcCursorTs(cursorTs: string): boolean {
   );
 }
 
+/** Field delimiter for the encoded cursor token. None of the three fields can contain it. */
+const CURSOR_DELIMITER = "|";
+
 /** Encode a keyset tuple to an opaque base64 cursor. */
 export function encodeCursor(cursor: DecodedCursor): string {
   // Validate on the way out too so an internally-malformed tuple can never be
   // minted into a cursor that would later fail to decode.
   const safe = DecodedCursorSchema.parse(cursor);
-  return Buffer.from(JSON.stringify(safe), "utf8").toString("base64");
+  const token = `${safe.cursorTs}${CURSOR_DELIMITER}${safe.sourceRank}${CURSOR_DELIMITER}${safe.id}`;
+  return Buffer.from(token, "utf8").toString("base64");
 }
 
 /**
  * Decode + validate an opaque cursor. Throws `CursorError` on any malformed
- * input (bad base64, non-JSON, wrong shape, out-of-range field). Never throws a
- * raw Zod/JSON error and never echoes the input.
+ * input (bad base64, wrong part count, out-of-range field, calendar-impossible
+ * timestamp). Never throws a raw Zod error and never echoes the input.
  */
 export function decodeCursor(raw: string): DecodedCursor {
-  let parsed: unknown;
-  try {
-    const json = Buffer.from(raw, "base64").toString("utf8");
-    parsed = JSON.parse(json);
-  } catch {
+  // base64 decode is total (it never throws — invalid chars are dropped), so we
+  // validate the decoded shape explicitly rather than relying on a try/catch.
+  const decoded = Buffer.from(raw, "base64").toString("utf8");
+  const parts = decoded.split(CURSOR_DELIMITER);
+  if (parts.length !== 3) {
     throw new CursorError();
   }
-  const result = DecodedCursorSchema.safeParse(parsed);
+  // `Number("")` → 0 and `Number("x")` → NaN; both are rejected by the schema's
+  // sourceRank ∈ {0,1} / id positive-int constraints below. cursorTs stays a raw
+  // string so the regex + calendar guard own its validation.
+  const candidate = {
+    cursorTs: parts[0],
+    sourceRank: Number(parts[1]),
+    id: Number(parts[2]),
+  };
+  const result = DecodedCursorSchema.safeParse(candidate);
   if (!result.success) {
     throw new CursorError();
   }

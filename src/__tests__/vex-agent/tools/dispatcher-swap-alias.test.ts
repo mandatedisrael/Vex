@@ -68,7 +68,11 @@ function ctx(overrides: Partial<DispatchCtx> = {}): DispatchCtx {
   } as unknown as DispatchCtx;
 }
 
-const EVM_SWAP_ARGS = { chain: "base", tokenIn: "ETH", tokenOut: "USDC", amount: "0.5", slippageBps: 50 };
+// EVM tokens must be a contract address or native (the `swap` router rejects a
+// bare symbol early — symmetric with the strict execute handler). tokenIn is
+// native ETH; tokenOut is a USDC contract address.
+const USDC_ADDR = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+const EVM_SWAP_ARGS = { chain: "base", tokenIn: "ETH", tokenOut: USDC_ADDR, amount: "0.5", slippageBps: 50 };
 
 beforeEach(() => {
   getProtocolManifest.mockReturnValue({ mutating: true, actionKind: "user_wallet_broadcast" });
@@ -85,7 +89,7 @@ describe("swap alias — side routing", () => {
     expect(req.params).toEqual({
       chain: "base",
       tokenIn: "ETH",
-      tokenOut: "USDC",
+      tokenOut: USDC_ADDR,
       amountIn: "0.5", // amount → amountIn translation
       slippageBps: 50,
     });
@@ -152,6 +156,17 @@ describe("swap alias — side routing", () => {
     expect(result.output).toContain("amount");
     expect(executeProtocolTool).not.toHaveBeenCalled();
   });
+
+  it("EVM bare symbol token → clear reject, NO dispatch (must use token_find first)", async () => {
+    const result = await dispatchTool(
+      { name: "swap", args: { chain: "base", tokenIn: "ETH", tokenOut: "USDC", amount: "0.5" }, toolCallId: "c7b" },
+      ctx(),
+    );
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("EVM tokens must be a contract address");
+    expect(result.output).toContain("token_find");
+    expect(executeProtocolTool).not.toHaveBeenCalled();
+  });
 });
 
 describe("swap alias — skips the internal approval gate (executeProtocolTool owns approval)", () => {
@@ -189,7 +204,7 @@ describe("swap alias — path-identity with direct execute_tool", () => {
     await dispatchTool(
       {
         name: "execute_tool",
-        args: { toolId: "kyberswap.swap.sell", params: { chain: "base", tokenIn: "ETH", tokenOut: "USDC", amountIn: "0.5", slippageBps: 50 } },
+        args: { toolId: "kyberswap.swap.sell", params: { chain: "base", tokenIn: "ETH", tokenOut: USDC_ADDR, amountIn: "0.5", slippageBps: 50 } },
         toolCallId: "c10b",
       },
       ctx(),

@@ -32,7 +32,7 @@
 
 import { z } from "zod";
 
-import { classifySwapFamily } from "./internal/swap-family.js";
+import { classifySwapFamily, isEvmSwapTokenInput } from "./internal/swap-family.js";
 
 /** A resolved target for a mutating protocol-alias. */
 export interface ResolvedAliasTarget {
@@ -133,6 +133,18 @@ function routeSwap(args: Record<string, unknown>): ResolvedAliasTarget {
       ...(a.slippageBps !== undefined ? { slippageBps: a.slippageBps } : {}),
     };
     return { toolId: "solana.swap.execute", params };
+  }
+
+  // EVM tokens MUST be a contract address or native — the execute handler
+  // resolves strictly (resolveTokenMetadataStrict), so a bare symbol would only
+  // fail deeper inside with a less-clear error. Reject it EARLY with the same
+  // doctrine message the quote alias uses (symmetry: a symbol is never DEX-
+  // resolved on the EVM path; use token_find first).
+  if (!isEvmSwapTokenInput(a.tokenIn) || !isEvmSwapTokenInput(a.tokenOut)) {
+    throw new MutatingAliasRouteError(
+      "swap: EVM tokens must be a contract address — resolve the symbol with " +
+        "token_find first, or pass native ETH/native.",
+    );
   }
 
   // EVM → KyberSwap. `side === "buy"` → buy (opens a lot on tokenOut for

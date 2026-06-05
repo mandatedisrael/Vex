@@ -22,11 +22,11 @@ export const SWAP_TOOLS: readonly ProtocolToolManifest[] = [
     actionKind: "read",
     params: [
       { key: "chain", type: "string", required: true, description: "Chain slug or alias." },
-      { key: "tokenIn", type: "string", required: true, description: "Input token address or symbol." },
-      { key: "tokenOut", type: "string", required: true, description: "Output token address or symbol." },
+      { key: "tokenIn", type: "string", required: true, description: "Input token CONTRACT ADDRESS (resolve a symbol with token_find first) or native ETH/native. Symbols are not resolved here." },
+      { key: "tokenOut", type: "string", required: true, description: "Output token CONTRACT ADDRESS (resolve a symbol with token_find first) or native ETH/native. Symbols are not resolved here." },
       { key: "amountIn", type: "string", required: true, description: "Amount in human-readable units." },
     ],
-    exampleParams: { chain: "ethereum", tokenIn: "ETH", tokenOut: "USDC", amountIn: "1.0" },
+    exampleParams: { chain: "ethereum", tokenIn: "ETH", tokenOut: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", amountIn: "1.0" },
     discovery: KYBERSWAP_SWAP_DISCOVERY["kyberswap.swap.quote"],
   },
   {

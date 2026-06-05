@@ -7,6 +7,8 @@
  *
  *   - swap_quote family router: EVM → kyberswap.swap.quote, "solana" →
  *     solana.swap.quote, ambiguous chain → clear failure (no dispatch).
+ *   - swap_quote EVM token guard: a bare symbol is rejected (no dispatch) — EVM
+ *     tokens must be a contract address or native; symbols resolve via token_find.
  *   - token_check / bridge_quote pass-through translation.
  *   - bridge_status: orders.get with an id, orders.list without.
  *
@@ -59,9 +61,12 @@ beforeEach(() => {
 });
 
 describe("swap_quote — family router", () => {
-  it("EVM chain dispatches kyberswap.swap.quote with amount→amountIn", async () => {
+  // EVM token addresses (the quote path is now strict: address-or-native only).
+  const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+
+  it("EVM chain dispatches kyberswap.swap.quote with amount→amountIn (native + address)", async () => {
     const result = await handleSwapQuote(
-      { chain: "base", tokenIn: "ETH", tokenOut: "USDC", amount: "1.5", slippageBps: 50 },
+      { chain: "base", tokenIn: "ETH", tokenOut: USDC, amount: "1.5", slippageBps: 50 },
       CTX,
     );
     expect(result.success).toBe(true);
@@ -70,19 +75,39 @@ describe("swap_quote — family router", () => {
     expect(params).toEqual({
       chain: "base",
       tokenIn: "ETH",
-      tokenOut: "USDC",
+      tokenOut: USDC,
       amountIn: "1.5",
       slippageBps: 50,
     });
   });
 
   it("EVM alias chain is normalized to the canonical slug (arb → arbitrum)", async () => {
-    await handleSwapQuote({ chain: "arb", tokenIn: "ETH", tokenOut: "USDC", amount: "1" }, CTX);
+    await handleSwapQuote({ chain: "arb", tokenIn: "ETH", tokenOut: USDC, amount: "1" }, CTX);
     const { toolId, params } = lastCall();
     expect(toolId).toBe("kyberswap.swap.quote");
     expect(params.chain).toBe("arbitrum");
     expect(params.amountIn).toBe("1");
     expect(params).not.toHaveProperty("slippageBps");
+  });
+
+  it("rejects a bare EVM symbol — clear fail, no dispatch (symbol must be resolved with token_find)", async () => {
+    const result = await handleSwapQuote(
+      { chain: "base", tokenIn: "ETH", tokenOut: "USDC", amount: "1" },
+      CTX,
+    );
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("EVM tokens must be a contract address");
+    expect(result.output).toContain("token_find");
+    expect(executeProtocolTool).not.toHaveBeenCalled();
+  });
+
+  it("accepts the native sentinel address and native keyword on the EVM path", async () => {
+    const NATIVE = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+    await handleSwapQuote({ chain: "base", tokenIn: NATIVE, tokenOut: "native", amount: "1" }, CTX);
+    const { toolId, params } = lastCall();
+    expect(toolId).toBe("kyberswap.swap.quote");
+    expect(params.tokenIn).toBe(NATIVE);
+    expect(params.tokenOut).toBe("native");
   });
 
   it('chain "solana" dispatches solana.swap.quote with tokenIn→inputToken and numeric amount', async () => {

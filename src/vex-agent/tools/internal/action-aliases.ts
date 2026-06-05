@@ -29,7 +29,7 @@ import type { ToolResult } from "../types.js";
 import type { InternalToolContext } from "./types.js";
 import { fail } from "./types.js";
 import { executeProtocolTool } from "../protocols/runtime.js";
-import { classifySwapFamily } from "./swap-family.js";
+import { classifySwapFamily, isEvmSwapTokenInput } from "./swap-family.js";
 
 // ── Shared dispatch context projection ───────────────────────────────
 //
@@ -98,7 +98,19 @@ export async function handleSwapQuote(
     return executeProtocolTool({ toolId: "solana.swap.quote", params }, protocolContext(context));
   }
 
-  // EVM → KyberSwap. amount → amountIn (both human decimal strings).
+  // EVM → KyberSwap. Tokens MUST be a contract address or native — the quote
+  // handler resolves strictly (resolveTokenMetadataStrict), so DEX symbol
+  // search is disabled to avoid wrong-contract matches (e.g. "USDC" → axlUSDC).
+  // Reject a bare symbol here with a CLEAR message before dispatch.
+  if (!isEvmSwapTokenInput(a.tokenIn) || !isEvmSwapTokenInput(a.tokenOut)) {
+    return fail(
+      "swap_quote: EVM tokens must be a contract address — resolve the symbol " +
+        "with token_find first, or pass native ETH/native. (Symbol resolution " +
+        "via the DEX is disabled to avoid wrong-contract matches.)",
+    );
+  }
+
+  // amount → amountIn (both human decimal strings).
   const params: Record<string, unknown> = {
     chain: family.chainSlug,
     tokenIn: a.tokenIn,

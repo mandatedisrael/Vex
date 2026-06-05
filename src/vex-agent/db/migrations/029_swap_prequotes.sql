@@ -18,10 +18,14 @@
 --
 -- Verdict semantics (`safety_verdict`):
 --   pass    — every audited leg passed its risk check; no leg is unknown.
---   fail    — at least one leg is a hard reject (EVM honeypot, or EVM
---             fee-on-transfer with tax > 50; Solana isSus = true). Mirrors the
---             real hard-abort in `executeKyberSwap` so the gate never passes
---             something the executor would reject.
+--   fail    — at least one leg is a CONFIRMED honeypot: EVM `isHoneypot = true`
+--             or Solana `isSus = true`. That is the ONLY hard-block doctrine —
+--             it mirrors the single hard-abort in `executeKyberSwap` so the gate
+--             never passes something the executor would reject. Fee-on-transfer
+--             (EVM `isFOT`/`tax`) is NOT a fail: the model decides on fee-bearing
+--             tokens (even in full-auto / full-agent). The FoT tax is surfaced in
+--             `safety_detail` and in the approval preview so a human/the audit
+--             still sees it; it never forces `fail` on its own.
 --   unknown — at least one non-native leg could NOT be audited (EVM
 --             checkFailed / malformed leg, Solana audit data absent for a
 --             non-native non-wSOL mint) and no leg is a hard fail. "Could not
@@ -32,18 +36,26 @@
 --   the verdict.
 --
 -- Match-hash composition (`match_hash`, sha256 hex; identical at record-time
--- and at Stage-7 gate-time):
+-- and at Stage-7 gate-time). The material is prefixed with the `kind`
+-- discriminant and then the kind-specific fields in a FIXED order, so a swap and
+-- a bridge with otherwise-similar values never collide. For a swap:
 --   sha256_hex(join(' ', [
---     session_id, family, chainIdOrEmpty, wallet_address_canon,
---     token_in_canon, token_out_canon, amount_canon
+--     'swap', session_id, family, chainIdOrEmpty, wallet_address_canon,
+--     token_in_canon, token_out_canon, amount_canon,
+--     recipient_canon, approveExact, slippage_bps
 --   ]))
 --   - EVM addresses + EVM wallet address are lowercased; Solana mints + wallet
 --     address are preserved as-is (base58 is case-sensitive).
 --   - chainIdOrEmpty: numeric chainId string for EVM, "" for Solana.
 --   - amount_canon: decimal-normalized human amount so "1.0" and "1" collide.
---   - Slippage and provider are deliberately NOT part of the hash (a slippage
---     tweak must not invalidate the safety preview; provider derives from
---     family).
+--   - recipient_canon: family-canonical output recipient (defaults to self when
+--     omitted, matching the executor) — a redirected output diverges → block.
+--   - approveExact: stable "1"/"0" allowance token — flipping it diverges → block.
+--   - slippage_bps: integer string (or "" when omitted). Slippage IS now bound:
+--     a 50bps quote then a 10000bps execute diverges → block. `provider` is the
+--     ONLY field deliberately EXCLUDED from the hash (it derives from `family`).
+--   (The bridge `kind` binds its own fixed tail — source/dest wallets, tokens,
+--   tradeType, refundTo, referrer, referrerFeeBps, filler — see swap-prequote.ts.)
 --
 -- Data-exposure invariant: `safety_detail` and `route_ref` carry ONLY bounded,
 -- structural fields (per-leg verdicts + audited booleans/numbers, or a bounded

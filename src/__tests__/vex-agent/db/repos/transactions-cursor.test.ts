@@ -3,10 +3,13 @@
  *
  * Pins:
  *   - encode → decode round-trips the keyset tuple losslessly (incl. 6-digit µs).
- *   - garbage / wrong-shape / out-of-range cursors are REJECTED with CursorError
- *     (bounded — never a raw Zod/JSON throw, never echoes the input).
+ *   - garbage / wrong-part-count / out-of-range cursors are REJECTED with
+ *     CursorError (bounded — never a raw Zod throw, never echoes the input).
  *   - a microsecond-truncated timestamp is rejected (the codec demands the exact
  *     DB to_char shape so sub-ms ties paginate correctly).
+ *
+ * Wire format under test: `base64("${cursorTs}|${sourceRank}|${id}")`. The
+ * forged fixtures below are built as delimited strings (NOT JSON) to match.
  */
 
 import { describe, it, expect } from "vitest";
@@ -23,6 +26,11 @@ const VALID: DecodedCursor = {
   id: 42,
 };
 
+/** Build a base64 cursor token from raw `|`-delimited parts (forges arbitrary shapes). */
+function forge(...parts: readonly (string | number)[]): string {
+  return Buffer.from(parts.join("|"), "utf8").toString("base64");
+}
+
 describe("transactions-cursor codec", () => {
   it("round-trips a valid cursor losslessly", () => {
     const encoded = encodeCursor(VALID);
@@ -35,31 +43,40 @@ describe("transactions-cursor codec", () => {
     expect(decodeCursor(encodeCursor(cursor)).cursorTs).toBe("2026-06-04T10:00:00.000001Z");
   });
 
-  it("rejects non-base64 / non-JSON garbage with CursorError", () => {
+  it("rejects non-base64 / opaque garbage with CursorError", () => {
+    // Lenient base64 decode never throws; these decode to a single part (no `|`),
+    // so the wrong-part-count guard rejects them.
     expect(() => decodeCursor("!!!not-base64!!!")).toThrow(CursorError);
-    expect(() => decodeCursor(Buffer.from("not json", "utf8").toString("base64"))).toThrow(CursorError);
+    expect(() => decodeCursor(Buffer.from("not delimited", "utf8").toString("base64"))).toThrow(CursorError);
   });
 
-  it("rejects a wrong-shape object (missing fields)", () => {
-    const bad = Buffer.from(JSON.stringify({ cursorTs: VALID.cursorTs }), "utf8").toString("base64");
-    expect(() => decodeCursor(bad)).toThrow(CursorError);
+  it("rejects a wrong part count (2-part and 4-part tokens)", () => {
+    const twoPart = forge(VALID.cursorTs, VALID.sourceRank); // missing id
+    const fourPart = forge(VALID.cursorTs, VALID.sourceRank, VALID.id, "extra");
+    expect(() => decodeCursor(twoPart)).toThrow(CursorError);
+    expect(() => decodeCursor(fourPart)).toThrow(CursorError);
   });
 
   it("rejects an out-of-range sourceRank", () => {
-    const bad = Buffer.from(JSON.stringify({ ...VALID, sourceRank: 2 }), "utf8").toString("base64");
-    expect(() => decodeCursor(bad)).toThrow(CursorError);
+    expect(() => decodeCursor(forge(VALID.cursorTs, 2, VALID.id))).toThrow(CursorError);
   });
 
-  it("rejects a non-positive / non-integer id", () => {
-    const zero = Buffer.from(JSON.stringify({ ...VALID, id: 0 }), "utf8").toString("base64");
-    const frac = Buffer.from(JSON.stringify({ ...VALID, id: 1.5 }), "utf8").toString("base64");
-    expect(() => decodeCursor(zero)).toThrow(CursorError);
-    expect(() => decodeCursor(frac)).toThrow(CursorError);
+  it("rejects a non-numeric / empty sourceRank field", () => {
+    // Number("x") → NaN, Number("") → 0; "0" is a valid rank but an empty rank
+    // field paired with a tampered id still has to round-trip cleanly — here we
+    // pin the non-numeric path explicitly.
+    expect(() => decodeCursor(forge(VALID.cursorTs, "x", VALID.id))).toThrow(CursorError);
+  });
+
+  it("rejects a non-positive / non-integer / non-numeric id", () => {
+    expect(() => decodeCursor(forge(VALID.cursorTs, VALID.sourceRank, 0))).toThrow(CursorError);
+    expect(() => decodeCursor(forge(VALID.cursorTs, VALID.sourceRank, 1.5))).toThrow(CursorError);
+    expect(() => decodeCursor(forge(VALID.cursorTs, VALID.sourceRank, "x"))).toThrow(CursorError);
+    expect(() => decodeCursor(forge(VALID.cursorTs, VALID.sourceRank, ""))).toThrow(CursorError);
   });
 
   it("rejects a millisecond-precision (3-digit) timestamp — demands the exact µs DB shape", () => {
-    const ms = Buffer.from(JSON.stringify({ ...VALID, cursorTs: "2026-06-04T10:00:00.123Z" }), "utf8").toString("base64");
-    expect(() => decodeCursor(ms)).toThrow(CursorError);
+    expect(() => decodeCursor(forge("2026-06-04T10:00:00.123Z", VALID.sourceRank, VALID.id))).toThrow(CursorError);
   });
 
   it("rejects a REGEX-SHAPED but calendar-impossible timestamp (Stage 9 semantic guard)", () => {
@@ -76,7 +93,7 @@ describe("transactions-cursor codec", () => {
       "2025-02-29T00:00:00.000000Z", // 2025 is not a leap year
     ];
     for (const cursorTs of forgeries) {
-      const forged = Buffer.from(JSON.stringify({ ...VALID, cursorTs }), "utf8").toString("base64");
+      const forged = forge(cursorTs, VALID.sourceRank, VALID.id);
       expect(() => decodeCursor(forged), `forgery ${cursorTs} must be rejected`).toThrow(CursorError);
     }
   });

@@ -13,7 +13,10 @@
  * wallet, DB, or privileged imports.
  */
 
+import { isAddress } from "viem";
+
 import { resolveChainSlug } from "@tools/kyberswap/chains.js";
+import { isNativeTokenInput } from "@tools/kyberswap/helpers.js";
 
 /** Chain values that route to the Solana (Jupiter) family. Checked before EVM. */
 export const SOLANA_CHAIN_VALUES: ReadonlySet<string> = new Set(["solana", "sol"]);
@@ -37,4 +40,20 @@ export function classifySwapFamily(chain: string): SwapFamily {
   } catch {
     return { kind: "unknown" };
   }
+}
+
+/**
+ * True when an EVM swap token input is acceptable WITHOUT DEX symbol search: a
+ * contract address (`isAddress`) OR the native token (`isNativeTokenInput` —
+ * the "native"/"eth" keyword or the native sentinel address). A bare symbol is
+ * rejected by callers because Kyber symbol search can match the wrong contract
+ * (e.g. "USDC" → axlUSDC) and seed a prequote for the wrong token; EVM symbols
+ * must be resolved with `token_find` (Khalani) first.
+ *
+ * Shared by the EVM branches of the read-only `swap_quote` alias and the
+ * mutating `swap` router so both reject a symbol identically (and stay symmetric
+ * with the execute/quote handlers' `resolveTokenMetadataStrict`).
+ */
+export function isEvmSwapTokenInput(input: string): boolean {
+  return isNativeTokenInput(input) || isAddress(input);
 }

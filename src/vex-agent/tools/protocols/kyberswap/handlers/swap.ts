@@ -15,7 +15,7 @@ import {
   verifyRouterAddress,
 } from "@tools/kyberswap/evm-utils.js";
 import { META_AGGREGATION_ROUTER_V2, NATIVE_TOKEN_ADDRESS } from "@tools/kyberswap/constants.js";
-import { resolveTokenMetadata, resolveTokenMetadataStrict, requireFeature, resolveChainWithId } from "@tools/kyberswap/helpers.js";
+import { resolveTokenMetadataStrict, requireFeature, resolveChainWithId } from "@tools/kyberswap/helpers.js";
 import logger from "@utils/logger.js";
 import { isRecord } from "@utils/validation-helpers.js";
 import { VexError, ErrorCodes } from "../../../../../errors.js";
@@ -250,8 +250,14 @@ export const SWAP_HANDLERS: Record<string, ProtocolHandler> = {
     const slug = resolveChainSlug(chain);
     requireFeature(slug, "aggregator");
     const chainId = slugToChainId(slug);
-    const tokenIn = await resolveTokenMetadata(tokenInRaw, chainId);
-    const tokenOut = await resolveTokenMetadata(tokenOutRaw, chainId);
+    // Strict: address-only (+ native sentinel/keyword) — symbols are NOT
+    // resolved via Kyber's DEX search here. A symbol like "USDC" can match the
+    // wrong contract (e.g. axlUSDC) and seed a prequote for the wrong token, so
+    // the quote resolution is symmetric with execute (resolveTokenMetadataStrict)
+    // and EVM symbols must be resolved with token_find first. Native ETH/native
+    // still quotes — resolveTokenMetadataStrict accepts it via isNativeTokenInput.
+    const tokenIn = await resolveTokenMetadataStrict(tokenInRaw, chainId);
+    const tokenOut = await resolveTokenMetadataStrict(tokenOutRaw, chainId);
     const amountIn = parseUnits(amountInRaw, tokenIn.decimals).toString();
 
     // Read-only token safety + route fetched in parallel — additive, never gates.

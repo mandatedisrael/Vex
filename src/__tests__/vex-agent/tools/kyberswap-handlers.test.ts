@@ -55,7 +55,8 @@ vi.mock("@tools/kyberswap/zaas/client.js", () => ({
 const mockExtractMintedNftId = vi.fn();
 const mockExtractErc1155Position = vi.fn();
 
-// readErc20Metadata is used by resolveTokenMetadata for address inputs (quote path).
+// readErc20Metadata is used by resolveTokenMetadataStrict for address inputs
+// (the quote path is now strict/address-only, matching execute).
 // Default: return plain ERC-20 metadata so non-native token addresses resolve
 // without an on-chain read. Tests override per-case where needed.
 const mockReadErc20Metadata = vi.fn(async (_slug: string, address: string) => ({
