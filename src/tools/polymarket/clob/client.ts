@@ -23,6 +23,7 @@ import {
   validateBatchLastTradesPricesResponse, validateOrderScoringResponse,
 } from "./validation.js";
 import logger from "../../../utils/logger.js";
+import { buildClobUrl, clobErrorMessage, buildClobAuthHeaders } from "./client/http.js";
 import type { VexError } from "../../../errors.js";
 import type {
   OrderBookSummary, SendOrderRequest, SendOrderResponse,
@@ -47,13 +48,7 @@ export class PolyClobClient {
   ) {}
 
   private buildUrl(path: string, query?: Record<string, string | undefined>): string {
-    const url = new URL(path, this.baseUrl);
-    if (query) {
-      for (const [key, value] of Object.entries(query)) {
-        if (value !== undefined && value.length > 0) url.searchParams.set(key, value);
-      }
-    }
-    return url.toString();
+    return buildClobUrl(this.baseUrl, path, query);
   }
 
   /** Unauthenticated request (market data). */
@@ -64,7 +59,7 @@ export class PolyClobClient {
       const response = await fetchWithTimeout(url, { timeoutMs: this.timeoutMs });
       if (!response.ok) {
         const raw = await readJson(response);
-        const message = isRecord(raw) && typeof raw.error === "string" ? raw.error : `HTTP ${response.status}`;
+        const message = clobErrorMessage(raw, response.status);
         logger.warn({ event: "polymarket.clob.request.error", path, status: response.status });
         throw mapPolyApiError(response.status, message, "CLOB");
       }
@@ -99,16 +94,13 @@ export class PolyClobClient {
       logger.debug({ event: "polymarket.clob.auth_request.start", path, method });
       const response = await fetchWithTimeout(url, {
         method,
-        headers: {
-          ...headers,
-          ...(body !== undefined ? { "Content-Type": "application/json" } : undefined),
-        },
+        headers: buildClobAuthHeaders(headers, body),
         body: body !== undefined ? bodyStr : undefined,
         timeoutMs: this.timeoutMs,
       });
       if (!response.ok) {
         const raw = await readJson(response);
-        const message = isRecord(raw) && typeof raw.error === "string" ? raw.error : `HTTP ${response.status}`;
+        const message = clobErrorMessage(raw, response.status);
         logger.warn({ event: "polymarket.clob.auth_request.error", path, status: response.status });
         throw mapPolyApiError(response.status, message, "CLOB");
       }
@@ -180,7 +172,7 @@ export class PolyClobClient {
       });
       if (!response.ok) {
         const raw = await readJson(response);
-        const message = isRecord(raw) && typeof raw.error === "string" ? raw.error : `HTTP ${response.status}`;
+        const message = clobErrorMessage(raw, response.status);
         throw mapPolyApiError(response.status, message, "CLOB");
       }
       return validator(await readJson(response));
