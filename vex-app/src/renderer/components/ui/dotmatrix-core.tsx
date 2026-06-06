@@ -1,4 +1,10 @@
-import "../dotmatrix-loader.css";
+import "../dotmatrix-loader/01-base.css";
+import "../dotmatrix-loader/02-bloom-states.css";
+import "../dotmatrix-loader/03-animation-classes.css";
+import "../dotmatrix-loader/04-keyframes-core.css";
+import "../dotmatrix-loader/05-square9.css";
+import "../dotmatrix-loader/06-misc-variants.css";
+import "../dotmatrix-loader/07-reduced-motion.css";
 
 export type {
   DotAnimationContext,
