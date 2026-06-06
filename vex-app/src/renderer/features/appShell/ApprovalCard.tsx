@@ -34,12 +34,10 @@ import {
   messagesKeys,
   runtimeKeys,
 } from "../../lib/api/queryKeys.js";
+import { isHighRisk as classifyHighRisk } from "./ApprovalCard/risk.js";
+import { ApprovalDetails } from "./ApprovalCard/ApprovalDetails.js";
+import { ApprovalDecisionActions } from "./ApprovalCard/ApprovalDecisionActions.js";
 
-const HIGH_RISK_LEVELS = new Set(["high", "critical"]);
-const HIGH_RISK_ACTION_KINDS = new Set([
-  "destructive",
-  "user_wallet_broadcast",
-]);
 const CONFIRM_RESET_MS = 4_000;
 
 export interface ApprovalCardProps {
@@ -63,21 +61,13 @@ export function ApprovalCard({
   const reject = useReject();
   const rejectRef = useRef<HTMLButtonElement | null>(null);
 
-  const isHighRisk = useMemo(() => {
-    if (
-      summary.riskLevel !== null &&
-      HIGH_RISK_LEVELS.has(summary.riskLevel)
-    ) {
-      return true;
-    }
-    if (
-      summary.actionKind !== null &&
-      HIGH_RISK_ACTION_KINDS.has(summary.actionKind)
-    ) {
-      return true;
-    }
-    return false;
-  }, [summary.riskLevel, summary.actionKind]);
+  const isHighRisk = useMemo(
+    () => classifyHighRisk(summary),
+    // Same inputs as the original inline classifier — recompute only when the
+    // risk-bearing fields change, not on every `summary` identity churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [summary.riskLevel, summary.actionKind],
+  );
 
   // Two-step confirm for high-risk. First click arms; second within
   // CONFIRM_RESET_MS fires. Switching buttons (or timeout) resets.
@@ -188,118 +178,22 @@ export function ApprovalCard({
       data-approval-id={summary.id}
       className="mt-3 overflow-hidden rounded-lg border border-white/[0.10] bg-white/[0.035] text-sm text-[var(--color-text-secondary)] backdrop-blur-xl"
     >
-      <header className="flex flex-wrap items-center gap-2 border-b border-white/[0.08] px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <h3
-            id={titleId}
-            className="truncate font-medium text-[var(--color-text-primary)]"
-          >
-            Approval needed:{" "}
-            <span className="font-mono">
-              {namespace !== null ? `${namespace}:${toolName}` : toolName}
-            </span>
-          </h3>
-        </div>
-        {summary.riskLevel !== null ? (
-          <span
-            data-testid="risk-chip"
-            className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${riskChipClasses(
-              summary.riskLevel,
-            )}`}
-          >
-            {summary.riskLevel}
-          </span>
-        ) : null}
-        {summary.actionKind !== null ? (
-          <span
-            data-testid="action-chip"
-            className="shrink-0 rounded-md border border-white/[0.10] px-2 py-0.5 text-xs uppercase tracking-wide"
-          >
-            {summary.actionKind}
-          </span>
-        ) : null}
-      </header>
-      <div className="space-y-3 px-4 py-3">
-        {summary.reasoningPreview.trim().length > 0 ? (
-          <p className="italic text-[var(--color-text-secondary)]">
-            {summary.reasoningPreview}
-          </p>
-        ) : null}
-        {criticalArgs !== null && Object.keys(criticalArgs).length > 0 ? (
-          <dl
-            data-testid="critical-args"
-            className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs"
-          >
-            {Object.entries(criticalArgs).map(([k, v]) => (
-              // `display: contents` keeps the grid layout while giving each
-              // pair a stable React key.
-              <div key={k} className="contents">
-                <dt className="uppercase tracking-wide text-[var(--color-text-tertiary)]">
-                  {k}
-                </dt>
-                <dd className="break-all font-mono">{String(v)}</dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
-        {inlineError !== null ? (
-          <p role="alert" className="text-xs text-destructive">
-            {inlineError}
-          </p>
-        ) : null}
-      </div>
-      <footer className="flex items-center justify-end gap-2 border-t border-white/[0.08] px-4 py-3">
-        <button
-          ref={rejectRef}
-          type="button"
-          onClick={onRejectClick}
-          disabled={inFlight}
-          aria-label={
-            isHighRisk && armedAction === "reject"
-              ? "Confirm reject"
-              : "Reject"
-          }
-          className="rounded-md border border-white/[0.10] px-3 py-1.5 text-xs hover:bg-white/[0.05] disabled:opacity-50"
-        >
-          {isHighRisk && armedAction === "reject"
-            ? "Click again to confirm reject"
-            : "Reject"}
-        </button>
-        <button
-          type="button"
-          onClick={onApproveClick}
-          disabled={inFlight}
-          aria-label={
-            isHighRisk && armedAction === "approve"
-              ? "Confirm approve"
-              : "Approve"
-          }
-          className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-            isHighRisk
-              ? "border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/15"
-              : "border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/15"
-          } disabled:opacity-50`}
-        >
-          {isHighRisk && armedAction === "approve"
-            ? "Click again to confirm approve"
-            : "Approve"}
-        </button>
-      </footer>
+      <ApprovalDetails
+        summary={summary}
+        titleId={titleId}
+        namespace={namespace}
+        toolName={toolName}
+        criticalArgs={criticalArgs}
+        inlineError={inlineError}
+      />
+      <ApprovalDecisionActions
+        isHighRisk={isHighRisk}
+        armedAction={armedAction}
+        inFlight={inFlight}
+        rejectRef={rejectRef}
+        onReject={onRejectClick}
+        onApprove={onApproveClick}
+      />
     </section>
   );
-}
-
-function riskChipClasses(level: string): string {
-  switch (level) {
-    case "critical":
-      return "border border-red-500/40 bg-red-500/10 text-red-300";
-    case "high":
-      return "border border-amber-500/40 bg-amber-500/10 text-amber-300";
-    case "medium":
-      return "border border-yellow-500/30 bg-yellow-500/10 text-yellow-300";
-    case "low":
-      return "border border-blue-500/30 bg-blue-500/10 text-blue-300";
-    default:
-      return "border border-white/[0.10] bg-white/[0.05]";
-  }
 }

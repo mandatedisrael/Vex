@@ -159,6 +159,50 @@ describe("ApprovalCard", () => {
     expect(mockRejectMutate).toHaveBeenCalledTimes(1);
   });
 
+  // INVARIANT (A-055): the high-risk gate must arm on the ACTION KIND alone,
+  // independent of riskLevel. With a benign riskLevel (info/low/null) but a
+  // dangerous actionKind, the two-click confirm must still fire — proving the
+  // extracted `isHighRisk` classifier preserves the OR over actionKind and the
+  // confirm gate in the component was not weakened by the split.
+  it.each(["info", "low", null] as const)(
+    "destructive actionKind arms the two-click gate even when riskLevel=%s",
+    (riskLevel) => {
+      renderCard(
+        makeSummary({ riskLevel, actionKind: "destructive" }),
+        false,
+      );
+      // First approve click only arms — must NOT call onApprove yet.
+      fireEvent.click(screen.getByRole("button", { name: /^approve$/i }));
+      expect(mockApproveMutate).not.toHaveBeenCalled();
+      // The button now exposes the confirm label/aria-label.
+      const confirm = screen.getByRole("button", {
+        name: /confirm approve/i,
+      });
+      expect(confirm.textContent).toContain("Click again to confirm approve");
+      // Second click fires.
+      fireEvent.click(confirm);
+      expect(mockApproveMutate).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(["info", "low", null] as const)(
+    "user_wallet_broadcast actionKind arms the two-click gate even when riskLevel=%s",
+    (riskLevel) => {
+      renderCard(
+        makeSummary({ riskLevel, actionKind: "user_wallet_broadcast" }),
+        false,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /^approve$/i }));
+      expect(mockApproveMutate).not.toHaveBeenCalled();
+      const confirm = screen.getByRole("button", {
+        name: /confirm approve/i,
+      });
+      expect(confirm.textContent).toContain("Click again to confirm approve");
+      fireEvent.click(confirm);
+      expect(mockApproveMutate).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("focusOnMount=true focuses the Reject button on first mount", () => {
     renderCard(
       makeSummary({ riskLevel: "info", actionKind: "read" }),
