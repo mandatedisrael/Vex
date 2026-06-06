@@ -8,19 +8,16 @@
  *   - mode + permission are immutable session axes
  *   - mission goal text is captured by the first chat submit, not here
  * The submit button stays disabled when the form is invalid.
+ *
+ * Presentational pieces (option catalogues, the `deriveSessionName` seed
+ * helper, the `RadioCard`, and the form sections) live under
+ * `./SessionCreator/` so this module keeps only the dialog shell + state
+ * ownership.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
-  AiChat01Icon,
-  Shield02Icon,
-  Target02Icon,
-  ZapIcon,
-} from "@hugeicons/core-free-icons";
-import {
-  SESSION_TITLE_MAX_LENGTH,
   type SessionCreateInput,
   type SessionMode,
   type SessionPermission,
@@ -35,73 +32,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../components/ui/dialog.js";
-import { Label } from "../../components/ui/label.js";
-import { cn } from "../../lib/utils.js";
 import { useCreateSession } from "../../lib/api/sessions.js";
 import { useAvailableWallets } from "../../lib/api/session-wallets.js";
 import { useUiStore } from "../../stores/uiStore.js";
-import { WalletSelect } from "./SessionWalletSelect.js";
+import { deriveSessionName } from "./SessionCreator/deriveSessionName.js";
+import {
+  ModeFieldset,
+  NameField,
+  PermissionFieldset,
+  SubmitError,
+  WalletFieldset,
+} from "./SessionCreator/FormSections.js";
 
 interface SessionCreatorProps {
   readonly open: boolean;
   readonly onOpenChange: (next: boolean) => void;
-}
-
-interface ModeOption {
-  readonly value: SessionMode;
-  readonly title: string;
-  readonly description: string;
-  readonly icon: IconSvgElement;
-}
-
-const MODE_OPTIONS: ReadonlyArray<ModeOption> = [
-  {
-    value: "agent",
-    title: "Agent",
-    description: "One-shot conversation. Vex stays in chat, no loop.",
-    icon: AiChat01Icon,
-  },
-  {
-    value: "mission",
-    title: "Mission",
-    description:
-      "Goal-driven loop. Vex pursues a target and can self-schedule wakes.",
-    icon: Target02Icon,
-  },
-];
-
-interface PermissionOption {
-  readonly value: SessionPermission;
-  readonly title: string;
-  readonly description: string;
-  readonly icon: IconSvgElement;
-}
-
-const PERMISSION_OPTIONS: ReadonlyArray<PermissionOption> = [
-  {
-    value: "restricted",
-    title: "Restricted",
-    description: "Every mutating transaction requires your approval.",
-    icon: Shield02Icon,
-  },
-  {
-    value: "full",
-    title: "Full access",
-    description: "Auto-execute approved tools without prompting per call.",
-    icon: ZapIcon,
-  },
-];
-
-/**
- * Deterministic session name seeded from the first message typed in the
- * welcome composer (welcome→create flow). Whitespace-collapsed + capped so it
- * satisfies the `name` min(1) requirement; the user can still edit it.
- */
-function deriveSessionName(message: string): string {
-  return message
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, Math.min(48, SESSION_TITLE_MAX_LENGTH));
 }
 
 export function SessionCreator({
@@ -214,98 +159,25 @@ export function SessionCreator({
           </DialogHeader>
 
           <DialogBody className="gap-5">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="vex-session-name">Name</Label>
-              <input
-                ref={nameRef}
-                id="vex-session-name"
-                type="text"
-                required
-                maxLength={SESSION_TITLE_MAX_LENGTH}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Give this session a short name."
-                className={cn(
-                  "h-10 w-full rounded-lg border border-white/[0.08] bg-white/[0.035] px-3 text-sm shadow-sm",
-                  "placeholder:text-muted-foreground",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8]",
-                )}
-              />
-              <div className="flex items-center justify-between gap-3 text-xs text-[var(--color-text-secondary)]">
-                <p>The sidebar uses this as the session title.</p>
-                <span aria-live="polite">
-                  {name.length} / {SESSION_TITLE_MAX_LENGTH}
-                </span>
-              </div>
-            </div>
+            <NameField name={name} onNameChange={setName} nameRef={nameRef} />
 
-            <fieldset className="flex flex-col gap-2">
-              <legend className="text-sm font-medium text-foreground">Mode</legend>
-              <div className="grid grid-cols-2 gap-2">
-                {MODE_OPTIONS.map((opt) => (
-                  <RadioCard
-                    key={opt.value}
-                    name="mode"
-                    value={opt.value}
-                    checked={mode === opt.value}
-                    onChange={() => setMode(opt.value)}
-                    title={opt.title}
-                    description={opt.description}
-                    icon={opt.icon}
-                  />
-                ))}
-              </div>
-            </fieldset>
+            <ModeFieldset mode={mode} onModeChange={setMode} />
 
-            <fieldset className="flex flex-col gap-2">
-              <legend className="text-sm font-medium text-foreground">
-                Permission
-              </legend>
-              <div className="grid grid-cols-2 gap-2">
-                {PERMISSION_OPTIONS.map((opt) => (
-                  <RadioCard
-                    key={opt.value}
-                    name="permission"
-                    value={opt.value}
-                    checked={permission === opt.value}
-                    onChange={() => setPermission(opt.value)}
-                    title={opt.title}
-                    description={opt.description}
-                    icon={opt.icon}
-                  />
-                ))}
-              </div>
-            </fieldset>
+            <PermissionFieldset
+              permission={permission}
+              onPermissionChange={setPermission}
+            />
 
-            <fieldset className="flex flex-col gap-2">
-              <legend className="text-sm font-medium text-foreground">
-                Wallets (optional)
-              </legend>
-              <p className="text-xs text-[var(--color-text-secondary)]">
-                Pick the EVM + Solana wallet this session may use. Locked once the
-                session starts; leave empty for a chat-only session.
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <WalletSelect
-                  label="EVM wallet"
-                  value={selectedEvmWalletId}
-                  options={inventory.evm}
-                  onChange={setSelectedEvmWalletId}
-                />
-                <WalletSelect
-                  label="Solana wallet"
-                  value={selectedSolanaWalletId}
-                  options={inventory.solana}
-                  onChange={setSelectedSolanaWalletId}
-                />
-              </div>
-            </fieldset>
+            <WalletFieldset
+              selectedEvmWalletId={selectedEvmWalletId}
+              selectedSolanaWalletId={selectedSolanaWalletId}
+              evmOptions={inventory.evm}
+              solanaOptions={inventory.solana}
+              onEvmChange={setSelectedEvmWalletId}
+              onSolanaChange={setSelectedSolanaWalletId}
+            />
 
-            {submitError !== null ? (
-              <p className="text-sm text-destructive" role="alert">
-                {submitError}
-              </p>
-            ) : null}
+            <SubmitError submitError={submitError} />
           </DialogBody>
 
           <DialogFooter className="border-white/[0.08]">
@@ -329,52 +201,5 @@ export function SessionCreator({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-interface RadioCardProps {
-  readonly name: string;
-  readonly value: string;
-  readonly checked: boolean;
-  readonly onChange: () => void;
-  readonly title: string;
-  readonly description: string;
-  readonly icon: IconSvgElement;
-}
-
-function RadioCard({
-  name,
-  value,
-  checked,
-  onChange,
-  title,
-  description,
-  icon,
-}: RadioCardProps): JSX.Element {
-  return (
-    <label
-      className={cn(
-        "flex min-h-[112px] cursor-pointer flex-col gap-2 rounded-lg border bg-white/[0.035] px-3 py-3 text-sm transition-colors",
-        checked
-          ? "border-[#3275f8]/55 bg-[#3275f8]/14 ring-1 ring-[#3275f8]/55"
-          : "border-white/[0.08] hover:bg-white/[0.06]",
-      )}
-    >
-      <input
-        type="radio"
-        name={name}
-        value={value}
-        checked={checked}
-        onChange={onChange}
-        className="sr-only"
-      />
-      <span className="flex h-8 w-8 items-center justify-center text-[#8da5ff]">
-        <HugeiconsIcon icon={icon} size={19} aria-hidden />
-      </span>
-      <span className="font-medium text-foreground">{title}</span>
-      <span className="text-xs text-[var(--color-text-secondary)]">
-        {description}
-      </span>
-    </label>
   );
 }
