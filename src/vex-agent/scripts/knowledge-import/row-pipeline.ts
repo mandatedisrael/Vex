@@ -32,8 +32,15 @@ import {
   type ImportedRow,
   isStringArray,
   requireOptionalStringOrNull,
+  requireValidActivationStrengthOrUndefined,
   requireValidDateOrUndefined,
+  requireValidDecayPolicyOrUndefined,
   requireValidHashOrNull,
+  requireValidInfluenceScopeOrUndefined,
+  requireValidMaturityStateOrUndefined,
+  requireValidOutcomeVersionOrUndefined,
+  requireValidRegimeTagsOrUndefined,
+  requireValidSourceOrUndefined,
   requireValidSourceSurfaceOrUndefined,
   requireValidStatusOrUndefined,
   requireValidValidUntil,
@@ -71,6 +78,33 @@ export async function processRow(
   // insertEntry defaults ('vex_agent' / NULL). Present-but-bad rejects.
   const sourceSurface = requireValidSourceSurfaceOrUndefined(row.source_surface, lineNumber);
   const sourceSession = requireOptionalStringOrNull(row.source_session, "source_session", lineNumber);
+
+  // v3 provenance classification + memory-v2 influence/bi-temporal fields.
+  // Absent on v1/v2 backups → undefined → insertEntry defaults (source='observed',
+  // established/1.0/advisory/none/[]/null/0), so legacy restore is byte-for-byte.
+  // Present-but-bad rejects (FIX-2: dropped/garbled durable state must not be
+  // silently re-defaulted).
+  const source = requireValidSourceOrUndefined(row.source, lineNumber);
+  const maturityState = requireValidMaturityStateOrUndefined(row.maturity_state, lineNumber);
+  const activationStrength = requireValidActivationStrengthOrUndefined(
+    row.activation_strength,
+    lineNumber,
+  );
+  const influenceScope = requireValidInfluenceScopeOrUndefined(row.influence_scope, lineNumber);
+  const decayPolicy = requireValidDecayPolicyOrUndefined(row.decay_policy, lineNumber);
+  const regimeTags = requireValidRegimeTagsOrUndefined(row.regime_tags, lineNumber);
+  const firstPromotedAt = requireValidDateOrUndefined(
+    row.first_promoted_at,
+    "first_promoted_at",
+    lineNumber,
+  );
+  const lastReinforcedAt = requireValidDateOrUndefined(
+    row.last_reinforced_at,
+    "last_reinforced_at",
+    lineNumber,
+  );
+  const nextReviewAt = requireValidDateOrUndefined(row.next_review_at, "next_review_at", lineNumber);
+  const outcomeVersion = requireValidOutcomeVersionOrUndefined(row.outcome_version, lineNumber);
 
   // Recompute content_hash locally — never trust the file's hash. A
   // tampered/corrupted hash in the backup is therefore a no-op.
@@ -147,6 +181,19 @@ export async function processRow(
         // ('vex_agent' / NULL); explicit values preserve the original writer.
         sourceSurface,
         sourceSession: sourceSession ?? undefined,
+        // ── v3 provenance classification + memory-v2 influence roundtrip.
+        // Undefined → insertEntry defaults (observed / established / 1.0 /
+        // advisory / none / [] / null / 0); explicit values preserve state.
+        source,
+        maturityState,
+        activationStrength,
+        influenceScope,
+        decayPolicy,
+        regimeTags,
+        firstPromotedAt,
+        lastReinforcedAt,
+        nextReviewAt,
+        outcomeVersion,
       },
       tx,
     ),

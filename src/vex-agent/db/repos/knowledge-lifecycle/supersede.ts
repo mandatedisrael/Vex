@@ -113,6 +113,16 @@ export async function runSupersedeStatements(
     }
 
     // 3. INSERT successor.
+    //
+    // Memory v2: the successor must be able to CARRY non-default influence /
+    // bi-temporal lifecycle values. The memory_manager (later stage) supersedes
+    // AND sets influence on the successor in one step, so omitting these columns
+    // here would silently drop caller-supplied v2 fields to DB defaults — the
+    // same data-loss class S1a fixed for insertEntry/export/import. We mirror
+    // insertEntry's pattern: the 9 v2 columns are appended at the TAIL of the
+    // column + param list, each defaulted in TS to the SAME value as its DB
+    // column default, so callers that omit them produce successor rows identical
+    // to the pre-v2 behaviour (byte-for-byte behaviour-neutral).
     const successorRes = await tx.query<KnowledgeRowShape>(
       `INSERT INTO knowledge_entries (
          kind, title, summary, content_md, tags, source_refs,
@@ -121,7 +131,10 @@ export async function runSupersedeStatements(
          source_surface, source_session,
          supersedes_id, status_reason, change_summary, what_failed,
          source,
-         created_at, updated_at
+         created_at, updated_at,
+         maturity_state, activation_strength, influence_scope, decay_policy,
+         regime_tags, first_promoted_at, last_reinforced_at, next_review_at,
+         outcome_version
        )
        VALUES (
          $1, $2, $3, $4, $5, $6::jsonb,
@@ -130,7 +143,10 @@ export async function runSupersedeStatements(
          COALESCE($14::text, 'vex_agent'), $15,
          $16, NULL, $17, $18,
          COALESCE($19::text, 'observed'),
-         NOW(), NOW()
+         NOW(), NOW(),
+         $20, $21, $22, $23,
+         $24, $25::timestamptz, $26::timestamptz, $27::timestamptz,
+         $28
        )
        RETURNING *`,
       [
@@ -153,6 +169,18 @@ export async function runSupersedeStatements(
         input.changeSummary ?? null,
         input.whatFailed ?? null,
         input.source ?? null,
+        // ── Memory v2: default in TS to the SAME values as the DB column
+        // defaults so callers that omit these are byte-for-byte behavior-neutral.
+        // Appended at the TAIL — existing positional params ($1–$19) are unchanged.
+        input.maturityState ?? "established",
+        input.activationStrength ?? 1.0,
+        input.influenceScope ?? "advisory",
+        input.decayPolicy ?? "none",
+        input.regimeTags ?? [],
+        input.firstPromotedAt ? input.firstPromotedAt.toISOString() : null,
+        input.lastReinforcedAt ? input.lastReinforcedAt.toISOString() : null,
+        input.nextReviewAt ? input.nextReviewAt.toISOString() : null,
+        input.outcomeVersion ?? 0,
       ],
     );
     const successorRow = successorRes.rows[0];

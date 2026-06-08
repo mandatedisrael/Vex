@@ -44,10 +44,20 @@ export function manifestSuite(ctx: SuiteCtx): void {
       expect(arg.whatFailed).toBeNull();
     });
 
-    it("accepts manifest version 2 (current)", async () => {
+    it("accepts manifest version 2", async () => {
       await importKnowledge(
         lines(
           JSON.stringify({ __type: "vex_knowledge_export", version: 2 }),
+          makeRowLine(),
+        ),
+      );
+      expect(mockInsertEntry).toHaveBeenCalledTimes(1);
+    });
+
+    it("accepts manifest version 3 (current — source + memory-v2 influence)", async () => {
+      await importKnowledge(
+        lines(
+          JSON.stringify({ __type: "vex_knowledge_export", version: 3 }),
           makeRowLine(),
         ),
       );

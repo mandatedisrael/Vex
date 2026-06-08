@@ -9,6 +9,22 @@
  */
 
 import type { KnowledgeStatus } from "@vex-agent/knowledge/policy.js";
+import {
+  isKnowledgeSource,
+  KNOWLEDGE_SOURCES,
+  type KnowledgeSource,
+} from "@vex-agent/memory/long-memory-source-policy.js";
+import {
+  DECAY_POLICIES,
+  INFLUENCE_SCOPES,
+  MATURITY_STATES,
+  decayPolicySchema,
+  influenceScopeSchema,
+  maturityStateSchema,
+  type DecayPolicy,
+  type InfluenceScope,
+  type MaturityState,
+} from "@vex-agent/memory/schema/long-memory-enums.js";
 
 export interface ImportedRow {
   kind: string;
@@ -34,9 +50,20 @@ export interface ImportedRow {
   status_reason?: string | null;
   change_summary?: string | null;
   what_failed?: string | null;
+  // ── v3 provenance classification + memory-v2 influence (undefined on v1/v2)
+  source?: string;
+  maturity_state?: string;
+  activation_strength?: number;
+  influence_scope?: string;
+  decay_policy?: string;
+  regime_tags?: string[];
+  first_promoted_at?: string | null;
+  last_reinforced_at?: string | null;
+  next_review_at?: string | null;
+  outcome_version?: number;
 }
 
-export type ManifestVersion = 1 | 2;
+export type ManifestVersion = 1 | 2 | 3;
 
 export function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every((x) => typeof x === "string");
@@ -146,4 +173,118 @@ export function requireValidSourceSurfaceOrUndefined(
     );
   }
   return s;
+}
+
+/**
+ * Provenance classification (`source`). Absent → undefined → insertEntry default
+ * `'observed'`. FIX-2: a present-but-invalid value must reject rather than be
+ * silently coerced, otherwise `inferred`/`hypothesis` could be re-tiered to a
+ * hot-context source on restore.
+ */
+export function requireValidSourceOrUndefined(
+  s: unknown,
+  lineNumber: number,
+): KnowledgeSource | undefined {
+  if (s === undefined || s === null) return undefined;
+  if (typeof s !== "string") {
+    throw new Error(`line ${lineNumber}: source must be a string, got ${typeof s}`);
+  }
+  if (!isKnowledgeSource(s)) {
+    throw new Error(
+      `line ${lineNumber}: source="${s}" is not valid (expected ${KNOWLEDGE_SOURCES.join("|")})`,
+    );
+  }
+  return s;
+}
+
+/**
+ * maturity_state — validated against the lockstep `z.enum` so SQL CHECK, TS and
+ * import agree. Absent → undefined → insertEntry default `'established'`.
+ */
+export function requireValidMaturityStateOrUndefined(
+  s: unknown,
+  lineNumber: number,
+): MaturityState | undefined {
+  if (s === undefined || s === null) return undefined;
+  const parsed = maturityStateSchema.safeParse(s);
+  if (!parsed.success) {
+    throw new Error(
+      `line ${lineNumber}: maturity_state="${String(s)}" is not valid (expected ${MATURITY_STATES.join("|")})`,
+    );
+  }
+  return parsed.data;
+}
+
+/** influence_scope — advisory | retrieval_boost only. Absent → default `'advisory'`. */
+export function requireValidInfluenceScopeOrUndefined(
+  s: unknown,
+  lineNumber: number,
+): InfluenceScope | undefined {
+  if (s === undefined || s === null) return undefined;
+  const parsed = influenceScopeSchema.safeParse(s);
+  if (!parsed.success) {
+    throw new Error(
+      `line ${lineNumber}: influence_scope="${String(s)}" is not valid (expected ${INFLUENCE_SCOPES.join("|")})`,
+    );
+  }
+  return parsed.data;
+}
+
+/** decay_policy — none | time | regime_aware | outcome_aware. Absent → default `'none'`. */
+export function requireValidDecayPolicyOrUndefined(
+  s: unknown,
+  lineNumber: number,
+): DecayPolicy | undefined {
+  if (s === undefined || s === null) return undefined;
+  const parsed = decayPolicySchema.safeParse(s);
+  if (!parsed.success) {
+    throw new Error(
+      `line ${lineNumber}: decay_policy="${String(s)}" is not valid (expected ${DECAY_POLICIES.join("|")})`,
+    );
+  }
+  return parsed.data;
+}
+
+/** activation_strength — finite number in [0,1]. Absent → undefined → default 1.0. */
+export function requireValidActivationStrengthOrUndefined(
+  v: unknown,
+  lineNumber: number,
+): number | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== "number" || !Number.isFinite(v)) {
+    throw new Error(
+      `line ${lineNumber}: activation_strength must be a finite number, got ${typeof v}`,
+    );
+  }
+  if (v < 0 || v > 1) {
+    throw new Error(`line ${lineNumber}: activation_strength=${v} is out of range [0,1]`);
+  }
+  return v;
+}
+
+/** outcome_version — non-negative integer. Absent → undefined → default 0. */
+export function requireValidOutcomeVersionOrUndefined(
+  v: unknown,
+  lineNumber: number,
+): number | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== "number" || !Number.isInteger(v)) {
+    throw new Error(`line ${lineNumber}: outcome_version must be an integer, got ${typeof v}`);
+  }
+  if (v < 0) {
+    throw new Error(`line ${lineNumber}: outcome_version=${v} must be >= 0`);
+  }
+  return v;
+}
+
+/** regime_tags — array of strings (no null elements). Absent → undefined → default []. */
+export function requireValidRegimeTagsOrUndefined(
+  v: unknown,
+  lineNumber: number,
+): string[] | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (!isStringArray(v)) {
+    throw new Error(`line ${lineNumber}: regime_tags must be an array of strings`);
+  }
+  return v;
 }

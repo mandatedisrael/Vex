@@ -14,6 +14,7 @@ import { auditSuite } from "./knowledge-import/audit-suite.js";
 import { shortCircuitSuite } from "./knowledge-import/short-circuit-suite.js";
 import { v2LifecycleSuite } from "./knowledge-import/v2-lifecycle-suite.js";
 import { v2ProvenanceSuite } from "./knowledge-import/v2-provenance-suite.js";
+import { v2InfluenceSuite } from "./knowledge-import/v2-influence-suite.js";
 import { countersSuite } from "./knowledge-import/counters-suite.js";
 import { leaseSuite } from "./knowledge-import/lease-suite.js";
 
@@ -186,6 +187,7 @@ describe("importKnowledge", () => {
   shortCircuitSuite(ctx);
   v2LifecycleSuite(ctx);
   v2ProvenanceSuite(ctx);
+  v2InfluenceSuite(ctx);
   countersSuite(ctx);
   leaseSuite(ctx);
 });

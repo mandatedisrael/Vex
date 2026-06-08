@@ -130,6 +130,93 @@ export function crudSuite(ctx: SuiteCtx): void {
       expect(params[20]).toBe("3/24 days hit >7% drawdown");
     });
 
+    it("applies memory-v2 influence DB defaults in INSERT params when omitted (behavior-neutral)", async () => {
+      mockQueryOne.mockResolvedValueOnce({ ...SAMPLE_ROW, inserted: true });
+      await insertEntry(baseInsertInput());
+      const [, params] = mockQueryOne.mock.calls[0];
+      // v2 columns are appended AFTER updated_at ($24), so params[24..32]. Earlier
+      // indices are deliberately untouched to keep existing param assertions valid.
+      expect(params[24]).toBe("established"); // maturity_state
+      expect(params[25]).toBe(1.0); // activation_strength
+      expect(params[26]).toBe("advisory"); // influence_scope
+      expect(params[27]).toBe("none"); // decay_policy
+      expect(params[28]).toEqual([]); // regime_tags
+      expect(params[29]).toBeNull(); // first_promoted_at
+      expect(params[30]).toBeNull(); // last_reinforced_at
+      expect(params[31]).toBeNull(); // next_review_at
+      expect(params[32]).toBe(0); // outcome_version
+    });
+
+    it("passes memory-v2 influence fields through INSERT params when provided", async () => {
+      mockQueryOne.mockResolvedValueOnce({ ...SAMPLE_ROW, inserted: true });
+      const firstPromotedAt = new Date("2026-04-01T00:00:00Z");
+      const lastReinforcedAt = new Date("2026-04-05T00:00:00Z");
+      const nextReviewAt = new Date("2026-05-01T00:00:00Z");
+      await insertEntry({
+        ...baseInsertInput(),
+        maturityState: "reinforced",
+        activationStrength: 0.5,
+        influenceScope: "retrieval_boost",
+        decayPolicy: "time",
+        regimeTags: ["bull", "high_vol"],
+        firstPromotedAt,
+        lastReinforcedAt,
+        nextReviewAt,
+        outcomeVersion: 3,
+      });
+      const [, params] = mockQueryOne.mock.calls[0];
+      expect(params[24]).toBe("reinforced");
+      expect(params[25]).toBe(0.5);
+      expect(params[26]).toBe("retrieval_boost");
+      expect(params[27]).toBe("time");
+      expect(params[28]).toEqual(["bull", "high_vol"]);
+      expect(params[29]).toBe(firstPromotedAt.toISOString());
+      expect(params[30]).toBe(lastReinforcedAt.toISOString());
+      expect(params[31]).toBe(nextReviewAt.toISOString());
+      expect(params[32]).toBe(3);
+    });
+
+    it("maps memory-v2 columns from the returned row", async () => {
+      mockQueryOne.mockResolvedValueOnce({
+        ...SAMPLE_ROW,
+        source: "inferred",
+        maturity_state: "reinforced",
+        activation_strength: 0.5,
+        influence_scope: "retrieval_boost",
+        decay_policy: "time",
+        regime_tags: ["bull"],
+        first_promoted_at: "2026-04-01T00:00:00Z",
+        last_reinforced_at: "2026-04-05T00:00:00Z",
+        next_review_at: "2026-05-01T00:00:00Z",
+        outcome_version: 2,
+        inserted: true,
+      });
+      const { entry } = await insertEntry(baseInsertInput());
+      expect(entry.source).toBe("inferred");
+      expect(entry.maturityState).toBe("reinforced");
+      expect(entry.activationStrength).toBe(0.5);
+      expect(entry.influenceScope).toBe("retrieval_boost");
+      expect(entry.decayPolicy).toBe("time");
+      expect(entry.regimeTags).toEqual(["bull"]);
+      expect(entry.firstPromotedAt).toBe("2026-04-01T00:00:00Z");
+      expect(entry.lastReinforcedAt).toBe("2026-04-05T00:00:00Z");
+      expect(entry.nextReviewAt).toBe("2026-05-01T00:00:00Z");
+      expect(entry.outcomeVersion).toBe(2);
+    });
+
+    it("mapRow applies legacy-equivalent v2 defaults when the row omits the columns", async () => {
+      // A narrower SELECT (no v2 columns) must not crash mapRow — the defensive
+      // `?? default` fallbacks mirror the DB column defaults.
+      mockQueryOne.mockResolvedValueOnce({ ...SAMPLE_ROW, inserted: true });
+      const { entry } = await insertEntry(baseInsertInput());
+      expect(entry.maturityState).toBe("established");
+      expect(entry.activationStrength).toBe(1.0);
+      expect(entry.influenceScope).toBe("advisory");
+      expect(entry.decayPolicy).toBe("none");
+      expect(entry.regimeTags).toEqual([]);
+      expect(entry.outcomeVersion).toBe(0);
+    });
+
     it("throws when embedding length does not match embeddingDim (pre-DB guard)", async () => {
       const input = baseInsertInput();
       input.embedding = makeEmbedding(512);

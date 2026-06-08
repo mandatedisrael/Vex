@@ -9,6 +9,11 @@
 import type { KnowledgeStatus } from "@vex-agent/knowledge/policy.js";
 import type { RecallCandidate } from "@vex-agent/knowledge/ranking.js";
 import type { KnowledgeSource } from "@vex-agent/memory/long-memory-source-policy.js";
+import type {
+  DecayPolicy,
+  InfluenceScope,
+  MaturityState,
+} from "@vex-agent/memory/schema/long-memory-enums.js";
 
 // ── Internal row types (not exported) ───────────────────────────
 
@@ -38,6 +43,22 @@ export interface KnowledgeRow {
   source: string;
   created_at: string;
   updated_at: string;
+  // ── Memory v2 (influence + bi-temporal lifecycle). See 001_initial.sql. ──
+  /** Lesson-confidence FSM, separate axis from `status`. CHECK ke_maturity_state_valid. */
+  maturity_state: string;
+  /** 0..1 reranking weight. CHECK ke_activation_strength_range. */
+  activation_strength: number;
+  /** advisory | retrieval_boost only. CHECK ke_influence_scope_valid. */
+  influence_scope: string;
+  /** none | time | regime_aware | outcome_aware. CHECK ke_decay_policy_valid. */
+  decay_policy: string;
+  /** Market-regime labels (NOT NULL DEFAULT '{}'); no NULL elements. */
+  regime_tags: string[];
+  first_promoted_at: string | null;
+  last_reinforced_at: string | null;
+  next_review_at: string | null;
+  /** Reconciliation counter (S7). CHECK ke_outcome_version_nonneg. */
+  outcome_version: number;
 }
 
 export interface KnowledgeRowWithInsertFlag extends KnowledgeRow {
@@ -81,6 +102,25 @@ export interface KnowledgeEntry {
   source: KnowledgeSource;
   createdAt: string;
   updatedAt: string;
+  // ── Memory v2 (influence + bi-temporal lifecycle) ───────────────
+  /** Lesson-confidence FSM tier. SEPARATE axis from `status`. Legacy/default `established`. */
+  maturityState: MaturityState;
+  /** 0..1 weight used by recall reranking (S3). Decay lowers it, never deletes. Legacy 1.0. */
+  activationStrength: number;
+  /** Advisory only by doctrine — never feeds execution/sizing/approval (OD-1). */
+  influenceScope: InfluenceScope;
+  /** How `activationStrength` erodes (S6). Legacy/default `none`. */
+  decayPolicy: DecayPolicy;
+  /** Market-regime labels for reactivation (S6). Never contains null elements. */
+  regimeTags: string[];
+  /** When this lesson was first promoted to long-term memory, or null. */
+  firstPromotedAt: string | null;
+  /** When this lesson was last reinforced by new evidence, or null. */
+  lastReinforcedAt: string | null;
+  /** Scheduled review timestamp for decay/reconciliation, or null. */
+  nextReviewAt: string | null;
+  /** Reconciliation counter (S7) — re-derivation is idempotent per (id, outcomeVersion). */
+  outcomeVersion: number;
 }
 
 /**
@@ -148,6 +188,19 @@ export interface InsertEntryInput {
    * `inferred` + `hypothesis` are recall-only.
    */
   source?: KnowledgeSource;
+  // ── Optional memory v2 influence fields. ALL omitted → legacy-equivalent DB
+  // defaults applied in TS by insertEntry (established / 1.0 / advisory / none /
+  // [] / null / 0), so pre-v2 callers are byte-for-byte behavior-neutral.
+  // Promotion / reconciliation paths (S4–S7) populate them; import preserves them.
+  maturityState?: MaturityState;
+  activationStrength?: number;
+  influenceScope?: InfluenceScope;
+  decayPolicy?: DecayPolicy;
+  regimeTags?: string[];
+  firstPromotedAt?: Date | null;
+  lastReinforcedAt?: Date | null;
+  nextReviewAt?: Date | null;
+  outcomeVersion?: number;
 }
 
 export interface InsertEntryResult {
@@ -235,6 +288,17 @@ export function mapRow(r: KnowledgeRow): KnowledgeEntry {
     source: (r.source ?? "observed") as KnowledgeSource,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    // ── Memory v2. DB columns are NOT NULL with defaults; the `?? default`
+    // fallbacks defensively cover rows from narrower SELECTs that omit them.
+    maturityState: (r.maturity_state ?? "established") as MaturityState,
+    activationStrength: r.activation_strength ?? 1.0,
+    influenceScope: (r.influence_scope ?? "advisory") as InfluenceScope,
+    decayPolicy: (r.decay_policy ?? "none") as DecayPolicy,
+    regimeTags: r.regime_tags ?? [],
+    firstPromotedAt: r.first_promoted_at,
+    lastReinforcedAt: r.last_reinforced_at,
+    nextReviewAt: r.next_review_at,
+    outcomeVersion: r.outcome_version ?? 0,
   };
 }
 

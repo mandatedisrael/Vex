@@ -78,6 +78,7 @@ function makeEntry(overrides: Record<string, unknown> = {}) {
     embeddingDim: 768,
     sourceSurface: "vex_agent",
     sourceSession: null,
+    source: "observed",
     // v2 lifecycle fields — default to null so plain makeEntry() acts like a
     // fresh active entry with no lineage. Tests that exercise supersede
     // roundtrip override these.
@@ -86,6 +87,17 @@ function makeEntry(overrides: Record<string, unknown> = {}) {
     changeSummary: null,
     whatFailed: null,
     supersedesContentHash: null,
+    // memory-v2 influence fields — default to the legacy-equivalent values so
+    // plain makeEntry() mirrors a fresh established entry. Fidelity tests override.
+    maturityState: "established",
+    activationStrength: 1.0,
+    influenceScope: "advisory",
+    decayPolicy: "none",
+    regimeTags: [],
+    firstPromotedAt: null,
+    lastReinforcedAt: null,
+    nextReviewAt: null,
+    outcomeVersion: 0,
     createdAt: "2026-04-06T12:00:00Z",
     updatedAt: "2026-04-06T12:00:00Z",
     ...overrides,
@@ -145,7 +157,7 @@ describe("exportKnowledge", () => {
     expect(lines.length).toBe(2); // manifest + 1 entry
     const manifest = JSON.parse(lines[0]!);
     expect(manifest.__type).toBe("vex_knowledge_export");
-    expect(manifest.version).toBe(2);
+    expect(manifest.version).toBe(3);
     expect(manifest.schema_fields).toEqual(EXPORT_SCHEMA_FIELDS);
     expect(typeof manifest.exported_at).toBe("string");
   });
@@ -301,6 +313,42 @@ describe("exportKnowledge", () => {
     const row = JSON.parse(sink.jsonlLines[1]!);
     expect(row.source_surface).toBe("vex_agent");
     expect(row.source_session).toBeNull();
+  });
+
+  // ── FIX-2: source + memory-v2 influence emitted verbatim (snake_case) ─
+
+  it("emits source + all memory-v2 influence fields verbatim (FIX-2)", async () => {
+    mockQuery.mockResolvedValueOnce([{ embedding_model: "x" }]);
+    mockStreamAllForExport.mockReturnValueOnce(
+      asyncIterableOf([
+        makeEntry({
+          id: 11,
+          source: "inferred",
+          maturityState: "reinforced",
+          activationStrength: 0.25,
+          influenceScope: "retrieval_boost",
+          decayPolicy: "time",
+          regimeTags: ["bull", "high_vol"],
+          firstPromotedAt: "2026-04-01T00:00:00Z",
+          lastReinforcedAt: "2026-04-05T00:00:00Z",
+          nextReviewAt: "2026-05-01T00:00:00Z",
+          outcomeVersion: 4,
+        }),
+      ]),
+    );
+    const sink = new CapturingSink();
+    await exportKnowledge(sink);
+    const row = JSON.parse(sink.jsonlLines[1]!);
+    expect(row.source).toBe("inferred");
+    expect(row.maturity_state).toBe("reinforced");
+    expect(row.activation_strength).toBe(0.25);
+    expect(row.influence_scope).toBe("retrieval_boost");
+    expect(row.decay_policy).toBe("time");
+    expect(row.regime_tags).toEqual(["bull", "high_vol"]);
+    expect(row.first_promoted_at).toBe("2026-04-01T00:00:00Z");
+    expect(row.last_reinforced_at).toBe("2026-04-05T00:00:00Z");
+    expect(row.next_review_at).toBe("2026-05-01T00:00:00Z");
+    expect(row.outcome_version).toBe(4);
   });
 
   it("returns the count of entries written (manifest is not counted)", async () => {

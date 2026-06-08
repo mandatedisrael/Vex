@@ -15,7 +15,7 @@
  *   pnpm exec tsx src/vex-agent/scripts/knowledge-export.ts [--out FILE]
  *
  * Output JSONL shape:
- *   line 1: {"__type":"vex_knowledge_export","version":1,"schema_fields":[...],
+ *   line 1: {"__type":"vex_knowledge_export","version":3,"schema_fields":[...],
  *            "source_embedding_model":"<unique or 'mixed'>","exported_at":"<ISO>"}
  *   line 2..N: {"kind":...,"title":...,..., "content_hash":..., "created_at":..., ...}
  *
@@ -33,16 +33,28 @@ import { pathToFileURL } from "node:url";
 import { runMigrations } from "@vex-agent/db/migrate.js";
 import { closePool, query } from "@vex-agent/db/client.js";
 import { streamAllForExport, type KnowledgeEntryForExport } from "@vex-agent/db/repos/knowledge.js";
+import type { KnowledgeSource } from "@vex-agent/memory/long-memory-source-policy.js";
+import type {
+  DecayPolicy,
+  InfluenceScope,
+  MaturityState,
+} from "@vex-agent/memory/schema/long-memory-enums.js";
 import { assertSchemaUpToDate } from "./_preflight.js";
 import logger from "@utils/logger.js";
 
 /**
- * Export schema v2 — lifecycle lineage + provenance:
+ * Export schema v3 — lifecycle lineage + provenance + memory-v2 influence:
  *   supersedes_content_hash — stable cross-DB link to predecessor (not local id).
  *   status_reason / change_summary / what_failed — lifecycle audit text.
  *   source_surface / source_session — provenance (which surface wrote this entry:
  *     vex_agent = mission loop / chat / scripts, mcp_local = legacy import provenance).
- *     Carried so audit trails survive backup/restore across machines.
+ *   source — provenance classification (observed | user_confirmed | inferred |
+ *     hypothesis). FIX-2: v1/v2 dropped this, so restore silently re-defaulted
+ *     every entry to `observed` and could auto-promote agent hypotheses.
+ *   maturity_state / activation_strength / influence_scope / decay_policy /
+ *     regime_tags / first_promoted_at / last_reinforced_at / next_review_at /
+ *     outcome_version — durable memory-v2 influence + bi-temporal fields. Carried
+ *     so backup/restore never resets a reinforced/boosted lesson to defaults.
  *
  * Streaming order (by id ASC) guarantees every predecessor is emitted before its
  * successor, so the importer's content_hash-based resolution always finds the
@@ -63,15 +75,25 @@ export const EXPORT_SCHEMA_FIELDS = [
   "content_hash",
   "source_surface",
   "source_session",
+  "source",
   "supersedes_content_hash",
   "status_reason",
   "change_summary",
   "what_failed",
+  "maturity_state",
+  "activation_strength",
+  "influence_scope",
+  "decay_policy",
+  "regime_tags",
+  "first_promoted_at",
+  "last_reinforced_at",
+  "next_review_at",
+  "outcome_version",
   "created_at",
   "updated_at",
 ] as const;
 
-export const EXPORT_MANIFEST_VERSION = 2;
+export const EXPORT_MANIFEST_VERSION = 3;
 
 export interface ExportManifest {
   __type: "vex_knowledge_export";
@@ -96,10 +118,21 @@ export interface ExportedRow {
   content_hash: string;
   source_surface: "vex_agent" | "mcp_local";
   source_session: string | null;
+  source: KnowledgeSource;
   supersedes_content_hash: string | null;
   status_reason: string | null;
   change_summary: string | null;
   what_failed: string | null;
+  // ── Memory v2 (influence + bi-temporal). Carried for full restore fidelity.
+  maturity_state: MaturityState;
+  activation_strength: number;
+  influence_scope: InfluenceScope;
+  decay_policy: DecayPolicy;
+  regime_tags: string[];
+  first_promoted_at: string | null;
+  last_reinforced_at: string | null;
+  next_review_at: string | null;
+  outcome_version: number;
   created_at: string;
   updated_at: string;
 }
@@ -120,10 +153,20 @@ function entryToExportRow(e: KnowledgeEntryForExport): ExportedRow {
     content_hash: e.contentHash,
     source_surface: e.sourceSurface,
     source_session: e.sourceSession,
+    source: e.source,
     supersedes_content_hash: e.supersedesContentHash,
     status_reason: e.statusReason,
     change_summary: e.changeSummary,
     what_failed: e.whatFailed,
+    maturity_state: e.maturityState,
+    activation_strength: e.activationStrength,
+    influence_scope: e.influenceScope,
+    decay_policy: e.decayPolicy,
+    regime_tags: e.regimeTags,
+    first_promoted_at: e.firstPromotedAt,
+    last_reinforced_at: e.lastReinforcedAt,
+    next_review_at: e.nextReviewAt,
+    outcome_version: e.outcomeVersion,
     created_at: e.createdAt,
     updated_at: e.updatedAt,
   };

@@ -165,6 +165,98 @@ describe("supersedeEntry — happy path", () => {
   });
 });
 
+describe("supersedeEntry — memory v2 successor fields", () => {
+  it("carries NON-default v2 influence/lifecycle values into the successor INSERT (no silent DB-default drop)", async () => {
+    // Regression for the S1a gap Codex flagged: runSupersedeStatements omitted
+    // the 9 memory-v2 columns from the successor INSERT, so a caller passing
+    // non-default maturity/activation/influence/decay/regime/outcome silently
+    // got DB defaults. The fix appends those columns at the tail of the INSERT.
+    const nextReviewIso = "2026-07-01T00:00:00.000Z";
+    const successorRowV2 = {
+      ...activePredRow,
+      id: 43,
+      title: "cap 5%",
+      summary: "pos size ≤ 5%",
+      content_md: "pos size ≤ 5%",
+      content_hash: SAMPLE_HASH_NEW,
+      supersedes_id: 7,
+      change_summary: "tightened from 10% to 5%",
+      what_failed: "3/24 days hit >7%",
+      // v2 columns the successor now carries (what RETURNING * gives back):
+      maturity_state: "reinforced",
+      activation_strength: 0.5,
+      influence_scope: "retrieval_boost",
+      decay_policy: "time",
+      regime_tags: ["bull"],
+      first_promoted_at: null,
+      last_reinforced_at: null,
+      next_review_at: nextReviewIso,
+      outcome_version: 3,
+    };
+    const predAfter = { ...activePredRow, status: "superseded", status_reason: "drawdown Q1" };
+
+    queryScript.push(
+      { sqlMatch: "BEGIN" },
+      { sqlMatch: "FOR UPDATE", rows: [activePredRow] },
+      { sqlMatch: /WHERE content_hash = \$1/, rows: [] },
+      { sqlMatch: /WHERE supersedes_id = \$1/, rows: [] },
+      { sqlMatch: "INSERT INTO knowledge_entries", rows: [successorRowV2] },
+      { sqlMatch: "UPDATE knowledge_entries", rows: [predAfter] },
+      { sqlMatch: "COMMIT" },
+    );
+
+    const result = await supersedeEntry(
+      makeInput({
+        maturityState: "reinforced",
+        activationStrength: 0.5,
+        influenceScope: "retrieval_boost",
+        decayPolicy: "time",
+        regimeTags: ["bull"],
+        nextReviewAt: new Date(nextReviewIso),
+        outcomeVersion: 3,
+      }),
+    );
+
+    // 1. The successor INSERT must NAME all 9 v2 columns (proves they are written,
+    //    not left to DB defaults).
+    const insert = queryLog.find((q) => q.sql.includes("INSERT INTO knowledge_entries"));
+    if (!insert) throw new Error("expected an INSERT INTO knowledge_entries query in the log");
+    for (const col of [
+      "maturity_state",
+      "activation_strength",
+      "influence_scope",
+      "decay_policy",
+      "regime_tags",
+      "first_promoted_at",
+      "last_reinforced_at",
+      "next_review_at",
+      "outcome_version",
+    ]) {
+      expect(insert.sql).toContain(col);
+    }
+
+    // 2. The caller's non-default values must reach the INSERT params (tail-appended).
+    const params = insert.params ?? [];
+    expect(params).toContain("reinforced");
+    expect(params).toContain(0.5);
+    expect(params).toContain("retrieval_boost");
+    expect(params).toContain("time");
+    expect(params).toContainEqual(["bull"]);
+    expect(params).toContain(nextReviewIso);
+    expect(params).toContain(3);
+
+    // 3. The returned successor maps those exact values (not DB defaults).
+    expect(result.successor.maturityState).toBe("reinforced");
+    expect(result.successor.activationStrength).toBe(0.5);
+    expect(result.successor.influenceScope).toBe("retrieval_boost");
+    expect(result.successor.decayPolicy).toBe("time");
+    expect(result.successor.regimeTags).toEqual(["bull"]);
+    expect(result.successor.nextReviewAt).toBe(nextReviewIso);
+    expect(result.successor.outcomeVersion).toBe(3);
+    expect(queryScript.length).toBe(0);
+  });
+});
+
 describe("supersedeEntry — rejections", () => {
   it("predecessor not found → SupersedeError(code=predecessor_not_found) + ROLLBACK", async () => {
     queryScript.push(

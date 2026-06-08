@@ -42,7 +42,7 @@ CREATE TABLE knowledge_entries (
   summary         TEXT NOT NULL,            -- 1-3 sentences, embedding input together with title
   content_md      TEXT NOT NULL DEFAULT '', -- full text, returned by recall (inline or via cache overflow)
   tags            TEXT[] DEFAULT '{}',
-  source_refs     JSONB DEFAULT '{}',       -- { protocol_executions:[ids], proj_activity:[ids], proj_pnl_lots:[ids] }
+  source_refs     JSONB DEFAULT '{}',       -- durable evidence anchors: immutable protocol_executions.id / protocol_capture_items.id + semantic keys (instrument_key/position_key). NOT proj_* SERIALs — sync/replay.ts TRUNCATEs+regenerates those, so they are unstable across replay.
   confidence      REAL,                     -- 0..1, optional
   status          TEXT NOT NULL DEFAULT 'active', -- active | superseded | invalidated | archived
   pinned          BOOLEAN NOT NULL DEFAULT FALSE,
@@ -56,8 +56,46 @@ CREATE TABLE knowledge_entries (
   source_session  TEXT,                     -- session id of the writer (Vex session id or NULL for legacy / scripts)
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- ── Memory v2 (influence + bi-temporal lifecycle) ─────────────────────────
+  -- These columns are added INLINE on the fresh CREATE (EDIT-IN-PLACE, dev DB
+  -- reset; no ALTER/backfill). Legacy-equivalent defaults keep pre-v2 writers
+  -- byte-for-byte behavior-neutral.
+  --   maturity_state      — lesson-confidence lifecycle, a SEPARATE axis from
+  --                         `status` (active/superseded/...): status tracks
+  --                         lineage, maturity tracks how trusted the lesson is.
+  --                         FSM detail lands in S6; legacy rows = 'established'.
+  --   activation_strength — 0..1 weight consumed by recall reranking (S3).
+  --                         Decay LOWERS it without deleting the row. Legacy=1.0.
+  --   influence_scope     — advisory | retrieval_boost ONLY. Memory is doctrine-
+  --                         bound to never feed execution/sizing/approval (OD-1;
+  --                         memory-poisoning guard). execution_constraint /
+  --                         sizing_hint are intentionally absent and never added.
+  --   decay_policy        — how activation_strength erodes (manager worker, S6).
+  --   regime_tags         — market-regime labels for reactivation (S6); no NULL
+  --                         elements (CHECK below).
+  --   first_promoted_at / last_reinforced_at / next_review_at — promotion/review
+  --                         timestamps (nullable; set by the manager, not on
+  --                         legacy insert).
+  --   outcome_version     — bumped by outcome reconciliation (S7) so a lesson is
+  --                         re-derived idempotently per (entry_id, outcome_version).
+  -- Indexes on maturity/activation are deferred to S3 (no reranking yet).
+  maturity_state      TEXT NOT NULL DEFAULT 'established',
+  activation_strength REAL NOT NULL DEFAULT 1.0,
+  influence_scope     TEXT NOT NULL DEFAULT 'advisory',
+  decay_policy        TEXT NOT NULL DEFAULT 'none',
+  regime_tags         TEXT[] NOT NULL DEFAULT '{}',
+  first_promoted_at   TIMESTAMPTZ,
+  last_reinforced_at  TIMESTAMPTZ,
+  next_review_at      TIMESTAMPTZ,
+  outcome_version     INTEGER NOT NULL DEFAULT 0,
   CONSTRAINT ke_embedding_dim_range CHECK (embedding_dim > 0 AND embedding_dim <= 8192),
-  CONSTRAINT ke_embedding_dim_matches_vector CHECK (vector_dims(embedding) = embedding_dim)
+  CONSTRAINT ke_embedding_dim_matches_vector CHECK (vector_dims(embedding) = embedding_dim),
+  CONSTRAINT ke_maturity_state_valid CHECK (maturity_state IN ('probationary','established','reinforced','decayed')),
+  CONSTRAINT ke_activation_strength_range CHECK (activation_strength >= 0 AND activation_strength <= 1),
+  CONSTRAINT ke_influence_scope_valid CHECK (influence_scope IN ('advisory','retrieval_boost')),
+  CONSTRAINT ke_decay_policy_valid CHECK (decay_policy IN ('none','time','regime_aware','outcome_aware')),
+  CONSTRAINT ke_regime_tags_no_null CHECK (array_position(regime_tags, NULL) IS NULL),
+  CONSTRAINT ke_outcome_version_nonneg CHECK (outcome_version >= 0)
 );
 CREATE INDEX idx_ke_status_validity ON knowledge_entries(status, valid_until DESC);
 CREATE INDEX idx_ke_kind ON knowledge_entries(kind);

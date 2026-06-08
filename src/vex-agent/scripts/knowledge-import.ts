@@ -90,9 +90,11 @@ export async function importKnowledge(source: AsyncIterable<string>): Promise<Im
       const version = (parsed as Record<string, unknown>).version;
       // v1 kept for backwards compat (old backups with no lifecycle fields).
       // v2 adds supersedes_content_hash + status_reason + change_summary + what_failed.
-      if (version !== 1 && version !== 2) {
+      // v3 adds `source` + memory-v2 influence/bi-temporal fields. Absent fields
+      // on v1/v2 backups fall through to insertEntry defaults (FIX-2).
+      if (version !== 1 && version !== 2 && version !== 3) {
         throw new Error(
-          `line 1: unsupported manifest version ${String(version)} (expected 1 or 2)`,
+          `line 1: unsupported manifest version ${String(version)} (expected 1, 2 or 3)`,
         );
       }
       manifestVersion = version;

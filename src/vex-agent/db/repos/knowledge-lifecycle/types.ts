@@ -9,6 +9,11 @@
 import type { KnowledgeEntry, InsertEntryInput } from "../knowledge.js";
 import type { KnowledgeStatus } from "@vex-agent/knowledge/policy.js";
 import type { KnowledgeSource } from "@vex-agent/memory/long-memory-source-policy.js";
+import type {
+  DecayPolicy,
+  InfluenceScope,
+  MaturityState,
+} from "@vex-agent/memory/schema/long-memory-enums.js";
 
 /**
  * Input shape mirrors `knowledge_write` params + lineage fields. We accept the
@@ -60,6 +65,16 @@ export interface KnowledgeRowShape {
   source: string;
   created_at: string;
   updated_at: string;
+  // ── Memory v2 (mirrors KnowledgeRow). supersede RETURNING * carries these. ──
+  maturity_state: string;
+  activation_strength: number;
+  influence_scope: string;
+  decay_policy: string;
+  regime_tags: string[];
+  first_promoted_at: string | null;
+  last_reinforced_at: string | null;
+  next_review_at: string | null;
+  outcome_version: number;
 }
 
 export function mapRowLocal(r: KnowledgeRowShape): KnowledgeEntry {
@@ -88,6 +103,16 @@ export function mapRowLocal(r: KnowledgeRowShape): KnowledgeEntry {
     source: (r.source ?? "observed") as KnowledgeSource,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    // ── Memory v2 (defensive defaults mirror mapRow in knowledge/types.ts). ──
+    maturityState: (r.maturity_state ?? "established") as MaturityState,
+    activationStrength: r.activation_strength ?? 1.0,
+    influenceScope: (r.influence_scope ?? "advisory") as InfluenceScope,
+    decayPolicy: (r.decay_policy ?? "none") as DecayPolicy,
+    regimeTags: r.regime_tags ?? [],
+    firstPromotedAt: r.first_promoted_at,
+    lastReinforcedAt: r.last_reinforced_at,
+    nextReviewAt: r.next_review_at,
+    outcomeVersion: r.outcome_version ?? 0,
   };
 }
 

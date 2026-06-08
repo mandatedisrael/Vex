@@ -84,7 +84,10 @@ export async function insertEntry(
          source_surface, source_session,
          supersedes_id, status_reason, change_summary, what_failed,
          source,
-         created_at, updated_at
+         created_at, updated_at,
+         maturity_state, activation_strength, influence_scope, decay_policy,
+         regime_tags, first_promoted_at, last_reinforced_at, next_review_at,
+         outcome_version
        )
        VALUES (
          $1, $2, $3, $4, $5, $6::jsonb,
@@ -93,7 +96,10 @@ export async function insertEntry(
          COALESCE($16::text, 'vex_agent'), $17,
          $18, $19, $20, $21,
          COALESCE($22::text, 'observed'),
-         COALESCE($23::timestamptz, NOW()), COALESCE($24::timestamptz, NOW())
+         COALESCE($23::timestamptz, NOW()), COALESCE($24::timestamptz, NOW()),
+         $25, $26, $27, $28,
+         $29, $30::timestamptz, $31::timestamptz, $32::timestamptz,
+         $33
        )
        ON CONFLICT (content_hash) DO NOTHING
        RETURNING *
@@ -127,6 +133,17 @@ export async function insertEntry(
       input.source ?? null,
       toIsoOrNull(input.createdAt),
       toIsoOrNull(input.updatedAt),
+      // ── Memory v2: default in TS to the SAME values as the DB column defaults
+      // so callers that omit these are byte-for-byte behavior-neutral.
+      input.maturityState ?? "established",
+      input.activationStrength ?? 1.0,
+      input.influenceScope ?? "advisory",
+      input.decayPolicy ?? "none",
+      input.regimeTags ?? [],
+      input.firstPromotedAt ? input.firstPromotedAt.toISOString() : null,
+      input.lastReinforcedAt ? input.lastReinforcedAt.toISOString() : null,
+      input.nextReviewAt ? input.nextReviewAt.toISOString() : null,
+      input.outcomeVersion ?? 0,
     ],
   );
   if (!row) throw new Error("knowledge_entries upsert returned no row");
