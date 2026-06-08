@@ -134,6 +134,16 @@ export type MemoryLogMeta = {
   readonly jobId?: string | number;
   readonly sessionId?: string | number;
   readonly conversationId?: string | number;
+  /** memory_entities.id (S1d — knowledge-graph node). */
+  readonly entityId?: string | number;
+  /** memory_edges.id (S1d — knowledge-graph edge). */
+  readonly edgeId?: string | number;
+  /** knowledge_entries.id (S1d — junction provenance / origin entry). */
+  readonly entryId?: string | number;
+  /** memory_entities.entity_type (S1d — bounded enum). */
+  readonly entityType?: string | number;
+  /** memory_edges.relation (S1d — bounded enum). */
+  readonly relation?: string | number;
   readonly decision?: string | number;
   readonly status?: string | number;
   readonly statusFrom?: string | number;
@@ -170,6 +180,11 @@ const META_KEY_CATEGORY: Record<keyof MemoryLogMeta, MetaCategory> = {
   jobId: "id",
   sessionId: "id",
   conversationId: "id",
+  entityId: "id",
+  edgeId: "id",
+  entryId: "id",
+  entityType: "enum",
+  relation: "enum",
   decision: "enum",
   status: "enum",
   statusFrom: "enum",

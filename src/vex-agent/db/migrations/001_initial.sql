@@ -751,3 +751,97 @@ CREATE UNIQUE INDEX uniq_mji_active_candidate ON memory_job_items(candidate_id)
 -- one item per decision (MF4)
 CREATE UNIQUE INDEX uniq_mji_decision ON memory_job_items(decision_id) WHERE decision_id IS NOT NULL;
 CREATE INDEX idx_mji_job_status ON memory_job_items(job_id, item_status);
+
+-- ══════════════════════════════════════════════════════════════════
+-- Memory v2 — knowledge graph (S1d). Entity nodes + entry↔entity links + edges.
+-- ══════════════════════════════════════════════════════════════════
+-- The async memory_manager (S8) extracts/normalizes entities from promoted
+-- knowledge_entries, links them, and asserts edges between entities. Supersession
+-- is by INVALIDATION (set timestamps), NEVER DELETE — Zep/Graphiti bi-temporal.
+-- Advisory-only: the graph only enriches retrieval (S3); never feeds
+-- sizing/approval/wallet-intent. Entities are GLOBAL (cross-session, like the
+-- long-term store) — no session_id. Embeddings are stored here (Q2) but produced
+-- by S8; the substrate only requires/validates them.
+
+-- memory_entities — normalized entity nodes (canonical things memories are about).
+CREATE TABLE memory_entities (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  entity_type       TEXT NOT NULL,                        -- closed enum (me_entity_type_valid)
+  name              TEXT NOT NULL,                        -- display surface as first seen
+  normalized_name   TEXT NOT NULL,                        -- lower()+collapsed-whitespace canonical dedup key
+  aliases           TEXT[] NOT NULL DEFAULT '{}',         -- observed surface variants (no NULL elements)
+  summary           TEXT NOT NULL DEFAULT '',             -- regional summary; S8 fills (redacted upstream)
+  attributes        JSONB NOT NULL DEFAULT '{}',          -- type-dependent attributes
+  embedding         vector NOT NULL,                      -- NAME embedding (entity resolution); no typmod
+  embedding_model   TEXT NOT NULL,                        -- authoritative — resolution filters on this
+  embedding_dim     INTEGER NOT NULL,
+  valid_from        TIMESTAMPTZ NOT NULL DEFAULT NOW(),   -- world: when the entity became known
+  valid_until       TIMESTAMPTZ,                          -- world: entity ceased (NULL = active)
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),   -- ingestion
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT me_embedding_dim_range          CHECK (embedding_dim > 0 AND embedding_dim <= 8192),
+  CONSTRAINT me_embedding_dim_matches_vector CHECK (vector_dims(embedding) = embedding_dim),
+  CONSTRAINT me_aliases_no_null              CHECK (array_position(aliases, NULL) IS NULL),
+  CONSTRAINT me_attributes_is_object         CHECK (jsonb_typeof(attributes) = 'object'),
+  CONSTRAINT me_normalized_name_nonempty     CHECK (length(normalized_name) > 0),
+  CONSTRAINT me_valid_window                 CHECK (valid_until IS NULL OR valid_until >= valid_from),
+  -- closed vocabulary (NAMED → lockstep-testable; source of truth: memory/schema/memory-entity-enums.ts)
+  CONSTRAINT me_entity_type_valid CHECK (entity_type IN
+    ('token','protocol','wallet','strategy','market_regime','concept','person','event'))
+);
+-- entity resolution dedup: AT MOST ONE active entity per (type, normalized_name).
+-- Partial predicate is the ON CONFLICT arbiter for upsertEntity's xmax upsert.
+CREATE UNIQUE INDEX uniq_me_active_identity ON memory_entities(entity_type, normalized_name) WHERE valid_until IS NULL;
+CREATE INDEX idx_me_embedding_match ON memory_entities(embedding_model, embedding_dim);
+CREATE INDEX idx_me_normalized     ON memory_entities(normalized_name);
+CREATE INDEX idx_me_type           ON memory_entities(entity_type);
+
+-- memory_entry_entities — junction: which entities a long-term knowledge_entry mentions.
+CREATE TABLE memory_entry_entities (
+  entry_id      INTEGER NOT NULL REFERENCES knowledge_entries(id) ON DELETE CASCADE,
+  entity_id     UUID    NOT NULL REFERENCES memory_entities(id)   ON DELETE CASCADE,
+  mention_count INTEGER NOT NULL DEFAULT 1,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (entry_id, entity_id),
+  CONSTRAINT mee_mention_count_pos CHECK (mention_count >= 1)
+);
+CREATE INDEX idx_mee_entity ON memory_entry_entities(entity_id);   -- reverse lookup (entity → entries)
+
+-- memory_edges — directed entity→entity relations, FULL bi-temporal (invalidate, never delete).
+CREATE TABLE memory_edges (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_entity_id      UUID NOT NULL REFERENCES memory_entities(id) ON DELETE CASCADE,
+  target_entity_id      UUID NOT NULL REFERENCES memory_entities(id) ON DELETE CASCADE,
+  relation              TEXT NOT NULL,                       -- closed enum (med_relation_valid)
+  fact                  TEXT NOT NULL DEFAULT '',            -- NL fact text (S8), redacted upstream
+  fact_embedding        vector,                              -- FACT embedding (recall); NULLABLE
+  embedding_model       TEXT,
+  embedding_dim         INTEGER,
+  origin_entry_id       INTEGER REFERENCES knowledge_entries(id) ON DELETE SET NULL,  -- primary provenance (FK-safe; full episode list deferred — D8)
+  -- FULL bi-temporal (Q1). NULL = open interval on every temporal bound.
+  valid_from            TIMESTAMPTZ NOT NULL DEFAULT NOW(),  -- world: relation became true
+  valid_until           TIMESTAMPTZ,                         -- world: relation stopped being true
+  invalidated_at        TIMESTAMPTZ,                         -- system: when WE retracted/superseded it (Graphiti expired_at)
+  superseded_by_edge_id UUID REFERENCES memory_edges(id) ON DELETE SET NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),  -- ingestion
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT med_no_self_loop      CHECK (source_entity_id <> target_entity_id),
+  CONSTRAINT med_no_self_supersede CHECK (superseded_by_edge_id IS NULL OR superseded_by_edge_id <> id),
+  CONSTRAINT med_superseded_implies_invalidated CHECK (superseded_by_edge_id IS NULL OR invalidated_at IS NOT NULL),
+  CONSTRAINT med_valid_window      CHECK (valid_until IS NULL OR valid_until >= valid_from),
+  -- fact embedding is an all-or-nothing triplet (mirror ke_/mc_ embedding guards, but nullable as a set)
+  CONSTRAINT med_embedding_triplet CHECK (
+    (fact_embedding IS NULL AND embedding_model IS NULL AND embedding_dim IS NULL)
+    OR (fact_embedding IS NOT NULL AND embedding_model IS NOT NULL AND embedding_dim IS NOT NULL
+        AND embedding_dim > 0 AND embedding_dim <= 8192 AND vector_dims(fact_embedding) = embedding_dim)
+  ),
+  CONSTRAINT med_relation_valid CHECK (relation IN
+    ('traded_on','uses','holds','competes_with','correlates_with','part_of','supersedes','related_to'))
+);
+-- AT MOST ONE active (currently-believed) edge per (source, target, relation). Invalidated
+-- temporal versions coexist (they fall out of the partial predicate). ON CONFLICT arbiter for upsertEdge.
+CREATE UNIQUE INDEX uniq_med_active_relation ON memory_edges(source_entity_id, target_entity_id, relation) WHERE invalidated_at IS NULL;
+CREATE INDEX idx_med_source          ON memory_edges(source_entity_id) WHERE invalidated_at IS NULL;
+CREATE INDEX idx_med_target          ON memory_edges(target_entity_id) WHERE invalidated_at IS NULL;
+CREATE INDEX idx_med_relation        ON memory_edges(relation);
+CREATE INDEX idx_med_embedding_match ON memory_edges(embedding_model, embedding_dim) WHERE fact_embedding IS NOT NULL;
