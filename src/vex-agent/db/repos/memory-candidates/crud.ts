@@ -153,6 +153,39 @@ export async function getCandidateById(
   return row ? mapRow(row) : null;
 }
 
+// ── Find latest by content hash (loop-prevention beyond pending) ─
+
+/**
+ * Most recent candidate row for `contentHash`, in ANY status, or null.
+ *
+ * The S2 suggest boundary uses this for loop-prevention BEYOND the live pending
+ * row: the partial unique index `uniq_mc_pending_hash` only dedupes against a
+ * `pending` candidate, so a hash that already reached a TERMINAL status
+ * (promoted / rejected / superseded / merged / expired / retained) would
+ * otherwise be re-staged on every suggest. The boundary checks
+ * `status !== 'pending'` on this result to short-circuit a terminal duplicate;
+ * a `pending` match is left to `insertCandidate`'s upsert. `ORDER BY recorded_at
+ * DESC LIMIT 1` returns the newest row when multiple share the hash across
+ * lifecycles.
+ */
+export async function findLatestCandidateByContentHash(
+  contentHash: string,
+  client?: PoolClient,
+): Promise<MemoryCandidate | null> {
+  if (!contentHash) return null;
+  const exec: Executor = client ?? getPool();
+  const row = await queryOneWith<MemoryCandidateRow>(
+    exec,
+    `SELECT ${CANDIDATE_COLUMNS}
+       FROM memory_candidates
+      WHERE content_hash = $1
+      ORDER BY recorded_at DESC
+      LIMIT 1`,
+    [contentHash],
+  );
+  return row ? mapRow(row) : null;
+}
+
 // ── Status transition (precondition-checked) ─────────────────────
 
 /**

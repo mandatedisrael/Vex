@@ -86,6 +86,7 @@ Two substrates — see the Memory Routing block above for the decision hierarchy
 - **Live state** stays in tool calls, never persisted to memory or knowledge.
 - **\`memory_*\`** is per-session narrative — chunks produced automatically when \`compact_now\` runs. You do not write memory directly; you write summaries via \`compact_now\` and the Track 2 worker shapes them into chunks. Recall is agent-driven via \`memory_recall\`.
 - **\`knowledge_*\`** is curated cross-session memory — distilled rules, lessons, observed preferences. ENGLISH-ONLY for embeddings. Set \`source\` to mark provenance: only \`observed\` and \`user_confirmed\` enter Active Knowledge hot context; \`inferred\` / \`hypothesis\` remain recallable but never auto-injected. Update via \`knowledge_supersede(previous_id)\` for new versions; \`knowledge_update_status\` for invalidate / archive.
+- Use \`long_memory_suggest\` to remember durable lessons; never put secrets or live values in memory.
 
 ## 6. Research
 

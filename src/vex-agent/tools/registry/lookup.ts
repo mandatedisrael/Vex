@@ -28,6 +28,7 @@ import { EVM_TOOLS } from "./evm.js";
 import { WALLET_TOOLS } from "./wallet.js";
 import { COMPACT_TOOLS } from "./compact.js";
 import { MEMORY_TOOLS } from "./memory.js";
+import { LONG_MEMORY_TOOLS } from "./long-memory.js";
 import { PLAN_TOOLS } from "./plan.js";
 
 // Order matters — the LLM sees tools in this order, which can subtly bias
@@ -49,6 +50,7 @@ export const TOOLS: readonly ToolDef[] = [
   ...WALLET_TOOLS,
   ...COMPACT_TOOLS,
   ...MEMORY_TOOLS,
+  ...LONG_MEMORY_TOOLS,
   ...PLAN_TOOLS,
 ];
 

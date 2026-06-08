@@ -69,6 +69,10 @@ export const INTERNAL_TOOL_LOADERS: Readonly<Record<string, InternalHandlerLoade
   mark_outstanding_resolved: async () =>
     (await import("../internal/memory/mark-resolved.js")).handleMarkOutstandingResolved,
 
+  // Long-term memory (v2) — agent-facing candidate write-door (stages, not writes)
+  long_memory_suggest: async () =>
+    (await import("../internal/long-memory/suggest.js")).handleLongMemorySuggest,
+
   // Compact primitive — agent-driven entry point for compaction at pressure
   compact_now: async () => (await import("../internal/compact/now.js")).handleCompactNow,
 

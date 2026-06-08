@@ -15,6 +15,7 @@ export { CANDIDATE_COLUMNS, mapRow } from "./types.js";
 export {
   insertCandidate,
   getCandidateById,
+  findLatestCandidateByContentHash,
   updateCandidateStatus,
   listCandidatesByStatus,
   type UpdateCandidateStatusPatch,

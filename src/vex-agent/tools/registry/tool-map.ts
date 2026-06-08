@@ -54,6 +54,10 @@ export const TOOL_MAP_CATEGORIES: readonly ToolMapCategory[] = [
     label: "Session memory — this conversation/mission only",
     toolNames: ["memory_recall", "mark_outstanding_resolved"],
   },
+  {
+    label: "Long-term memory — suggest a durable cross-session lesson (staged, not written)",
+    toolNames: ["long_memory_suggest"],
+  },
   { label: "Context compaction — pressure only", toolNames: ["compact_now"] },
   {
     label: "Knowledge recall/history — curated across sessions",
