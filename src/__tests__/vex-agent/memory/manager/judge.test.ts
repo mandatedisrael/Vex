@@ -38,7 +38,7 @@ function ctx(): JudgeContext {
 function stubProvider(content: string, costUsd: number | null = null): () => Promise<JudgeProvider> {
   return async () => ({
     loadConfig: async () => ({ model: "stub" }),
-    chatCompletionSimple: async () => ({ content, usage: costUsd === null ? {} : { costUsd } }),
+    chatCompletionSimple: async () => ({ content, usage: costUsd === null ? {} : { cost: costUsd } }),
   });
 }
 

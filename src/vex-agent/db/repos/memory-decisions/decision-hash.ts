@@ -10,9 +10,11 @@
  *
  * Encoding REUSES the length-prefixed SHA256 style of `knowledge/content-hash.ts`
  * (`${len}:${field}|${len}:${field}|…`): unambiguous and deterministic with zero
- * escaping. `evidenceRefs` is canonicalized order-independently (each anchor →
- * fixed-key JSON, the array sorted) so two decisions that differ only in anchor
- * ordering hash the same. Only the SEMANTIC payload is hashed — never timestamps,
+ * escaping, and no JSON serialization (db/repos must stay JSON.stringify-free —
+ * enforced by the jsonb-boundary test). `evidenceRefs` is canonicalized
+ * order-independently (each anchor → fixed field order, length-prefixed, the
+ * array sorted) so two decisions that differ only in anchor ordering hash the
+ * same. Only the SEMANTIC payload is hashed — never timestamps,
  * inference provider/model/cost, or job_id (the same decision reached on a retry
  * by a different job is still the same decision).
  */
@@ -36,19 +38,22 @@ export interface DecisionHashInput {
   evidenceRefs: EvidenceRefs;
 }
 
+const lp = (s: string): string => `${s.length}:${s}`;
+
 function canonicalAnchor(a: EvidenceRefs[number]): string {
-  // Fixed key order → deterministic per-anchor JSON; nulls fill optional fields.
-  return JSON.stringify({
-    executionId: a.executionId,
-    captureItemId: a.captureItemId ?? null,
-    instrumentKey: a.instrumentKey ?? null,
-    positionKey: a.positionKey ?? null,
-  });
+  // Fixed field order, length-prefixed; "" encodes an absent optional field
+  // (schema enforces min(1) on keys, so "" never collides with a real value).
+  return [
+    lp(String(a.executionId)),
+    lp(a.captureItemId === undefined ? "" : String(a.captureItemId)),
+    lp(a.instrumentKey ?? ""),
+    lp(a.positionKey ?? ""),
+  ].join("|");
 }
 
 export function computeDecisionHash(input: DecisionHashInput): string {
-  const evidence = input.evidenceRefs.map(canonicalAnchor).sort().join("");
-  const lp = (s: string): string => `${s.length}:${s}`;
+  // Whole-anchor length prefix keeps anchor boundaries unambiguous after sort+join.
+  const evidence = input.evidenceRefs.map(canonicalAnchor).sort().map(lp).join("|");
   const encoded = [
     lp(input.anchorKind),
     lp(input.anchorId),

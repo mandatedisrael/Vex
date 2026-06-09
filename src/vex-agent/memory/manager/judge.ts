@@ -21,13 +21,18 @@ import { buildJudgeSystemPrompt, buildJudgeUserPrompt } from "./judge-prompt.js"
 import { judgeVerdictSchema, type JudgeVerdict } from "./judge-schema.js";
 import type { JudgeContext } from "./context-builder.js";
 
-/** The provider surface the judge needs — a subset of OpenRouterProvider. */
+/**
+ * The provider surface the judge needs — a structural supertype of
+ * OpenRouterProvider (`usage.cost` is the provider's authoritative per-request
+ * USD cost from `InferenceUsage`), so `new OpenRouterProvider()` is assignable
+ * with no cast.
+ */
 export interface JudgeProvider {
   loadConfig(): Promise<unknown | null>;
   chatCompletionSimple(
     messages: ReadonlyArray<{ role: string; content: string }>,
     config: unknown,
-  ): Promise<{ content: string; usage?: { costUsd?: number | null } }>;
+  ): Promise<{ content: string; usage?: { cost?: number | null } }>;
 }
 
 export interface JudgeCallResult {
@@ -45,10 +50,10 @@ export interface JudgeCallResult {
  */
 async function defaultProvider(): Promise<JudgeProvider> {
   const { OpenRouterProvider } = await import("@vex-agent/inference/openrouter.js");
-  return new OpenRouterProvider() as unknown as JudgeProvider;
+  return new OpenRouterProvider();
 }
 
-const costShape = z.object({ usage: z.object({ costUsd: z.number().nullable().optional() }).optional() });
+const costShape = z.object({ usage: z.object({ cost: z.number().nullable().optional() }).optional() });
 
 /**
  * Call the judge for ONE escalated candidate. THROWS on missing config, timeout,
@@ -106,7 +111,7 @@ export async function callJudge(
 
   // Cost is best-effort — a provider that does not report it yields null.
   const costParse = costShape.safeParse(response);
-  const costUsd = costParse.success ? costParse.data.usage?.costUsd ?? null : null;
+  const costUsd = costParse.success ? costParse.data.usage?.cost ?? null : null;
 
   memLog("judge", "called", {
     decisionType: validated.data.verdict,
