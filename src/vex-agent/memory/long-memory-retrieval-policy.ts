@@ -25,6 +25,11 @@
 import { RECALL_MAX_K } from "@vex-agent/knowledge/policy.js";
 import type { KnowledgeSource } from "@vex-agent/memory/long-memory-source-policy.js";
 import type { MaturityState } from "@vex-agent/memory/schema/long-memory-enums.js";
+import {
+  ACTIVATION_MIN_FACTOR,
+  ACTIVATION_MIN_FACTOR_PROVEN_BOUND,
+  activationFactor,
+} from "@vex-agent/memory/manager/maturity-policy.js";
 
 // ── Constants (§4) ───────────────────────────────────────────────
 
@@ -74,6 +79,20 @@ if (
   );
 }
 
+// S6a (§7 / D-RERANK): activation enters the knowledge score as a BOUNDED
+// multiplier `activationFactor(activation) ∈ [ACTIVATION_MIN_FACTOR, 1]`. The
+// "confirmed > candidate" invariant needs the worst-tier knowledge entry (0.7) at
+// activation 0 to still beat a max-similarity candidate (× 0.6):
+//   0.7 × ACTIVATION_MIN_FACTOR ≥ CANDIDATE_DUAL_TRACE_WEIGHT.
+// Assert it here (the value lives in maturity-policy.ts, which also self-checks
+// MIN_FACTOR ≥ the proven 0.857 bound) so the dependency between the two modules'
+// constants is verified at import time.
+if (SOURCE_SOFT_WEIGHT * ACTIVATION_MIN_FACTOR < CANDIDATE_DUAL_TRACE_WEIGHT) {
+  throw new Error(
+    `long-memory-retrieval-policy: SOURCE_SOFT_WEIGHT (${SOURCE_SOFT_WEIGHT}) × ACTIVATION_MIN_FACTOR (${ACTIVATION_MIN_FACTOR}) < CANDIDATE_DUAL_TRACE_WEIGHT (${CANDIDATE_DUAL_TRACE_WEIGHT}) — activation de-weight would break "confirmed > candidate" (proven bound ${ACTIVATION_MIN_FACTOR_PROVEN_BOUND})`,
+  );
+}
+
 // ── Source-discriminated result type ─────────────────────────────
 
 /**
@@ -109,6 +128,8 @@ export interface LongMemoryKnowledgeResult {
   /** Provenance tier — drives the source-tier de-weight. */
   readonly sourceTier: KnowledgeSource;
   readonly maturityState: MaturityState;
+  /** 0..1 influence weight (S6a) — drives the BOUNDED rerank activation factor. */
+  readonly activationStrength: number;
   readonly tags: readonly string[];
   readonly validUntil: string | null;
   /** Knowledge provenance refs (`knowledge_entries.source_refs`), surfaced under the unified output key. */
@@ -144,23 +165,29 @@ export interface LongMemoryCandidateResult {
 
 /**
  * The knowledge-only inputs `scoreKnowledge` needs: the `rerank` BASE score
- * (already includes recency/confidence/pinned boosts) and the provenance tier.
+ * (already includes recency/confidence/pinned boosts), the provenance tier, and
+ * the 0..1 activation strength (S6a influence weight).
  */
 export interface KnowledgeScoreInput {
   readonly rerankScore: number;
   readonly sourceTier: KnowledgeSource;
+  readonly activationStrength: number;
 }
 
 /**
- * Score a knowledge entry: `rerankScore × sourceTierWeight`.
- * `observed` / `user_confirmed` → ×1.0; `inferred` / `hypothesis` →
- * ×`SOURCE_SOFT_WEIGHT` (lower rank, never excluded).
+ * Score a knowledge entry: `rerankScore × sourceTierWeight × activationFactor`.
+ *   - `sourceTierWeight`: `observed`/`user_confirmed` → ×1.0; `inferred`/
+ *     `hypothesis` → ×`SOURCE_SOFT_WEIGHT` (lower rank, never excluded).
+ *   - `activationFactor`: BOUNDED in [ACTIVATION_MIN_FACTOR, 1] (S6a / §7) so a
+ *     decayed lesson ranks below a reinforced one at equal base score WITHOUT
+ *     ever dropping a confirmed entry under a candidate (the import-time assert
+ *     above proves `worst tier × MIN_FACTOR ≥ candidate weight`).
  */
 export function scoreKnowledge(input: KnowledgeScoreInput): number {
   const tierWeight = (FULL_WEIGHT_SOURCES as readonly string[]).includes(input.sourceTier)
     ? 1
     : SOURCE_SOFT_WEIGHT;
-  return input.rerankScore * tierWeight;
+  return input.rerankScore * tierWeight * activationFactor(input.activationStrength);
 }
 
 /**
@@ -199,7 +226,11 @@ export function blendAndRank(
 ): BlendResult {
   const scoredKnowledge: LongMemoryResult[] = knowledge.map((k) => ({
     ...k,
-    score: scoreKnowledge({ rerankScore: k.rerankScore, sourceTier: k.sourceTier }),
+    score: scoreKnowledge({
+      rerankScore: k.rerankScore,
+      sourceTier: k.sourceTier,
+      activationStrength: k.activationStrength,
+    }),
   }));
 
   // Gate (min similarity) → order by raw similarity DESC for a deterministic cap

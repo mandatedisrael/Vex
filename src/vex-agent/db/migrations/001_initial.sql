@@ -107,6 +107,52 @@ CREATE INDEX idx_ke_source_surface ON knowledge_entries(source_surface);
 -- No vector index in MVP. Exact cosine scan after status/kind/validity prefilter is OK to ~5k entries.
 -- The vector column uses no typmod; adding ANN (ivfflat/hnsw) later requires re-typing the column.
 
+-- knowledge_maturity_events — append-only audit of every maturity/activation
+-- transition on a knowledge_entries row (S6a — debug "why did this lesson decay /
+-- mature / reactivate"). DURABLE append-only audit: `entry_id` is an IMMUTABLE
+-- ANCHOR with NO foreign key (same doctrine as memory_decisions' anchor columns),
+-- so the log survives a hypothetical knowledge_entries delete and never trips an
+-- ON DELETE CASCADE. The maturity FSM NEVER deletes a knowledge row (decay erodes
+-- activation to a floor > 0; genesis §956), so an anchor is correct here:
+-- referential validity at write time is owned by the repo (recordMaturityEvent is
+-- only called by the manager holding a live entry). `event`, `from_state`/
+-- `to_state`, `reason_code`, and `decided_by` are CLOSED enums (named CHECKs →
+-- lockstep-tested against knowledge/schema/knowledge-maturity-event.ts). The
+-- maturity-state CHECKs REUSE the same closed vocabulary as
+-- knowledge_entries.maturity_state. `trigger_refs` is a STRUCTURAL JSONB pointer
+-- bag ({candidateId?, executionId?, regimeSnapshotId?}) — never raw content;
+-- `rationale` is a short structural "why" with NO raw secrets / monetary values
+-- (redaction discipline, like memLog). `activation_before/after` are [0,1].
+CREATE TABLE knowledge_maturity_events (
+  id                BIGSERIAL PRIMARY KEY,
+  entry_id          INTEGER NOT NULL,   -- anchor (no FK); the knowledge_entries.id this event is about
+  event             TEXT NOT NULL,      -- matured | reinforced | decayed | reactivated (closed enum + lockstep)
+  from_state        TEXT NOT NULL,      -- maturity_state BEFORE (probationary|established|reinforced|decayed)
+  to_state          TEXT NOT NULL,      -- maturity_state AFTER
+  reason_code       TEXT NOT NULL,      -- recurrence_confirmation | time_decay | regime_decay | outcome_change (closed enum + lockstep)
+  activation_before REAL NOT NULL,      -- [0,1] activation_strength BEFORE
+  activation_after  REAL NOT NULL,      -- [0,1] activation_strength AFTER
+  trigger_refs      JSONB NOT NULL DEFAULT '{}',  -- structural pointers ({candidateId?, executionId?, regimeSnapshotId?}); NEVER raw content
+  decided_by        TEXT NOT NULL DEFAULT 'system',  -- system | manager (closed enum + lockstep)
+  rationale         TEXT,               -- short structural "why"; NO raw secrets/monetary (redaction discipline)
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT kme_activation_before_range CHECK (activation_before >= 0 AND activation_before <= 1),
+  CONSTRAINT kme_activation_after_range  CHECK (activation_after  >= 0 AND activation_after  <= 1),
+  CONSTRAINT kme_trigger_refs_is_object  CHECK (jsonb_typeof(trigger_refs) = 'object'),
+  -- NAMED enum CHECKs → lockstep-testable (single source of truth:
+  -- vex-agent/memory/schema/knowledge-maturity-event.ts). The from_state/to_state
+  -- vocabulary REUSES knowledge_entries.maturity_state (ke_maturity_state_valid).
+  CONSTRAINT kme_event_valid       CHECK (event IN ('matured','reinforced','decayed','reactivated')),
+  CONSTRAINT kme_from_state_valid  CHECK (from_state IN ('probationary','established','reinforced','decayed')),
+  CONSTRAINT kme_to_state_valid    CHECK (to_state IN ('probationary','established','reinforced','decayed')),
+  CONSTRAINT kme_reason_code_valid CHECK (reason_code IN ('recurrence_confirmation','time_decay','regime_decay','outcome_change')),
+  CONSTRAINT kme_decided_by_valid  CHECK (decided_by IN ('system','manager'))
+);
+-- Audit history for one entry, newest first (debug "why" timeline).
+CREATE INDEX idx_kme_entry ON knowledge_maturity_events(entry_id, created_at DESC);
+-- Sweep / metric queries by event type.
+CREATE INDEX idx_kme_event ON knowledge_maturity_events(event);
+
 -- (Removed: the `folders` + `documents` freeform-scratchpad tables. The
 --  scratchpad tool vertical (document_*) was retired in favour of the
 --  canonical knowledge layer (knowledge_entries) + per-session narrative

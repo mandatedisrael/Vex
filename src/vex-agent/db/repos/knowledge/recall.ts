@@ -127,6 +127,7 @@ export async function recallLongMemoryTopK(
        id, kind, title, summary, content_md, tags, source_refs,
        confidence, status, pinned, valid_from, valid_until,
        content_hash, embedding_model, embedding_dim, source, maturity_state,
+       activation_strength,
        created_at, updated_at,
        (embedding <=> $1::vector) AS cosine_distance
      FROM knowledge_entries

@@ -314,6 +314,13 @@ export interface LongMemoryRecallCandidate extends RecallCandidate {
   source: KnowledgeSource;
   /** Lesson-confidence FSM tier — surfaced in detailed output (S6 ranking input). */
   maturityState: MaturityState;
+  /**
+   * 0..1 influence weight (S6a) — drives the BOUNDED rerank activation factor
+   * (`activationFactor`). A decayed lesson has lower activation and ranks below a
+   * reinforced one at equal base score, WITHOUT ever dropping under a candidate
+   * (the MIN_FACTOR bound). Defaults to 1.0 for rows from narrower SELECTs.
+   */
+  activationStrength: number;
 }
 
 export function mapRowToLongMemoryCandidate(r: KnowledgeRecallRow): LongMemoryRecallCandidate {
@@ -321,6 +328,7 @@ export function mapRowToLongMemoryCandidate(r: KnowledgeRecallRow): LongMemoryRe
     ...mapRowToCandidate(r),
     source: (r.source ?? "observed") as KnowledgeSource,
     maturityState: (r.maturity_state ?? "established") as MaturityState,
+    activationStrength: r.activation_strength ?? 1.0,
   };
 }
 

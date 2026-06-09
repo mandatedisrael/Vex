@@ -21,15 +21,19 @@ import type {
  * recallable via `knowledge_recall` but never enter the always-on prompt.
  * See migration 018 for the partial index supporting this filter.
  *
- * Maturity gate (S4/§949): a freshly-promoted lesson starts `probationary` and
- * is NEVER hot-context — it must mature (S6) before it can auto-inject. The
- * source filter alone is insufficient: a probationary entry promoted with
+ * Maturity gate (S4/§949 + S6a/§11.6): a freshly-promoted lesson starts
+ * `probationary` and is NEVER hot-context — it must mature (S6) before it can
+ * auto-inject; a `decayed` lesson has eroded out of the always-on prompt and must
+ * NOT dominate hot context (genesis §725). Both are excluded here. The source
+ * filter alone is insufficient: a probationary/decayed entry promoted with
  * `source='observed'` would otherwise pass the source check and leak into the
- * always-on prompt. Excluding `probationary` here enforces the genesis invariant
- * that probationary / inferred-hypothesis knowledge stays out of hot context.
+ * always-on prompt. Recurrence reactivation (S6a) lifts a `decayed` entry back to
+ * `established` → it becomes hot-context-eligible again. Excluding both states
+ * enforces the genesis invariant that probationary / decayed / inferred-hypothesis
+ * knowledge stays out of hot context.
  */
 const HOT_CONTEXT_SOURCE_SQL =
-  "source IN ('observed', 'user_confirmed') AND maturity_state <> 'probationary'";
+  "source IN ('observed', 'user_confirmed') AND maturity_state NOT IN ('probationary', 'decayed')";
 
 export async function listActiveForHotContext(
   opts: ListActiveOptions,

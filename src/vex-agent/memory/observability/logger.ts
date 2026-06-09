@@ -173,6 +173,20 @@ export type MemoryLogMeta = {
   readonly llmCalls?: string | number;
   /** Accumulated USD cost of a decision's inference (S4). */
   readonly costUsd?: string | number;
+  /** knowledge_maturity_events.event (S6a — bounded enum: matured|reinforced|decayed|reactivated). */
+  readonly maturityEvent?: string | number;
+  /** maturity_state BEFORE a transition (S6a — bounded enum). */
+  readonly fromState?: string | number;
+  /** maturity_state AFTER a transition (S6a — bounded enum). */
+  readonly toState?: string | number;
+  /** knowledge_maturity_events.reason_code (S6a — bounded enum). */
+  readonly reasonCode?: string | number;
+  /** activation_strength BEFORE a transition (S6a — 0..1 number). */
+  readonly activationBefore?: string | number;
+  /** activation_strength AFTER a transition (S6a — 0..1 number). */
+  readonly activationAfter?: string | number;
+  /** Days since last reinforcement at a decay step (S6a — number). */
+  readonly daysSinceReinforced?: string | number;
   readonly status?: string | number;
   readonly statusFrom?: string | number;
   readonly statusTo?: string | number;
@@ -228,6 +242,13 @@ const META_KEY_CATEGORY: Record<keyof MemoryLogMeta, MetaCategory> = {
   recurrenceCount: "num",
   llmCalls: "num",
   costUsd: "num",
+  maturityEvent: "enum",
+  fromState: "enum",
+  toState: "enum",
+  reasonCode: "enum",
+  activationBefore: "num",
+  activationAfter: "num",
+  daysSinceReinforced: "num",
   status: "enum",
   statusFrom: "enum",
   statusTo: "enum",

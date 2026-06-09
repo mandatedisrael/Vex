@@ -52,6 +52,7 @@ import {
 } from "@vex-agent/db/repos/memory-job-items/index.js";
 import { getLatestDecision } from "@vex-agent/db/repos/memory-decisions/index.js";
 import { listCandidatesByStatus } from "@vex-agent/db/repos/memory-candidates/index.js";
+import { runDecaySweep } from "./decay-sweep.js";
 import {
   consolidateCandidate,
   applyDecisionAtomically,
@@ -143,6 +144,18 @@ export function startMemoryManagerExecutor(
   };
 
   const sweep = async (): Promise<void> => {
+    // S6a activation decay sweep — independent of the consolidate-enqueue check
+    // below (decay must run even when there are no pending candidates). Its own
+    // try/catch so a decay failure never blocks consolidate enqueue and vice
+    // versa. Idempotent + bounded (see decay-sweep.ts).
+    try {
+      await runDecaySweep();
+    } catch (err) {
+      memLog.warn("decay_sweep", "failed", {
+        errorCode: err instanceof Error ? "decay_sweep_error" : "decay_sweep_unknown",
+      });
+    }
+
     try {
       // Enqueue a consolidate job only when pending candidates exist and no
       // consolidate job is already active (pending/running/failed).
@@ -298,6 +311,9 @@ async function processItem(
       // the decision (null for non-trade kinds / no surviving anchor).
       outcome: decision.outcome,
       availableAtDecisionTime: decision.availableAtDecisionTime,
+      // S6a: reinforce the active entry a duplicate candidate confirms (2nd
+      // confirmation), in the SAME tx as the decision.
+      reinforce: decision.reinforce,
     });
 
     if (decision.llmCalls > 0) {

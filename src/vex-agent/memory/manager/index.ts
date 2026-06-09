@@ -16,7 +16,35 @@ export {
   type ConsolidateDeps,
   type CandidateDecision,
   type AtomicApplyResult,
+  type ReinforcementTarget,
 } from "./consolidate.js";
+
+export {
+  reinforceEntry,
+  decayEntry,
+  defaultMaturityDeps,
+  DECAY_AUDIT_MIN_DELTA,
+  type MaturityDeps,
+  type ReinforceResult,
+  type DecayResult,
+} from "./maturity.js";
+
+export {
+  ACTIVATION_HALF_LIFE_DAYS,
+  DECAY_FLOOR,
+  REINFORCE_STEP,
+  DECAY_TO_DECAYED_THRESHOLD,
+  REACTIVATION_ACTIVATION,
+  ACTIVATION_MIN_FACTOR,
+  ACTIVATION_MIN_FACTOR_PROVEN_BOUND,
+  decayedActivation,
+  nextStateOnDecay,
+  reinforcedActivation,
+  nextStateOnReinforce,
+  reinforceEventFor,
+  activationFactor,
+  daysSince,
+} from "./maturity-policy.js";
 
 export {
   applyDecision,

@@ -44,7 +44,7 @@ describe("deterministic stage", () => {
     expect(v).toEqual({ kind: "reject", reason: "duplicate" });
   });
 
-  it("rejects a near-duplicate with no differing number or date (D5)", () => {
+  it("rejects a near-duplicate with no differing number or date and carries the matched id for reinforcement (D5)", () => {
     const matches: KnowledgeMatch[] = [
       {
         knowledgeId: 1,
@@ -55,7 +55,9 @@ describe("deterministic stage", () => {
     ];
     const candidate = makeCandidate({ title: "no numbers here", summary: "purely qualitative claim" });
     const v = runDeterministicStage(baseInput({ candidate, knowledgeMatches: matches }));
-    expect(v).toEqual({ kind: "reject", reason: "duplicate" });
+    // S6a: the near-dup match id rides along so consolidate can reinforce that
+    // active entry (the candidate is a 2nd confirmation of an existing lesson).
+    expect(v).toEqual({ kind: "reject", reason: "duplicate", reinforcesKnowledgeId: 1 });
   });
 
   it("does NOT treat a high-cosine match that differs on a number as a duplicate (Graphiti guardrail)", () => {

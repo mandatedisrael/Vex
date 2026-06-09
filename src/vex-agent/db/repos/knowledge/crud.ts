@@ -22,13 +22,16 @@
 import type { PoolClient } from "pg";
 import {
   execute,
+  executeWith,
   getPool,
   queryOne,
   queryOneWith,
+  queryWith,
   type Executor,
 } from "../../client.js";
 import { jsonb } from "../../params.js";
 import type { UpdatableKnowledgeStatus, KnowledgeStatus } from "@vex-agent/knowledge/policy.js";
+import type { DecayPolicy, MaturityState } from "@vex-agent/memory/schema/long-memory-enums.js";
 import {
   type InsertEntryInput,
   type InsertEntryResult,
@@ -184,6 +187,188 @@ export async function findByContentHash(hash: string): Promise<KnowledgeEntry | 
     [hash],
   );
   return row ? mapRow(row) : null;
+}
+
+// ── Maturity FSM transition (S6a) ────────────────────────────────
+
+/** Active-entry row needed by the maturity manager (S6a decay sweep input). */
+export interface MaturityEntryRow {
+  id: number;
+  maturityState: MaturityState;
+  activationStrength: number;
+  decayPolicy: DecayPolicy;
+  firstPromotedAt: string | null;
+  lastReinforcedAt: string | null;
+}
+
+/**
+ * Apply a maturity/activation transition to ONE knowledge entry (S6a). Updates
+ * `activation_strength` + `maturity_state`, optionally bumps `last_reinforced_at`
+ * (reinforcement / reactivation — NEVER on plain decay or recall), and stamps
+ * `updated_at`. Guarded on `status = 'active'` (the FSM only touches live lessons)
+ * AND on the CURRENT maturity/activation values so a concurrent transition is a
+ * no-op precondition miss, never a lost update. The maturity FSM NEVER deletes a
+ * row — decay floors activation > 0. Runs in the caller's tx when a client is
+ * passed (reinforcement records its audit row in the SAME tx).
+ *
+ * Returns `true` iff the row transitioned (matched id+status+precondition);
+ * `false` means the precondition no longer holds (already transitioned / not
+ * active) — the caller must NOT then write an audit row.
+ */
+export async function applyMaturityTransition(
+  args: {
+    entryId: number;
+    expectedMaturityState: MaturityState;
+    expectedActivation: number;
+    nextMaturityState: MaturityState;
+    nextActivation: number;
+    bumpLastReinforcedAt: boolean;
+  },
+  client?: PoolClient,
+): Promise<boolean> {
+  if (!Number.isFinite(args.entryId) || args.entryId <= 0) return false;
+  const exec: Executor = client ?? getPool();
+  const setReinforced = args.bumpLastReinforcedAt ? ", last_reinforced_at = NOW()" : "";
+  const count = await executeWith(
+    exec,
+    `UPDATE knowledge_entries
+        SET activation_strength = $1,
+            maturity_state = $2,
+            updated_at = NOW()${setReinforced}
+      WHERE id = $3
+        AND status = 'active'
+        AND maturity_state = $4
+        AND activation_strength = $5`,
+    [
+      args.nextActivation,
+      args.nextMaturityState,
+      args.entryId,
+      args.expectedMaturityState,
+      args.expectedActivation,
+    ],
+  );
+  return count === 1;
+}
+
+/**
+ * Fetch ONE active entry's maturity inputs by id (FOR UPDATE-lockable via the
+ * caller's tx). Returns null when the row is absent or non-active. Used by the
+ * reinforcement seam to resolve the current FSM state of the entry a candidate
+ * confirms.
+ */
+export async function getMaturityEntry(
+  entryId: number,
+  client?: PoolClient,
+): Promise<MaturityEntryRow | null> {
+  if (!Number.isFinite(entryId) || entryId <= 0) return null;
+  const exec: Executor = client ?? getPool();
+  const row = await queryOneWith<{
+    id: number;
+    maturity_state: string;
+    activation_strength: number;
+    decay_policy: string;
+    first_promoted_at: string | null;
+    last_reinforced_at: string | null;
+  }>(
+    exec,
+    `SELECT id, maturity_state, activation_strength, decay_policy,
+            first_promoted_at, last_reinforced_at
+       FROM knowledge_entries
+      WHERE id = $1 AND status = 'active'`,
+    [entryId],
+  );
+  if (!row) return null;
+  return {
+    id: row.id,
+    maturityState: row.maturity_state as MaturityState,
+    activationStrength: row.activation_strength,
+    decayPolicy: row.decay_policy as DecayPolicy,
+    firstPromotedAt: row.first_promoted_at,
+    lastReinforcedAt: row.last_reinforced_at,
+  };
+}
+
+/**
+ * Batch of active, decayable entries for the S6a decay sweep: `status='active'`
+ * AND `decay_policy <> 'none'` (pinned/legacy are frozen). Ordered by id for a
+ * stable, resumable scan; `afterId` pages forward (id > afterId). Read-only
+ * snapshot — the sweep applies each transition with its own precondition guard,
+ * so a stale read is harmless (the guarded update is the source of truth).
+ */
+export async function listDecayableEntries(
+  args: { afterId: number; limit: number },
+  client?: PoolClient,
+): Promise<MaturityEntryRow[]> {
+  const limit = Number.isFinite(args.limit) && args.limit > 0 ? Math.floor(args.limit) : 0;
+  if (limit === 0) return [];
+  const afterId = Number.isFinite(args.afterId) && args.afterId > 0 ? Math.floor(args.afterId) : 0;
+  const exec: Executor = client ?? getPool();
+  const rows = await queryWith<{
+    id: number;
+    maturity_state: string;
+    activation_strength: number;
+    decay_policy: string;
+    first_promoted_at: string | null;
+    last_reinforced_at: string | null;
+  }>(
+    exec,
+    `SELECT id, maturity_state, activation_strength, decay_policy,
+            first_promoted_at, last_reinforced_at
+       FROM knowledge_entries
+      WHERE status = 'active'
+        AND decay_policy <> 'none'
+        AND id > $1
+      ORDER BY id ASC
+      LIMIT $2`,
+    [afterId, limit],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    maturityState: row.maturity_state as MaturityState,
+    activationStrength: row.activation_strength,
+    decayPolicy: row.decay_policy as DecayPolicy,
+    firstPromotedAt: row.first_promoted_at,
+    lastReinforcedAt: row.last_reinforced_at,
+  }));
+}
+
+/**
+ * Find the ACTIVE knowledge entry with this content_hash (reinforcement seam): a
+ * candidate that is an EXACT duplicate of an active entry confirms it. Returns the
+ * entry id + maturity inputs, or null when no ACTIVE row matches (a superseded /
+ * archived duplicate is NOT reinforced). `idx_ke_content_hash` makes this a single
+ * indexed lookup.
+ */
+export async function findActiveByContentHash(
+  hash: string,
+  client?: PoolClient,
+): Promise<MaturityEntryRow | null> {
+  if (!hash) return null;
+  const exec: Executor = client ?? getPool();
+  const row = await queryOneWith<{
+    id: number;
+    maturity_state: string;
+    activation_strength: number;
+    decay_policy: string;
+    first_promoted_at: string | null;
+    last_reinforced_at: string | null;
+  }>(
+    exec,
+    `SELECT id, maturity_state, activation_strength, decay_policy,
+            first_promoted_at, last_reinforced_at
+       FROM knowledge_entries
+      WHERE content_hash = $1 AND status = 'active'`,
+    [hash],
+  );
+  if (!row) return null;
+  return {
+    id: row.id,
+    maturityState: row.maturity_state as MaturityState,
+    activationStrength: row.activation_strength,
+    decayPolicy: row.decay_policy as DecayPolicy,
+    firstPromotedAt: row.first_promoted_at,
+    lastReinforcedAt: row.last_reinforced_at,
+  };
 }
 
 // ── Update status ────────────────────────────────────────────────

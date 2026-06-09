@@ -268,6 +268,7 @@ export async function handleLongMemorySearch(
       similarity: c.similarity,
       sourceTier: c.source,
       maturityState: c.maturityState,
+      activationStrength: c.activationStrength,
       tags: c.tags,
       validUntil: c.validUntil ? c.validUntil.toISOString() : null,
       evidenceRefs: c.sourceRefs,

@@ -25,6 +25,11 @@ import {
   type LongMemoryKnowledgeResult,
   type LongMemoryCandidateResult,
 } from "@vex-agent/memory/long-memory-retrieval-policy.js";
+import {
+  ACTIVATION_MIN_FACTOR,
+  DECAY_FLOOR,
+  activationFactor,
+} from "@vex-agent/memory/manager/maturity-policy.js";
 import type { KnowledgeSource } from "@vex-agent/memory/long-memory-source-policy.js";
 
 // ── Builders ──────────────────────────────────────────────────────
@@ -42,6 +47,7 @@ function knowledge(
     similarity: 0.8,
     sourceTier: "observed",
     maturityState: "established",
+    activationStrength: 1.0,
     tags: [],
     validUntil: null,
     evidenceRefs: {},
@@ -81,15 +87,27 @@ describe("long-memory retrieval policy — weight invariant", () => {
 
 // ── Scorers ───────────────────────────────────────────────────────
 
-describe("scoreKnowledge — source-tier de-weight", () => {
-  it("keeps full weight for observed and user_confirmed", () => {
-    expect(scoreKnowledge({ rerankScore: 1, sourceTier: "observed" })).toBe(1);
-    expect(scoreKnowledge({ rerankScore: 1, sourceTier: "user_confirmed" })).toBe(1);
+describe("scoreKnowledge — source-tier de-weight × activation factor", () => {
+  it("keeps full weight for observed and user_confirmed at full activation", () => {
+    expect(scoreKnowledge({ rerankScore: 1, sourceTier: "observed", activationStrength: 1 })).toBeCloseTo(1, 10);
+    expect(scoreKnowledge({ rerankScore: 1, sourceTier: "user_confirmed", activationStrength: 1 })).toBeCloseTo(1, 10);
   });
 
-  it("de-weights inferred and hypothesis by SOURCE_SOFT_WEIGHT", () => {
-    expect(scoreKnowledge({ rerankScore: 1, sourceTier: "inferred" })).toBeCloseTo(SOURCE_SOFT_WEIGHT, 10);
-    expect(scoreKnowledge({ rerankScore: 1, sourceTier: "hypothesis" })).toBeCloseTo(SOURCE_SOFT_WEIGHT, 10);
+  it("de-weights inferred and hypothesis by SOURCE_SOFT_WEIGHT at full activation", () => {
+    expect(scoreKnowledge({ rerankScore: 1, sourceTier: "inferred", activationStrength: 1 })).toBeCloseTo(SOURCE_SOFT_WEIGHT, 10);
+    expect(scoreKnowledge({ rerankScore: 1, sourceTier: "hypothesis", activationStrength: 1 })).toBeCloseTo(SOURCE_SOFT_WEIGHT, 10);
+  });
+
+  it("applies the bounded activation factor on top of the tier weight", () => {
+    // activation 0 → ×ACTIVATION_MIN_FACTOR; activation 0.5 → linear midpoint.
+    expect(scoreKnowledge({ rerankScore: 1, sourceTier: "observed", activationStrength: 0 })).toBeCloseTo(ACTIVATION_MIN_FACTOR, 10);
+    expect(scoreKnowledge({ rerankScore: 1, sourceTier: "observed", activationStrength: 0.5 })).toBeCloseTo(activationFactor(0.5), 10);
+  });
+
+  it("ranks a higher-activation entry above a decayed one at equal base score + tier", () => {
+    const reinforced = scoreKnowledge({ rerankScore: 0.8, sourceTier: "observed", activationStrength: 1.0 });
+    const decayed = scoreKnowledge({ rerankScore: 0.8, sourceTier: "observed", activationStrength: DECAY_FLOOR });
+    expect(reinforced).toBeGreaterThan(decayed);
   });
 });
 
@@ -198,5 +216,49 @@ describe("blendAndRank — candidate gating and cap", () => {
     const { results, droppedCandidates } = blendAndRank([], weak);
     expect(results).toHaveLength(0);
     expect(droppedCandidates).toBe(0);
+  });
+});
+
+// ── MANDATORY: activation never breaks "confirmed > candidate" (§7) ──
+
+describe("activation rerank factor preserves the confirmed > candidate invariant", () => {
+  // The worst-tier knowledge entry (inferred/hypothesis at SOURCE_SOFT_WEIGHT
+  // 0.7) at ANY activation must still beat a candidate at the SAME raw similarity
+  // (candidate weight CANDIDATE_DUAL_TRACE_WEIGHT 0.6, no boosts). Property-tested
+  // across the full activation range × both tier weights × representative
+  // similarities, with NO base-score boosts (the strict worst case: rerankScore
+  // === similarity, so (sim+boosts) is minimal).
+  const TIER_WEIGHTS = [SOURCE_SOFT_WEIGHT, 1.0] as const;
+  const ACTIVATIONS = [0, DECAY_FLOOR, 0.5, 1.0] as const;
+  const SIMILARITIES = [0.36, 0.5, 0.75, 1.0] as const;
+
+  it("holds for every (tierWeight × activation × similarity) at zero boosts", () => {
+    for (const tierWeight of TIER_WEIGHTS) {
+      for (const activation of ACTIVATIONS) {
+        for (const sim of SIMILARITIES) {
+          // No boosts: rerankScore === similarity (the minimum (sim+boosts)).
+          const knowledgeScore = sim * tierWeight * activationFactor(activation);
+          const candidateScore = sim * CANDIDATE_DUAL_TRACE_WEIGHT;
+          expect(knowledgeScore).toBeGreaterThanOrEqual(candidateScore - 1e-12);
+        }
+      }
+    }
+  });
+
+  it("holds end-to-end via blendAndRank: a worst-tier zero-activation entry outranks a same-similarity candidate", () => {
+    for (const activation of ACTIVATIONS) {
+      const sim = 0.9;
+      const worstKnowledge = knowledge({
+        id: 1,
+        similarity: sim,
+        rerankScore: sim, // no boosts — strict worst case
+        sourceTier: "hypothesis",
+        activationStrength: activation,
+      });
+      const sameSimCandidate = candidate({ id: `c-${activation}`, similarity: sim });
+      const { results } = blendAndRank([worstKnowledge], [sameSimCandidate]);
+      expect(results[0]!.source).toBe("long_memory");
+      expect(results[1]!.source).toBe("memory_candidate");
+    }
   });
 });

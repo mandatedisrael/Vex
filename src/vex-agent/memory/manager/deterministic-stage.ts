@@ -53,7 +53,19 @@ export interface EscalationSignals {
 }
 
 export type DeterministicVerdict =
-  | { kind: "reject"; reason: MemoryDecisionRejectReason }
+  | {
+      kind: "reject";
+      reason: MemoryDecisionRejectReason;
+      /**
+       * S6a reinforcement seam: when a `duplicate` reject was caused by a match
+       * against a SPECIFIC active knowledge entry (D5 near-dup), its id is carried
+       * here so consolidate can reinforce that entry (2nd confirmation) instead of
+       * dropping the candidate silently. D4 (exact content-hash dup) does NOT carry
+       * an id — the matched row is resolved by content-hash in consolidate
+       * (`findActiveByContentHash`). Absent for every non-duplicate reject.
+       */
+      reinforcesKnowledgeId?: number;
+    }
   | { kind: "expire"; reason: MemoryDecisionRejectReason }
   | { kind: "retain"; reason: string }
   | { kind: "escalate"; signals: EscalationSignals };
@@ -160,10 +172,12 @@ export function runDeterministicStage(input: DeterministicInput): DeterministicV
 
   // D5 — near-dup (Fork D): max cosine ≥ NEAR_DUP_COSINE AND NOT differing on a
   // number/date/qualifier ⇒ duplicate. A high-cosine match that DOES differ on a
-  // number/date is NOT a dup (it may be a conflict/supersede — escalated).
+  // number/date is NOT a dup (it may be a conflict/supersede — escalated). The
+  // matched entry id rides along (S6a) so consolidate can reinforce it (the
+  // candidate is a 2nd confirmation of an existing active lesson).
   for (const m of input.knowledgeMatches) {
     if (m.similarity >= NEAR_DUP_COSINE && !differsOnNumberOrDate(candidateText, m.text)) {
-      return { kind: "reject", reason: "duplicate" };
+      return { kind: "reject", reason: "duplicate", reinforcesKnowledgeId: m.knowledgeId };
     }
   }
 

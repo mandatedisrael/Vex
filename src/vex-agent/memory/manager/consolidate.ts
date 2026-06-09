@@ -76,6 +76,8 @@ import { buildJudgeContext } from "./context-builder.js";
 import { callJudge, type JudgeProvider } from "./judge.js";
 import type { JudgeVerdict } from "./judge-schema.js";
 import { applyDecision, type DecisionPlan } from "./promote.js";
+import { reinforceEntry, defaultMaturityDeps, type MaturityDeps } from "./maturity.js";
+import { findActiveByContentHash } from "@vex-agent/db/repos/knowledge/crud.js";
 
 // ── Injectable IO ───────────────────────────────────────────────────
 
@@ -301,6 +303,20 @@ function planFromDeterministic(v: Extract<DeterministicVerdict, { kind: "reject"
 
 // ── consolidateCandidate (deterministic + judge → plan) ─────────────
 
+/**
+ * S6a reinforcement seam: a candidate that is a duplicate of an ACTIVE knowledge
+ * entry is a 2nd confirmation → reinforce that entry (recurrence; D-MATURE)
+ * instead of dropping the candidate silently. The target is resolved in the
+ * atomic apply tx (so the read + reinforce + decision are atomic):
+ *   - `{ kind: "entry"; knowledgeId }` — D5 near-dup carried the matched id.
+ *   - `{ kind: "contentHash"; contentHash }` — D4 exact-dup; the active entry is
+ *     looked up by content-hash in the tx (`findActiveByContentHash`).
+ * Absent on every non-duplicate decision.
+ */
+export type ReinforcementTarget =
+  | { kind: "entry"; knowledgeId: number }
+  | { kind: "contentHash"; contentHash: string };
+
 export interface CandidateDecision {
   plan: DecisionPlan;
   llmCalls: number;
@@ -314,6 +330,12 @@ export interface CandidateDecision {
   outcome: MemoryOutcomeSummary | null;
   /** S5 — the as-of decision boundary stamped on `available_at_decision_time`. */
   availableAtDecisionTime: Date | null;
+  /**
+   * S6a — when the decision is a `duplicate` reject of an active entry, the
+   * reinforcement target. The atomic apply reinforces it (2nd confirmation) in the
+   * SAME tx as the decision. Null for every non-reinforcing decision.
+   */
+  reinforce: ReinforcementTarget | null;
 }
 
 /**
@@ -414,12 +436,18 @@ export async function consolidateCandidate(
   });
 
   if (verdict.kind !== "escalate") {
+    // S6a reinforcement seam: a `duplicate` reject means the candidate confirms an
+    // existing ACTIVE entry (a 2nd confirmation; D-MATURE). Resolve the target so
+    // the atomic apply can reinforce it — D5 near-dup carried the matched id; D4
+    // exact-dup resolves the active entry by content-hash in the tx.
+    const reinforce = reinforcementTargetFor(verdict, exactDuplicate, contentHash);
     return {
       plan: planFromDeterministic(verdict),
       llmCalls: 0,
       costUsd: null,
       outcome,
       availableAtDecisionTime,
+      reinforce,
     };
   }
 
@@ -441,7 +469,31 @@ export async function consolidateCandidate(
     costUsd: judged.costUsd,
     outcome,
     availableAtDecisionTime,
+    // The judge path never produces a deterministic `duplicate` — escalation
+    // means D4/D5 did NOT fire, so there is no reinforcement target here.
+    reinforce: null,
   };
+}
+
+/**
+ * Resolve the S6a reinforcement target from a deterministic verdict (§8). A
+ * `duplicate` reject is a 2nd confirmation of an existing ACTIVE entry:
+ *   - D5 near-dup carried the matched id → reinforce that entry directly.
+ *   - D4 exact content-hash dup (`exactDuplicate`) → reinforce the active entry
+ *     that owns this content-hash (resolved in the tx by `findActiveByContentHash`).
+ * Every non-duplicate verdict (and a non-reject) yields null.
+ */
+function reinforcementTargetFor(
+  verdict: DeterministicVerdict,
+  exactDuplicate: boolean,
+  contentHash: string,
+): ReinforcementTarget | null {
+  if (verdict.kind !== "reject" || verdict.reason !== "duplicate") return null;
+  if (verdict.reinforcesKnowledgeId !== undefined) {
+    return { kind: "entry", knowledgeId: verdict.reinforcesKnowledgeId };
+  }
+  if (exactDuplicate) return { kind: "contentHash", contentHash };
+  return null;
 }
 
 // ── applyDecisionAtomically (owner-check + apply + record, one tx) ──
@@ -471,10 +523,16 @@ export async function applyDecisionAtomically(args: {
   outcome?: MemoryOutcomeSummary | null;
   /** S5 — as-of decision boundary → candidate.available_at_decision_time + valid_from. */
   availableAtDecisionTime?: Date | null;
+  /** S6a — reinforce the active entry this duplicate confirms (2nd confirmation). */
+  reinforce?: ReinforcementTarget | null;
+  /** S6a — injectable maturity IO (tests stub the reinforce path). */
+  maturityDeps?: MaturityDeps;
   client?: PoolClient;
 }): Promise<AtomicApplyResult> {
   const outcome = args.outcome ?? null;
   const boundary = args.availableAtDecisionTime ?? null;
+  const reinforce = args.reinforce ?? null;
+  const maturityDeps = args.maturityDeps ?? defaultMaturityDeps();
 
   const run = async (tx: PoolClient): Promise<AtomicApplyResult> => {
     // Owner-check: the item must still be `processing`, the job `running` and
@@ -518,10 +576,46 @@ export async function applyDecisionAtomically(args: {
         `applyDecisionAtomically: recordDecision failed (${recorded.reason}) for candidate ${args.candidate.id}`,
       );
     }
+
+    // S6a reinforcement seam (§8): a `duplicate` reject means this candidate is a
+    // 2nd real confirmation of an existing ACTIVE entry. Reinforce that entry
+    // (activation↑, maturity advance / decayed→established reactivation; audited)
+    // in the SAME tx. Resolved here (not in consolidate) so the read + reinforce
+    // are atomic with the decision. A target that no longer resolves (the entry
+    // was superseded / archived between recall and apply) is a benign no-op — the
+    // candidate is still recorded as a duplicate reject.
+    if (reinforce && args.plan.type === "reject") {
+      await applyReinforcement(reinforce, args.candidate.id, tx, maturityDeps);
+    }
+
     return { decisionId: recorded.decision.id, decisionType: args.plan.type };
   };
 
   return args.client ? run(args.client) : withTransaction(run);
+}
+
+/**
+ * Resolve a reinforcement target to a concrete entry id and reinforce it in the
+ * tx (S6a §8). The `candidateId` rides along as the structural `trigger_ref` so
+ * the audit row links the reinforcement to its confirming candidate. A
+ * content-hash target that no longer resolves to an ACTIVE entry is a benign
+ * no-op (the active row was superseded/archived between recall and apply).
+ */
+async function applyReinforcement(
+  target: ReinforcementTarget,
+  candidateId: string,
+  tx: PoolClient,
+  maturityDeps: MaturityDeps,
+): Promise<void> {
+  let knowledgeId: number | null;
+  if (target.kind === "entry") {
+    knowledgeId = target.knowledgeId;
+  } else {
+    const entry = await findActiveByContentHash(target.contentHash, tx);
+    knowledgeId = entry?.id ?? null;
+  }
+  if (knowledgeId === null) return;
+  await reinforceEntry(knowledgeId, { candidateId }, tx, maturityDeps);
 }
 
 /** Thrown when the owner-check fails — the worker lost the claim. */

@@ -25,6 +25,15 @@ export function hotContextSuite(ctx: SuiteCtx): void {
       expect(params).toEqual([12]);
       expect(result[0]?.kind).toBe("risk_rule");
     });
+
+    it("excludes both probationary AND decayed maturity from hot context (S6a §11.6)", async () => {
+      mockQuery.mockResolvedValueOnce([]);
+      await listActiveForHotContext({ limit: 5 });
+      const [sql] = mockQuery.mock.calls[0];
+      expect(sql).toContain("maturity_state NOT IN ('probationary', 'decayed')");
+      // Only confirmed provenance is hot-context eligible.
+      expect(sql).toContain("source IN ('observed', 'user_confirmed')");
+    });
   });
 
   describe("listKnownKinds", () => {
