@@ -76,10 +76,13 @@ async function anchorsCoherent(
   input: ParsedDecisionInput,
 ): Promise<boolean> {
   if (input.decisionType === "reconcile") {
+    // S7: a reconcile decision is stamped with the outcome_version it PRODUCED
+    // (v+1 — matching the post-bump entry + candidate audit surfaces), while the
+    // deciding job is keyed by the version it CONSUMED (v) — hence the `- 1`.
     const res = await tx.query(
       `SELECT 1 FROM memory_jobs
         WHERE id = $1 AND job_kind = 'reconcile' AND status = 'running'
-          AND reconcile_entry_id = $2 AND reconcile_outcome_version = $3
+          AND reconcile_entry_id = $2 AND reconcile_outcome_version = $3 - 1
         FOR UPDATE`,
       [input.jobId, input.reconcileEntryId, input.outcomeVersion],
     );
@@ -115,6 +118,7 @@ interface DecisionInsertValues {
   inferenceProvider: string | null;
   inferenceModel: string | null;
   costUsd: number | null;
+  decidedBy: string;
 }
 
 async function upsertDecision(
@@ -129,14 +133,14 @@ async function upsertDecision(
        decision_version, decision_type, decision_hash, reject_reason,
        promoted_knowledge_id, supersedes_knowledge_id, merge_target_knowledge_id,
        outcome_version, evidence_refs,
-       inference_provider, inference_model, cost_usd
+       inference_provider, inference_model, cost_usd, decided_by
      )
      VALUES (
        $1, $2, $3,
        $4, $5, $6, $7,
        $8, $9, $10,
        $11, $12::jsonb,
-       $13, $14, $15
+       $13, $14, $15, $16
      )
      ON CONFLICT ${conflictTarget}
      DO UPDATE SET created_at = memory_decisions.created_at
@@ -157,6 +161,7 @@ async function upsertDecision(
       vals.inferenceProvider,
       vals.inferenceModel,
       vals.costUsd,
+      vals.decidedBy,
     ],
   );
 }
@@ -213,6 +218,7 @@ export async function recordDecision(
       inferenceProvider,
       inferenceModel,
       costUsd,
+      decidedBy: input.decidedBy,
     };
     conflictTarget = "(reconcile_entry_id, outcome_version) WHERE reconcile_entry_id IS NOT NULL";
   } else {
@@ -247,6 +253,7 @@ export async function recordDecision(
       inferenceProvider,
       inferenceModel,
       costUsd,
+      decidedBy: input.decidedBy,
     };
     conflictTarget = "(candidate_id, decision_version) WHERE candidate_id IS NOT NULL";
   }

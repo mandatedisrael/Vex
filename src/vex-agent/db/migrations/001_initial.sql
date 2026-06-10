@@ -97,6 +97,11 @@ CREATE TABLE knowledge_entries (
   outcome_version     INTEGER NOT NULL DEFAULT 0,
   CONSTRAINT ke_embedding_dim_range CHECK (embedding_dim > 0 AND embedding_dim <= 8192),
   CONSTRAINT ke_embedding_dim_matches_vector CHECK (vector_dims(embedding) = embedding_dim),
+  -- S7 hardening: the status vocabulary above was documented but never
+  -- CHECK-enforced (legacy gap — sibling tables CHECK their status columns).
+  -- S7's reconcile writes 'invalidated' directly in a tx, so the vocabulary
+  -- becomes load-bearing. Values = knowledge/policy.ts KnowledgeStatus.
+  CONSTRAINT ke_status_valid CHECK (status IN ('active','superseded','invalidated','archived')),
   CONSTRAINT ke_maturity_state_valid CHECK (maturity_state IN ('probationary','established','reinforced','decayed')),
   CONSTRAINT ke_activation_strength_range CHECK (activation_strength >= 0 AND activation_strength <= 1),
   CONSTRAINT ke_influence_scope_valid CHECK (influence_scope IN ('advisory','retrieval_boost')),
@@ -711,6 +716,13 @@ CREATE INDEX idx_mc_status_recorded ON memory_candidates(status, recorded_at);  
 -- loop-prevention: at most one live (pending) candidate per content_hash. The
 -- partial predicate is the ON CONFLICT arbiter for insertCandidate's xmax upsert.
 CREATE UNIQUE INDEX uniq_mc_pending_hash ON memory_candidates(content_hash) WHERE status = 'pending';
+-- D-MAP (S7): ledger→memory wake mapping. A capture/settlement wake carries the
+-- FIX-1 anchor keys ({executionId, instrumentKey?, positionKey?}); the wake query
+-- matches PROMOTED candidates by JSONB containment (`evidence_refs @> '[{…}]'`),
+-- OR-ed per key — the planner combines the @> probes on this ONE GIN via BitmapOr.
+-- jsonb_path_ops: smaller + faster than the default opclass and supports exactly
+-- the @> operator the wake query uses.
+CREATE INDEX idx_mc_evidence_refs ON memory_candidates USING GIN (evidence_refs jsonb_path_ops);
 
 -- ══════════════════════════════════════════════════════════════════
 -- Memory v2 — manager work substrate (S1c). Batch consolidation queue.
@@ -734,6 +746,15 @@ CREATE TABLE memory_jobs (
   -- GROUP BY). Only true accumulators (llm_call_count, cost_usd) live on the row.
   reconcile_entry_id        INTEGER REFERENCES knowledge_entries(id) ON DELETE CASCADE,  -- job_kind='reconcile' (S7)
   reconcile_outcome_version INTEGER,
+  -- wake_pending (S7 D-REARM) — closes the LOST-WAKE WINDOW: a ledger wake that
+  -- lands WHILE this reconcile job is `running` cannot be folded into the
+  -- in-flight pass (that pass read the ledger BEFORE the wake's write), and after
+  -- `completed` nobody would know it arrived. enqueueReconcileJob's conflict path
+  -- sets the flag on a running row; markCompleted CONSUMES it (completed →
+  -- pending, attempt_count=0, flag false) so the job runs ONE more pass against
+  -- the post-wake ledger. recoverStaleRunning leaves it untouched (the signal
+  -- survives a worker crash). Only ever set on reconcile rows.
+  wake_pending              BOOLEAN NOT NULL DEFAULT FALSE,
   attempt_count             INTEGER NOT NULL DEFAULT 0,
   max_attempts              INTEGER NOT NULL DEFAULT 3,
   next_attempt_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),

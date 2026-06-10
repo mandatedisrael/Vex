@@ -167,6 +167,12 @@ export type MemoryLogMeta = {
   readonly productType?: string | number;
   /** Outcome reconciliation counter (S5 init 0; S7 bumps). */
   readonly outcomeVersion?: string | number;
+  /** Reconcile consequence applied (S7 — bounded enum: reinforce|quench|invalidate|retain|bookkeep|tier_raise). */
+  readonly reconcileAction?: string | number;
+  /** Active entries a ledger wake matched (S7 — number). */
+  readonly matchedEntries?: string | number;
+  /** Reconcile jobs freshly enqueued by a ledger wake (S7 — number). */
+  readonly enqueuedJobs?: string | number;
   /** Distinct-execution recurrence count behind a generalization (S4 — D-REC). */
   readonly recurrenceCount?: string | number;
   /** LLM calls made deciding a candidate / batch (S4 — judge cost telemetry). */
@@ -249,6 +255,9 @@ const META_KEY_CATEGORY: Record<keyof MemoryLogMeta, MetaCategory> = {
   pointInTimeChecked: "enum",
   productType: "enum",
   outcomeVersion: "num",
+  reconcileAction: "enum",
+  matchedEntries: "num",
+  enqueuedJobs: "num",
   recurrenceCount: "num",
   llmCalls: "num",
   costUsd: "num",

@@ -4,22 +4,29 @@
  * State transitions (compact_jobs precedent):
  *   pending → running               (claim via SELECT FOR UPDATE SKIP LOCKED)
  *   running → completed             (markCompleted, owner-checked)
+ *   running → pending               (markCompleted CONSUMING wake_pending, S7 D-REARM)
  *   running → failed                (markFailed, transient; retry scheduled)
  *   running → permanently_failed    (markFailed at attempt_count >= max_attempts)
  *   failed  → pending               (next_attempt_at <= now, attempt < max)
  *   running → pending               (recoverStaleRunning: stale heartbeat)
+ *   completed → pending             (enqueueReconcileJob RE-ARM on a new wake, S7 D-REARM)
  *   permanently_failed → pending    (resetReconcileJob: explicit reconcile retry)
  *
- * Concurrency disciplines (S1c spec §5):
+ * Concurrency disciplines (S1c spec §5 + S7 D-REARM):
  *   - claim: FOR UPDATE SKIP LOCKED inside a transaction; attempt+1 at CLAIM.
  *   - heartbeat / markCompleted / markFailed: owner-checked
  *     (status='running' AND locked_by=$workerId) — a reclaimed stale worker
  *     can never mutate the new owner's row.
  *   - recoverStaleRunning: ONE transaction resets each stale job to pending AND
  *     releases its reserved|processing items (MF3) — no separate caller step.
- *   - enqueueReconcileJob: PURE idempotent insert (never mutates an existing
- *     row of any status, R4-MF1); resetReconcileJob is the ONLY revive
- *     (permanently_failed → pending, FULL field reset, R5-MF2).
+ *     It MUST leave wake_pending untouched (S7 gate R1): the wake signal
+ *     survives a worker crash and is consumed on the recovered run's completion.
+ *   - enqueueReconcileJob (S7 D-REARM): idempotent per (entry, outcome_version)
+ *     with status-aware conflict handling — `completed` re-arms to a fresh
+ *     pending run, `running` raises wake_pending (lost-wake window), pending/
+ *     failed are no-ops (the queued run will read the post-wake ledger anyway),
+ *     and `permanently_failed` is untouched (resetReconcileJob is the ONLY
+ *     revive for a given-up row, R5-MF2).
  *
  * Observability: memLog (memory/observability/logger.ts), area `job`. Only
  * allowlisted, structurally-safe meta — bounded errorCode, never a raw error.
@@ -75,20 +82,29 @@ export async function enqueueConsolidateJob(client?: PoolClient): Promise<Memory
 }
 
 /**
- * Enqueue a reconcile job for (entryId, outcomeVersion). PURE idempotent insert
- * (R4-MF1): a second call for the same key returns the EXISTING row with
- * `inserted=false` and NEVER mutates it — regardless of its status — so a failed
- * reconcile keeps its retry/backoff cycle and a completed one is not re-run.
+ * Enqueue a reconcile job for (entryId, outcomeVersion) — idempotent per key
+ * with S7 D-REARM status-aware conflict handling. The unique key
+ * (`uniq_mj_reconcile`) spans ALL statuses, so a same-key wake must decide what
+ * an existing row means:
  *
- * Concurrency-safe AND pure: a no-op `DO UPDATE SET reconcile_entry_id =
- * memory_jobs.reconcile_entry_id` (sets the column to its own value — NO field
- * changes, so status/attempt/backoff are untouched) reliably RETURNS the row on
- * both the insert and the conflict path; `(xmax = 0)` distinguishes a fresh
- * insert from a conflict. This replaces the earlier `DO NOTHING` + CTE/UNION
- * fallback, which under a concurrent same-key insert could return zero rows
- * (the conflicting row was not yet visible under READ COMMITTED) — the same race
- * the memory-candidates upsert fixes. R5-MF1: the conflict target names the
- * partial index's columns + predicate.
+ *   - `completed` → RE-ARM (status pending, attempt_count 0, next_attempt_at
+ *     NOW(), wake_pending false, completed_at cleared): the prior run already
+ *     consumed an OLDER ledger state; a new wake at the same version means the
+ *     ledger moved again without a version bump (the prior pass was a no-op).
+ *   - `running` → SET wake_pending=true (lost-wake window): the in-flight pass
+ *     read the ledger BEFORE this wake's write; markCompleted consumes the flag
+ *     into one more pending pass so the signal is never lost.
+ *   - `pending` / `failed` → no-op: the queued/retrying run will read the
+ *     post-wake ledger when it executes.
+ *   - `permanently_failed` → untouched: resetReconcileJob is the ONLY revive
+ *     for a given-up row (R5-MF2).
+ *
+ * Concurrency-safe: the CASE-form `DO UPDATE` reliably RETURNS the row on both
+ * the insert and the conflict path; `(xmax = 0)` distinguishes a fresh insert
+ * from a conflict (memory-candidates xmax-upsert precedent). The CASE arms read
+ * the row's PRE-UPDATE values (`memory_jobs.*`), so each status maps to exactly
+ * one action. R5-MF1: the conflict target names the partial index's columns +
+ * predicate.
  */
 export async function enqueueReconcileJob(
   entryId: number,
@@ -101,7 +117,18 @@ export async function enqueueReconcileJob(
     `INSERT INTO memory_jobs (job_kind, reconcile_entry_id, reconcile_outcome_version)
      VALUES ('reconcile', $1, $2)
      ON CONFLICT (reconcile_entry_id, reconcile_outcome_version) WHERE job_kind = 'reconcile'
-     DO UPDATE SET reconcile_entry_id = memory_jobs.reconcile_entry_id
+     DO UPDATE SET
+       status          = CASE WHEN memory_jobs.status = 'completed' THEN 'pending'
+                              ELSE memory_jobs.status END,
+       attempt_count   = CASE WHEN memory_jobs.status = 'completed' THEN 0
+                              ELSE memory_jobs.attempt_count END,
+       next_attempt_at = CASE WHEN memory_jobs.status = 'completed' THEN NOW()
+                              ELSE memory_jobs.next_attempt_at END,
+       completed_at    = CASE WHEN memory_jobs.status = 'completed' THEN NULL
+                              ELSE memory_jobs.completed_at END,
+       wake_pending    = CASE WHEN memory_jobs.status = 'completed' THEN FALSE
+                              WHEN memory_jobs.status = 'running'   THEN TRUE
+                              ELSE memory_jobs.wake_pending END
      RETURNING ${JOB_COLUMNS}, (xmax = 0) AS inserted`,
     [entryId, outcomeVersion],
   );
@@ -115,6 +142,7 @@ export async function enqueueReconcileJob(
   memLog("job", "enqueued", {
     jobId: job.id,
     jobKind: job.jobKind,
+    status: job.status,
     insertResult: inserted ? "inserted" : "duplicate",
   });
   return { job, inserted };
@@ -141,6 +169,7 @@ export async function resetReconcileJob(
        SET status                 = 'pending',
            attempt_count          = 0,
            next_attempt_at        = NOW(),
+           wake_pending           = FALSE,
            locked_at              = NULL,
            locked_by              = NULL,
            heartbeat_at           = NULL,
@@ -248,6 +277,16 @@ export async function heartbeat(
  * Mark a job completed — owner-checked. Clears the lock and stamps
  * `completed_at`. Returns true iff the row was actually transitioned; a false
  * return means the claim was lost (reclaimed by recoverStaleRunning).
+ *
+ * S7 D-REARM flag consumption: when `wake_pending=true` (a ledger wake landed
+ * while this run was in flight — its reads predate the wake's write), the row
+ * goes back to `pending` with attempt_count=0 instead of `completed`, so ONE
+ * more pass runs against the post-wake ledger. Extended here rather than in a
+ * reconcile-only variant: the flag is only ever raised on reconcile rows
+ * (enqueueReconcileJob conflict path), so consolidate completions are
+ * byte-for-byte unchanged, and a single completion path means no call site can
+ * ever forget to consume the flag. The CASE arms read the PRE-UPDATE
+ * `wake_pending`; the flag itself is always cleared.
  */
 export async function markCompleted(
   jobId: number,
@@ -255,20 +294,25 @@ export async function markCompleted(
   client?: PoolClient,
 ): Promise<boolean> {
   const exec: Executor = client ?? getPool();
-  const rowCount = await executeWith(
+  const row = await queryOneWith<{ status: string }>(
     exec,
     `UPDATE memory_jobs
-       SET status       = 'completed',
-           locked_at    = NULL,
-           locked_by    = NULL,
-           heartbeat_at = NULL,
-           completed_at = NOW()
-     WHERE id = $1 AND status = 'running' AND locked_by = $2`,
+       SET status          = CASE WHEN wake_pending THEN 'pending' ELSE 'completed' END,
+           attempt_count   = CASE WHEN wake_pending THEN 0 ELSE attempt_count END,
+           next_attempt_at = CASE WHEN wake_pending THEN NOW() ELSE next_attempt_at END,
+           completed_at    = CASE WHEN wake_pending THEN NULL ELSE NOW() END,
+           wake_pending    = FALSE,
+           locked_at       = NULL,
+           locked_by       = NULL,
+           heartbeat_at    = NULL
+     WHERE id = $1 AND status = 'running' AND locked_by = $2
+     RETURNING status`,
     [jobId, workerId],
   );
-  const ok = rowCount === 1;
-  if (ok) memLog("job", "completed", { jobId });
-  return ok;
+  if (!row) return false;
+  if (row.status === "pending") memLog("job", "wake_rearmed", { jobId });
+  else memLog("job", "completed", { jobId });
+  return true;
 }
 
 /**
@@ -349,6 +393,11 @@ export async function markFailed(
  * reservation. Cross-table write to memory_job_items is intentional: the
  * reset-job + release-items invariant must be atomic, so it lives here rather
  * than in a separate caller step. Returns the counts for telemetry.
+ *
+ * S7 gate R1: NEITHER update touches `wake_pending` — a wake flagged onto a
+ * running job MUST survive the crash-recovery reset, so the recovered run's
+ * completion still consumes it into one more post-wake pass. Do not "clean it
+ * up" here.
  */
 export async function recoverStaleRunning(
   staleThresholdMs: number,

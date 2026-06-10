@@ -229,6 +229,85 @@ export async function findLatestCandidateByContentHash(
   return row ? mapRow(row) : null;
 }
 
+// ── Find by promoted knowledge id (S7 — the live outcome record) ─
+
+/**
+ * The PROMOTED candidate behind a knowledge entry — the entry's LIVE outcome
+ * record (S5 doctrine: the candidate row keeps carrying the ledger-resolved
+ * outcome after promotion; S7 reconcile re-derives + bumps it there). Returns
+ * null when no promoted candidate points at the entry (e.g. an imported /
+ * legacy lesson) — reconcile then no-ops. `ORDER BY updated_at DESC LIMIT 1`
+ * picks the newest should multiple promoted rows ever share the target.
+ */
+export async function findCandidateByPromotedKnowledgeId(
+  knowledgeId: number,
+  client?: PoolClient,
+): Promise<MemoryCandidate | null> {
+  if (!Number.isFinite(knowledgeId) || knowledgeId <= 0) return null;
+  const exec: Executor = client ?? getPool();
+  const row = await queryOneWith<MemoryCandidateRow>(
+    exec,
+    `SELECT ${CANDIDATE_COLUMNS}
+       FROM memory_candidates
+      WHERE status = 'promoted' AND promoted_knowledge_id = $1
+      ORDER BY updated_at DESC
+      LIMIT 1`,
+    [knowledgeId],
+  );
+  return row ? mapRow(row) : null;
+}
+
+// ── Wake mapping (S7 D-MAP — ledger anchors → active entries) ────
+
+/**
+ * One containment probe of the wake query: a single FIX-1 anchor key matched
+ * against `evidence_refs` elements by JSONB containment (`@>`). Exactly one of
+ * the fields is set per probe (the caller builds one probe per distinct key).
+ */
+export interface WakeAnchorProbe {
+  executionId?: number;
+  instrumentKey?: string;
+  positionKey?: string;
+}
+
+/** A wake target: an ACTIVE knowledge entry + its current outcome_version. */
+export interface WakeTarget {
+  entryId: number;
+  outcomeVersion: number;
+}
+
+/**
+ * D-MAP (S7): map ledger wake keys to the ACTIVE knowledge entries whose
+ * promoted candidates anchor them. ONE query: promoted candidates whose
+ * `evidence_refs` contains ANY probe (`@>` OR-chain — BitmapOr on
+ * `idx_mc_evidence_refs`), joined to their ACTIVE entries. The read-only JOIN
+ * to knowledge_entries is intentional (recoverStaleRunning cross-table
+ * precedent): the (entry, current outcome_version) pair is the reconcile job
+ * key and must come from one consistent read. DISTINCT — many candidates /
+ * probes may hit the same entry, but one wake enqueues one job per entry.
+ */
+export async function findPromotedWakeTargets(
+  probes: readonly WakeAnchorProbe[],
+  client?: PoolClient,
+): Promise<WakeTarget[]> {
+  if (probes.length === 0) return [];
+  const exec: Executor = client ?? getPool();
+  const clauses = probes.map((_, i) => `mc.evidence_refs @> $${i + 1}::jsonb`);
+  const params = probes.map((probe) => jsonb([probe]));
+  const rows = await queryWith<{ entry_id: number; outcome_version: number }>(
+    exec,
+    `SELECT DISTINCT ke.id AS entry_id, ke.outcome_version
+       FROM memory_candidates mc
+       JOIN knowledge_entries ke ON ke.id = mc.promoted_knowledge_id
+      WHERE mc.status = 'promoted'
+        AND mc.promoted_knowledge_id IS NOT NULL
+        AND ke.status = 'active'
+        AND (${clauses.join(" OR ")})`,
+    params,
+  );
+  return rows.map((r) => ({ entryId: r.entry_id, outcomeVersion: r.outcome_version }));
+}
+
 // ── Status transition (precondition-checked) ─────────────────────
 
 /**
@@ -374,6 +453,65 @@ export async function updateCandidateOutcome(
   }
 
   // Zero rows — disambiguate not_found vs precondition_failed (mirrors status setter).
+  const current = await queryOneWith<{ status: string }>(
+    exec,
+    "SELECT status FROM memory_candidates WHERE id = $1",
+    [id],
+  );
+  if (!current) return { ok: false, reason: "not_found" };
+  return {
+    ok: false,
+    reason: "precondition_failed",
+    currentStatus: current.status as CandidateStatus,
+  };
+}
+
+// ── Reconciled outcome write (S7 — the promoted candidate is the live record) ─
+
+/**
+ * Persist a RE-DERIVED outcome on a PROMOTED candidate (S7 §4.5). The S5 setter
+ * (`updateCandidateOutcome`) guards `status='pending'` — correct at
+ * consolidation, structurally wrong for reconcile, which by definition touches
+ * a candidate that already promoted. This setter guards
+ * `status='promoted' AND promoted_knowledge_id=$entry` instead: only the live
+ * outcome record of THAT entry can be rewritten, never a pending/terminal row
+ * and never a candidate re-pointed at another entry. Runs inside the reconcile
+ * tx (the entry row is already FOR UPDATE-locked); the caller passes a
+ * Zod-validated `MemoryOutcomeSummary` carrying `outcomeVersion: v+1` +
+ * `outcomeLastChangedAt`.
+ */
+export async function updateReconciledCandidateOutcome(
+  id: string,
+  knowledgeId: number,
+  outcome: MemoryOutcomeSummary,
+  client?: PoolClient,
+): Promise<UpdateCandidateOutcomeResult> {
+  if (!id) return { ok: false, reason: "not_found" };
+
+  const exec: Executor = client ?? getPool();
+  const updated = await queryOneWith<{ id: string }>(
+    exec,
+    `UPDATE memory_candidates
+       SET outcome = $3::jsonb,
+           updated_at = NOW()
+     WHERE id = $1 AND status = 'promoted' AND promoted_knowledge_id = $2
+     RETURNING id`,
+    [id, knowledgeId, jsonb(outcome)],
+  );
+
+  if (updated) {
+    memLog("candidate", "outcome_reconciled", {
+      candidateId: id,
+      promotedKnowledgeId: knowledgeId,
+      outcomeStatus: outcome.status,
+      lessonSignal: outcome.lessonSignal,
+      evidenceQuality: outcome.evidenceQuality,
+      outcomeVersion: outcome.outcomeVersion,
+    });
+    return { ok: true };
+  }
+
+  // Zero rows — disambiguate not_found vs precondition_failed (mirrors the S5 setter).
   const current = await queryOneWith<{ status: string }>(
     exec,
     "SELECT status FROM memory_candidates WHERE id = $1",

@@ -9,6 +9,8 @@
  */
 
 import { sanitizeJsonbValue } from "@vex-agent/db/params.js";
+import { memLog } from "@vex-agent/memory/observability/logger.js";
+import type { LedgerWakeKey } from "@vex-agent/memory/ledger-wake.js";
 
 /**
  * Extract external_refs from handler result data for correlation/lookup.
@@ -84,10 +86,36 @@ export async function populateCaptureItems(
     })),
   );
 
+  const wakeKeys: LedgerWakeKey[] = [];
   for (let i = 0; i < sanitizedItems.length; i++) {
     const itemRefs = extractExternalRefs({ _tradeCapture: sanitizedItems[i] });
     const mergedRefs = { ...executionExternalRefs, ...itemRefs };
     await populateActivity(executionId, captureItemIds[i] ?? null, toolId, namespace, sanitizedItems[i], mergedRefs);
+    wakeKeys.push({
+      executionId,
+      ...(mergedRefs.instrumentKey ? { instrumentKey: mergedRefs.instrumentKey } : {}),
+      ...(mergedRefs.positionKey ? { positionKey: mergedRefs.positionKey } : {}),
+    });
+  }
+
+  // ── S7 D-SEAM: ledger→memory wake (the ONLY call site) ────────────────────
+  // The projections above are committed, so a reconcile pass triggered by this
+  // wake reads the post-write ledger. This single seam covers agent trades AND
+  // settlement sync (recordSyntheticCapture → populateCaptureItems), while
+  // replayActivityFromCapture below structurally bypasses it (no wake storm on
+  // replay). F3 (owner fork): wallet_intents are deliberately OUT of the wake
+  // path — nothing here (or in the outcome resolver) reads wallet_intents; an
+  // intent-driven wake would be a dead coupling with nothing to recompute, and
+  // the real fill data lands in proj_* through sync anyway. Best-effort: a wake
+  // failure NEVER breaks the capture/sync pipeline — the ledger is the source
+  // of truth and memory catches up on the next wake for the same keys.
+  try {
+    const { enqueueLedgerWake } = await import("@vex-agent/memory/ledger-wake.js");
+    await enqueueLedgerWake(wakeKeys);
+  } catch (err: unknown) {
+    memLog.warn("reconcile", "wake_failed", {
+      errorCode: err instanceof Error ? "wake_error" : "wake_unknown",
+    });
   }
 }
 

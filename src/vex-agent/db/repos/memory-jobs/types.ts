@@ -33,6 +33,7 @@ export interface MemoryJobRow {
   status: string;
   reconcile_entry_id: number | null;
   reconcile_outcome_version: number | null;
+  wake_pending: boolean;
   attempt_count: number;
   max_attempts: number;
   next_attempt_at: string;
@@ -63,6 +64,13 @@ export interface MemoryJob {
   reconcileEntryId: number | null;
   /** knowledge_entries.outcome_version this reconcile job targets, or null. */
   reconcileOutcomeVersion: number | null;
+  /**
+   * S7 D-REARM — a ledger wake arrived WHILE this reconcile job was `running`
+   * (the in-flight pass read the ledger before the wake's write). Consumed by
+   * markCompleted: completed → pending + attempt 0 + flag false, so the job runs
+   * one more pass against the post-wake ledger. Always false on consolidate rows.
+   */
+  wakePending: boolean;
   attemptCount: number;
   maxAttempts: number;
   nextAttemptAt: string;
@@ -102,6 +110,7 @@ export function mapRow(r: MemoryJobRow): MemoryJob {
     status: r.status as MemoryJobStatus,
     reconcileEntryId: r.reconcile_entry_id,
     reconcileOutcomeVersion: r.reconcile_outcome_version,
+    wakePending: r.wake_pending,
     attemptCount: r.attempt_count,
     maxAttempts: r.max_attempts,
     nextAttemptAt: r.next_attempt_at,
@@ -122,7 +131,7 @@ export function mapRow(r: MemoryJobRow): MemoryJob {
 
 // ── Column list (single source of truth for reads) ──────────────
 export const JOB_COLUMNS = `
-  id, job_kind, status, reconcile_entry_id, reconcile_outcome_version,
+  id, job_kind, status, reconcile_entry_id, reconcile_outcome_version, wake_pending,
   attempt_count, max_attempts, next_attempt_at,
   locked_at, locked_by, heartbeat_at, last_error,
   inference_provider, inference_model, inference_completed_at,

@@ -20,7 +20,11 @@
  *     invariant (§7 / D-RERANK). It maps activation ∈ [0,1] → [MIN_FACTOR, 1.0].
  *
  * Unit of time is DAYS everywhere (matching the existing reranker; never mix with
- * hours). `outcome_aware` decay still behaves as plain time decay (S7).
+ * hours). `outcome_aware` decay IS plain time decay here BY DESIGN
+ * (D-OUTCOME-AWARE, S7): the outcome is an EVENT applied at reconcile time
+ * (reconcile-policy.ts consequence map — reinforce/quench/invalidate), not a
+ * continuous decay modulation; BETWEEN reconciles an outcome_aware entry simply
+ * time-decays.
  *
  * S6b adds the REGIME layer, still pure:
  *   - `effectiveRegime(...)` — the dwell rule (F3): the latest TWO snapshots must
@@ -204,7 +208,9 @@ function clampUnit(x: number): number {
  * `regimeHalfLifeDays(matchKind)` to modulate erosion speed. A non-positive /
  * non-finite half-life falls back to the default (defensive — production values
  * are guarded by the import-time factor asserts). `outcome_aware` behaves as
- * plain time decay until S7. `daysSinceReinforced < 0` (clock skew) is clamped
+ * plain time decay BETWEEN reconciles (D-OUTCOME-AWARE — the outcome is an
+ * event applied by S7's reconcile, not a decay modulation).
+ * `daysSinceReinforced < 0` (clock skew) is clamped
  * to 0 (no decay, never an increase). Activation is clamped to [0,1] on input.
  */
 export function decayedActivation(

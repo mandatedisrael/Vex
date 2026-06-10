@@ -31,14 +31,6 @@ export const JUDGE_TIMEOUT_MS = TRACK2_TIMEOUT_MS;
 /** Initial retry backoff (× attempt_count for an exponential schedule). */
 export const MEMORY_RETRY_BACKOFF_BASE_MS = TRACK2_RETRY_BACKOFF_BASE_MS;
 
-/**
- * Long backoff for a job kind the current stage cannot process (a `reconcile`
- * job — only enqueued from S7). Failing it back with a long backoff keeps it in
- * the retry cycle (never permanently lost) until the reconcile path exists,
- * without burning the attempt budget on a fast loop.
- */
-export const UNSUPPORTED_JOB_KIND_BACKOFF_MS = 60 * 60_000; // 1h
-
 // ── Poll / sweep cadence ────────────────────────────────────────────
 
 /** Worker poll interval — how often the executor claims the next due job. */

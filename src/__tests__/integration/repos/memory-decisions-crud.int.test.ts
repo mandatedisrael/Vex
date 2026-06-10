@@ -102,7 +102,10 @@ describe("memory_decisions repo (integration)", () => {
 
   it("reconcile dual idempotency on (entry, outcome_version)", async () => {
     const entryId = await seedKnowledgeEntry("recon");
-    const jobId = await seedReconcileJob(entryId, 2);
+    // S7: the decision is stamped with the outcome_version it PRODUCED (v+1),
+    // while the deciding job is keyed by the version it CONSUMED (v) — the
+    // coherence check requires job.reconcile_outcome_version = decision - 1.
+    const jobId = await seedReconcileJob(entryId, 1);
     const a = await recordDecision({
       decisionType: "reconcile",
       reconcileEntryId: entryId,

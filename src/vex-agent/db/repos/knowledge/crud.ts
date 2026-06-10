@@ -31,6 +31,7 @@ import {
 } from "../../client.js";
 import { jsonb } from "../../params.js";
 import type { UpdatableKnowledgeStatus, KnowledgeStatus } from "@vex-agent/knowledge/policy.js";
+import type { KnowledgeSource } from "@vex-agent/memory/long-memory-source-policy.js";
 import type { DecayPolicy, MaturityState } from "@vex-agent/memory/schema/long-memory-enums.js";
 import {
   type InsertEntryInput,
@@ -364,6 +365,135 @@ export async function findActiveByContentHash(
     [hash],
   );
   return row ? mapMaturityRow(row) : null;
+}
+
+// ── Reconcile reads/writes (S7 — all inside the reconcile tx) ────
+
+/**
+ * The entry facts the reconcile tx re-validates + transitions under lock:
+ * optimistic concurrency inputs (`status`, `outcomeVersion`) plus the FSM
+ * (`maturityState`, `activationStrength`) and provenance tier (`source`) the
+ * consequence map / tier-raise act on.
+ */
+export interface ReconcileEntryLock {
+  id: number;
+  status: KnowledgeStatus;
+  source: KnowledgeSource;
+  outcomeVersion: number;
+  maturityState: MaturityState;
+  activationStrength: number;
+}
+
+/**
+ * Lock ONE knowledge entry for reconcile (S7 §4.5) — `FOR UPDATE`, ANY status
+ * (the worker disambiguates inactive/stale itself; a status filter here would
+ * collapse "raced to non-active" and "gone" into one null). MUST be the FIRST
+ * lock the reconcile tx takes: the documented lock order is entry →
+ * promoted-candidate → job row (recordDecision's coherence check re-locks the
+ * job last), which shares no edge with consolidate's jobs → pending-candidate →
+ * entry order (disjoint candidate sets), so no deadlock cycle exists.
+ */
+export async function lockEntryForReconcile(
+  entryId: number,
+  tx: PoolClient,
+): Promise<ReconcileEntryLock | null> {
+  if (!Number.isFinite(entryId) || entryId <= 0) return null;
+  const row = await queryOneWith<{
+    id: number;
+    status: string;
+    source: string;
+    outcome_version: number;
+    maturity_state: string;
+    activation_strength: number;
+  }>(
+    tx,
+    `SELECT id, status, source, outcome_version, maturity_state, activation_strength
+       FROM knowledge_entries
+      WHERE id = $1
+      FOR UPDATE`,
+    [entryId],
+  );
+  if (!row) return null;
+  return {
+    id: row.id,
+    status: row.status as KnowledgeStatus,
+    source: row.source as KnowledgeSource,
+    outcomeVersion: row.outcome_version,
+    maturityState: row.maturity_state as MaturityState,
+    activationStrength: row.activation_strength,
+  };
+}
+
+/**
+ * Invalidate an entry on a reconcile flip verdict (S7 §4.5). DIRECT update —
+ * `updateStatus` deliberately does NOT set `valid_until`, but a reconcile
+ * invalidation is a BI-TEMPORAL fact ("the world stopped supporting this lesson
+ * NOW"), so `valid_until=NOW()` is stamped here. `status_reason` records the
+ * judge's bounded rationale (≤ RECONCILE_RATIONALE_MAX — schema-enforced
+ * upstream; never logged). Guarded on `status='active'`; recall already filters
+ * to active, so the row disappears from retrieval atomically with the tx.
+ */
+export async function invalidateEntryOnReconcile(
+  entryId: number,
+  reason: string | null,
+  tx: PoolClient,
+): Promise<boolean> {
+  const count = await executeWith(
+    tx,
+    `UPDATE knowledge_entries
+        SET status = 'invalidated',
+            status_reason = COALESCE($2, status_reason),
+            valid_until = NOW(),
+            updated_at = NOW()
+      WHERE id = $1 AND status = 'active'`,
+    [entryId, reason],
+  );
+  return count === 1;
+}
+
+/**
+ * Raise an entry's provenance tier on a reconcile judge verdict (S7 F2). The
+ * UPWARD-ONLY rule is enforced by the caller against the FOR UPDATE-locked
+ * `ReconcileEntryLock.source` (race-free inside the same tx); this write only
+ * re-guards `status='active'`. The clamp (`clampSourceTier`) ran upstream, so
+ * `source` can never exceed the evidence ceiling.
+ */
+export async function raiseEntrySourceTier(
+  entryId: number,
+  source: KnowledgeSource,
+  tx: PoolClient,
+): Promise<boolean> {
+  const count = await executeWith(
+    tx,
+    `UPDATE knowledge_entries
+        SET source = $2, updated_at = NOW()
+      WHERE id = $1 AND status = 'active'`,
+    [entryId, source],
+  );
+  return count === 1;
+}
+
+/**
+ * Bump `outcome_version` (S7 §4.5) — the optimistic-concurrency closing write
+ * of the reconcile tx. Guarded on the CURRENT version (D-ORDER: resolve + judge
+ * ran before the tx; the guard proves nothing reconciled this entry in
+ * between). Deliberately NO status guard: an `invalidate` consequence flips the
+ * row to non-active earlier in the SAME tx, and the bump must still land so the
+ * decision audit, candidate outcome, and entry version stay in lockstep.
+ */
+export async function bumpOutcomeVersion(
+  entryId: number,
+  fromVersion: number,
+  tx: PoolClient,
+): Promise<boolean> {
+  const count = await executeWith(
+    tx,
+    `UPDATE knowledge_entries
+        SET outcome_version = $2 + 1, updated_at = NOW()
+      WHERE id = $1 AND outcome_version = $2`,
+    [entryId, fromVersion],
+  );
+  return count === 1;
 }
 
 // ── Update status ────────────────────────────────────────────────

@@ -33,6 +33,7 @@ import { z } from "zod";
 
 import { evidenceRefsSchema } from "@vex-agent/memory/schema/memory-candidate.js";
 import {
+  memoryDecisionActorSchema,
   memoryDecisionRejectReasonSchema,
 } from "@vex-agent/memory/schema/memory-decision-enums.js";
 
@@ -44,11 +45,14 @@ export const DECISION_INFERENCE_NAME_MAX = 200;
  * traces to a job — `memory_decisions.job_id NOT NULL`). The knowledge-id
  * targets are the live outcome pointers (`promoted/supersedes/merge_target`),
  * optional on every branch. `decisionVersion` defaults to 0 (the initial
- * decision; the manager bumps it on each re-decision).
+ * decision; the manager bumps it on each re-decision). `decidedBy` defaults to
+ * `manager` (the DB column default); S7 reconcile passes `system` when the
+ * deterministic consequence map decided without the LLM judge.
  */
 const decisionBaseFields = {
   jobId: z.number().int().positive(),
   decisionVersion: z.number().int().min(0).default(0),
+  decidedBy: memoryDecisionActorSchema.default("manager"),
   promotedKnowledgeId: z.number().int().positive().optional(),
   supersedesKnowledgeId: z.number().int().positive().optional(),
   mergeTargetKnowledgeId: z.number().int().positive().optional(),

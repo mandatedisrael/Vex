@@ -22,8 +22,9 @@
  *   Finalize: anyTransientFailure || anyUnclosed → markFailed (retry revives the
  *   job's own failed/unclosed items); else markCompleted.
  *
- * A `reconcile` job (only enqueued from S7, not in S4) is failed back with a long
- * backoff (`reconcile_not_supported_pre_s7`) — never permanently lost.
+ * A `reconcile` job (S7) routes to `processReconcileJob` (reconcile.ts): one
+ * entry per job, NO job items, self-finalizing (heartbeat + markCompleted /
+ * markFailed inside, incl. the D-REARM wake_pending consumption on completion).
  *
  * Maintenance cron-tick (§10): every MAINTENANCE_SWEEP_INTERVAL_MS, enqueue a
  * consolidate job IFF pending candidates exist without an active job.
@@ -54,6 +55,11 @@ import { getLatestDecision } from "@vex-agent/db/repos/memory-decisions/index.js
 import { listCandidatesByStatus } from "@vex-agent/db/repos/memory-candidates/index.js";
 import { runDecaySweep } from "./decay-sweep.js";
 import {
+  processReconcileJob,
+  defaultReconcileDeps,
+  type ReconcileDeps,
+} from "./reconcile.js";
+import {
   consolidateCandidate,
   applyDecisionAtomically,
   defaultConsolidateDeps,
@@ -67,7 +73,6 @@ import {
   MAINTENANCE_SWEEP_INTERVAL_MS,
   MEMORY_RETRY_BACKOFF_BASE_MS,
   MEMORY_WORKER_POLL_INTERVAL_MS,
-  UNSUPPORTED_JOB_KIND_BACKOFF_MS,
   WORKER_HEARTBEAT_INTERVAL_MS,
   WORKER_STALE_THRESHOLD_MS,
 } from "./policy.js";
@@ -83,6 +88,8 @@ export interface StartMemoryManagerOptions {
   sweepIntervalMs?: number;
   /** Injectable consolidate deps (tests stub recall/deref/judge). */
   deps?: ConsolidateDeps;
+  /** Injectable reconcile deps (tests stub resolver/judge/repo IO) — S7. */
+  reconcileDeps?: ReconcileDeps;
 }
 
 export function startMemoryManagerExecutor(
@@ -92,6 +99,7 @@ export function startMemoryManagerExecutor(
   const sweepInterval = options.sweepIntervalMs ?? MAINTENANCE_SWEEP_INTERVAL_MS;
   const workerId = `memory-manager-${process.pid}-${randomUUID().slice(0, 8)}`;
   const deps = options.deps ?? defaultConsolidateDeps();
+  const reconcileDeps = options.reconcileDeps ?? defaultReconcileDeps();
 
   let stopped = false;
   let inFlight: Promise<void> | null = null;
@@ -129,9 +137,9 @@ export function startMemoryManagerExecutor(
       memLog("manager", "claimed", { jobId: job.id, jobKind: job.jobKind });
 
       if (job.jobKind === "reconcile") {
-        // S7 work — not supported pre-S7. Fail back with a long backoff (never
-        // permanently lost) so the reconcile path can pick it up later.
-        await markFailed(job.id, workerId, "reconcile_not_supported_pre_s7", UNSUPPORTED_JOB_KIND_BACKOFF_MS);
+        // S7: outcome reconciliation — one entry per job, self-finalizing
+        // (markCompleted / markFailed + heartbeat live inside; never throws).
+        await processReconcileJob(job, workerId, reconcileDeps);
         return;
       }
 

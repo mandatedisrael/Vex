@@ -215,8 +215,9 @@ export async function decayEntry(
 
   // ONLY regime_aware entries under a live effective regime get a non-neutral
   // match kind ('low' dwell-confidence resolves to neutral inside the policy).
-  // Everything else — `time` policy, `outcome_aware` (gated until S7), or no
-  // regime — is neutral, i.e. the unmodulated S6a half-life.
+  // Everything else — `time` policy, `outcome_aware` (the outcome is an EVENT
+  // applied at reconcile, S7 D-OUTCOME-AWARE — between reconciles it
+  // time-decays), or no regime — is neutral, i.e. the unmodulated S6a half-life.
   const matchKind: RegimeMatchKind =
     entry.decayPolicy === "regime_aware" && regime !== null
       ? regimeMatchKind(entry.regimeTags, regime)

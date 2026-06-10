@@ -428,6 +428,31 @@ describe("memory observability logger — structural guard", () => {
     });
   });
 
+  // ── S7 reconcile keys (§5 allowlist extension) ──────────────────
+
+  describe("filterMemoryLogMeta — S7 reconcile keys", () => {
+    it("keeps the reconcile enum / num keys with valid values", () => {
+      const out = filterMemoryLogMeta({
+        reconcileAction: "quench",
+        matchedEntries: 3,
+        enqueuedJobs: 1,
+      });
+      expect(out).toEqual({
+        reconcileAction: "quench",
+        matchedEntries: 3,
+        enqueuedJobs: 1,
+      });
+    });
+
+    it("drops free-text on reconcileAction (enum shape gate)", () => {
+      expect(filterMemoryLogMeta({ reconcileAction: "quench because the trade lost" })).toEqual({});
+    });
+
+    it("drops non-number matchedEntries / enqueuedJobs (num category)", () => {
+      expect(filterMemoryLogMeta({ matchedEntries: "three", enqueuedJobs: "one" })).toEqual({});
+    });
+  });
+
   // ── memLog: public API integrates the guard ────────────────────
 
   describe("memLog", () => {
