@@ -41,6 +41,7 @@ const PRICING_A = {
   prompt: "0.000001",
   completion: "0.000002",
   inputCacheRead: "0.0000005",
+  inputCacheWrite: "0.00000125",
   internalReasoning: "0.000003",
 };
 const PRICING_B = {
@@ -85,7 +86,16 @@ describe("OpenRouterProvider.loadConfig caching (F4)", () => {
     expect(first?.inputPricePerM).toBeCloseTo(1, 9);
     expect(first?.outputPricePerM).toBeCloseTo(2, 9);
     expect(first?.cachePricePerM).toBeCloseTo(0.5, 9);
+    expect(first?.cacheWritePricePerM).toBeCloseTo(1.25, 9);
     expect(first?.reasoningPricePerM).toBeCloseTo(3, 9);
+  });
+
+  it("(a2) cacheWritePricePerM is null when the catalog has no inputCacheWrite", async () => {
+    const { inputCacheWrite: _omit, ...withoutWrite } = PRICING_A;
+    listMock.mockResolvedValue(catalog(withoutWrite));
+    const provider = new OpenRouterProvider();
+    const config = await provider.loadConfig();
+    expect(config?.cacheWritePricePerM).toBeNull();
   });
 
   it("(b) dedups concurrent calls — one /models call, distinct copies", async () => {

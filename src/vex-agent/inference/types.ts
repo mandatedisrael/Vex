@@ -28,6 +28,13 @@ export interface InferenceConfig {
   priceCurrency: PriceCurrency;
   /** Price per 1M cached input tokens, when reported by the provider. */
   cachePricePerM: number | null;
+  /**
+   * Price per 1M cache-WRITE tokens (explicit-cache models only, e.g.
+   * Anthropic 1.25×/2× input price). `null` when the provider catalog does
+   * not report a write price — auto-prefix-cache providers (OpenAI,
+   * DeepSeek, Gemini) charge nothing extra for writes.
+   */
+  cacheWritePricePerM: number | null;
   /** Price per 1M reasoning tokens, when reported by the provider. */
   reasoningPricePerM: number | null;
 }
@@ -42,6 +49,12 @@ export interface InferenceUsage {
   totalTokens: number;
   /** Cached input tokens (OpenRouter) — reduces prompt cost */
   cachedTokens?: number;
+  /**
+   * Tokens written to the prompt cache this request. OpenRouter returns
+   * this ONLY for explicit-cache models with cache-write pricing
+   * (`promptTokensDetails.cacheWriteTokens`); absent ⇒ treat as 0.
+   */
+  cacheWriteTokens?: number;
   /** Reasoning tokens (OpenRouter extended thinking) — separate pricing */
   reasoningTokens?: number;
   /**
@@ -154,6 +167,25 @@ export interface RequestCost {
 
 export type ProviderMessageRole = "system" | "user" | "assistant" | "tool";
 
+/**
+ * Cache-segment marker set by the ENGINE (`buildProviderMessages` knows the
+ * segment boundaries — mid-tape system rows and the summary are not
+ * distinguishable by role alone). The inference layer is purely mechanical:
+ * it places provider cache breakpoints ONLY where a hint says so, never by
+ * positional heuristics.
+ *
+ * - `static_prefix`: the stable system prefix (breakpoint A candidate).
+ * - `summary`: post-compact rolling summary — never gets a breakpoint.
+ * - `history_tail`: LAST non-empty history message (breakpoint B candidate),
+ *   marked AFTER `repairOrphanedToolCalls` so it sits on the final tape.
+ * - `turn_state`: trailing per-call state — never gets a breakpoint.
+ */
+export type ProviderMessageCacheHint =
+  | "static_prefix"
+  | "summary"
+  | "history_tail"
+  | "turn_state";
+
 export interface ProviderMessage {
   role: ProviderMessageRole;
   content: string;
@@ -161,6 +193,8 @@ export interface ProviderMessage {
   toolCallId?: string;
   /** For assistant messages: tool calls made in this turn */
   toolCalls?: ProviderToolCallRef[];
+  /** Cache-segment marker — see {@link ProviderMessageCacheHint}. */
+  cacheHint?: ProviderMessageCacheHint;
 }
 
 export interface ProviderToolCallRef {

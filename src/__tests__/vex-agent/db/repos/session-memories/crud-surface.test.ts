@@ -25,6 +25,7 @@ import {
   insertMemories,
   getById,
   listActiveBySession,
+  listUnresolvedOutstandingItems,
   getSessionMemoryStats,
   markOutstandingResolved,
   updateEmbedding,
@@ -36,6 +37,7 @@ import type {
   PreparedMemoryRender,
   SessionMemoryStats,
   ResolveOutstandingResult,
+  UnresolvedOutstandingItem,
 } from "../../../../../vex-agent/db/repos/session-memories/crud.js";
 
 describe("session-memories crud façade — public surface", () => {
@@ -45,6 +47,7 @@ describe("session-memories crud façade — public surface", () => {
     expect(typeof insertMemories).toBe("function");
     expect(typeof getById).toBe("function");
     expect(typeof listActiveBySession).toBe("function");
+    expect(typeof listUnresolvedOutstandingItems).toBe("function");
     expect(typeof getSessionMemoryStats).toBe("function");
     expect(typeof markOutstandingResolved).toBe("function");
     expect(typeof updateEmbedding).toBe("function");
@@ -56,6 +59,7 @@ describe("session-memories crud façade — public surface", () => {
     expect(crudFacade.insertMemories).toBe(insertMemories);
     expect(crudFacade.getById).toBe(getById);
     expect(crudFacade.listActiveBySession).toBe(listActiveBySession);
+    expect(crudFacade.listUnresolvedOutstandingItems).toBe(listUnresolvedOutstandingItems);
     expect(crudFacade.getSessionMemoryStats).toBe(getSessionMemoryStats);
     expect(crudFacade.markOutstandingResolved).toBe(markOutstandingResolved);
     expect(crudFacade.updateEmbedding).toBe(updateEmbedding);
@@ -68,10 +72,12 @@ describe("session-memories crud façade — public surface", () => {
     const prepared: PreparedMemoryRender | null = null;
     const stats: SessionMemoryStats | null = null;
     const resolveResult: ResolveOutstandingResult | null = null;
+    const unresolvedItem: UnresolvedOutstandingItem | null = null;
     expect(insertResult).toBeNull();
     expect(prepared).toBeNull();
     expect(stats).toBeNull();
     expect(resolveResult).toBeNull();
+    expect(unresolvedItem).toBeNull();
   });
 
   it("exports EXACTLY the expected runtime keys — no more, no less", () => {
@@ -83,6 +89,7 @@ describe("session-memories crud façade — public surface", () => {
         "insertMemories",
         "getById",
         "listActiveBySession",
+        "listUnresolvedOutstandingItems",
         "getSessionMemoryStats",
         "markOutstandingResolved",
         "updateEmbedding",

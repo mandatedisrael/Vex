@@ -21,6 +21,7 @@ describe("OpenRouter cost calculation", () => {
     outputPricePerM: 15.0,     // $15/M output
     priceCurrency: "USD",
     cachePricePerM: 0.3,       // $0.30/M cached (90% cheaper)
+    cacheWritePricePerM: 3.75, // $3.75/M cache write (1.25× input)
     reasoningPricePerM: 15.0,  // same as output for this model
   };
 
@@ -38,12 +39,13 @@ describe("OpenRouter cost calculation", () => {
     expect(cost.currency).toBe("USD");
   });
 
-  it("accounts for cached token savings", () => {
+  it("accounts for cached token savings (missing cacheWriteTokens ⇒ surcharge 0)", () => {
     const usage: InferenceUsage = {
       promptTokens: 10_000,
       completionTokens: 1_000,
       totalTokens: 11_000,
       cachedTokens: 5_000,  // half of prompt was cached
+      // NOTE: no cacheWriteTokens — write surcharge must be exactly 0.
     };
     const cost = computeRequestCost(usage, baseConfig);
 
@@ -52,6 +54,58 @@ describe("OpenRouter cost calculation", () => {
     // Total: promptCost + completionCost - savings
     const expectedTotal = 0.03 + 0.015 - 0.0135;
     expect(cost.totalCost).toBeCloseTo(expectedTotal);
+  });
+
+  // ── D-SAVINGS — per-term null-gating + NET semantics ────────────
+
+  it("per-term gating: write price NULL + cachedTokens>0 ⇒ POSITIVE savings (auto-providers)", () => {
+    // Auto-prefix-cache providers (OpenAI/DeepSeek/Gemini) report cached
+    // tokens, have a read price, but NO write price and NO cacheWriteTokens.
+    // The missing write price must NEVER suppress the read savings.
+    const config: InferenceConfig = { ...baseConfig, cacheWritePricePerM: null };
+    const usage: InferenceUsage = {
+      promptTokens: 10_000,
+      completionTokens: 1_000,
+      totalTokens: 11_000,
+      cachedTokens: 5_000,
+    };
+    const cost = computeRequestCost(usage, config);
+    expect(cost.breakdown.cachedSavings).toBeCloseTo(0.0135);
+    expect(cost.breakdown.cachedSavings).toBeGreaterThan(0);
+  });
+
+  it("NET savings go NEGATIVE for a write-heavy request — and the new localTotal absorbs the surcharge (pinned)", () => {
+    // First request of an explicit-cache prefix: large write, tiny read.
+    const usage: InferenceUsage = {
+      promptTokens: 10_000,
+      completionTokens: 1_000,
+      totalTokens: 11_000,
+      cachedTokens: 1_000,      // read savings: 1K × $2.70/M = $0.0027
+      cacheWriteTokens: 8_000,  // surcharge: 8K × ($3.75 − $3.00)/M = $0.006
+    };
+    const cost = computeRequestCost(usage, baseConfig);
+
+    expect(cost.breakdown.cachedSavings).toBeCloseTo(0.0027 - 0.006); // −0.0033
+    expect(cost.breakdown.cachedSavings).toBeLessThan(0);
+
+    // INTENTIONAL coupling pin: localTotal = prompt + completion − NET savings.
+    // 0.03 + 0.015 − (−0.0033) = 0.0483 — the fallback estimate now carries
+    // the write surcharge (totalCost still prefers authoritative usage.cost).
+    expect(cost.totalCost).toBeCloseTo(0.03 + 0.015 + 0.0033);
+  });
+
+  it("cacheWriteTokens present but write price null ⇒ surcharge still 0", () => {
+    const config: InferenceConfig = { ...baseConfig, cacheWritePricePerM: null };
+    const usage: InferenceUsage = {
+      promptTokens: 10_000,
+      completionTokens: 1_000,
+      totalTokens: 11_000,
+      cachedTokens: 2_000,
+      cacheWriteTokens: 8_000,
+    };
+    const cost = computeRequestCost(usage, config);
+    // Pure read savings: 2K × $2.70/M.
+    expect(cost.breakdown.cachedSavings).toBeCloseTo(0.0054);
   });
 
   it("accounts for reasoning token surcharge", () => {
@@ -82,6 +136,7 @@ describe("OpenRouter cost calculation", () => {
     const configNoPricing: InferenceConfig = {
       ...baseConfig,
       cachePricePerM: null,
+      cacheWritePricePerM: null,
       reasoningPricePerM: null,
     };
     const usage: InferenceUsage = {
@@ -109,6 +164,7 @@ describe("computeRequestCost — authoritative SDK cost preference", () => {
     outputPricePerM: 15.0,
     priceCurrency: "USD",
     cachePricePerM: 0.3,
+    cacheWritePricePerM: 3.75,
     reasoningPricePerM: 15.0,
   };
   // Local estimate for this usage = promptCost 0.03 + completionCost 0.03 = 0.06.

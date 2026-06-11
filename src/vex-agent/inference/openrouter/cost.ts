@@ -22,7 +22,14 @@ export function computeRequestCost(
   const completionCost =
     (usage.completionTokens / 1_000_000) * config.outputPricePerM;
 
-  let cachedSavings = 0;
+  // NET cache savings with PER-TERM null-gating: read savings require only
+  // the cache-READ price; the write surcharge requires only the cache-WRITE
+  // price. Auto-prefix-cache providers (OpenAI/DeepSeek/Gemini) report
+  // cachedTokens but have no write price (and never report cacheWriteTokens)
+  // — they must still get their POSITIVE read savings; a missing write price
+  // NEVER suppresses them. Net can be NEGATIVE (write-heavy first request of
+  // an explicit-cache prefix) — recorded truthfully.
+  let readSavings = 0;
   if (
     config.cachePricePerM !== null &&
     usage.cachedTokens &&
@@ -30,8 +37,23 @@ export function computeRequestCost(
   ) {
     const standardCost = (usage.cachedTokens / 1_000_000) * config.inputPricePerM;
     const cacheCost = (usage.cachedTokens / 1_000_000) * config.cachePricePerM;
-    cachedSavings = standardCost - cacheCost;
+    readSavings = standardCost - cacheCost;
   }
+
+  let writeSurcharge = 0;
+  if (
+    config.cacheWritePricePerM !== null &&
+    usage.cacheWriteTokens &&
+    usage.cacheWriteTokens > 0
+  ) {
+    const standardCost =
+      (usage.cacheWriteTokens / 1_000_000) * config.inputPricePerM;
+    const writeCost =
+      (usage.cacheWriteTokens / 1_000_000) * config.cacheWritePricePerM;
+    writeSurcharge = writeCost - standardCost;
+  }
+
+  const cachedSavings = readSavings - writeSurcharge;
 
   let reasoningCost = 0;
   if (
@@ -46,6 +68,11 @@ export function computeRequestCost(
     reasoningCost = actualCost - standardCost;
   }
 
+  // INTENTIONAL coupling (pinned by tests): `cachedSavings` is now NET
+  // (read savings − write surcharge), so the fallback estimate absorbs the
+  // write surcharge here. Only the fallback changes — `totalCost` still
+  // prefers the authoritative `usage.cost`. Correct because OpenRouter's
+  // `prompt_tokens` already INCLUDES cached and cache-write tokens.
   const localTotal = promptCost + completionCost - cachedSavings + reasoningCost;
 
   // Prefer the provider's authoritative cost when it is a finite, non-negative

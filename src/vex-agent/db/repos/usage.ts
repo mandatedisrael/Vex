@@ -20,6 +20,14 @@ export interface UsageEntry {
   completionTokens: number;
   cost: number;
   cachedTokens?: number;
+  /**
+   * NET cache savings for this request (read savings − write surcharge) from
+   * `computeRequestCost`. Can be NEGATIVE (write-heavy explicit-cache
+   * request) — persisted truthfully. Default 0.
+   */
+  cachedSavings?: number;
+  /** Cache-write tokens (explicit-cache models only; absent ⇒ 0). */
+  cacheWriteTokens?: number;
   reasoningTokens?: number;
   provider?: string;
   model?: string;
@@ -29,11 +37,12 @@ export interface UsageEntry {
 export async function logUsage(sessionId: string, entry: UsageEntry): Promise<void> {
   const totalTokens = entry.promptTokens + entry.completionTokens;
   await execute(
-    `INSERT INTO usage_log (session_id, prompt_tokens, completion_tokens, total_tokens, cached_tokens, reasoning_tokens, cost, provider, model, currency)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    `INSERT INTO usage_log (session_id, prompt_tokens, completion_tokens, total_tokens, cached_tokens, reasoning_tokens, cost, provider, model, currency, cached_savings, cache_write_tokens)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [sessionId, entry.promptTokens, entry.completionTokens, totalTokens,
      entry.cachedTokens ?? 0, entry.reasoningTokens ?? 0, entry.cost,
-     entry.provider ?? null, entry.model ?? null, entry.currency ?? "USD"],
+     entry.provider ?? null, entry.model ?? null, entry.currency ?? "USD",
+     entry.cachedSavings ?? 0, entry.cacheWriteTokens ?? 0],
   );
 }
 

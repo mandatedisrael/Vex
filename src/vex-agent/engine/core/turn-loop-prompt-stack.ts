@@ -1,13 +1,18 @@
 /**
  * Per-turn prompt-stack assembly — context-pressure banner, resume
- * packet (post-compact bridge), memory-state banner, tool catalog,
- * memory routing. Extracted from `turn-loop.ts` for scaling.
+ * packet (post-compact bridge), `# Memory` section, tool catalog.
+ * Extracted from `turn-loop.ts` for scaling.
  *
  * Bridge counter behavior is preserved: the helper decrements the
  * counter on every turn the bridge is "still active" (counter > 0),
  * regardless of whether the resume packet fetch ultimately succeeded.
  * This matches the original loop semantics (`postCompactBridgeRemaining--`
  * was outside the try/catch).
+ *
+ * Memory: `memory.getTurnContext` is called ONCE here — the single
+ * pre-inference memory read. The same object feeds BOTH the rendered
+ * `memorySection` prompt layer AND the `hasSessionMemory` tool-visibility
+ * signal, so the section and the tool gate can never disagree.
  *
  * Tool visibility: this helper builds the SINGLE `ToolVisibilityContext` for
  * the turn (runner-supplied static axes + the per-turn band + `hasSessionMemory`
@@ -22,13 +27,12 @@ import type {
 } from "@vex-agent/inference/types.js";
 import { pressureFraction, type ContextUsageBand } from "./context-band.js";
 import * as sessionsRepo from "@vex-agent/db/repos/sessions.js";
-import { getSessionMemoryStats } from "@vex-agent/db/repos/session-memories/index.js";
 import { buildContextPressureBanner } from "../prompts/context-pressure.js";
 import { buildResumePacket } from "../prompts/resume-packet.js";
 import { buildToolCatalogPrompt } from "../prompts/tool-catalog.js";
 import { buildActivePlanBlock, PLAN_OFF_NOTICE } from "../prompts/plan.js";
-import { buildMemoryStateBanner } from "../prompts/memory-state.js";
-import { MEMORY_BANNER_RECENT_THEMES_LIMIT } from "@vex-agent/memory/session-memory-policy.js";
+import { buildMemorySection } from "../prompts/memory-section.js";
+import { getTurnContext } from "@vex-agent/memory/turn-context.js";
 import {
   getOpenAITools,
   type ToolVisibilityContext,
@@ -50,7 +54,6 @@ export async function buildTurnPromptStack(args: {
   readonly contextLimit: number;
   readonly postCompactBridgeRemaining: number;
   readonly basePromptOptions: PromptStackOptions;
-  readonly memoryRoutingPrompt: string;
   /**
    * Static visibility axes the runner knows up-front (permission, role,
    * sessionKind, missionRunActive). Combined with the per-turn band +
@@ -88,24 +91,16 @@ export async function buildTurnPromptStack(args: {
     nextPostCompactBridgeRemaining = args.postCompactBridgeRemaining - 1;
   }
 
-  // Per-session narrative-memory stats — fetched ONCE per turn here (the single
-  // pre-inference memory read) and used for BOTH the memory-state banner AND the
-  // tool-visibility gate (`hasSessionMemory`). Failure → treat as no memory
-  // (banner stays empty, memory tools stay hidden); never crash the turn.
-  let hasSessionMemory = false;
-  try {
-    const memStats = await getSessionMemoryStats(
-      args.context.sessionId,
-      MEMORY_BANNER_RECENT_THEMES_LIMIT,
-    );
-    hasSessionMemory = memStats.activeCount > 0;
-    promptOptions.memoryStateBanner = buildMemoryStateBanner(memStats);
-  } catch (err) {
-    logger.warn("turn.memory_state.fetch_failed", {
-      sessionId: args.context.sessionId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  // Memory façade — the SINGLE pre-inference memory read (knowledge hot
+  // context + session-memory stats, each branch fail-soft to null inside the
+  // façade; never crashes the turn). One object feeds BOTH the `# Memory`
+  // section AND the `hasSessionMemory` tool-visibility gate. A FAILED stats
+  // fetch (null branch) keeps memory tools hidden — same fail-closed
+  // behavior as before.
+  const memoryCtx = await getTurnContext({ sessionId: args.context.sessionId });
+  const hasSessionMemory =
+    memoryCtx.sessionStats !== null && memoryCtx.sessionStats.activeCount > 0;
+  promptOptions.memorySection = buildMemorySection(memoryCtx);
 
   // Plan-mode prompt layers (session-scoped). When plan-mode is ON and a plan
   // exists, inject the advisory "# Active Plan" layer (turn-start snapshot from
@@ -159,7 +154,6 @@ export async function buildTurnPromptStack(args: {
   // unconditional, so the two cannot drift (no stale defaultTools path).
   const tools = toToolDefinitions(getOpenAITools(visibilityCtx));
   promptOptions.toolCatalogPrompt = buildToolCatalogPrompt(visibilityCtx);
-  promptOptions.memoryRoutingPrompt = args.memoryRoutingPrompt;
 
   return {
     promptOptions,

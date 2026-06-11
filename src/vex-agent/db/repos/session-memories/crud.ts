@@ -26,7 +26,12 @@ export { prepareMemoryRender, type PreparedMemoryRender } from "./render.js";
 
 export { insertPreparedMemory, insertMemories, type InsertResult } from "./create.js";
 
-export { getById, listActiveBySession } from "./read.js";
+export {
+  getById,
+  listActiveBySession,
+  listUnresolvedOutstandingItems,
+  type UnresolvedOutstandingItem,
+} from "./read.js";
 
 export { getSessionMemoryStats, type SessionMemoryStats } from "./stats.js";
 

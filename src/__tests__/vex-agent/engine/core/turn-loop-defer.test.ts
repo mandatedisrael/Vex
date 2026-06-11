@@ -202,7 +202,7 @@ function makeProvider(responses: Array<{
         usage: { promptTokens: 1000, completionTokens: 200, cachedTokens: 0, reasoningTokens: 0 },
       });
     }),
-    calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD" }),
+    calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD", breakdown: { promptCost: 0, completionCost: 0, cachedSavings: 0, reasoningCost: 0 } }),
   };
 }
 

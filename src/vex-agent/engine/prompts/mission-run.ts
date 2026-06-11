@@ -70,9 +70,23 @@ export function buildMissionRunPrompt(
       lines.push(runContext.missionPromptContext);
       lines.push("");
     }
-    lines.push(`Iteration: ${runContext.iterationCount}`);
-    lines.push("");
+    // NOTE: the `Iteration: N` line deliberately does NOT live here anymore
+    // (D-SPLIT-MISSION). The contract core above is part of the STATIC cache
+    // prefix; the per-slice iteration counter renders as a small turn-state
+    // layer via `buildMissionTurnState` so it cannot bust the prefix cache
+    // between slices.
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Mission turn-state layer — the per-slice iteration line split out of the
+ * core mission-run prompt (D-SPLIT-MISSION). Pinned to the FROZEN
+ * `missionRunContext.iterationCount` snapshot taken at slice start
+ * (start/resume/recover) — NEVER a live DB read, which would change the
+ * per-slice semantics.
+ */
+export function buildMissionTurnState(iterationCount: number): string {
+  return `Iteration: ${iterationCount}`;
 }

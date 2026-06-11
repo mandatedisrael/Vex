@@ -4,6 +4,16 @@
  * Builds prompt stack, consumes provider.chatCompletionStream() (buffered
  * chatCompletion fallback) and accumulates the response, logs usage +
  * updates tokenCount. The assistant message save is deferred to turn-loop.
+ *
+ * Provider-message layout (D-LAYOUT) — four cache segments, marked with
+ * `cacheHint` so the inference layer can place cache breakpoints without
+ * positional heuristics:
+ *
+ *   [0]  system  static prefix (joined staticLayers)   "static_prefix"
+ *   [1]  system  compaction summary (when present)     "summary"
+ *   […]  history (DB tape; LAST non-empty message      "history_tail"
+ *        marked AFTER repairOrphanedToolCalls)
+ *   [N]  system  turn state (joined turnLayers)        "turn_state"
  */
 
 import { randomUUID } from "node:crypto";
@@ -12,21 +22,11 @@ import type { InferenceProvider, InferenceConfig, ProviderMessage, ParsedToolCal
 import { runStreamingInference } from "@vex-agent/inference/stream-consumer.js";
 import type { Message } from "@vex-agent/db/repos/messages.js";
 import { buildPromptStack, type PromptStackOptions } from "../prompts/index.js";
-import { formatActiveKnowledgeBlock } from "../prompts/knowledge.js";
-import { buildKnowledgeStateBanner } from "../prompts/knowledge-state.js";
 import { sanitizeForSystemPrompt } from "../prompts/sanitize.js";
 import { repairOrphanedToolCalls } from "./transcript-integrity.js";
 import { appendMessage, streamDeltaBus, toStreamDeltaEvent } from "@vex-agent/engine/events/index.js";
 import * as usageRepo from "@vex-agent/db/repos/usage.js";
 import * as sessionsRepo from "@vex-agent/db/repos/sessions.js";
-import * as knowledgeRepo from "@vex-agent/db/repos/knowledge.js";
-import {
-  ACTIVE_KNOWLEDGE_ENTRY_LIMIT,
-  KNOWN_KINDS_LIMIT,
-} from "@vex-agent/knowledge/policy.js";
-import {
-  KNOWLEDGE_BANNER_TOP_KINDS_LIMIT,
-} from "@vex-agent/memory/long-memory-source-policy.js";
 import logger from "@utils/logger.js";
 
 export interface SingleTurnResult {
@@ -49,11 +49,15 @@ export interface SingleTurnResult {
 /**
  * Execute a single inference turn.
  *
- * 1. Build prompt stack
- * 2. Convert messages to provider format
+ * 1. Build prompt stack (static + turn-state segments)
+ * 2. Convert messages to provider format (4 cache segments, hints set here)
  * 3. Consume provider.chatCompletionStream() → accumulate InferenceResponse
  *    (chatCompletion fallback), emitting ephemeral stream deltas on streamDeltaBus
  * 4. Log usage + update tokenCount
+ *
+ * `promptOptions` arrives FULLY BUILT from the caller — `buildTurnPromptStack`
+ * owns the single pre-inference memory read (`memory.getTurnContext`) and the
+ * rendered `memorySection`; this function performs no memory/knowledge IO.
  *
  * NOTE: Does NOT save the assistant message. The caller (turn-loop)
  * handles deferred save after determining the canonical batch prefix
@@ -70,45 +74,18 @@ export async function executeTurn(
   promptOptions: PromptStackOptions = {},
   signal?: AbortSignal,
 ): Promise<SingleTurnResult> {
-  // Pre-fetch Active Knowledge inputs (hot context entries + known kinds taxonomy
-  // + active count for the state banner). All four queries are indexed and cheap;
-  // failure here is non-fatal — we just render an empty Active Knowledge block
-  // and an empty knowledge-state banner instead of crashing the turn.
-  let activeKnowledgeBlock = "";
-  let knowledgeStateBanner = "";
-  try {
-    const [activeEntries, knownKinds, activeCount] = await Promise.all([
-      knowledgeRepo.listActiveForHotContext({ limit: ACTIVE_KNOWLEDGE_ENTRY_LIMIT }),
-      knowledgeRepo.listKnownKinds({ limit: KNOWN_KINDS_LIMIT }),
-      knowledgeRepo.countActiveHotContextEntries(),
-    ]);
-    activeKnowledgeBlock = formatActiveKnowledgeBlock(activeEntries, knownKinds);
-    knowledgeStateBanner = buildKnowledgeStateBanner({
-      activeCount,
-      topKinds: knownKinds.slice(0, KNOWLEDGE_BANNER_TOP_KINDS_LIMIT),
-    });
-  } catch (err) {
-    logger.warn("turn.active_knowledge.fetch_failed", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-
-  // Build prompt — banners passed through promptOptions; the caller (turn-loop)
-  // supplies `contextPressureBanner`, `resumePacket`, and the `memoryStateBanner`
-  // (produced once per turn in buildTurnPromptStack alongside the
-  // `hasSessionMemory` tool-visibility signal — a single pre-inference memory read).
-  const promptLayers = buildPromptStack(context, {
-    ...promptOptions,
-    activeKnowledgeBlock,
-    knowledgeStateBanner,
-  });
-  const systemPrompt = promptLayers.join("\n\n---\n\n");
+  // Build prompt — split into the stable static prefix and the volatile
+  // turn-state segment (D-LAYOUT). Each segment is joined separately.
+  const promptStack = buildPromptStack(context, promptOptions);
+  const staticPrompt = promptStack.staticLayers.join("\n\n---\n\n");
+  const turnStatePrompt = promptStack.turnLayers.join("\n\n---\n\n");
 
   // Convert to provider format
   const providerMessages = buildProviderMessages(
-    systemPrompt,
+    staticPrompt,
     summary,
     existingMessages,
+    turnStatePrompt,
   );
 
   // In-flight repair only; DB tape remains unchanged.
@@ -119,6 +96,12 @@ export async function executeTurn(
       inserted: repair.insertedPlaceholders,
     });
   }
+
+  // Mark the history tail AFTER repair so breakpoint B sits on the FINAL
+  // tape — repair may append placeholder tool rows behind an assistant with
+  // unanswered tool calls, and B must not land before them. `hasSummary`
+  // mirrors buildProviderMessages' truthiness check (empty string = none).
+  markHistoryTail(repair.messages, summary !== null && summary.length > 0);
 
   // Inference — consume the streaming path and accumulate a
   // `chatCompletion`-equivalent response, emitting one ephemeral stream delta
@@ -168,6 +151,10 @@ export async function executeTurn(
       provider: config.provider,
       model: config.model,
       currency: cost.currency,
+      // NET cache savings (read − write surcharge; negative possible) +
+      // cache-write tokens — persisted at log time (D-SAVINGS).
+      cachedSavings: cost.breakdown.cachedSavings,
+      cacheWriteTokens: response.usage.cacheWriteTokens ?? 0,
     });
     await sessionsRepo.updateTokenCount(context.sessionId, promptTokens);
   }
@@ -184,14 +171,15 @@ export async function executeTurn(
 // ── Helpers ─────────────────────────────────────────────────────
 
 function buildProviderMessages(
-  systemPrompt: string,
+  staticPrompt: string,
   summary: string | null,
   messages: Message[],
+  turnStatePrompt: string,
 ): ProviderMessage[] {
   const result: ProviderMessage[] = [];
 
-  // System prompt
-  result.push({ role: "system", content: systemPrompt });
+  // Static system prefix — breakpoint A candidate.
+  result.push({ role: "system", content: staticPrompt, cacheHint: "static_prefix" });
 
   // Compaction summary (if checkpoint happened). The summary is the agent's
   // own `compact_now.conversation_summary` argument — LLM-emitted prose that
@@ -202,6 +190,7 @@ function buildProviderMessages(
     result.push({
       role: "system",
       content: `[Previous conversation summary]\n${sanitizeForSystemPrompt(summary)}`,
+      cacheHint: "summary",
     });
   }
 
@@ -227,7 +216,31 @@ function buildProviderMessages(
     result.push(providerMsg);
   }
 
+  // Trailing turn-state system message — NEVER cache-marked for a breakpoint.
+  result.push({ role: "system", content: turnStatePrompt, cacheHint: "turn_state" });
+
   return result;
+}
+
+/**
+ * Mark the LAST history message with non-empty content as `history_tail`
+ * (breakpoint B carrier). Empty-content rows are skipped backwards; an empty
+ * history leaves no marker (no B). Role-agnostic — production tapes
+ * legitimately end with system rows (continue-cue / operator-cue) or with
+ * repair-inserted placeholder tool rows, which carry non-empty content.
+ *
+ * Operates on the POST-repair tape: history spans the indices between the
+ * leading static/summary system messages and the trailing turn-state message.
+ */
+function markHistoryTail(messages: ProviderMessage[], hasSummary: boolean): void {
+  const historyStart = hasSummary ? 2 : 1;
+  // Last index before the trailing turn-state message.
+  for (let i = messages.length - 2; i >= historyStart; i--) {
+    if (messages[i].content.length > 0) {
+      messages[i].cacheHint = "history_tail";
+      return;
+    }
+  }
 }
 
 /**

@@ -205,6 +205,7 @@ export class OpenRouterProvider implements InferenceProvider {
     let inputPricePerM = 0;
     let outputPricePerM = 0;
     let cachePricePerM: number | null = null;
+    let cacheWritePricePerM: number | null = null;
     let reasoningPricePerM: number | null = null;
 
     // `/models` transport/server/SDK failure → metadata_unavailable (the
@@ -239,6 +240,7 @@ export class OpenRouterProvider implements InferenceProvider {
       inputPricePerM = parsePricePerM(found.pricing.prompt) ?? 0;
       outputPricePerM = parsePricePerM(found.pricing.completion) ?? 0;
       cachePricePerM = parsePricePerM(found.pricing.inputCacheRead);
+      cacheWritePricePerM = parsePricePerM(found.pricing.inputCacheWrite);
       reasoningPricePerM = parsePricePerM(found.pricing.internalReasoning);
     }
 
@@ -263,6 +265,7 @@ export class OpenRouterProvider implements InferenceProvider {
         outputPricePerM,
         priceCurrency: "USD",
         cachePricePerM,
+        cacheWritePricePerM,
         reasoningPricePerM,
       },
     };

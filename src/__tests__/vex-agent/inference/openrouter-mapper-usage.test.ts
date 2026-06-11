@@ -25,6 +25,28 @@ describe("extractUsage", () => {
     });
   });
 
+  it("maps promptTokensDetails.cacheWriteTokens (explicit-cache models)", () => {
+    const usage = extractUsage({
+      promptTokens: 100,
+      completionTokens: 40,
+      totalTokens: 140,
+      promptTokensDetails: { cachedTokens: 30, cacheWriteTokens: 55 },
+    });
+    expect(usage.cachedTokens).toBe(30);
+    expect(usage.cacheWriteTokens).toBe(55);
+  });
+
+  it("leaves cacheWriteTokens undefined when absent (auto-providers never return it)", () => {
+    const usage = extractUsage({
+      promptTokens: 100,
+      completionTokens: 40,
+      totalTokens: 140,
+      promptTokensDetails: { cachedTokens: 30 },
+    });
+    expect(usage.cachedTokens).toBe(30);
+    expect(usage.cacheWriteTokens).toBeUndefined();
+  });
+
   it("leaves cost (and detail fields) undefined when the provider omits them", () => {
     const usage = extractUsage({
       promptTokens: 10,
@@ -33,6 +55,7 @@ describe("extractUsage", () => {
     });
     expect(usage.cost).toBeUndefined();
     expect(usage.cachedTokens).toBeUndefined();
+    expect(usage.cacheWriteTokens).toBeUndefined();
     expect(usage.reasoningTokens).toBeUndefined();
   });
 

@@ -35,7 +35,6 @@ import {
   appendPendingOperatorInstructions,
   maxOperatorInstructionId,
 } from "./operator-instructions.js";
-import { buildMemoryRoutingRule } from "../prompts/memory-routing.js";
 import * as missionRunsRepo from "@vex-agent/db/repos/mission-runs.js";
 
 // Per-iteration helpers (pure async; thread state explicitly through args/returns):
@@ -52,8 +51,6 @@ import {
   armPostCompactBridge,
   createBandObserverWithLog,
 } from "./turn-loop-state-init.js";
-
-const MEMORY_ROUTING_PROMPT = buildMemoryRoutingRule();
 
 /**
  * Run the turn loop.
@@ -228,7 +225,6 @@ export async function runTurnLoop(
       contextLimit: loopConfig.contextLimit,
       postCompactBridgeRemaining,
       basePromptOptions: promptOptions,
-      memoryRoutingPrompt: MEMORY_ROUTING_PROMPT,
       baseVisibility: loopConfig.baseVisibility,
     });
     postCompactBridgeRemaining = stack.nextPostCompactBridgeRemaining;

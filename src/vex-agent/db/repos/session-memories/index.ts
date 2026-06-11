@@ -31,6 +31,7 @@ export {
   prepareMemoryRender,
   getById,
   listActiveBySession,
+  listUnresolvedOutstandingItems,
   getSessionMemoryStats,
   markOutstandingResolved,
   updateEmbedding,
@@ -38,6 +39,7 @@ export {
   type PreparedMemoryRender,
   type SessionMemoryStats,
   type ResolveOutstandingResult,
+  type UnresolvedOutstandingItem,
 } from "./crud.js";
 
 export { recallTopK } from "./recall.js";

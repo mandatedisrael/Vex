@@ -27,6 +27,7 @@ describe("types - structural integrity", () => {
       outputPricePerM: 15.0,
       priceCurrency: "USD",
       cachePricePerM: 1.5,
+      cacheWritePricePerM: 3.75,
       reasoningPricePerM: 15.0,
     };
     expect(config.provider).toBe("openrouter");
@@ -44,6 +45,7 @@ describe("types - structural integrity", () => {
       outputPricePerM: 15.0,
       priceCurrency: "USD",
       cachePricePerM: null,
+      cacheWritePricePerM: null,
       reasoningPricePerM: null,
     };
     expect(config.temperature).toBe(0.7);
@@ -55,9 +57,11 @@ describe("types - structural integrity", () => {
       completionTokens: 500,
       totalTokens: 1500,
       cachedTokens: 200,
+      cacheWriteTokens: 40,
       reasoningTokens: 100,
     };
     expect(usage.cachedTokens).toBe(200);
+    expect(usage.cacheWriteTokens).toBe(40);
   });
 
   it("InferenceResponse represents text-only response", () => {

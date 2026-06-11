@@ -3,8 +3,10 @@
  *
  * Emits the agent identity (persona name), the single active aspect for the
  * current mode (no noise from unreachable modes), an optional user persona
- * block, the memory/self-learning contract, current context, and any content
- * injected into `loadedDocuments` (e.g. by `knowledge_get`).
+ * block, the memory/self-learning contract, current context, and response
+ * formatting. `loadedDocuments` content renders as its OWN static layer at
+ * the END of the cache prefix (built in prompts/index.ts) so a new load
+ * busts only the layers behind it, not the whole base.
  */
 
 import type { EngineContext } from "../types.js";
@@ -68,18 +70,6 @@ export function buildBasePrompt(context: EngineContext): string {
   lines.push("- Use plain `https://` links; do not embed images or raw HTML.");
   lines.push("Lead with the answer, then detail. Keep it concise.");
   lines.push("");
-
-  // Content injected into the prompt by tools this turn (e.g. knowledge_get
-  // under a "knowledge:{id}" key). Neutral header — no longer documents-only.
-  if (context.loadedDocuments.size > 0) {
-    lines.push("# Loaded Content");
-    lines.push("");
-    for (const [key, content] of context.loadedDocuments) {
-      lines.push(`## ${key}`);
-      lines.push(content);
-      lines.push("");
-    }
-  }
 
   return lines.join("\n");
 }

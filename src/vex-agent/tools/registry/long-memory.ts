@@ -29,6 +29,7 @@
  */
 
 import type { ToolDef } from "../types.js";
+import { formatKindExamples } from "@vex-agent/memory/kind-catalog.js";
 
 export const LONG_MEMORY_TOOLS: readonly ToolDef[] = [
   {
@@ -56,7 +57,7 @@ export const LONG_MEMORY_TOOLS: readonly ToolDef[] = [
         kind: {
           type: "string",
           description:
-            "Free-form snake_case kind, English (e.g. trade_lesson, risk_rule, user_preference, protocol_fact). Reuse an existing kind before inventing a new one.",
+            `Free-form snake_case kind, English (e.g. ${formatKindExamples()}). Reuse an existing kind before inventing a new one.`,
         },
         title: {
           type: "string",
@@ -142,7 +143,7 @@ export const LONG_MEMORY_TOOLS: readonly ToolDef[] = [
       // QUERY GUIDANCE
       "Write SEMANTIC INTENT in English, not keywords (embedding retrieval is significantly stronger on English; translate the user's intent first). ✓ 'user trading risk preferences and position sizing rules' ✗ 'risk'. Returns only active, non-expired memory.",
       // RESPONSE
-      "response_format: 'concise' (default) → source, id, kind, title, similarity, score (+ notConsolidated on fresh signals); 'detailed' adds summary, content, tags, validUntil, maturity, source tier, evidence. If results were truncated to the inline cap, the response says so and asks you to refine — there is no overflow fetch.",
+      "response_format: 'concise' (default) → source, id, kind, title, similarity, score (+ notConsolidated on fresh signals); 'detailed' adds summary, content, tags, validUntil, maturity, source tier, evidence. Results found through the knowledge graph (1-hop from a direct hit) carry via:'via_graph(entity)' and no inline content — use long_memory_get on their id when the lead matters. If results were truncated to the inline cap, the response says so and asks you to refine — there is no overflow fetch.",
     ].join(" "),
     parameters: {
       type: "object",
@@ -158,7 +159,8 @@ export const LONG_MEMORY_TOOLS: readonly ToolDef[] = [
         },
         kind: {
           type: "string",
-          description: "Optional exact kind filter (free-form snake_case, e.g. risk_rule, trade_lesson). Omit to search across all kinds.",
+          // Intentional change: 2 → 4 examples, catalog order (D-KINDS).
+          description: `Optional exact kind filter (free-form snake_case, e.g. ${formatKindExamples()}). Omit to search across all kinds.`,
         },
         response_format: {
           type: "string",
@@ -171,7 +173,8 @@ export const LONG_MEMORY_TOOLS: readonly ToolDef[] = [
         },
         expand_graph: {
           type: "boolean",
-          description: "Reserved for knowledge-graph expansion (default false). Currently a no-op — returns no extra results yet.",
+          description:
+            "Knowledge-graph expansion (default true): 1-hop graph neighbors of the top direct hits fill the REMAINING inline slots, marked via_graph(entity) and always scored below the direct result they came from. Set false to disable.",
         },
       },
       required: ["query"],

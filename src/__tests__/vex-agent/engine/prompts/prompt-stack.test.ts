@@ -8,6 +8,7 @@ import {
   buildPermissionPrompt,
   buildToolUsagePrompt,
 } from "../../../../vex-agent/engine/prompts/index.js";
+import type { PromptStackOptions } from "../../../../vex-agent/engine/prompts/index.js";
 import { buildRuntimeClockSnapshot } from "../../../../vex-agent/engine/runtime-clock.js";
 import { PROTOCOL_ADVERTISED_NAMESPACE_ALLOWLIST, PROTOCOL_TOOLS } from "../../../../vex-agent/tools/protocols/catalog.js";
 
@@ -27,6 +28,15 @@ function makeContext(overrides: Partial<EngineContext> = {}): EngineContext {
   };
 }
 
+/** Convenience: full prompt text (static + turn) for content assertions. */
+function joinedStack(
+  context: EngineContext = makeContext(),
+  options: PromptStackOptions = {},
+): string {
+  const stack = buildPromptStack(context, options);
+  return [...stack.staticLayers, ...stack.turnLayers].join("\n");
+}
+
 describe("prompt-stack", () => {
   beforeEach(() => {
     resetProtocolsPromptCache();
@@ -41,8 +51,7 @@ describe("prompt-stack", () => {
     for (const permission of permissions) {
       for (const kind of kinds) {
         it(`includes base + tool-usage + protocols in ${kind}/${permission}`, () => {
-          const stack = buildPromptStack(makeContext({ sessionPermission: permission, sessionKind: kind }));
-          const joined = stack.join("\n");
+          const joined = joinedStack(makeContext({ sessionPermission: permission, sessionKind: kind }));
 
           // Base prompt markers
           expect(joined).toContain("# Identity");
@@ -64,6 +73,122 @@ describe("prompt-stack", () => {
         });
       }
     }
+  });
+
+  // ── D-LAYOUT: static/turn split + layer order ────────────────
+
+  describe("static vs turn segmentation (D-LAYOUT)", () => {
+    const FULL_OPTIONS: PromptStackOptions = {
+      contextPressureBanner: "[Context pressure: elevated — 72% used]",
+      resumePacket: "[Resume packet — generation 3, just compacted]",
+      memorySection: "# Memory\n\n[Session memories: 2 chunk(s) across 1 compact(s). Tool: memory_recall(semantic_intent, k≤5).]\n\n# Memory Routing\n\n- routing line",
+      activePlanBlock: "# Active Plan\n\n1. do the thing",
+      toolCatalogPrompt: "# Available Tool Map\n\n- wallet_balances",
+      personaSetupHint: "# Personalize me (optional)\n\noffer text",
+      planOffNotice: "[Plan mode was switched off]",
+    };
+
+    it("static layers contain NO volatile markers", () => {
+      const { staticLayers } = buildPromptStack(
+        makeContext({ sessionKind: "mission", missionId: "m-1", missionRunId: "run-1" }),
+        {
+          ...FULL_OPTIONS,
+          missionRunContext: { missionPromptContext: "# Mission: X", iterationCount: 5 },
+        },
+      );
+      const staticJoined = staticLayers.join("\n");
+      expect(staticJoined).not.toContain("# Runtime Clock");
+      expect(staticJoined).not.toContain("# Memory Routing");
+      expect(staticJoined).not.toContain("# Available Tool Map");
+      expect(staticJoined).not.toContain("Iteration:");
+      expect(staticJoined).not.toContain("Context pressure");
+      expect(staticJoined).not.toContain("Resume packet");
+      // Active-plan LAYER body absent (tool-usage legitimately NAMES the
+      // `# Active Plan` heading in its reuse rule, so match the body).
+      expect(staticJoined).not.toContain("1. do the thing");
+      expect(staticJoined).not.toContain("# Personalize me");
+      // Loaded Content absent when no documents are loaded.
+      expect(staticJoined).not.toContain("# Loaded Content");
+    });
+
+    it("turn layers render in pinned order: clock → pressure → resume → # Memory(routing at end) → activePlan → Tool Map → mission turn-state → one-shots", () => {
+      const { turnLayers } = buildPromptStack(
+        makeContext({ sessionKind: "mission", missionId: "m-1", missionRunId: "run-1" }),
+        {
+          ...FULL_OPTIONS,
+          missionRunContext: { missionPromptContext: "# Mission: X", iterationCount: 5 },
+        },
+      );
+      const turnJoined = turnLayers.join("\n");
+      const order = [
+        "# Runtime Clock",
+        "[Context pressure: elevated",
+        "[Resume packet",
+        "# Memory",
+        "# Memory Routing",
+        "# Active Plan",
+        "# Available Tool Map",
+        "Iteration: 5",
+        "# Personalize me (optional)",
+        "[Plan mode was switched off]",
+      ];
+      let lastIdx = -1;
+      for (const marker of order) {
+        const idx = turnJoined.indexOf(marker);
+        expect(idx, `marker missing or out of order: ${marker}`).toBeGreaterThan(lastIdx);
+        lastIdx = idx;
+      }
+    });
+
+    it("the Iteration pin lives in the TURN layers (D-SPLIT-MISSION), frozen from missionRunContext", () => {
+      const stack = buildPromptStack(
+        makeContext({ sessionKind: "mission", missionId: "m-1", missionRunId: "run-1" }),
+        {
+          missionRunContext: {
+            missionPromptContext: "# Mission: SOL DCA\n**Goal:** Accumulate 10 SOL",
+            iterationCount: 5,
+          },
+        },
+      );
+      expect(stack.turnLayers.join("\n")).toContain("Iteration: 5");
+      expect(stack.staticLayers.join("\n")).not.toContain("Iteration:");
+      // Contract core stays static.
+      expect(stack.staticLayers.join("\n")).toContain("SOL DCA");
+    });
+
+    it("base prompt no longer carries Loaded Content; it renders as the LAST static layer", () => {
+      const { staticLayers } = buildPromptStack(makeContext({
+        loadedDocuments: new Map([["knowledge:42", "# Strategy\nBuy low sell high"]]),
+      }));
+      // Not inside base (first layer)…
+      expect(staticLayers[0]).not.toContain("# Loaded Content");
+      // …but as the final static layer (END of the cache prefix).
+      const last = staticLayers[staticLayers.length - 1];
+      expect(last).toContain("# Loaded Content");
+      expect(last).toContain("knowledge:42");
+      expect(last).toContain("Buy low sell high");
+    });
+
+    it("grep-gate: separated static layers carry no stale positional 'above' references to turn-state blocks", () => {
+      const { staticLayers } = buildPromptStack(makeContext());
+      const staticJoined = staticLayers.join("\n");
+      // The two reworded references (tool-usage.ts) now point at the turn state.
+      expect(staticJoined).not.toContain("Tool Map above");
+      expect(staticJoined).not.toContain("Memory Routing block above");
+      expect(staticJoined).toContain("Tool Map provided in the turn state");
+      expect(staticJoined).toContain("Memory Routing block in the turn state");
+    });
+
+    it("turn layers always start with the runtime clock; memorySection lands only when provided", () => {
+      const without = buildPromptStack(makeContext());
+      expect(without.turnLayers[0]).toContain("# Runtime Clock");
+      expect(without.turnLayers.join("\n")).not.toContain("# Memory Routing");
+
+      const withSection = buildPromptStack(makeContext(), {
+        memorySection: "# Memory\n\n# Memory Routing\n\n- line",
+      });
+      expect(withSection.turnLayers.join("\n")).toContain("# Memory Routing");
+    });
   });
 
   // ── Protocols generated from catalog ────────────────────────
@@ -142,26 +267,23 @@ describe("prompt-stack", () => {
       }));
 
       // Both should have the same protocols prompt
-      const setupProtocols = setupStack.find(s => s.includes("# Available Protocol Namespaces"));
-      const fullProtocols = fullStack.find(s => s.includes("# Available Protocol Namespaces"));
+      const setupProtocols = setupStack.staticLayers.find(s => s.includes("# Available Protocol Namespaces"));
+      const fullProtocols = fullStack.staticLayers.find(s => s.includes("# Available Protocol Namespaces"));
       expect(setupProtocols).toBe(fullProtocols);
 
       // Both should have the same tool-usage prompt
-      const setupToolUsage = setupStack.find(s => s.includes("# Tool Usage"));
-      const fullToolUsage = fullStack.find(s => s.includes("# Tool Usage"));
+      const setupToolUsage = setupStack.staticLayers.find(s => s.includes("# Tool Usage"));
+      const fullToolUsage = fullStack.staticLayers.find(s => s.includes("# Tool Usage"));
       expect(setupToolUsage).toBe(fullToolUsage);
     });
 
     it("differs only in policy and context", () => {
-      const setupStack = buildPromptStack(makeContext({
+      const setupJoined = joinedStack(makeContext({
         sessionKind: "mission", sessionPermission: "restricted",
       }));
-      const fullStack = buildPromptStack(makeContext({
+      const fullJoined = joinedStack(makeContext({
         sessionKind: "mission", sessionPermission: "full", missionRunId: "run-1",
       }));
-
-      const setupJoined = setupStack.join("\n");
-      const fullJoined = fullStack.join("\n");
 
       // Setup has setup-specific content
       expect(setupJoined).toContain("# Mission Setup");
@@ -203,37 +325,33 @@ describe("prompt-stack", () => {
 
   describe("contextual layers", () => {
     it("agent mode includes agent prompt", () => {
-      const stack = buildPromptStack(makeContext({ sessionKind: "agent" }));
-      const joined = stack.join("\n");
+      const joined = joinedStack(makeContext({ sessionKind: "agent" }));
       expect(joined).toContain("# Agent Mode");
     });
 
     it("mission setup includes setup prompt", () => {
-      const stack = buildPromptStack(makeContext({
+      const joined = joinedStack(makeContext({
         sessionKind: "mission", missionId: "m-1",
       }));
-      const joined = stack.join("\n");
       expect(joined).toContain("# Mission Setup");
       expect(joined).not.toContain("# Mission Execution");
     });
 
     it("mission run includes run prompt", () => {
-      const stack = buildPromptStack(makeContext({
+      const joined = joinedStack(makeContext({
         sessionKind: "mission", missionId: "m-1", missionRunId: "run-1",
       }));
-      const joined = stack.join("\n");
       expect(joined).toContain("# Mission Execution");
       expect(joined).not.toContain("# Mission Setup");
     });
 
     it("subagent includes subagent prompt", () => {
-      const stack = buildPromptStack(makeContext({ isSubagent: true }));
-      const joined = stack.join("\n");
+      const joined = joinedStack(makeContext({ isSubagent: true }));
       expect(joined).toContain("# Subagent Role");
     });
 
     it("mission setup with context shows draft state", () => {
-      const stack = buildPromptStack(
+      const joined = joinedStack(
         makeContext({ sessionKind: "mission" }),
         {
           missionSetupContext: {
@@ -242,7 +360,6 @@ describe("prompt-stack", () => {
           },
         },
       );
-      const joined = stack.join("\n");
       expect(joined).toContain("SOL DCA");
       expect(joined).toContain("Still Missing");
       expect(joined).toContain("capitalSource");
@@ -255,7 +372,7 @@ describe("prompt-stack", () => {
     });
 
     it("mission run with context shows mission contract", () => {
-      const stack = buildPromptStack(
+      const joined = joinedStack(
         makeContext({ sessionKind: "mission", missionRunId: "run-1" }),
         {
           missionRunContext: {
@@ -264,13 +381,12 @@ describe("prompt-stack", () => {
           },
         },
       );
-      const joined = stack.join("\n");
       expect(joined).toContain("SOL DCA");
       expect(joined).toContain("Iteration: 5");
     });
 
     it("subagent with context shows task and restrictions", () => {
-      const stack = buildPromptStack(
+      const joined = joinedStack(
         makeContext({ isSubagent: true }),
         {
           subagentContext: {
@@ -280,14 +396,13 @@ describe("prompt-stack", () => {
           },
         },
       );
-      const joined = stack.join("\n");
       expect(joined).toContain("Research SOL/USDC liquidity");
       expect(joined).toContain("NO TRADES");
       expect(joined).toContain("restricted");
     });
 
     it("subagent briefing includes parent summary snapshot when provided", () => {
-      const stack = buildPromptStack(
+      const joined = joinedStack(
         makeContext({ isSubagent: true }),
         {
           subagentContext: {
@@ -299,14 +414,13 @@ describe("prompt-stack", () => {
           },
         },
       );
-      const joined = stack.join("\n");
       expect(joined).toContain("## Parent context (snapshot at spawn)");
       expect(joined).toContain("SOL long at 145 USD");
       expect(joined).toContain("portfolio +4.2%");
     });
 
     it("subagent briefing omits parent context block when snapshot is empty or absent", () => {
-      const withoutSnapshot = buildPromptStack(
+      const withoutSnapshot = joinedStack(
         makeContext({ isSubagent: true }),
         {
           subagentContext: {
@@ -315,10 +429,10 @@ describe("prompt-stack", () => {
             childPermission: "restricted",
           },
         },
-      ).join("\n");
+      );
       expect(withoutSnapshot).not.toContain("## Parent context");
 
-      const withEmptySnapshot = buildPromptStack(
+      const withEmptySnapshot = joinedStack(
         makeContext({ isSubagent: true }),
         {
           subagentContext: {
@@ -328,7 +442,7 @@ describe("prompt-stack", () => {
             parentSummarySnapshot: "   \n   ",
           },
         },
-      ).join("\n");
+      );
       expect(withEmptySnapshot).not.toContain("## Parent context");
     });
   });
@@ -337,12 +451,11 @@ describe("prompt-stack", () => {
 
   describe("base prompt", () => {
     it("includes session context", () => {
-      const stack = buildPromptStack(makeContext({ sessionId: "test-session" }));
-      const joined = stack.join("\n");
+      const joined = joinedStack(makeContext({ sessionId: "test-session" }));
       expect(joined).toContain("test-session");
     });
 
-    it("includes runtime clock context for session and mission timing", () => {
+    it("includes runtime clock context for session and mission timing (turn layers)", () => {
       const runtimeClock = buildRuntimeClockSnapshot({
         now: new Date("2026-05-03T08:39:18.126Z"),
         timezone: "UTC",
@@ -361,21 +474,22 @@ describe("prompt-stack", () => {
         }),
         { runtimeClock },
       );
-      const joined = stack.join("\n");
+      const turnJoined = stack.turnLayers.join("\n");
 
-      expect(joined).toContain("# Runtime Clock");
-      expect(joined).toContain("Current time UTC: 2026-05-03T08:39:18.126Z");
-      expect(joined).toContain("Session started: 2026-05-03T08:01:02.000Z (elapsed: 38m 16s)");
-      expect(joined).toContain("Mission run started: 2026-05-03T08:10:00.000Z (elapsed: 29m 18s)");
-      expect(joined).toContain("Mission deadline: 2026-05-03T14:10:00.000Z (in 5h 30m)");
-      expect(joined).toContain("loop_defer(after_ms, reason)");
+      expect(turnJoined).toContain("# Runtime Clock");
+      expect(turnJoined).toContain("Current time UTC: 2026-05-03T08:39:18.126Z");
+      expect(turnJoined).toContain("Session started: 2026-05-03T08:01:02.000Z (elapsed: 38m 16s)");
+      expect(turnJoined).toContain("Mission run started: 2026-05-03T08:10:00.000Z (elapsed: 29m 18s)");
+      expect(turnJoined).toContain("Mission deadline: 2026-05-03T14:10:00.000Z (in 5h 30m)");
+      expect(turnJoined).toContain("loop_defer(after_ms, reason)");
+      // The volatile clock must never leak into the static prefix.
+      expect(stack.staticLayers.join("\n")).not.toContain("# Runtime Clock");
     });
 
     it("includes loaded content blocks (e.g. knowledge_get injections)", () => {
-      const stack = buildPromptStack(makeContext({
+      const joined = joinedStack(makeContext({
         loadedDocuments: new Map([["knowledge:42", "# Strategy\nBuy low sell high"]]),
       }));
-      const joined = stack.join("\n");
       expect(joined).toContain("# Loaded Content");
       expect(joined).toContain("knowledge:42");
       expect(joined).toContain("Buy low sell high");
@@ -391,8 +505,7 @@ describe("prompt-stack", () => {
      * can't reach from this session.
      */
     it("AGENT aspect: only teacher/collaborator lines, no MISSION narrative", () => {
-      const stack = buildPromptStack(makeContext({ sessionKind: "agent" }));
-      const joined = stack.join("\n");
+      const joined = joinedStack(makeContext({ sessionKind: "agent" }));
       expect(joined).toContain("AGENT");
       expect(joined).toContain("teacher, collaborator");
       expect(joined).not.toContain("MISSION SETUP");
@@ -400,8 +513,7 @@ describe("prompt-stack", () => {
     });
 
     it("MISSION SETUP aspect: planner lines, no AGENT / MISSION RUN narrative", () => {
-      const stack = buildPromptStack(makeContext({ sessionKind: "mission" }));
-      const joined = stack.join("\n");
+      const joined = joinedStack(makeContext({ sessionKind: "mission" }));
       expect(joined).toContain("MISSION SETUP");
       expect(joined).toContain("planner");
       // AGENT aspect narrative absent — we only check the aspect-section label.
@@ -410,10 +522,9 @@ describe("prompt-stack", () => {
     });
 
     it("MISSION RUN aspect: executor lines, no SETUP / AGENT narrative", () => {
-      const stack = buildPromptStack(makeContext({
+      const joined = joinedStack(makeContext({
         sessionKind: "mission", missionId: "m-1", missionRunId: "run-1",
       }));
-      const joined = stack.join("\n");
       expect(joined).toContain("MISSION RUN");
       expect(joined).toContain("executor");
       expect(joined).toContain("mission_stop");
@@ -424,29 +535,24 @@ describe("prompt-stack", () => {
     });
 
     it("SUBAGENT aspect overrides sessionKind and narrates delegated task", () => {
-      const stack = buildPromptStack(makeContext({ isSubagent: true, sessionKind: "agent" }));
-      const joined = stack.join("\n");
+      const joined = joinedStack(makeContext({ isSubagent: true, sessionKind: "agent" }));
       expect(joined).toContain("SUBAGENT");
       expect(joined).toContain("delegated");
       expect(joined).not.toContain("teacher, collaborator");
     });
   });
 
-  // ── Stack composition ───────────────────────────────────────
-
   // ── DeFi safety rules ──────────────────────────────────────
 
   describe("DeFi safety rules in prompt", () => {
     it("contains gas reserve rule", () => {
-      const stack = buildPromptStack(makeContext());
-      const joined = stack.join("\n");
+      const joined = joinedStack(makeContext());
       expect(joined).toContain("Gas reserve on native tokens");
       expect(joined).toContain("balance minus gas reserve");
     });
 
     it("contains fresh balance rule", () => {
-      const stack = buildPromptStack(makeContext());
-      const joined = stack.join("\n");
+      const joined = joinedStack(makeContext());
       expect(joined).toContain("Fresh balance before each mutation");
     });
 
@@ -454,14 +560,12 @@ describe("prompt-stack", () => {
       // PR3-clarity moved the rule into the Protocol Execution section
       // and rephrased it as "Quote / preview before mutation" — the
       // contract (read-only dryRun pass first) is preserved.
-      const stack = buildPromptStack(makeContext());
-      const joined = stack.join("\n");
+      const joined = joinedStack(makeContext());
       expect(joined).toMatch(/Quote\s*\/\s*preview before mutation/i);
     });
 
     it("contains address-first rule", () => {
-      const stack = buildPromptStack(makeContext());
-      const joined = stack.join("\n");
+      const joined = joinedStack(makeContext());
       expect(joined).toContain("Address-first for EVM mutations");
       expect(joined).toContain("khalani.tokens.search");
     });
@@ -524,16 +628,19 @@ describe("prompt-stack", () => {
   // ── Stack structure ───────────────────────────────────────
 
   describe("stack structure", () => {
-    it("returns array of separate sections", () => {
+    it("returns the {staticLayers, turnLayers} shape with separate sections", () => {
       const stack = buildPromptStack(makeContext());
-      expect(Array.isArray(stack)).toBe(true);
-      // Minimum: base + tool-usage + protocols + mode + chat = 5
-      expect(stack.length).toBeGreaterThanOrEqual(5);
+      expect(Array.isArray(stack.staticLayers)).toBe(true);
+      expect(Array.isArray(stack.turnLayers)).toBe(true);
+      // Static minimum: base + tool-usage + protocols + permission + wallet + mode = 6
+      expect(stack.staticLayers.length).toBeGreaterThanOrEqual(5);
+      // Turn minimum: runtime clock.
+      expect(stack.turnLayers.length).toBeGreaterThanOrEqual(1);
     });
 
     it("each section is a non-empty string", () => {
       const stack = buildPromptStack(makeContext());
-      for (const section of stack) {
+      for (const section of [...stack.staticLayers, ...stack.turnLayers]) {
         expect(typeof section).toBe("string");
         expect(section.length).toBeGreaterThan(0);
       }
@@ -543,7 +650,7 @@ describe("prompt-stack", () => {
   // ── Persona (user-configurable name + tone) ─────────────────
   describe("persona", () => {
     it("renders the configured persona name in identity + aspect (verbatim casing)", () => {
-      const joined = buildPromptStack(makeContext({ personaName: "Aria" })).join("\n");
+      const joined = joinedStack(makeContext({ personaName: "Aria" }));
       expect(joined).toContain("You are Aria —");
       expect(joined).toContain("Aria as teacher");
       // Default brand name must NOT leak when a custom name is set.
@@ -551,9 +658,9 @@ describe("prompt-stack", () => {
     });
 
     it("renders the persona block as a subordinate section when configured", () => {
-      const joined = buildPromptStack(
+      const joined = joinedStack(
         makeContext({ personaBlock: "Tone: concise, dry, no emoji." }),
-      ).join("\n");
+      );
       expect(joined).toContain("# Persona (user style preferences)");
       expect(joined).toContain("Tone: concise, dry, no emoji.");
       // Framed as subordinate to the authoritative rules.
@@ -561,17 +668,18 @@ describe("prompt-stack", () => {
     });
 
     it("omits the persona section when no block is configured", () => {
-      const joined = buildPromptStack(makeContext()).join("\n");
+      const joined = joinedStack(makeContext());
       expect(joined).not.toContain("# Persona (user style preferences)");
     });
 
-    it("renders the one-time persona-setup hint only when supplied via options", () => {
+    it("renders the one-time persona-setup hint only when supplied via options (turn layers)", () => {
       const withHint = buildPromptStack(makeContext(), {
         personaSetupHint: "# Personalize me (optional)\n\noffer text",
-      }).join("\n");
-      expect(withHint).toContain("# Personalize me (optional)");
+      });
+      expect(withHint.turnLayers.join("\n")).toContain("# Personalize me (optional)");
+      expect(withHint.staticLayers.join("\n")).not.toContain("# Personalize me (optional)");
 
-      const without = buildPromptStack(makeContext()).join("\n");
+      const without = joinedStack(makeContext());
       expect(without).not.toContain("# Personalize me (optional)");
     });
   });

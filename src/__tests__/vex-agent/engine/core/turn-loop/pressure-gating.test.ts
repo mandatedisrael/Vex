@@ -256,7 +256,7 @@ describe("turn-loop", () => {
           },
         });
       }),
-      calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD" }),
+      calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD", breakdown: { promptCost: 0, completionCost: 0, cachedSavings: 0, reasoningCost: 0 } }),
     };
   }
 
@@ -267,7 +267,7 @@ describe("turn-loop", () => {
     return {
       chatCompletionStream: stream,
       chatCompletion: vi.fn(),
-      calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD" }),
+      calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD", breakdown: { promptCost: 0, completionCost: 0, cachedSavings: 0, reasoningCost: 0 } }),
     };
   }
 
@@ -455,7 +455,7 @@ describe("turn-loop", () => {
             reasoningTokens: 0,
           },
         }),
-        calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD" }),
+        calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD", breakdown: { promptCost: 0, completionCost: 0, cachedSavings: 0, reasoningCost: 0 } }),
       };
 
       const result = await runTurnLoop(

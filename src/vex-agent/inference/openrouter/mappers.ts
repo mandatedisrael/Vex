@@ -6,6 +6,8 @@ import type { ChatResult } from "@openrouter/sdk/models/chatresult.js";
 import type { ChatRequest } from "@openrouter/sdk/models/chatrequest.js";
 import type { ChatToolCall } from "@openrouter/sdk/models/chattoolcall.js";
 import type { ChatStreamToolCall } from "@openrouter/sdk/models/chatstreamtoolcall.js";
+import type { ChatContentText } from "@openrouter/sdk/models/chatcontenttext.js";
+import type { ChatContentItems } from "@openrouter/sdk/models/chatcontentitems.js";
 
 import type {
   InferenceResponse,
@@ -22,16 +24,71 @@ import logger from "@utils/logger.js";
 const TOOL_RESULT_PLACEHOLDER_CONTENT =
   "[Engine: tool execution did not complete — placeholder]";
 
-export function mapMessages(messages: ProviderMessage[]): ChatRequest["messages"] {
-  const mapped = messages.map(m => {
+/**
+ * Cache-breakpoint application options. Purely mechanical — the mapper
+ * places `cacheControl` ONLY on messages the engine hinted (`static_prefix`
+ * → breakpoint A, `history_tail` → breakpoint B). `summary` / `turn_state`
+ * hints NEVER receive a breakpoint. With `applyBreakpoints: false` (the
+ * default / auto-prefix-cache providers / models without cache pricing) the
+ * request shape is byte-identical to the pre-cache wiring: plain string
+ * contents, zero markup.
+ */
+export interface CacheBreakpointOptions {
+  /** Place breakpoints A/B per engine cacheHints. */
+  readonly applyBreakpoints: boolean;
+  /**
+   * Fallback shape (D-LIVETEST F3 fallback — currently UNUSED, activated by
+   * `MERGE_TURN_STATE_FALLBACK_ENABLED` in params.ts): merge the trailing
+   * turn-state system message INTO the static system message as a second
+   * text part `[static(+cacheControl), turn-state]`, so history ends the
+   * messages array. Breakpoint B on `history_tail` is RETAINED.
+   */
+  readonly mergeTurnStateIntoStaticPrefix: boolean;
+}
+
+const EPHEMERAL = { type: "ephemeral" as const };
+
+/** Text part with a cache breakpoint, shaped for system-message content. */
+function textPartWithCache(text: string): ChatContentText {
+  return { type: "text", text, cacheControl: EPHEMERAL };
+}
+
+/**
+ * Content parts for user/tool/assistant carriers: cacheControl goes on the
+ * LAST text part (single-part for our string contents).
+ */
+function itemPartsWithCache(text: string): Array<ChatContentItems> {
+  return [{ type: "text", text, cacheControl: EPHEMERAL }];
+}
+
+export function mapMessages(
+  messages: ProviderMessage[],
+  cache?: CacheBreakpointOptions,
+): ChatRequest["messages"] {
+  const applyBreakpoints = cache?.applyBreakpoints === true;
+
+  const mapped: ChatRequest["messages"] = messages.map(m => {
+    // Breakpoint B carrier — role-agnostic. The engine marks the LAST
+    // non-empty history message; mid-tape system rows (continue-cue,
+    // operator-cue) are legitimate carriers.
+    const isHistoryTail = applyBreakpoints && m.cacheHint === "history_tail";
+
     if (m.role === "tool" && m.toolCallId) {
-      return { role: "tool" as const, content: m.content, toolCallId: m.toolCallId };
+      return {
+        role: "tool" as const,
+        content: isHistoryTail ? itemPartsWithCache(m.content) : m.content,
+        toolCallId: m.toolCallId,
+      };
     }
 
     if (m.role === "assistant" && m.toolCalls?.length) {
+      // Keep toolCalls intact; convert content to parts only when non-empty.
       return {
         role: "assistant" as const,
-        content: m.content || undefined,
+        content:
+          isHistoryTail && m.content
+            ? itemPartsWithCache(m.content)
+            : m.content || undefined,
         toolCalls: m.toolCalls.map(tc => ({
           id: tc.id ?? "",
           type: "function" as const,
@@ -40,12 +97,63 @@ export function mapMessages(messages: ProviderMessage[]): ChatRequest["messages"
       };
     }
 
-    if (m.role === "system") return { role: "system" as const, content: m.content };
-    if (m.role === "assistant") return { role: "assistant" as const, content: m.content || undefined };
-    return { role: "user" as const, content: m.content };
+    if (m.role === "system") {
+      // Breakpoint A: the static prefix system message. `summary` and
+      // `turn_state` hints stay plain strings — never a breakpoint.
+      if (applyBreakpoints && m.cacheHint === "static_prefix") {
+        return { role: "system" as const, content: [textPartWithCache(m.content)] };
+      }
+      if (isHistoryTail) {
+        return { role: "system" as const, content: [textPartWithCache(m.content)] };
+      }
+      return { role: "system" as const, content: m.content };
+    }
+    if (m.role === "assistant") {
+      return {
+        role: "assistant" as const,
+        content:
+          isHistoryTail && m.content
+            ? itemPartsWithCache(m.content)
+            : m.content || undefined,
+      };
+    }
+    return {
+      role: "user" as const,
+      content: isHistoryTail ? itemPartsWithCache(m.content) : m.content,
+    };
   });
 
+  if (applyBreakpoints && cache?.mergeTurnStateIntoStaticPrefix === true) {
+    mergeTurnStateIntoStatic(messages, mapped);
+  }
+
   return synthesizeMissingToolResults(mapped);
+}
+
+/**
+ * Fallback-merge (see {@link CacheBreakpointOptions.mergeTurnStateIntoStaticPrefix}):
+ * rebuild the static system message as `[static(+cacheControl), turn-state]`
+ * and drop the trailing turn-state message, so history ends the array
+ * (textbook incremental pattern). Breakpoint B placed during mapping is NOT
+ * touched. No-op when either hinted message is missing or not a system row.
+ */
+function mergeTurnStateIntoStatic(
+  source: ProviderMessage[],
+  mapped: ChatRequest["messages"],
+): void {
+  const staticIdx = source.findIndex(m => m.cacheHint === "static_prefix" && m.role === "system");
+  const turnIdx = source.findIndex(m => m.cacheHint === "turn_state" && m.role === "system");
+  if (staticIdx === -1 || turnIdx === -1) return;
+
+  mapped[staticIdx] = {
+    role: "system" as const,
+    content: [
+      textPartWithCache(source[staticIdx].content),
+      // Turn-state part sits AFTER the breakpoint — never cached.
+      { type: "text" as const, text: source[turnIdx].content },
+    ],
+  };
+  mapped.splice(turnIdx, 1);
 }
 
 type MappedMessage = ChatRequest["messages"][number];
@@ -116,12 +224,15 @@ export function synthesizeMissingToolResults(
 
 // ── Response parsing ─────────────────────────────────────────────
 
-export function extractUsage(raw: { promptTokens?: number; completionTokens?: number; totalTokens?: number; cost?: number | null; completionTokensDetails?: { reasoningTokens?: number | null } | null; promptTokensDetails?: { cachedTokens?: number } | null } | undefined): InferenceUsage {
+export function extractUsage(raw: { promptTokens?: number; completionTokens?: number; totalTokens?: number; cost?: number | null; completionTokensDetails?: { reasoningTokens?: number | null } | null; promptTokensDetails?: { cachedTokens?: number; cacheWriteTokens?: number } | null } | undefined): InferenceUsage {
   return {
     promptTokens: raw?.promptTokens ?? 0,
     completionTokens: raw?.completionTokens ?? 0,
     totalTokens: raw?.totalTokens ?? 0,
     cachedTokens: raw?.promptTokensDetails?.cachedTokens ?? undefined,
+    // Returned ONLY for explicit-cache models with cache-write pricing;
+    // absent ⇒ undefined ⇒ 0 downstream (logUsage / cost surcharge).
+    cacheWriteTokens: raw?.promptTokensDetails?.cacheWriteTokens ?? undefined,
     reasoningTokens: raw?.completionTokensDetails?.reasoningTokens ?? undefined,
     // OpenRouter returns `usage.cost` (USD) automatically on every response;
     // the engine prefers it over the local price-table estimate. `null` when

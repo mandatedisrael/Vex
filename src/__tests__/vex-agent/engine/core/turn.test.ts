@@ -58,6 +58,12 @@ describe("turn", () => {
     };
   }
 
+  const COST_RESULT = {
+    totalCost: 0.001,
+    currency: "USD",
+    breakdown: { promptCost: 0.0008, completionCost: 0.0002, cachedSavings: 0, reasoningCost: 0 },
+  };
+
   function makeProvider(response: {
     content?: string | null;
     toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }> | null;
@@ -71,7 +77,7 @@ describe("turn", () => {
       // chatCompletionSimple stays on the contract (used by checkpoint extract/merge)
       // but the recall path no longer calls it — see "recall path" tests below.
       chatCompletionSimple: vi.fn(),
-      calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD" }),
+      calculateCost: vi.fn().mockReturnValue(COST_RESULT),
     };
   }
 
@@ -87,7 +93,7 @@ describe("turn", () => {
       },
       chatCompletion: vi.fn(),
       chatCompletionSimple: vi.fn(),
-      calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD" }),
+      calculateCost: vi.fn().mockReturnValue(COST_RESULT),
     };
   }
 
@@ -142,6 +148,47 @@ describe("turn", () => {
     expect(mockLogUsage).toHaveBeenCalledWith("session-1", expect.objectContaining({
       promptTokens: 1000,
       completionTokens: 200,
+    }));
+  });
+
+  it("logs cachedSavings from the cost breakdown + cacheWriteTokens from usage (D-SAVINGS)", async () => {
+    const provider = {
+      id: "fake",
+      chatCompletionStream: async function* (): AsyncGenerator<StreamChunk> {
+        yield {
+          type: "usage",
+          usage: {
+            promptTokens: 1000, completionTokens: 200, totalTokens: 1200,
+            cachedTokens: 600, cacheWriteTokens: 35,
+          },
+        };
+        yield { type: "content", text: "ok" };
+        yield { type: "done" };
+      },
+      chatCompletion: vi.fn(),
+      chatCompletionSimple: vi.fn(),
+      calculateCost: vi.fn().mockReturnValue({
+        totalCost: 0.001,
+        currency: "USD",
+        // NEGATIVE net savings — persisted truthfully, never clamped.
+        breakdown: { promptCost: 0.0008, completionCost: 0.0002, cachedSavings: -0.00004, reasoningCost: 0 },
+      }),
+    };
+    await executeTurn(makeContext(), [], null, provider as any, makeConfig() as any, []);
+
+    expect(mockLogUsage).toHaveBeenCalledWith("session-1", expect.objectContaining({
+      cachedSavings: -0.00004,
+      cacheWriteTokens: 35,
+    }));
+  });
+
+  it("defaults cacheWriteTokens to 0 when the provider omits it", async () => {
+    const provider = makeProvider({ content: "Hi" });
+    await executeTurn(makeContext(), [], null, provider as any, makeConfig() as any, []);
+
+    expect(mockLogUsage).toHaveBeenCalledWith("session-1", expect.objectContaining({
+      cachedSavings: 0,
+      cacheWriteTokens: 0,
     }));
   });
 
@@ -251,7 +298,7 @@ describe("turn", () => {
         yield { type: "content", text: "DROPPED" };
       },
       chatCompletionSimple: vi.fn(),
-      calculateCost: vi.fn().mockReturnValue({ totalCost: 0.001, currency: "USD" }),
+      calculateCost: vi.fn().mockReturnValue(COST_RESULT),
     };
     const result = await executeTurn(
       makeContext(), [], null, provider as any, makeConfig() as any, [], {}, controller.signal,
@@ -263,9 +310,110 @@ describe("turn", () => {
     expect(mockLogUsage).toHaveBeenCalled();
   });
 
-  // PR2 cutover: the legacy `[Session episode recall]` block + the
-  // `recallTopK`-driven auto-injection are removed. Per-session narrative
-  // memory is now agent-driven via `memory_recall`; the system-prompt-side
-  // surface is the `[Session memories: ...]` banner from `buildMemoryStateBanner`
-  // (covered by `prompts/memory-state.test.ts` + `prompts/prompt-stack.test.ts`).
+  // STRUCTURE+CACHE: executeTurn no longer pre-fetches Active Knowledge or
+  // memory stats — `promptOptions` arrive FULLY BUILT from buildTurnPromptStack
+  // (memory façade seam covered by `turn-active-knowledge.test.ts` +
+  // `memory/turn-context.test.ts` + `prompts/memory-section.test.ts`).
+
+  // ── D-LAYOUT: 4-segment provider messages + cacheHints ────────
+
+  describe("buildProviderMessages segments + cacheHints", () => {
+    function capturedMessages(provider: ReturnType<typeof makeProvider>) {
+      const [providerMessages] = provider.chatCompletion.mock.calls[0]!;
+      return providerMessages as Array<{
+        role: string; content: string; cacheHint?: string; toolCallId?: string;
+      }>;
+    }
+
+    it("empty history ⇒ [static_prefix, turn_state] with NO history_tail", async () => {
+      const provider = makeProvider({ content: "ok" });
+      await executeTurn(makeContext(), [], null, provider as any, makeConfig() as any, []);
+
+      const msgs = capturedMessages(provider);
+      expect(msgs).toHaveLength(2);
+      expect(msgs[0].role).toBe("system");
+      expect(msgs[0].cacheHint).toBe("static_prefix");
+      expect(msgs[1].role).toBe("system");
+      expect(msgs[1].cacheHint).toBe("turn_state");
+      expect(msgs.some((m) => m.cacheHint === "history_tail")).toBe(false);
+    });
+
+    it("summary present ⇒ second system message carries the 'summary' hint (never a breakpoint hint)", async () => {
+      const provider = makeProvider({ content: "ok" });
+      await executeTurn(
+        makeContext(), [], "rolling summary text", provider as any, makeConfig() as any, [],
+      );
+
+      const msgs = capturedMessages(provider);
+      expect(msgs[1].role).toBe("system");
+      expect(msgs[1].cacheHint).toBe("summary");
+      expect(msgs[1].content).toContain("rolling summary text");
+    });
+
+    it("marks the LAST history message as history_tail (4 segments in order)", async () => {
+      const provider = makeProvider({ content: "ok" });
+      const messages = [
+        { role: "user" as const, content: "first", timestamp: "t1" },
+        { role: "assistant" as const, content: "second", timestamp: "t2" },
+      ];
+      await executeTurn(
+        makeContext(), messages, "summary", provider as any, makeConfig() as any, [],
+      );
+
+      const msgs = capturedMessages(provider);
+      expect(msgs.map((m) => m.cacheHint)).toEqual([
+        "static_prefix", "summary", undefined, "history_tail", "turn_state",
+      ]);
+    });
+
+    it("tape ending with a continue-cue SYSTEM row: that row is the history_tail (role-agnostic)", async () => {
+      const provider = makeProvider({ content: "ok" });
+      const messages = [
+        { role: "user" as const, content: "go", timestamp: "t1" },
+        { role: "system" as const, content: "[Engine: continue]", timestamp: "t2" },
+      ];
+      await executeTurn(makeContext(), messages, null, provider as any, makeConfig() as any, []);
+
+      const msgs = capturedMessages(provider);
+      const tail = msgs.find((m) => m.cacheHint === "history_tail");
+      expect(tail?.role).toBe("system");
+      expect(tail?.content).toBe("[Engine: continue]");
+      // The trailing turn-state system row is NOT the tail.
+      expect(msgs[msgs.length - 1].cacheHint).toBe("turn_state");
+    });
+
+    it("empty-content tail rows are skipped backwards when marking history_tail", async () => {
+      const provider = makeProvider({ content: "ok" });
+      const messages = [
+        { role: "user" as const, content: "real content", timestamp: "t1" },
+        { role: "assistant" as const, content: "", timestamp: "t2" },
+      ];
+      await executeTurn(makeContext(), messages, null, provider as any, makeConfig() as any, []);
+
+      const msgs = capturedMessages(provider);
+      const tail = msgs.find((m) => m.cacheHint === "history_tail");
+      expect(tail?.content).toBe("real content");
+    });
+
+    it("history_tail is marked AFTER repair: placeholder tool row for an unanswered tool-call becomes the tail", async () => {
+      const provider = makeProvider({ content: "ok" });
+      const messages = [
+        { role: "user" as const, content: "go", timestamp: "t1" },
+        {
+          role: "assistant" as const,
+          content: "",
+          toolCalls: [{ id: "call-1", command: "noop", args: {} }],
+          timestamp: "t2",
+        },
+        // NO tool result — repairOrphanedToolCalls appends a placeholder.
+      ];
+      await executeTurn(makeContext(), messages, null, provider as any, makeConfig() as any, []);
+
+      const msgs = capturedMessages(provider);
+      const tail = msgs.find((m) => m.cacheHint === "history_tail");
+      expect(tail?.role).toBe("tool");
+      expect(tail?.toolCallId).toBe("call-1");
+      expect(tail?.content).toContain("placeholder");
+    });
+  });
 });

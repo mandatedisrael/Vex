@@ -25,6 +25,7 @@
 
 import { query, queryOne } from "@vex-agent/db/client.js";
 import { getBySessionAndGeneration } from "@vex-agent/db/repos/compact-jobs/index.js";
+import { listUnresolvedOutstandingItems } from "@vex-agent/db/repos/session-memories/index.js";
 import { sanitizeForSystemPrompt } from "./sanitize.js";
 
 /** Re-export so the regression suite that already imports `sanitizePreserveMd`
@@ -47,17 +48,12 @@ export async function buildResumePacket(
 
   const compactJob = await getBySessionAndGeneration(sessionId, generation);
 
-  // Aggregate unresolved outstanding items across active chunks.
-  const outstandingRows = await query<{ memory_id: number; theme: string; item_id: string; text: string }>(
-    `SELECT m.id AS memory_id, m.theme, item->>'id' AS item_id, item->>'text' AS text
-     FROM session_memories m,
-          jsonb_array_elements(m.outstanding_items) item
-     WHERE m.session_id = $1
-       AND m.status = 'active'
-       AND item->>'resolved_at' IS NULL
-     ORDER BY m.created_at DESC, m.id DESC
-     LIMIT $2`,
-    [sessionId, MAX_UNRESOLVED_LINES],
+  // Aggregate unresolved outstanding items across active chunks — repo-owned
+  // SQL (D-RESUME-SQL: `listUnresolvedOutstandingItems` in
+  // db/repos/session-memories carries the query 1:1).
+  const outstandingRows = await listUnresolvedOutstandingItems(
+    sessionId,
+    MAX_UNRESOLVED_LINES,
   );
 
   // Last N assistant messages with substantive content (decisions).
@@ -111,7 +107,7 @@ export async function buildResumePacket(
     for (const r of outstandingRows) {
       const safeText = sanitizeForSystemPrompt(r.text);
       const safeTheme = sanitizeForSystemPrompt(r.theme);
-      lines.push(`- [${safeTheme}] (memory_id=${r.memory_id}, item_id=${r.item_id}) ${safeText}`);
+      lines.push(`- [${safeTheme}] (memory_id=${r.memoryId}, item_id=${r.itemId}) ${safeText}`);
     }
     lines.push("");
   }
