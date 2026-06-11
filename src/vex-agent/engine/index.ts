@@ -40,6 +40,7 @@ export {
 export { runSubagentEngine } from "./subagents/runner.js";
 
 export { routeUserMessage, submitOperatorInstruction } from "./ingress.js";
+export type { TurnRequestOptions } from "./core/runner.js";
 
 export { startWakeExecutor } from "./wake/executor.js";
 export type { WakeExecutorHandle, WakeDeps, ClaimedWake, ClaimedWakeOutcome } from "./wake/executor.js";

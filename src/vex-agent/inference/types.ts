@@ -9,6 +9,17 @@ import type { JsonSchema } from "../tools/types.js";
 
 // ── Provider config (loaded once at startup) ─────────────────────
 
+/**
+ * Reasoning effort exposed to operators (S6). Deliberately a SUBSET of the
+ * OpenRouter SDK's `ChatRequestEffort` ("xhigh" | "high" | "medium" | "low" |
+ * "minimal" | "none"): "xhigh"/"minimal" add little user-meaningful range and
+ * "none" (provider-side reasoning off) is intentionally not exposed — for
+ * reasoning-capable models Vex always requests at least "low", and for models
+ * WITHOUT reasoning support the `reasoning` param is omitted entirely (see
+ * `buildOpenRouterParams`), which is the only true "off".
+ */
+export type ReasoningEffort = "low" | "medium" | "high";
+
 export interface InferenceConfig {
   /** Provider identifier, e.g. "openrouter". */
   provider: string;
@@ -37,6 +48,15 @@ export interface InferenceConfig {
   cacheWritePricePerM: number | null;
   /** Price per 1M reasoning tokens, when reported by the provider. */
   reasoningPricePerM: number | null;
+  /**
+   * Per-TURN reasoning effort requested by the operator (S6). NEVER set by
+   * `loadConfig()` — the engine entry point stamps it onto its caller-owned
+   * config copy for that turn only. `buildOpenRouterParams` reads it ONLY
+   * when the model supports reasoning (`reasoningPricePerM !== null`) and
+   * falls back to "medium" when absent; non-reasoning models never see a
+   * `reasoning` param regardless of this field.
+   */
+  reasoningEffort?: ReasoningEffort;
 }
 
 export type PriceCurrency = "USD";

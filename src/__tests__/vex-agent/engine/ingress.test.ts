@@ -244,7 +244,23 @@ describe("ingress.routeUserMessage", () => {
     const result = await routeUserMessage("s1", "hi");
 
     expect(result).toBe(agentResult);
-    // 9-5a threads the chat-turn stop signal (undefined here) to the agent turn.
-    expect(mockProcessAgentTurn).toHaveBeenCalledWith("s1", "hi", undefined);
+    // 9-5a threads the chat-turn stop signal (undefined here) to the agent
+    // turn; S6 threads the per-turn request options (undefined here) too.
+    expect(mockProcessAgentTurn).toHaveBeenCalledWith("s1", "hi", undefined, undefined);
+  });
+
+  it("threads per-turn request options to the agent turn (S6)", async () => {
+    mockGetActiveRunBySession.mockResolvedValue(null);
+    mockGetSession.mockResolvedValue({ id: "s1", mode: "agent", permission: "restricted" });
+    mockGetActiveMission.mockResolvedValue(null);
+
+    const result = await routeUserMessage("s1", "hi", undefined, {
+      reasoningEffort: "high",
+    });
+
+    expect(result).toBe(agentResult);
+    expect(mockProcessAgentTurn).toHaveBeenCalledWith("s1", "hi", undefined, {
+      reasoningEffort: "high",
+    });
   });
 });

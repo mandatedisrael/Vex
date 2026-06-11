@@ -19,6 +19,7 @@ import {
   processAgentTurn,
   processMissionSetupTurn,
   resumeMissionRun,
+  type TurnRequestOptions,
 } from "./core/runner.js";
 import * as loopWakeRepo from "@vex-agent/db/repos/loop-wake.js";
 import * as missionRunsRepo from "@vex-agent/db/repos/mission-runs.js";
@@ -44,6 +45,7 @@ export async function routeUserMessage(
   sessionId: string,
   userInput: string,
   signal?: AbortSignal,
+  options?: TurnRequestOptions,
 ): Promise<TurnResult> {
   const cancelled = await loopWakeRepo.cancelForSession(sessionId, "user_preempt");
   if (cancelled > 0) {
@@ -107,17 +109,19 @@ export async function routeUserMessage(
   }
 
   // Chat/agent turn — the only path that honours the chat-turn "stop
-  // generating" signal (9-5a). Mission resume/interrupt/setup branches above
-  // ignore it.
-  return processAgentTurn(sessionId, userInput, signal);
+  // generating" signal (9-5a) and per-turn request options (S6). Mission
+  // resume/interrupt/setup branches above ignore both — autonomous
+  // iterations keep the uniform engine defaults.
+  return processAgentTurn(sessionId, userInput, signal, options);
 }
 
 export async function submitOperatorInstruction(
   sessionId: string,
   userInput: string,
   signal?: AbortSignal,
+  options?: TurnRequestOptions,
 ): Promise<TurnResult> {
-  return routeUserMessage(sessionId, userInput, signal);
+  return routeUserMessage(sessionId, userInput, signal, options);
 }
 
 async function resumeMissionRunWithPreempt(

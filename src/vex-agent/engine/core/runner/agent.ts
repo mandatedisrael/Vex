@@ -9,6 +9,7 @@
  */
 
 import type { TurnResult } from "../../types.js";
+import type { ReasoningEffort } from "@vex-agent/inference/types.js";
 import { hydrateEngineSession } from "../hydrate.js";
 import type { TurnLoopConfig } from "../turn-loop.js";
 import { runTurnLoop } from "../turn-loop.js";
@@ -23,6 +24,23 @@ import { buildPersonaSetupHint } from "@vex-agent/engine/prompts/persona-setup.j
 // ── processAgentTurn ────────────────────────────────────────────
 
 /**
+ * Per-turn request options threaded from the desktop host (S6). Optional and
+ * additive: existing call sites compile unchanged. Only interactive agent
+ * turns honour these — mission setup/resume/wake keep the engine defaults
+ * (uniform "medium"-when-supported reasoning, no per-iteration UI).
+ */
+export interface TurnRequestOptions {
+  /**
+   * Operator-chosen reasoning effort for THIS turn. Applied to the
+   * caller-owned `InferenceConfig` copy; `buildOpenRouterParams` only acts
+   * on it when the model supports reasoning (`reasoningPricePerM !== null`),
+   * so a stale/unsupported request can never change a non-reasoning model's
+   * request shape or cost.
+   */
+  readonly reasoningEffort?: ReasoningEffort;
+}
+
+/**
  * Process a single agent turn. User sends message → engine responds.
  * For sessionKind="agent", the turn-loop iterates tool-call rounds
  * until the model emits a final text reply (capped by maxIterations).
@@ -31,6 +49,7 @@ export async function processAgentTurn(
   sessionId: string,
   userInput: string,
   signal?: AbortSignal,
+  options?: TurnRequestOptions,
 ): Promise<TurnResult> {
   logger.info("engine.agent.turn", { sessionId });
 
@@ -39,6 +58,13 @@ export async function processAgentTurn(
 
   const config = await provider.loadConfig();
   if (!config) throw new Error("No inference config available");
+
+  // Stamp the per-turn reasoning effort on OUR config copy (loadConfig hands
+  // out caller-owned clones, never the cached reference). The support gate
+  // lives in buildOpenRouterParams — single source of truth.
+  if (options?.reasoningEffort !== undefined) {
+    config.reasoningEffort = options.reasoningEffort;
+  }
 
   // Puzzle 03 — claim the session lease BEFORE the first state
   // mutation (codex blocker #2): two rapid `chat.submit` IPC calls

@@ -42,6 +42,19 @@ export function isExplicitCacheModel(model: string): boolean {
  */
 export const MERGE_TURN_STATE_FALLBACK_ENABLED = false;
 
+/**
+ * Engine-wide default reasoning effort (S6, product-owner approved): every
+ * request to a reasoning-capable model (catalog reports `internalReasoning`
+ * pricing → `config.reasoningPricePerM !== null`) carries
+ * `reasoning: { effort }` so opt-in-thinking models (e.g. Claude) actually
+ * emit reasoning. Models WITHOUT reasoning pricing never get the param —
+ * their request shape (and cost) is byte-identical to before. The SDK also
+ * accepts "xhigh"/"minimal"/"none"; Vex deliberately exposes only
+ * low/medium/high and uses param omission as the sole "off" state (see
+ * `ReasoningEffort` in ../types.ts).
+ */
+export const DEFAULT_REASONING_EFFORT = "medium" as const;
+
 export function buildOpenRouterParams(
   messages: ProviderMessage[],
   tools: ToolDefinition[],
@@ -65,6 +78,11 @@ export function buildOpenRouterParams(
     maxTokens: config.maxOutputTokens,
     ...(config.temperature !== undefined && { temperature: config.temperature }),
     ...(stream && { stream: true }),
+    // Reasoning ONLY for models the catalog prices as reasoning-capable —
+    // everything else keeps today's exact request shape (zero cost change).
+    ...(config.reasoningPricePerM !== null && {
+      reasoning: { effort: config.reasoningEffort ?? DEFAULT_REASONING_EFFORT },
+    }),
   };
 
   if (tools.length > 0) {
