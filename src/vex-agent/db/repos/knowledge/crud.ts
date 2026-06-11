@@ -367,6 +367,70 @@ export async function findActiveByContentHash(
   return row ? mapMaturityRow(row) : null;
 }
 
+// ── Graph-expansion batch read (S8) ──────────────────────────────
+
+/**
+ * The recall-DTO shape `long_memory_search` needs to build a graph-expansion
+ * result: identity + display text + the NEIGHBOR-side scoring inputs
+ * (`source` tier, `activationStrength`) + `validUntil` for the response field.
+ * NO embedding, NO contentMd — expansion results are bounded pointers; the
+ * agent fetches full content via `long_memory_get`.
+ */
+export interface GraphNeighborEntry {
+  id: number;
+  kind: string;
+  title: string;
+  summary: string;
+  source: KnowledgeSource;
+  maturityState: MaturityState;
+  activationStrength: number;
+  validUntil: string | null;
+}
+
+/**
+ * Batch-fetch ACTIVE, non-expired entries by id (S8 expansion step 4). One
+ * `= ANY($1)` query — never per-entry. Applies the SAME active + non-expired
+ * predicate as `recallLongMemoryTopK` (`pinned` overrides TTL), so graph
+ * expansion can never resurface an entry direct recall would exclude (S3
+ * invariant). Order is by id (callers re-rank by graph score).
+ */
+export async function getActiveEntriesByIds(
+  ids: readonly number[],
+  client?: PoolClient,
+): Promise<GraphNeighborEntry[]> {
+  if (ids.length === 0) return [];
+  const exec: Executor = client ?? getPool();
+  const rows = await queryWith<{
+    id: number;
+    kind: string;
+    title: string;
+    summary: string;
+    source: string;
+    maturity_state: string;
+    activation_strength: number;
+    valid_until: string | null;
+  }>(
+    exec,
+    `SELECT id, kind, title, summary, source, maturity_state, activation_strength, valid_until
+       FROM knowledge_entries
+      WHERE id = ANY($1::int[])
+        AND status = 'active'
+        AND (pinned = TRUE OR valid_until IS NULL OR valid_until > NOW())
+      ORDER BY id ASC`,
+    [ids],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    title: r.title,
+    summary: r.summary,
+    source: r.source as KnowledgeSource,
+    maturityState: r.maturity_state as MaturityState,
+    activationStrength: r.activation_strength,
+    validUntil: r.valid_until,
+  }));
+}
+
 // ── Reconcile reads/writes (S7 — all inside the reconcile tx) ────
 
 /**

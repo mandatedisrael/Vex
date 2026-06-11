@@ -33,6 +33,7 @@
 import type { PoolClient } from "pg";
 
 import {
+  executeWith,
   getPool,
   queryOneWith,
   queryWith,
@@ -372,6 +373,86 @@ export async function listEdgesFrom(
     [entityId],
   );
   return rows.map(mapRow);
+}
+
+/**
+ * ACTIVE, valid-time edges touching ANY of a BATCH of entities, in EITHER
+ * direction, capped PER ENTITY PER SIDE (S8 expansion step 2). One query:
+ * `unnest` over the batch with two LATERAL probes (source side / target side),
+ * each riding the matching partial index (`idx_med_source` / `idx_med_target`
+ * — both predicated on `invalidated_at IS NULL`). Valid-time = the relation is
+ * currently believed AND its world-time window covers now. An edge between two
+ * batched entities appears once per touched endpoint — de-duplicated by id here
+ * so callers never double-count.
+ */
+export async function listActiveEdgesForEntities(
+  entityIds: readonly string[],
+  limitPerSide: number,
+  client?: PoolClient,
+): Promise<MemoryEdge[]> {
+  if (entityIds.length === 0) return [];
+  if (!Number.isFinite(limitPerSide) || limitPerSide <= 0) return [];
+  const exec: Executor = client ?? getPool();
+  // The LATERAL subqueries project exactly EDGE_COLUMNS (never the raw
+  // fact_embedding), so the outer `e.*` is the same bounded column set.
+  const rows = await queryWith<MemoryEdgeRow>(
+    exec,
+    `SELECT DISTINCT ON (e.id) e.*
+       FROM unnest($1::uuid[]) AS ent(id)
+       JOIN LATERAL (
+         (SELECT ${EDGE_COLUMNS} FROM memory_edges
+           WHERE source_entity_id = ent.id
+             AND invalidated_at IS NULL
+             AND valid_from <= NOW()
+             AND (valid_until IS NULL OR valid_until > NOW())
+           ORDER BY valid_from DESC, id DESC
+           LIMIT $2)
+         UNION ALL
+         (SELECT ${EDGE_COLUMNS} FROM memory_edges
+           WHERE target_entity_id = ent.id
+             AND invalidated_at IS NULL
+             AND valid_from <= NOW()
+             AND (valid_until IS NULL OR valid_until > NOW())
+           ORDER BY valid_from DESC, id DESC
+           LIMIT $2)
+       ) e ON TRUE
+      ORDER BY e.id`,
+    [entityIds, Math.floor(limitPerSide)],
+  );
+  return rows.map(mapRow);
+}
+
+/**
+ * Bulk system-time retraction of every ACTIVE edge a knowledge entry asserted
+ * (S8 / D-SUPERSEDE-WIRING): edges are claims of their ORIGIN lesson — when the
+ * lesson stops being current (supersede / reconcile-invalidate), its edges stop
+ * being believed. Sets `invalidated_at` only (world-time `valid_until` is left
+ * untouched, matching `invalidateEdge`'s no-patch default — we stop asserting
+ * the relation, we do not claim the world changed). Idempotent: the
+ * `invalidated_at IS NULL` guard makes a re-run a 0-row no-op. Returns the
+ * number of edges retracted.
+ *
+ * D-EDGE-OWNERSHIP (conscious v1 tradeoff): the active-triple arbiter means an
+ * edge may be "relied on" by other live lessons that re-asserted it — this bulk
+ * retraction still invalidates it. Accepted: edges are a weak associative
+ * signal, entry↔entity links survive, and the next promotion asserting the
+ * relation re-creates it with a fresh origin.
+ */
+export async function invalidateEdgesForOrigin(
+  entryId: number,
+  client?: PoolClient,
+): Promise<number> {
+  if (!Number.isFinite(entryId) || entryId <= 0) return 0;
+  const exec: Executor = client ?? getPool();
+  const count = await executeWith(
+    exec,
+    `UPDATE memory_edges
+        SET invalidated_at = NOW(), updated_at = NOW()
+      WHERE origin_entry_id = $1 AND invalidated_at IS NULL`,
+    [entryId],
+  );
+  if (count > 0) memLog("edge", "origin_invalidated", { entryId, count });
+  return count;
 }
 
 /** Incoming edges to `entityId` (target), active-only by default. */

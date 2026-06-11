@@ -112,6 +112,7 @@ interface Stubs {
   applyMaturityTransition: ReturnType<typeof vi.fn>;
   recordMaturityEvent: ReturnType<typeof vi.fn>;
   invalidateEntryOnReconcile: ReturnType<typeof vi.fn>;
+  invalidateEdgesForOrigin: ReturnType<typeof vi.fn>;
   raiseEntrySourceTier: ReturnType<typeof vi.fn>;
   bumpOutcomeVersion: ReturnType<typeof vi.fn>;
   updateReconciledCandidateOutcome: ReturnType<typeof vi.fn>;
@@ -136,6 +137,9 @@ function makeDeps(scenario: StubScenario = {}): Stubs {
   const applyMaturityTransition = vi.fn().mockResolvedValue(true);
   const recordMaturityEvent = vi.fn().mockResolvedValue({ id: "1" });
   const invalidateEntryOnReconcile = vi.fn().mockResolvedValue(true);
+  // S8: graph-edge retraction stub (the invalidate branch retracts the lesson's
+  // asserted edges in the SAME tx; 0 = "no edges existed", the common case).
+  const invalidateEdgesForOrigin = vi.fn().mockResolvedValue(0);
   const raiseEntrySourceTier = vi.fn().mockResolvedValue(true);
   const bumpOutcomeVersion = vi.fn().mockResolvedValue(true);
   const updateReconciledCandidateOutcome = vi.fn().mockResolvedValue({ ok: true });
@@ -162,6 +166,7 @@ function makeDeps(scenario: StubScenario = {}): Stubs {
     applyMaturityTransition: applyMaturityTransition as unknown as ReconcileDeps["applyMaturityTransition"],
     recordMaturityEvent: recordMaturityEvent as unknown as ReconcileDeps["recordMaturityEvent"],
     invalidateEntryOnReconcile: invalidateEntryOnReconcile as unknown as ReconcileDeps["invalidateEntryOnReconcile"],
+    invalidateEdgesForOrigin: invalidateEdgesForOrigin as unknown as ReconcileDeps["invalidateEdgesForOrigin"],
     raiseEntrySourceTier: raiseEntrySourceTier as unknown as ReconcileDeps["raiseEntrySourceTier"],
     bumpOutcomeVersion: bumpOutcomeVersion as unknown as ReconcileDeps["bumpOutcomeVersion"],
     updateReconciledCandidateOutcome: updateReconciledCandidateOutcome as unknown as ReconcileDeps["updateReconciledCandidateOutcome"],
@@ -183,6 +188,7 @@ function makeDeps(scenario: StubScenario = {}): Stubs {
     applyMaturityTransition,
     recordMaturityEvent,
     invalidateEntryOnReconcile,
+    invalidateEdgesForOrigin,
     raiseEntrySourceTier,
     bumpOutcomeVersion,
     updateReconciledCandidateOutcome,
@@ -376,6 +382,9 @@ describe("processReconcileJob — flip → judge", () => {
       expect.objectContaining({ flip: true, tierRaiseEligible: true }),
     );
     expect(s.invalidateEntryOnReconcile).toHaveBeenCalledWith(ENTRY_ID, "contradicted", TX);
+    // S8 (D-SUPERSEDE-WIRING): the dead lesson's graph edges are retracted in
+    // the SAME tx as the invalidation.
+    expect(s.invalidateEdgesForOrigin).toHaveBeenCalledWith(ENTRY_ID, TX);
     expect(s.applyMaturityTransition).not.toHaveBeenCalled();
     expect(s.recordMaturityEvent).not.toHaveBeenCalled();
     expect(s.bumpJobInference).toHaveBeenCalledWith(makeJob().id, { llmCalls: 1, costUsd: 0.002 });
@@ -400,6 +409,7 @@ describe("processReconcileJob — flip → judge", () => {
     });
     await processReconcileJob(makeJob(), WORKER, s.deps);
     expect(s.invalidateEntryOnReconcile).not.toHaveBeenCalled();
+    expect(s.invalidateEdgesForOrigin).not.toHaveBeenCalled();
     expect(s.applyMaturityTransition).not.toHaveBeenCalled();
     expect(s.bumpOutcomeVersion).toHaveBeenCalledWith(ENTRY_ID, 0, TX);
     expect(s.recordDecision).toHaveBeenCalledWith(

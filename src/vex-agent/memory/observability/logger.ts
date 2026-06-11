@@ -203,6 +203,16 @@ export type MemoryLogMeta = {
   readonly regimeSource?: string | number;
   /** regime_snapshots.id (S6b — SERIAL, plain number). */
   readonly regimeSnapshotId?: string | number;
+  /** Entities asserted by one graph extraction (S8 — number). */
+  readonly entityCount?: string | number;
+  /** Edges asserted by one graph extraction (S8 — number). */
+  readonly edgeCount?: string | number;
+  /** entry↔entity links written by one graph extraction (S8 — number). */
+  readonly linkCount?: string | number;
+  /** Graph-expansion results served by one search (S8 — number). */
+  readonly expandedCount?: string | number;
+  /** Seed results that fed one graph expansion (S8 — number). */
+  readonly seedCount?: string | number;
   readonly status?: string | number;
   readonly statusFrom?: string | number;
   readonly statusTo?: string | number;
@@ -273,6 +283,11 @@ const META_KEY_CATEGORY: Record<keyof MemoryLogMeta, MetaCategory> = {
   regimeConfidence: "enum",
   regimeSource: "enum",
   regimeSnapshotId: "num",
+  entityCount: "num",
+  edgeCount: "num",
+  linkCount: "num",
+  expandedCount: "num",
+  seedCount: "num",
   status: "enum",
   statusFrom: "enum",
   statusTo: "enum",

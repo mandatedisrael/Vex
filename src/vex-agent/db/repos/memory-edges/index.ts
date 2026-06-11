@@ -18,6 +18,8 @@ export {
   invalidateEdge,
   supersedeEdge,
   listActiveEdgesForEntity,
+  listActiveEdgesForEntities,
+  invalidateEdgesForOrigin,
   listEdgesFrom,
   listEdgesTo,
   type InvalidateEdgePatch,

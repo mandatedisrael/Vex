@@ -4,7 +4,8 @@
  * Validates the agent-facing `long_memory_search` payload. The tool HIDES its
  * strategy (vector + dual-trace + rerank), so the agent input is deliberately
  * small: a semantic `query`, an optional result count `k`, an optional exact
- * `kind` filter, the response shape, and the two dual-trace / graph hooks.
+ * `kind` filter, the response shape, and the dual-trace / graph-expansion
+ * toggles (`expand_graph` defaults ON since S8 — F3).
  *
  * Deliberately ABSENT:
  * - `scope` (R1-#5) — its semantics were undefined vs the hardcoded expiry gate;
@@ -58,7 +59,9 @@ export const longMemorySearchInputSchema = z
       .optional(),
     responseFormat: responseFormatSchema.default("concise"),
     includeCandidates: z.boolean().default(true),
-    expandGraph: z.boolean().default(false),
+    // S8 (F3): graph expansion is ON by default — 1-hop neighbors fill the
+    // remaining inline slots, bounded + marked; the agent can opt out.
+    expandGraph: z.boolean().default(true),
   })
   .strict();
 

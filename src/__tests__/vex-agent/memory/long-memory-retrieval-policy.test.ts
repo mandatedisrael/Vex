@@ -18,8 +18,11 @@ import {
   blendAndRank,
   scoreKnowledge,
   scoreCandidate,
+  graphScore,
+  sourceTierWeight,
   CANDIDATE_DUAL_TRACE_WEIGHT,
   SOURCE_SOFT_WEIGHT,
+  GRAPH_HOP_DECAY,
   LONG_MEMORY_CANDIDATE_MIN_SIMILARITY,
   LONG_MEMORY_CANDIDATE_MAX,
   type LongMemoryKnowledgeResult,
@@ -216,6 +219,68 @@ describe("blendAndRank — candidate gating and cap", () => {
     const { results, droppedCandidates } = blendAndRank([], weak);
     expect(results).toHaveLength(0);
     expect(droppedCandidates).toBe(0);
+  });
+});
+
+// ── S8: graph-expansion scoring (D-EXPAND — graph enriches, never dominates) ──
+
+describe("graphScore — 1-hop neighbor scoring (S8 / D-EXPAND)", () => {
+  const TIERS: KnowledgeSource[] = ["observed", "user_confirmed", "inferred", "hypothesis"];
+  const ACTIVATIONS = [0, DECAY_FLOOR, 0.5, 1.0] as const;
+  const SEED_SCORES = [0.01, 0.2, 0.6, 1.0, 1.35] as const; // incl. boosted > 1
+
+  it("keeps GRAPH_HOP_DECAY a strict de-weight in (0, 1), distinct from the candidate weight", () => {
+    expect(GRAPH_HOP_DECAY).toBeGreaterThan(0);
+    expect(GRAPH_HOP_DECAY).toBeLessThan(1);
+    // Plan-gate R1: 0.5 deliberately avoids colliding with the 0.6 candidate
+    // de-weight, so the two signals stay numerically distinct.
+    expect(GRAPH_HOP_DECAY).not.toBe(CANDIDATE_DUAL_TRACE_WEIGHT);
+  });
+
+  it("composes seedScore × decay × NEIGHBOR tier × NEIGHBOR activation (no double-counted seed factors)", () => {
+    const seedScore = 0.8;
+    for (const tier of TIERS) {
+      for (const activation of ACTIVATIONS) {
+        expect(graphScore(seedScore, { sourceTier: tier, activationStrength: activation })).toBeCloseTo(
+          seedScore * GRAPH_HOP_DECAY * sourceTierWeight(tier) * activationFactor(activation),
+          10,
+        );
+      }
+    }
+  });
+
+  it("property: STRICTLY below the seed for EVERY positive seed × neighbor tier × neighbor activation", () => {
+    for (const seedScore of SEED_SCORES) {
+      for (const tier of TIERS) {
+        for (const activation of ACTIVATIONS) {
+          const score = graphScore(seedScore, { sourceTier: tier, activationStrength: activation });
+          expect(score).toBeLessThan(seedScore);
+          expect(score).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  it("worst-case sanity: a hypothesis-seed → hypothesis-neighbor path scores below a same-similarity candidate", () => {
+    // The weakest seed (hypothesis tier, no boosts: rerank === sim) hopping to
+    // the weakest neighbor must land BELOW the candidate de-weight at the same
+    // raw similarity — the graph is the weakest of the three signals.
+    for (const sim of [0.36, 0.5, 0.75, 1.0]) {
+      for (const seedActivation of ACTIVATIONS) {
+        for (const neighborActivation of ACTIVATIONS) {
+          const seedScore = scoreKnowledge({
+            rerankScore: sim,
+            sourceTier: "hypothesis",
+            activationStrength: seedActivation,
+          });
+          const score = graphScore(seedScore, {
+            sourceTier: "hypothesis",
+            activationStrength: neighborActivation,
+          });
+          expect(score).toBeLessThan(scoreCandidate({ similarity: sim }));
+        }
+      }
+    }
   });
 });
 

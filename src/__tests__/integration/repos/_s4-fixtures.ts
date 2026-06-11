@@ -107,9 +107,18 @@ export function stubJudge(verdict: JudgeVerdict): ConsolidateDeps["judge"] {
  * Build consolidate deps with the REAL recall/deref against pgvector but a STUB
  * judge (no OpenRouter). The cluster recall + knowledge recall + evidence deref
  * all hit the DB so the full integration path is exercised.
+ *
+ * S8: `buildGraphPlan` is stubbed to null (extraction fail-open) so these
+ * suites NEVER call the real extractor LLM — even when OPENROUTER_API_KEY is
+ * present in the environment. Graph-v1 behavior is pinned by its own suite
+ * (graph-v1.int.test.ts) with a deterministic extraction stub.
  */
 export function depsWithStubJudge(verdict: JudgeVerdict): ConsolidateDeps {
-  return { ...defaultConsolidateDeps(), judge: stubJudge(verdict) };
+  return {
+    ...defaultConsolidateDeps(),
+    judge: stubJudge(verdict),
+    buildGraphPlan: async () => null,
+  };
 }
 
 export const PROMOTE_VERDICT: JudgeVerdict = {

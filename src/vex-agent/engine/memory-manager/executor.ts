@@ -322,6 +322,9 @@ async function processItem(
       // S6a: reinforce the active entry a duplicate candidate confirms (2nd
       // confirmation), in the SAME tx as the decision.
       reinforce: decision.reinforce,
+      // S8: pre-built graph plan (promote/supersede only; null → no graph —
+      // fail-open). Applied under SAVEPOINT inside the same tx.
+      graphPlan: decision.graphPlan,
     });
 
     if (decision.llmCalls > 0) {

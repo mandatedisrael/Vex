@@ -15,15 +15,30 @@ const TEST_PROVIDER_MODEL = "ai/embeddinggemma:300M-Q8_0";
 const mockRecallLongMemoryTopK = vi.fn();
 const mockGetById = vi.fn();
 const mockGetLineageChain = vi.fn();
+const mockGetActiveEntriesByIds = vi.fn();
 vi.mock("@vex-agent/db/repos/knowledge.js", () => ({
   recallLongMemoryTopK: (...args: unknown[]) => mockRecallLongMemoryTopK(...args),
   getById: (...args: unknown[]) => mockGetById(...args),
   getLineageChain: (...args: unknown[]) => mockGetLineageChain(...args),
+  getActiveEntriesByIds: (...args: unknown[]) => mockGetActiveEntriesByIds(...args),
 }));
 
 const mockRecallCandidatesTopK = vi.fn();
 vi.mock("@vex-agent/db/repos/memory-candidates/index.js", () => ({
   recallCandidatesTopK: (...args: unknown[]) => mockRecallCandidatesTopK(...args),
+}));
+
+// S8 graph-expansion repos (default: empty graph — expansion adds nothing).
+const mockListEntityIdsForEntries = vi.fn();
+const mockListEntryIdsForEntities = vi.fn();
+vi.mock("@vex-agent/db/repos/memory-entry-entities/index.js", () => ({
+  listEntityIdsForEntries: (...args: unknown[]) => mockListEntityIdsForEntries(...args),
+  listEntryIdsForEntities: (...args: unknown[]) => mockListEntryIdsForEntities(...args),
+}));
+
+const mockListActiveEdgesForEntities = vi.fn();
+vi.mock("@vex-agent/db/repos/memory-edges/index.js", () => ({
+  listActiveEdgesForEntities: (...args: unknown[]) => mockListActiveEdgesForEntities(...args),
 }));
 
 const mockEmbedQuery = vi.fn();
@@ -110,6 +125,11 @@ beforeEach(() => {
   mockEmbedQuery.mockResolvedValue({ embedding: vector(), providerModel: TEST_PROVIDER_MODEL });
   mockRecallLongMemoryTopK.mockResolvedValue([knowledgeRow()]);
   mockRecallCandidatesTopK.mockResolvedValue([candidateRow()]);
+  // Empty graph by default: expansion (ON by default — F3) finds nothing.
+  mockListEntityIdsForEntries.mockResolvedValue([]);
+  mockListActiveEdgesForEntities.mockResolvedValue([]);
+  mockListEntryIdsForEntities.mockResolvedValue([]);
+  mockGetActiveEntriesByIds.mockResolvedValue([]);
 });
 
 // ── search: blended union ─────────────────────────────────────────
@@ -159,14 +179,158 @@ describe("long_memory_search — include_candidates flag", () => {
   });
 });
 
-describe("long_memory_search — expand_graph hook", () => {
-  it("returns no extra results for expand_graph (empty hook until S8)", async () => {
+describe("long_memory_search — expand_graph (S8, default ON)", () => {
+  /** Wire a 1-hop graph: entry 1 → entity e1 —edge→ entity e2 → entry 2. */
+  function wireOneHopGraph(): void {
+    mockListEntityIdsForEntries.mockResolvedValue([{ entryId: 1, entityId: "e1" }]);
+    mockListActiveEdgesForEntities.mockResolvedValue([
+      { sourceEntityId: "e1", targetEntityId: "e2" },
+    ]);
+    mockListEntryIdsForEntities.mockResolvedValue([
+      { entryId: 2, entityId: "e2", entityName: "SOL" },
+    ]);
+    mockGetActiveEntriesByIds.mockResolvedValue([
+      {
+        id: 2,
+        kind: "trade_lesson",
+        title: "Neighbor via SOL",
+        summary: "Reached through the graph.",
+        source: "observed",
+        maturityState: "established",
+        activationStrength: 1,
+        validUntil: null,
+      },
+    ]);
+  }
+
+  it("expands by default (F3): an empty graph adds nothing and changes nothing", async () => {
     mockRecallCandidatesTopK.mockResolvedValue([]);
-    const withGraph = await handleLongMemorySearch({ query: "x", expand_graph: true }, ctx());
-    const withoutGraph = await handleLongMemorySearch({ query: "x", expand_graph: false }, ctx());
-    const a = JSON.parse(withGraph.output);
-    const b = JSON.parse(withoutGraph.output);
+    const defaultOn = await handleLongMemorySearch({ query: "x" }, ctx());
+    expect(mockListEntityIdsForEntries).toHaveBeenCalledTimes(1); // graph consulted by default
+    const explicitlyOff = await handleLongMemorySearch({ query: "x", expand_graph: false }, ctx());
+    const a = JSON.parse(defaultOn.output);
+    const b = JSON.parse(explicitlyOff.output);
     expect(a.results.length).toBe(b.results.length);
+    expect(a.truncated).toBe(false);
+  });
+
+  it("does not touch the graph repos when expand_graph is false", async () => {
+    mockRecallCandidatesTopK.mockResolvedValue([]);
+    await handleLongMemorySearch({ query: "x", expand_graph: false }, ctx());
+    expect(mockListEntityIdsForEntries).not.toHaveBeenCalled();
+    expect(mockListActiveEdgesForEntities).not.toHaveBeenCalled();
+    expect(mockGetActiveEntriesByIds).not.toHaveBeenCalled();
+  });
+
+  it("appends a 1-hop neighbor BELOW the direct hit, marked via_graph(entity), and logs graph_expanded", async () => {
+    mockRecallCandidatesTopK.mockResolvedValue([]);
+    wireOneHopGraph();
+
+    const res = await handleLongMemorySearch({ query: "x" }, ctx());
+    const data = JSON.parse(res.output);
+
+    expect(data.results).toHaveLength(2);
+    expect(data.results[0].id).toBe(1);
+    expect(data.results[0].via).toBeUndefined();
+    expect(data.results[1].id).toBe(2);
+    expect(data.results[1].via).toBe("via_graph(SOL)");
+    // Strictly below the seed (D-EXPAND: graph enriches, never dominates).
+    expect(data.results[1].score).toBeLessThan(data.results[0].score);
+
+    const expanded = mockMemLog.mock.calls.filter(
+      (c) => c[0] === "search" && c[1] === "graph_expanded",
+    );
+    expect(expanded).toHaveLength(1);
+    expect(expanded[0]![2]).toEqual({ expandedCount: 1, seedCount: 1 });
+  });
+
+  it("detailed format carries the marker too, with empty contentMd (bounded pointer)", async () => {
+    mockRecallCandidatesTopK.mockResolvedValue([]);
+    wireOneHopGraph();
+    const res = await handleLongMemorySearch({ query: "x", response_format: "detailed" }, ctx());
+    const data = JSON.parse(res.output);
+    const neighbor = data.results[1];
+    expect(neighbor.via).toBe("via_graph(SOL)");
+    expect(neighbor.contentMd).toBe("");
+  });
+
+  it("never evicts a direct result: a full inline cap leaves zero slots for expansion", async () => {
+    // 12 direct hits (above the inline cap of 10) → expansion has no free slot
+    // and must not even fan out to the graph.
+    const many = Array.from({ length: 12 }, (_, i) =>
+      knowledgeRow({ id: i + 1, similarity: 0.9 - i * 0.01 }),
+    );
+    mockRecallLongMemoryTopK.mockResolvedValue(many);
+    mockRecallCandidatesTopK.mockResolvedValue([]);
+    wireOneHopGraph();
+
+    const res = await handleLongMemorySearch({ query: "x" }, ctx());
+    const data = JSON.parse(res.output);
+    expect(data.count).toBe(10);
+    expect(data.results.every((r: { via?: string }) => r.via === undefined)).toBe(true);
+    expect(mockListEntityIdsForEntries).not.toHaveBeenCalled(); // zero slots → graph untouched
+    expect(data.droppedCount).toBe(2);
+    expect(data.droppedDirect).toBe(2);
+    expect(data.droppedExpansion).toBe(0);
+  });
+
+  it("splits droppedCount into direct vs expansion and logs graph_expansion_truncated", async () => {
+    // 1 direct hit + 7 graph neighbors: MAX_RESULTS (5) caps the expansion →
+    // 2 expansion drops, 0 direct drops.
+    mockRecallCandidatesTopK.mockResolvedValue([]);
+    mockListEntityIdsForEntries.mockResolvedValue([{ entryId: 1, entityId: "e1" }]);
+    mockListActiveEdgesForEntities.mockResolvedValue([
+      { sourceEntityId: "e1", targetEntityId: "e2" },
+    ]);
+    const refs = Array.from({ length: 7 }, (_, i) => ({
+      entryId: 100 + i,
+      entityId: "e2",
+      entityName: "SOL",
+    }));
+    mockListEntryIdsForEntities.mockResolvedValue(refs);
+    mockGetActiveEntriesByIds.mockResolvedValue(
+      refs.map((r) => ({
+        id: r.entryId,
+        kind: "trade_lesson",
+        title: `Neighbor ${r.entryId}`,
+        summary: "s",
+        source: "observed",
+        maturityState: "established",
+        activationStrength: 1,
+        validUntil: null,
+      })),
+    );
+
+    const res = await handleLongMemorySearch({ query: "x" }, ctx());
+    const data = JSON.parse(res.output);
+    expect(data.count).toBe(6); // 1 direct + 5 expansion (GRAPH_EXPANSION_MAX_RESULTS)
+    expect(data.truncated).toBe(true);
+    expect(data.droppedCount).toBe(2);
+    expect(data.droppedDirect).toBe(0);
+    expect(data.droppedExpansion).toBe(2);
+
+    const truncated = mockMemLog.mock.calls.filter(
+      (c) => c[0] === "search" && c[1] === "graph_expansion_truncated",
+    );
+    expect(truncated).toHaveLength(1);
+    expect(truncated[0]![2]).toEqual({ count: 2 });
+    // Direct truncation did NOT fire.
+    expect(
+      mockMemLog.mock.calls.filter((c) => c[0] === "search" && c[1] === "truncated"),
+    ).toHaveLength(0);
+  });
+
+  it("fails open: a graph repo error never fails the search", async () => {
+    mockRecallCandidatesTopK.mockResolvedValue([]);
+    mockListEntityIdsForEntries.mockRejectedValue(new Error("graph db down"));
+    const res = await handleLongMemorySearch({ query: "x" }, ctx());
+    expect(res.success).toBe(true);
+    const data = JSON.parse(res.output);
+    expect(data.results).toHaveLength(1); // the direct hit still serves
+    const warned = mockMemLog.mock.calls.filter(
+      (c) => c[0] === "search" && c[1] === "graph_expansion_failed",
+    );
+    expect(warned).toHaveLength(1);
   });
 });
 

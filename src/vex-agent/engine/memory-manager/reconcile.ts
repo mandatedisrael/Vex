@@ -55,6 +55,7 @@ import {
   type MemoryJob,
 } from "@vex-agent/db/repos/memory-jobs/index.js";
 import { recordDecision } from "@vex-agent/db/repos/memory-decisions/index.js";
+import { invalidateEdgesForOrigin } from "@vex-agent/db/repos/memory-edges/index.js";
 import {
   applyMaturityTransition,
   bumpOutcomeVersion,
@@ -123,6 +124,8 @@ export interface ReconcileDeps {
   applyMaturityTransition: typeof applyMaturityTransition;
   recordMaturityEvent: typeof recordMaturityEvent;
   invalidateEntryOnReconcile: typeof invalidateEntryOnReconcile;
+  /** S8 — retract the entry's graph edges when the lesson is invalidated. */
+  invalidateEdgesForOrigin: typeof invalidateEdgesForOrigin;
   raiseEntrySourceTier: typeof raiseEntrySourceTier;
   bumpOutcomeVersion: typeof bumpOutcomeVersion;
   updateReconciledCandidateOutcome: typeof updateReconciledCandidateOutcome;
@@ -158,6 +161,7 @@ export function defaultReconcileDeps(
     applyMaturityTransition,
     recordMaturityEvent,
     invalidateEntryOnReconcile,
+    invalidateEdgesForOrigin,
     raiseEntrySourceTier,
     bumpOutcomeVersion,
     updateReconciledCandidateOutcome,
@@ -558,6 +562,14 @@ async function applyConsequence(
     case "invalidate": {
       const ok = await deps.invalidateEntryOnReconcile(lock.id, args.rationale, tx);
       if (!ok) throw new Error(`reconcile invalidate: update missed under lock (entry ${lock.id})`);
+      // S8 (D-SUPERSEDE-WIRING): the lesson's graph edges are ITS claims — when
+      // the lesson dies, retract them in the SAME tx (bulk, idempotent; count
+      // logged by the repo). Deliberately NO savepoint here: this is one plain
+      // UPDATE, and a statement failure means the tx/connection is already
+      // doomed — the job's markFailed→retry path is the recovery, exactly as
+      // for every other reconcile write. Entry↔entity links stay (historical;
+      // expansion filters on ke.status='active').
+      await deps.invalidateEdgesForOrigin(lock.id, tx);
       return;
     }
     case "retain":

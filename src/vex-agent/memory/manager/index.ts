@@ -20,6 +20,38 @@ export {
 } from "./consolidate.js";
 
 export {
+  extractEntities,
+  buildGraphPlan,
+  applyGraphPlan,
+  canonicalizeDollarName,
+  defaultGraphPlanDeps,
+  buildExtractionSystemPrompt,
+  buildExtractionUserPrompt,
+  type ExtractionLesson,
+  type GraphLessonCandidate,
+  type GraphPlan,
+  type GraphPlanDeps,
+  type GraphPlanEntity,
+  type GraphPlanLink,
+  type GraphPlanEdge,
+  type GraphApplyCounts,
+} from "./entity-extraction.js";
+
+export {
+  entityExtractionSchema,
+  EXTRACTION_ENTITIES_MAX,
+  EXTRACTION_ENTITY_NAME_MAX,
+  EXTRACTION_ALIASES_MAX,
+  EXTRACTION_ALIAS_MAX,
+  EXTRACTION_SUMMARY_MAX,
+  EXTRACTION_EDGES_MAX,
+  EXTRACTION_FACT_MAX,
+  type EntityExtraction,
+  type ExtractedEntity,
+  type ExtractedEdge,
+} from "./entity-extraction-schema.js";
+
+export {
   reinforceEntry,
   decayEntry,
   defaultMaturityDeps,

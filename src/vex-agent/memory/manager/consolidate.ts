@@ -78,6 +78,13 @@ import type { JudgeVerdict } from "./judge-schema.js";
 import { applyDecision, type DecisionPlan } from "./promote.js";
 import { reinforceEntry, defaultMaturityDeps, type MaturityDeps } from "./maturity.js";
 import { findActiveByContentHash } from "@vex-agent/db/repos/knowledge/crud.js";
+import { invalidateEdgesForOrigin } from "@vex-agent/db/repos/memory-edges/index.js";
+import {
+  applyGraphPlan,
+  buildGraphPlan,
+  defaultGraphPlanDeps,
+  type GraphPlan,
+} from "./entity-extraction.js";
 
 // ── Injectable IO ───────────────────────────────────────────────────
 
@@ -119,6 +126,17 @@ export interface ConsolidateDeps {
   ) => Promise<MemoryOutcomeSummary | null>;
   /** S5 — an anchor execution's created_at (drives the as-of decision boundary). */
   getExecutionTime: ExecTimeDeref;
+  /**
+   * S8 — build the graph write-plan for a promote/supersede verdict (F1: the
+   * SECOND LLM call happens ONLY here, pre-tx). FAIL-OPEN by contract: any
+   * extraction/embedding error yields `null` and the promotion proceeds
+   * without a graph. Injected so the decision pipeline is testable without
+   * the extractor LLM or the embeddings sidecar.
+   */
+  buildGraphPlan: (
+    candidate: MemoryCandidate,
+    plan: { regimeTags: readonly string[] },
+  ) => Promise<GraphPlan | null>;
   /** Inference identity recorded on a decision. */
   inferenceProvider: string | null;
   inferenceModel: string | null;
@@ -177,6 +195,8 @@ export function defaultConsolidateDeps(
       const exec = await executionsRepo.getById(executionId);
       return exec ? { createdAt: exec.createdAt } : null;
     },
+    buildGraphPlan: (candidate, plan) =>
+      buildGraphPlan(candidate, plan, defaultGraphPlanDeps(makeProvider)),
     inferenceProvider: "openrouter",
     inferenceModel: process.env.AGENT_MODEL ?? null,
   };
@@ -340,6 +360,12 @@ export interface CandidateDecision {
    * SAME tx as the decision. Null for every non-reinforcing decision.
    */
   reinforce: ReinforcementTarget | null;
+  /**
+   * S8 — the pre-built graph write-plan for a promote/supersede plan (F1; built
+   * PRE-TX so the LLM never holds locks). Null on every non-promoting plan AND
+   * whenever extraction failed open — the atomic apply skips the graph then.
+   */
+  graphPlan: GraphPlan | null;
 }
 
 /**
@@ -452,6 +478,8 @@ export async function consolidateCandidate(
       outcome,
       availableAtDecisionTime,
       reinforce,
+      // Deterministic terminals never promote — no extraction (F1: zero cost).
+      graphPlan: null,
     };
   }
 
@@ -467,6 +495,14 @@ export async function consolidateCandidate(
       costUsd: judged.costUsd,
     },
   );
+  // S8 seam (F1): the verdict resolved to promote/supersede → ONE extraction
+  // call PRE-TX (D-ORDER — the LLM never holds locks). Fail-open by contract:
+  // a null plan means the lesson promotes WITHOUT a graph.
+  const graphPlan =
+    plan.type === "promote" || plan.type === "supersede"
+      ? await deps.buildGraphPlan(candidate, { regimeTags: plan.regimeTags })
+      : null;
+
   return {
     plan,
     llmCalls: judged.llmCalls,
@@ -476,6 +512,7 @@ export async function consolidateCandidate(
     // The judge path never produces a deterministic `duplicate` — escalation
     // means D4/D5 did NOT fire, so there is no reinforcement target here.
     reinforce: null,
+    graphPlan,
   };
 }
 
@@ -508,15 +545,24 @@ export interface AtomicApplyResult {
 }
 
 /**
- * Owner-check (R1#2) + S5 outcome write + applyDecision + recordDecision in ONE
- * transaction (FIX-4 §8 / S5 §8). The owner-check `SELECT … FOR UPDATE OF i,j`
- * proves this worker still holds the item BEFORE any write; a lost claim THROWS
- * before any mutation. When the candidate is trade-family with a resolved
- * outcome, `updateCandidateOutcome` persists the ledger facts + as-of boundary
- * BEFORE promote (so the lesson is grounded), and the boundary becomes the
- * promoted entry's `valid_from` with an explicit `outcome_version=0` (S5 init;
- * S7 bumps). recordDecision re-locks the same rows in the SAME tx (no deadlock).
- * The item is closed (markItemDone) by the caller AFTER commit.
+ * Owner-check (R1#2) + S5 outcome write + applyDecision + S8 graph writes +
+ * recordDecision in ONE transaction (FIX-4 §8 / S5 §8 / S8 D-WRITE). The
+ * owner-check `SELECT … FOR UPDATE OF i,j` proves this worker still holds the
+ * item BEFORE any write; a lost claim THROWS before any mutation. When the
+ * candidate is trade-family with a resolved outcome, `updateCandidateOutcome`
+ * persists the ledger facts + as-of boundary BEFORE promote (so the lesson is
+ * grounded), and the boundary becomes the promoted entry's `valid_from` with an
+ * explicit `outcome_version=0` (S5 init; S7 bumps).
+ *
+ * S8 graph writes run AFTER `applyDecision` (the promoted entry id comes from
+ * `decisionInput.promotedKnowledgeId`) and BEFORE `recordDecision`, inside
+ * `SAVEPOINT graph_plan` (D-SAVEPOINT): an in-tx graph error rolls back ONLY
+ * the graph writes — the promotion commits without a graph (fail-open closed
+ * end-to-end). A supersede additionally retracts the PREDECESSOR's edges in
+ * the same savepoint-protected region (D-SUPERSEDE-WIRING).
+ *
+ * recordDecision re-locks the same rows in the SAME tx (no deadlock). The item
+ * is closed (markItemDone) by the caller AFTER commit.
  */
 export async function applyDecisionAtomically(args: {
   candidate: MemoryCandidate;
@@ -531,12 +577,15 @@ export async function applyDecisionAtomically(args: {
   reinforce?: ReinforcementTarget | null;
   /** S6a — injectable maturity IO (tests stub the reinforce path). */
   maturityDeps?: MaturityDeps;
+  /** S8 — pre-built graph plan (null → promotion without graph; fail-open). */
+  graphPlan?: GraphPlan | null;
   client?: PoolClient;
 }): Promise<AtomicApplyResult> {
   const outcome = args.outcome ?? null;
   const boundary = args.availableAtDecisionTime ?? null;
   const reinforce = args.reinforce ?? null;
   const maturityDeps = args.maturityDeps ?? defaultMaturityDeps();
+  const graphPlan = args.graphPlan ?? null;
 
   const run = async (tx: PoolClient): Promise<AtomicApplyResult> => {
     // Owner-check: the item must still be `processing`, the job `running` and
@@ -574,6 +623,26 @@ export async function applyDecisionAtomically(args: {
       validFrom: outcome ? boundary : null,
       outcomeVersion: outcome ? 0 : undefined,
     });
+
+    // ── S8 graph writes (D-WRITE / D-SAVEPOINT / D-SUPERSEDE-WIRING) ──
+    // The promoted entry id rides in decisionInput.promotedKnowledgeId (a
+    // promote that degraded to a reject — redaction anomaly — carries none →
+    // graph skipped). Wrapped in a SAVEPOINT so an in-tx graph error NEVER
+    // takes the promotion down with it.
+    const promotedEntryId = applied.decisionInput.promotedKnowledgeId ?? null;
+    const predecessorId = args.plan.type === "supersede" ? args.plan.previousKnowledgeId : null;
+    if ((graphPlan !== null && promotedEntryId !== null) || predecessorId !== null) {
+      await applyGraphWritesFailOpen(
+        {
+          candidateId: args.candidate.id,
+          graphPlan: promotedEntryId !== null ? graphPlan : null,
+          entryId: promotedEntryId,
+          predecessorId,
+        },
+        tx,
+      );
+    }
+
     const recorded = await recordDecision(applied.decisionInput, tx);
     if (!recorded.ok) {
       throw new Error(
@@ -620,6 +689,58 @@ async function applyReinforcement(
   }
   if (knowledgeId === null) return;
   await reinforceEntry(knowledgeId, { candidateId }, tx, maturityDeps);
+}
+
+/**
+ * S8 graph writes under `SAVEPOINT graph_plan` (D-SAVEPOINT). Order inside the
+ * savepoint:
+ *   1. supersede only — retract the PREDECESSOR's edges
+ *      (`invalidateEdgesForOrigin`; D-SUPERSEDE-WIRING — edges are claims of
+ *      their origin lesson; the successor gets a fresh extraction). Entry↔entity
+ *      links of the predecessor STAY (historical record; expansion filters on
+ *      `ke.status='active'`).
+ *   2. `applyGraphPlan` — entities / aliases / links / edges for the NEW entry.
+ *
+ * Any error → `ROLLBACK TO SAVEPOINT graph_plan` + audited warn + the promotion
+ * CONTINUES (commits without a graph). Pre-validation (Zod / enum / dim) makes
+ * an in-tx failure an anomaly — the savepoint is a seatbelt, not an expected
+ * path. The SAVEPOINT statement itself sits OUTSIDE the try: if even that
+ * fails, the connection is broken and the whole tx is doomed regardless.
+ */
+async function applyGraphWritesFailOpen(
+  args: {
+    candidateId: string;
+    graphPlan: GraphPlan | null;
+    entryId: number | null;
+    predecessorId: number | null;
+  },
+  tx: PoolClient,
+): Promise<void> {
+  await tx.query("SAVEPOINT graph_plan");
+  try {
+    if (args.predecessorId !== null) {
+      // Count is logged by the repo (memory.edge.origin_invalidated).
+      await invalidateEdgesForOrigin(args.predecessorId, tx);
+    }
+    if (args.graphPlan !== null && args.entryId !== null) {
+      const counts = await applyGraphPlan(args.graphPlan, args.entryId, tx);
+      memLog("manager", "graph_extracted", {
+        candidateId: args.candidateId,
+        promotedKnowledgeId: args.entryId,
+        entityCount: counts.entityCount,
+        edgeCount: counts.edgeCount,
+        linkCount: counts.linkCount,
+      });
+    }
+    await tx.query("RELEASE SAVEPOINT graph_plan");
+  } catch {
+    // Fail-open: only the graph writes roll back; the promotion proceeds.
+    await tx.query("ROLLBACK TO SAVEPOINT graph_plan");
+    memLog.warn("manager", "graph_extraction_failed", {
+      candidateId: args.candidateId,
+      errorCode: "graph_apply_error",
+    });
+  }
 }
 
 /** Thrown when the owner-check fails — the worker lost the claim. */

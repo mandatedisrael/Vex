@@ -40,6 +40,8 @@ function deps(overrides: Partial<ConsolidateDeps> = {}): ConsolidateDeps {
     // exercise the outcome-aware 'strong' path override this.
     resolveOutcome: async () => null,
     getExecutionTime: async () => ({ createdAt: new Date().toISOString() }),
+    // S8: extraction stubbed to fail-open (null plan) — the seam tests override.
+    buildGraphPlan: async () => null,
     inferenceProvider: "openrouter",
     inferenceModel: "test/model",
     ...overrides,
@@ -185,6 +187,91 @@ describe("consolidateCandidate decision pipeline", () => {
     if (out.plan.type === "promote") {
       expect(out.plan.sourceTier).toBe("inferred");
     }
+  });
+});
+
+// ── S8 graph-extraction seam (F1: second LLM call ONLY on promote/supersede) ──
+
+describe("consolidateCandidate — S8 graph-extraction seam", () => {
+  const STUB_PLAN = { entities: [], links: [], edges: [] };
+
+  it("calls buildGraphPlan exactly once on a promote plan, with the verdict's regimeTags", async () => {
+    const calls: { candidateId: string; regimeTags: readonly string[] }[] = [];
+    const candidate = makeCandidate();
+    const out = await consolidateCandidate(
+      candidate,
+      EMB,
+      deps({
+        recallClusterAnchors: twoExecCluster(),
+        buildGraphPlan: async (c, plan) => {
+          calls.push({ candidateId: c.id, regimeTags: plan.regimeTags });
+          return STUB_PLAN;
+        },
+      }),
+    );
+    expect(out.plan.type).toBe("promote");
+    expect(calls).toEqual([{ candidateId: candidate.id, regimeTags: ["bull"] }]);
+    expect(out.graphPlan).toBe(STUB_PLAN);
+  });
+
+  it("never calls buildGraphPlan on a deterministic terminal (retain at n=1 — F1: zero cost)", async () => {
+    let called = false;
+    const out = await consolidateCandidate(
+      makeCandidate(),
+      EMB,
+      deps({
+        buildGraphPlan: async () => {
+          called = true;
+          return STUB_PLAN;
+        },
+      }),
+    );
+    expect(out.plan.type).toBe("retain");
+    expect(called).toBe(false);
+    expect(out.graphPlan).toBeNull();
+  });
+
+  it("never calls buildGraphPlan on a judge reject", async () => {
+    let called = false;
+    const out = await consolidateCandidate(
+      makeCandidate(),
+      EMB,
+      deps({
+        recallClusterAnchors: twoExecCluster(),
+        judge: async () => ({
+          verdict: {
+            verdict: "reject",
+            rubric: { grounding: 1, durability: 1, novelty: 2, generalizability: 1, processNotOutcome: 3 },
+            sourceTier: "hypothesis",
+            regimeTags: [],
+            rejectReason: "insufficient_evidence",
+          },
+          llmCalls: 1,
+          costUsd: null,
+        }),
+        buildGraphPlan: async () => {
+          called = true;
+          return STUB_PLAN;
+        },
+      }),
+    );
+    expect(out.plan.type).toBe("reject");
+    expect(called).toBe(false);
+    expect(out.graphPlan).toBeNull();
+  });
+
+  it("carries a null graph plan on extraction fail-open — the promotion still proceeds", async () => {
+    const out = await consolidateCandidate(
+      makeCandidate(),
+      EMB,
+      deps({
+        recallClusterAnchors: twoExecCluster(),
+        // buildGraphPlan's CONTRACT is fail-open: any internal error → null.
+        buildGraphPlan: async () => null,
+      }),
+    );
+    expect(out.plan.type).toBe("promote");
+    expect(out.graphPlan).toBeNull();
   });
 });
 

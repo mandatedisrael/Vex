@@ -65,6 +65,39 @@ export const LONG_MEMORY_CANDIDATE_MIN_SIMILARITY = 0.35;
 /** Maximum number of candidates that may surface in one search. */
 export const LONG_MEMORY_CANDIDATE_MAX = 3;
 
+// ── Graph expansion (S8 / D-EXPAND) — tune, do not freeze ────────
+
+/**
+ * Per-hop confidence decay for a graph-expansion result (S8). A neighbor reached
+ * through ONE entity hop scores `seed.score × GRAPH_HOP_DECAY × neighbor
+ * factors` — strictly below its seed, so the graph ENRICHES results and never
+ * dominates them (graph is the weakest of the three signals). 0.5 deliberately
+ * avoids an accidental collision with CANDIDATE_DUAL_TRACE_WEIGHT (0.6) so the
+ * two de-weights stay visually and numerically distinct. Tune, do not freeze.
+ */
+export const GRAPH_HOP_DECAY = 0.5;
+
+/** Max blended ENTRY results used as expansion seeds (top of the ranked list). */
+export const GRAPH_EXPANSION_MAX_SEEDS = 5;
+
+/** Max seed/neighbor entities considered per expansion (and per-entity edge cap). */
+export const GRAPH_EXPANSION_MAX_ENTITIES = 8;
+
+/** Max graph-expansion results appended to one search response. */
+export const GRAPH_EXPANSION_MAX_RESULTS = 5;
+
+/** Max chars of the `viaEntity` marker name surfaced on an expansion result. */
+export const GRAPH_VIA_ENTITY_MAX = 50;
+
+// Import-time assert (S8): the hop decay MUST stay a strict de-weight in (0, 1).
+// A decay ≥ 1 would let a 1-hop neighbor match or beat its seed — breaking the
+// "graph enriches, never dominates" doctrine silently.
+if (!(GRAPH_HOP_DECAY > 0 && GRAPH_HOP_DECAY < 1)) {
+  throw new Error(
+    `long-memory-retrieval-policy: invariant 0 < GRAPH_HOP_DECAY < 1 violated (got ${GRAPH_HOP_DECAY})`,
+  );
+}
+
 // Compile-time + runtime assertion of the hard invariant
 // `CANDIDATE_DUAL_TRACE_WEIGHT < SOURCE_SOFT_WEIGHT ≤ 1`. A future edit that
 // breaks it would silently let a candidate outrank a confirmed entry.
@@ -136,6 +169,10 @@ export interface LongMemoryKnowledgeResult {
   readonly evidenceRefs: Record<string, unknown>;
   /** Knowledge `rerank` BASE score (similarity + boosts) — the de-weight multiplies this. */
   readonly rerankScore: number;
+  /** S8 — present iff this result was reached via graph expansion, never direct recall. */
+  readonly via?: "graph";
+  /** S8 — the entity name (≤ GRAPH_VIA_ENTITY_MAX chars) the expansion hopped through. */
+  readonly viaEntity?: string;
 }
 
 /** A blended result sourced from a fresh `not_consolidated` candidate. */
@@ -184,10 +221,46 @@ export interface KnowledgeScoreInput {
  *     above proves `worst tier × MIN_FACTOR ≥ candidate weight`).
  */
 export function scoreKnowledge(input: KnowledgeScoreInput): number {
-  const tierWeight = (FULL_WEIGHT_SOURCES as readonly string[]).includes(input.sourceTier)
-    ? 1
-    : SOURCE_SOFT_WEIGHT;
-  return input.rerankScore * tierWeight * activationFactor(input.activationStrength);
+  return (
+    input.rerankScore *
+    sourceTierWeight(input.sourceTier) *
+    activationFactor(input.activationStrength)
+  );
+}
+
+/**
+ * Source-tier weight shared by direct knowledge scoring and graph expansion:
+ * `observed`/`user_confirmed` → ×1.0; `inferred`/`hypothesis` →
+ * ×`SOURCE_SOFT_WEIGHT` (ranked lower, never excluded).
+ */
+export function sourceTierWeight(tier: KnowledgeSource): number {
+  return (FULL_WEIGHT_SOURCES as readonly string[]).includes(tier) ? 1 : SOURCE_SOFT_WEIGHT;
+}
+
+/** The neighbor-side credibility inputs `graphScore` composes (S8 / D-EXPAND). */
+export interface GraphNeighborScoreInput {
+  readonly sourceTier: KnowledgeSource;
+  readonly activationStrength: number;
+}
+
+/**
+ * Score a graph-expansion neighbor (S8 / D-EXPAND): `seedScore ×
+ * GRAPH_HOP_DECAY × tierWeight(neighbor) × activationFactor(neighbor)`.
+ *
+ * `seedScore` ALREADY contains the SEED's tier × activation (`scoreKnowledge`),
+ * so the composition multiplies in the NEIGHBOR's credibility only — never the
+ * seed factors twice. For any POSITIVE seed score the result is strictly below
+ * it (decay < 1, both neighbor factors ≤ 1) — the property the import-time
+ * assert above protects. Callers must skip seeds with score ≤ 0 (the strict
+ * inequality is meaningless there).
+ */
+export function graphScore(seedScore: number, neighbor: GraphNeighborScoreInput): number {
+  return (
+    seedScore *
+    GRAPH_HOP_DECAY *
+    sourceTierWeight(neighbor.sourceTier) *
+    activationFactor(neighbor.activationStrength)
+  );
 }
 
 /**

@@ -14,4 +14,8 @@ export {
   linkEntryEntity,
   listEntitiesForEntry,
   listEntriesForEntity,
+  listEntityIdsForEntries,
+  listEntryIdsForEntities,
+  type EntryEntityLink,
+  type EntityEntryRef,
 } from "./crud.js";
