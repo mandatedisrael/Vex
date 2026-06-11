@@ -181,7 +181,7 @@ export function SelectMenu({
         onKeyDown={handleKeyDown}
         className={cn(
           "flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-white/[0.035] px-2 text-left text-sm text-foreground",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]",
           "disabled:cursor-not-allowed disabled:opacity-60",
           className,
         )}
@@ -211,7 +211,9 @@ export function SelectMenu({
           role="listbox"
           aria-label={ariaLabel}
           aria-labelledby={ariaLabelledBy}
-          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-white/[0.08] bg-[#061026]/95 p-1 shadow-[0_0_40px_rgba(15,40,110,0.45)] backdrop-blur-2xl"
+          // Solid semantic popover surface (A6) — depth from luminance + a
+          // hairline, never backdrop blur or a resting glow.
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground"
         >
           {options.map((opt, index) => {
             const active = index === activeIndex;
@@ -227,7 +229,7 @@ export function SelectMenu({
                 className={cn(
                   "flex cursor-pointer items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-sm",
                   active
-                    ? "bg-[#3275f8]/18 text-foreground"
+                    ? "bg-[var(--vex-accent-fill-12)] text-foreground"
                     : "text-[var(--color-text-secondary)]",
                   selected && !active && "text-foreground",
                 )}
@@ -236,7 +238,7 @@ export function SelectMenu({
                 {selected ? (
                   <span
                     aria-hidden
-                    className="ml-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#8da5ff]"
+                    className="ml-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--vex-accent)]"
                   />
                 ) : null}
               </li>

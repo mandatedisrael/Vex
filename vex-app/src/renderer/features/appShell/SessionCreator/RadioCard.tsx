@@ -31,10 +31,10 @@ export function RadioCard({
   return (
     <label
       className={cn(
-        "flex min-h-[112px] cursor-pointer flex-col gap-2 rounded-lg border bg-white/[0.035] px-3 py-3 text-sm transition-colors",
+        "flex min-h-[112px] cursor-pointer flex-col gap-2 rounded-lg border px-3 py-3 text-sm transition-colors",
         checked
-          ? "border-[#3275f8]/55 bg-[#3275f8]/14 ring-1 ring-[#3275f8]/55"
-          : "border-white/[0.08] hover:bg-white/[0.06]",
+          ? "border-[var(--vex-accent-border)] bg-[var(--vex-accent-fill-8)]"
+          : "border-[var(--vex-line)] hover:bg-white/[0.03]",
       )}
     >
       <input
@@ -45,11 +45,16 @@ export function RadioCard({
         onChange={onChange}
         className="sr-only"
       />
-      <span className="flex h-8 w-8 items-center justify-center text-[#8da5ff]">
+      <span
+        className={cn(
+          "flex h-8 w-8 items-center justify-center",
+          checked ? "text-[var(--vex-accent-text)]" : "text-[var(--vex-text-3)]",
+        )}
+      >
         <HugeiconsIcon icon={icon} size={19} aria-hidden />
       </span>
       <span className="font-medium text-foreground">{title}</span>
-      <span className="text-xs text-[var(--color-text-secondary)]">
+      <span className="text-xs text-[var(--vex-text-2)]">
         {description}
       </span>
     </label>

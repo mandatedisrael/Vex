@@ -54,13 +54,12 @@ export type VexDomain =
    */
   | "compaction"
   /**
-   * Agent integration stage 7-2a — read-only knowledge + per-session memory
-   * management surfaces (sanitized list reads; no mutation yet — knowledge
-   * disable/archive lands in 7-2b). `knowledge` is the global store;
-   * `memory` is per-session. DB unavailability maps to `internal.unexpected`
+   * Agent integration stage 7-2a + memory-system S9 — read-only memory
+   * inspection surfaces (sanitized list reads, no mutations): the
+   * per-session memory lists plus the global long-term memory list
+   * (`longMemory.list`). DB unavailability maps to `internal.unexpected`
    * like the other read domains.
    */
-  | "knowledge"
   | "memory"
   /**
    * Used by the read-only `sessions.getModel` handler (global runtime
@@ -170,14 +169,6 @@ export type VexErrorCode =
   | "approvals.run_terminated"
   | "approvals.dispatch_failed"
   | "approvals.policy_drift_blocked"
-  /**
-   * Stage 7-2b — knowledge disable/archive mutation
-   * (`knowledge.updateStatus`). `not_found` = entry gone; `invalid_state` =
-   * entry no longer active (already disabled/superseded). Both
-   * `retryable: false, userActionable: true`.
-   */
-  | "knowledge.not_found"
-  | "knowledge.invalid_state"
   /**
    * Stage 8-5 — compaction retry (`compaction.retry`). `not_found` = no such
    * job for the (session, generation); `invalid_state` = the job is not (or no

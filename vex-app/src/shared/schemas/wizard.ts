@@ -137,7 +137,10 @@ const REVIEW_PRECONDITION = WIZARD_STEP_IDS.filter((id) => id !== "review");
 function isCompletedConsistent(s: {
   readonly currentStepId: WizardStepId;
   readonly completedSteps: ReadonlyArray<WizardStepId>;
-  readonly completed?: boolean;
+  // `| undefined` is required under exactOptionalPropertyTypes: the Zod
+  // `.optional()` output type is `boolean | undefined`, and a plain
+  // `completed?: boolean` parameter would reject it.
+  readonly completed?: boolean | undefined;
 }): boolean {
   if (s.completed !== true) return true;
   if (s.currentStepId !== "review") return false;

@@ -25,6 +25,11 @@ vi.mock("@hugeicons/react", () => ({
 vi.mock("@hugeicons/core-free-icons", () => ({
   Add01Icon: "Add01Icon",
   AiChat01Icon: "AiChat01Icon",
+  // S5 act ledger — ToolLedger/toolGlyph.ts imports these four.
+  AiWebBrowsingIcon: "AiWebBrowsingIcon",
+  File01Icon: "File01Icon",
+  TerminalIcon: "TerminalIcon",
+  Wrench01Icon: "Wrench01Icon",
   AlertCircleIcon: "AlertCircleIcon",
   Archive02Icon: "Archive02Icon",
   ArrowDown01Icon: "ArrowDown01Icon",
@@ -42,7 +47,8 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   Delete02Icon: "Delete02Icon",
   Exchange01Icon: "Exchange01Icon",
   FilterHorizontalIcon: "FilterHorizontalIcon",
-  Knowledge01Icon: "Knowledge01Icon",
+  Brain01Icon: "Brain01Icon",
+  MapPinIcon: "MapPinIcon",
   PanelLeftCloseIcon: "PanelLeftCloseIcon",
   PanelLeftOpenIcon: "PanelLeftOpenIcon",
   Search01Icon: "Search01Icon",
@@ -290,7 +296,7 @@ describe("AppShell", () => {
     // Empty transcript (default mock) → chips are visible as conversation starters.
     renderShell();
     await screen.findByText("Chips");
-    expect(await screen.findByRole("button", { name: /Swap/i })).not.toBeNull();
+    expect(await screen.findByRole("button", { name: /wallet balances/i })).not.toBeNull();
   });
 
   it("hides quick-action chips once the session transcript has messages", async () => {
@@ -321,7 +327,7 @@ describe("AppShell", () => {
     renderShell();
     await screen.findByText("hi vex");
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: /Swap/i })).toBeNull(),
+      expect(screen.queryByRole("button", { name: /wallet balances/i })).toBeNull(),
     );
   });
 

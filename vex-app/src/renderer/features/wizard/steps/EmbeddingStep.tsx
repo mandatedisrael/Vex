@@ -163,7 +163,7 @@ export function EmbeddingStep({
       description={
         <>
           Vex needs an OpenAI-compatible embedding endpoint to power
-          knowledge recall. The bundled stack runs llama.cpp:server with
+          long-term memory recall. The bundled stack runs llama.cpp:server with
           EmbeddingGemma 300M on{" "}
           <code>127.0.0.1:{DEFAULT_EMBED_PORT}</code> — point this at
           your own OpenAI / Ollama / remote endpoint if you prefer.

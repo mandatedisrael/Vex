@@ -4,7 +4,7 @@
  *
  * Error rendering is specialised by VexErrorCode:
  *   - embedding.dim_locked → warning card with the existing/target row
- *     count + "knowledge unavailable" guidance.
+ *     count + "memory unavailable" guidance.
  *   - embedding.db_unavailable → retry card with hint to verify the
  *     System Check screen first.
  */
@@ -33,13 +33,13 @@ export function EmbeddingWarningPanels({
         >
           <strong className="block font-semibold">Dim change blocked.</strong>
           <p className="mt-1">
-            {serverError.details.existingRowCount} existing knowledge
+            {serverError.details.existingRowCount} existing long-term memory
             entries use a different embedding dimension. Changing to
             dim={serverError.details.targetDim} would make them
             unavailable.
           </p>
           <p className="mt-2 text-xs">
-            Safe path: export your knowledge first, wipe
+            Safe path: export your memory first, wipe
             <code className="mx-1">knowledge_entries</code>, then change
             dim and re-import. (Phase 2 GUI for this.)
           </p>

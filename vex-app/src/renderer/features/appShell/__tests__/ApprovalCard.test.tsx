@@ -239,6 +239,25 @@ describe("ApprovalCard", () => {
     );
   });
 
+  // S5 signed glint — the ONE success light in the approvals flow.
+  it("renders the one-shot signed glint after a successful approve", () => {
+    mockApproveMutate.mockImplementation((_input, options) => {
+      void options?.onSuccess?.({ ok: true, data: {} });
+    });
+    renderCard(makeSummary({ riskLevel: "info", actionKind: "read" }), false);
+    fireEvent.click(screen.getByRole("button", { name: /^approve$/i }));
+    expect(document.querySelector("[data-vex-signed-glint]")).not.toBeNull();
+  });
+
+  it("never lights the glint on reject (one-light rule)", () => {
+    mockRejectMutate.mockImplementation((_input, options) => {
+      void options?.onSuccess?.({ ok: true, data: {} });
+    });
+    renderCard(makeSummary({ riskLevel: "info", actionKind: "read" }), false);
+    fireEvent.click(screen.getByRole("button", { name: /^reject$/i }));
+    expect(document.querySelector("[data-vex-signed-glint]")).toBeNull();
+  });
+
   it("buttons disabled while a mutation is in-flight", () => {
     approvePending = true;
     renderCard(

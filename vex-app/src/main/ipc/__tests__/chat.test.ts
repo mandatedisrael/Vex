@@ -124,6 +124,8 @@ describe("registerChatSubmitHandler", () => {
       row.id,
       "Rebalance Arbitrum LP",
       expect.any(AbortSignal),
+      // S6: no reasoningEffort in the payload → no per-turn options.
+      undefined,
     );
     expect(process.env.VEX_DB_URL).toBe(
       "postgresql://vex:test-secret@127.0.0.1:5777/vex",
@@ -151,6 +153,31 @@ describe("registerChatSubmitHandler", () => {
       row.id,
       "Check portfolio",
       expect.any(AbortSignal),
+      undefined,
+    );
+  });
+
+  it("threads the per-turn reasoningEffort into the engine options (S6)", async () => {
+    const row = makeSessionRow({ mode: "agent", initialGoal: null });
+    mocks.getSessionById.mockResolvedValue({ ok: true, data: row });
+    registerChatSubmitHandler();
+
+    const fn = handlers.get(CH.chat.submit)!;
+    const result = (await fn(trustedSender, {
+      requestId: "r-reason",
+      payload: {
+        sessionId: row.id,
+        message: "Think hard about this",
+        reasoningEffort: "high",
+      },
+    })) as { ok: boolean };
+
+    expect(result.ok).toBe(true);
+    expect(mocks.submitOperatorInstruction).toHaveBeenCalledWith(
+      row.id,
+      "Think hard about this",
+      expect.any(AbortSignal),
+      { reasoningEffort: "high" },
     );
   });
 

@@ -31,7 +31,7 @@ export function ReportIssueButton({
         onClick={openDialog}
         aria-label="Report an issue"
         aria-haspopup="dialog"
-        className="border border-white/[0.08] bg-white/[0.03] text-[var(--color-text-secondary)] hover:bg-white/[0.08] hover:text-foreground"
+        className="border border-[var(--vex-line-strong)] bg-transparent text-[var(--vex-text-2)] hover:bg-white/[0.04] hover:text-foreground"
       >
         <HugeiconsIcon icon={Bug02Icon} size={16} aria-hidden />
         {compact ? null : <span>Report issue</span>}

@@ -19,13 +19,13 @@ import type {
 
 /** How a row is laid out + styled. */
 export type TranscriptRowVariant =
-  | "user" // right-aligned operator prompt
-  | "assistant" // left, Vex avatar
-  | "assistant_stopped" // assistant bubble + "Stopped" badge (9-5b)
+  | "user" // right-aligned operator card + "You · HH:MM" caption (S3)
+  | "assistant" // full-width countersigned document flow (S3)
+  | "assistant_stopped" // assistant document + "Stopped" line (9-5b)
   | "tool" // compact mono tool call/result
   | "notice" // centered muted system/runtime/error line
   | "compaction" // centered static "conversation compacted" marker (8-4)
-  | "recall"; // static memory/knowledge recall indicator (8-4)
+  | "recall"; // static session/long-memory recall indicator (8-4)
 
 export interface TranscriptRowModel {
   readonly id: number;
@@ -34,6 +34,16 @@ export interface TranscriptRowModel {
   readonly label: string | null;
   readonly content: string;
   /**
+   * ISO timestamp threaded from `SessionMessageDto.createdAt` (S3): the
+   * persistent "You · 14:32" / "Vex · 14:32" register captions print it.
+   */
+  readonly createdAt: string;
+  /**
+   * Notice rows only (S3): `error`-kind notices keep the destructive tone;
+   * everything else that lands on the notice variant stays neutral.
+   */
+  readonly noticeTone?: "runtime" | "error";
+  /**
    * Tool rows only. `"call"` → `content` is assistant prose and `toolCalls`
    * carries the per-call param disclosures; `"result"` → `content` is the
    * tool output and `label` is `<toolName>_output`. Undefined elsewhere.
@@ -41,6 +51,20 @@ export interface TranscriptRowModel {
   readonly toolKind?: "call" | "result";
   /** Tool CALL rows: one disclosure per executed tool in the batch. */
   readonly toolCalls?: readonly ToolCallDisplay[];
+  /**
+   * Tool RESULT rows only (S5): the provider call id from the DTO, kept so
+   * the act-ledger post-pass can merge a result's output into its call's
+   * view entry. `null` when the engine wrote no correlation id.
+   */
+  readonly toolCallId?: string | null;
+  /**
+   * Tool CALL rows after the act-ledger post-pass (S5): one entry per
+   * executed call, each carrying its merged output when the matching
+   * `tool_result` landed in the same uninterrupted tool run. Absent on rows
+   * that never went through `groupTranscriptRows` — renderers fall back to
+   * `toolCalls` with no output.
+   */
+  readonly toolActs?: readonly ToolCallActView[];
 }
 
 function assertNever(value: never): never {
@@ -126,6 +150,10 @@ export function toTranscriptRow(
         toolKind: "result",
         label: `${name}_output`,
         content: dto.content,
+        createdAt: dto.createdAt,
+        // Correlation id survives into the row model so the S5 post-pass can
+        // pair this output with its call inside the same tool run.
+        toolCallId: dto.toolCallId,
       };
     }
     // tool_call row: prose (content) + one disclosure per executed tool.
@@ -135,7 +163,18 @@ export function toTranscriptRow(
       toolKind: "call",
       label: dto.toolName,
       content: dto.content,
+      createdAt: dto.createdAt,
       toolCalls: dto.toolCalls ?? [],
+    };
+  }
+  if (variant === "notice") {
+    return {
+      id: dto.id,
+      variant,
+      label: null,
+      content: dto.content,
+      createdAt: dto.createdAt,
+      noticeTone: dto.kind === "error" ? "error" : "runtime",
     };
   }
   return {
@@ -143,13 +182,14 @@ export function toTranscriptRow(
     variant,
     label: resolveLabel(variant, dto.toolName),
     content: dto.content,
+    createdAt: dto.createdAt,
   };
 }
 
 /**
  * Compact rows carry a short tag. `tool` rows show the tool name (or a
  * generic fallback); `recall` rows carry the raw tool name so the marker can
- * pick accurate copy (memory vs knowledge); everything else has no label.
+ * pick accurate copy (session vs long-term memory); everything else has no label.
  */
 function resolveLabel(
   variant: TranscriptRowVariant,
@@ -158,4 +198,165 @@ function resolveLabel(
   if (variant === "tool") return toolName ?? "tool";
   if (variant === "recall") return toolName;
   return null;
+}
+
+// ── S5: THE ACT LEDGER — post-pass grouping over the row list ───────────────
+//
+// The transcript registers tool work as ACTS: a call plus (when it landed in
+// the same uninterrupted tool run) its output. Long chains of acts collapse
+// into one aggregation entry so the document stays readable. This is a pure
+// post-pass over `toTranscriptRows` output — every existing variant passes
+// through untouched; only `variant === "tool"` rows are restructured.
+
+/** A run only aggregates when it registers at least this many CALLS. */
+export const TOOL_GROUP_MIN_CALLS = 3;
+
+/**
+ * One registered act: the sanitized call display plus its merged output.
+ * `output === null` means no result row paired (still running, lost, or the
+ * result landed outside the run) — the renderer then shows Args only.
+ */
+export interface ToolCallActView {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly toolArgs: string | null;
+  readonly output: string | null;
+}
+
+/** Aggregation entry replacing a run of ≥TOOL_GROUP_MIN_CALLS calls. */
+export interface ToolGroupRowModel {
+  readonly variant: "tool_group";
+  /** First contributing call row's message id — stable across refetches. */
+  readonly id: number;
+  readonly calls: readonly ToolCallActView[];
+  /** Tool names deduped in first-appearance order (drives the glyph strip). */
+  readonly distinctToolNames: readonly string[];
+  /** First contributing call row's timestamp. */
+  readonly createdAt: string;
+}
+
+/** What the transcript actually renders: plain rows plus group entries. */
+export type TranscriptEntry = TranscriptRowModel | ToolGroupRowModel;
+
+/**
+ * Collapse consecutive runs of tool rows into act entries (S5). "Consecutive"
+ * means uninterrupted by any non-tool row — user/assistant/marker/notice rows
+ * all break a run. Within a run, each `tool_result` row merges into its call's
+ * act (matched by `toolCallId` against calls registered EARLIER in the run);
+ * results that cannot pair stay standalone rows exactly as before. Runs whose
+ * call count reaches `TOOL_GROUP_MIN_CALLS` emit ONE `tool_group` entry;
+ * smaller runs keep individual call rows (with `toolActs` attached).
+ */
+export function groupTranscriptRows(
+  rows: readonly TranscriptRowModel[],
+): TranscriptEntry[] {
+  const out: TranscriptEntry[] = [];
+  let run: TranscriptRowModel[] = [];
+  const flushRun = (): void => {
+    if (run.length === 0) return;
+    out.push(...transformToolRun(run));
+    run = [];
+  };
+  for (const row of rows) {
+    if (row.variant === "tool") {
+      run.push(row);
+      continue;
+    }
+    flushRun();
+    out.push(row);
+  }
+  flushRun();
+  return out;
+}
+
+/** Internal pairing shape — mutable `output` while the run is scanned. */
+interface MutableAct {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly toolArgs: string | null;
+  output: string | null;
+}
+
+function transformToolRun(
+  run: readonly TranscriptRowModel[],
+): TranscriptEntry[] {
+  // Pass 1 — register every call as an act, then pair each result forward.
+  // Results always postdate their calls, so one chronological scan suffices.
+  const actsByRowId = new Map<number, MutableAct[]>();
+  const actByCallId = new Map<string, MutableAct>();
+  const consumedResultIds = new Set<number>();
+  const allActs: MutableAct[] = [];
+  for (const row of run) {
+    if (row.toolKind === "call") {
+      const acts = (row.toolCalls ?? []).map(
+        (call): MutableAct => ({ ...call, output: null }),
+      );
+      actsByRowId.set(row.id, acts);
+      for (const act of acts) {
+        allActs.push(act);
+        // First registration wins on a duplicate id (defensive — provider
+        // call ids are unique in practice).
+        if (!actByCallId.has(act.toolCallId)) {
+          actByCallId.set(act.toolCallId, act);
+        }
+      }
+      continue;
+    }
+    if (
+      row.toolKind === "result" &&
+      row.toolCallId !== null &&
+      row.toolCallId !== undefined
+    ) {
+      const act = actByCallId.get(row.toolCallId);
+      if (act !== undefined && act.output === null) {
+        act.output = row.content;
+        consumedResultIds.add(row.id);
+      }
+    }
+  }
+
+  // Pass 2 — emit. Grouped runs fold every act into ONE entry placed at the
+  // first contributing call row; assistant prose on grouped call rows is
+  // preserved as a document-only row ABOVE its acts (aggregation may drop the
+  // call/result interleaving, never the words).
+  const grouped = allActs.length >= TOOL_GROUP_MIN_CALLS;
+  const entries: TranscriptEntry[] = [];
+  let groupEmitted = false;
+  for (const row of run) {
+    if (row.toolKind === "call") {
+      const acts = actsByRowId.get(row.id) ?? [];
+      if (!grouped || acts.length === 0) {
+        // Stays individual; merged outputs ride along for the act renderer.
+        entries.push({ ...row, toolActs: acts });
+        continue;
+      }
+      if (row.content.length > 0) {
+        entries.push({ ...row, toolCalls: [], toolActs: [] });
+      }
+      if (!groupEmitted) {
+        entries.push({
+          variant: "tool_group",
+          id: row.id,
+          calls: allActs,
+          distinctToolNames: dedupeToolNames(allActs),
+          createdAt: row.createdAt,
+        });
+        groupEmitted = true;
+      }
+      continue;
+    }
+    // Result (or defensive unknown) row: merged results disappear into their
+    // act; orphans keep today's standalone disclosure rendering.
+    if (consumedResultIds.has(row.id)) continue;
+    entries.push(row);
+  }
+  return entries;
+}
+
+function dedupeToolNames(acts: readonly MutableAct[]): string[] {
+  const names: string[] = [];
+  for (const act of acts) {
+    if (!names.includes(act.toolName)) names.push(act.toolName);
+  }
+  return names;
 }

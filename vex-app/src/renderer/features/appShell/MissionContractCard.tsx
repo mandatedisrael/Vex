@@ -120,7 +120,7 @@ export function MissionContractCard({
       role="region"
       aria-labelledby="mission-contract-card-title"
       data-vex-area="mission-contract-card"
-      className="mt-7 overflow-hidden rounded-lg border border-white/[0.10] bg-white/[0.035] text-sm text-[var(--color-text-secondary)] backdrop-blur-xl"
+      className="mt-7 overflow-hidden rounded-lg border border-[var(--vex-line-strong)] bg-[var(--vex-surface-1)] text-sm text-[var(--vex-text-2)]"
     >
       <CardHeader kind={state.kind} title={title} />
       <CardBody draft={state.draft} />

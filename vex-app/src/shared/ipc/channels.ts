@@ -198,7 +198,7 @@ export const CH = {
   // Compaction — Track-2 status + history (stages 7-1, 7-2a) + retry (8-5).
   // `getStatus` = latest job + active count for the runtime-bar chip;
   // `listHistory` = the session's compaction-generation timeline for the
-  // knowledge/memory panel (both app-scoped; null for missing/foreign sessions).
+  // memory panel (both app-scoped; null for missing/foreign sessions).
   // `retry` re-enqueues a permanently-failed generation for another attempt.
   compaction: {
     getStatus: "vex:compaction:getStatus",
@@ -206,12 +206,12 @@ export const CH = {
     retry: "vex:compaction:retry",
   },
 
-  // Knowledge — read-only management list of the GLOBAL knowledge store
-  // (stage 7-2a). Sanitized metadata only (no content_md / source_refs /
-  // embeddings). Disable/archive mutation lands in 7-2b.
-  knowledge: {
-    list: "vex:knowledge:list",
-    updateStatus: "vex:knowledge:updateStatus",
+  // Long-term memory — read-only list of the GLOBAL long-term memory store
+  // (memory-system S9 rewire). Sanitized metadata only (no content_md /
+  // source_refs / embeddings). Deliberately NO mutation channel: the
+  // lifecycle is owned by the agent's memory manager.
+  longMemory: {
+    list: "vex:longMemory:list",
   },
 
   // Memory — read-only per-session memory list + stats (stage 7-2a).

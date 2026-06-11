@@ -3,9 +3,8 @@
   "compilerOptions": {
     "lib": ["ES2024"],
     "types": [],
-    "outDir": "./dist/shared",
-    "rootDir": ".",
     "paths": {
+      "@shared/*": ["./src/shared/*"],
       "@vex-lib/*": ["../src/lib/*"]
     }
   },

@@ -152,6 +152,12 @@ export function registerChatSubmitHandler(): () => void {
           input.sessionId,
           input.message,
           ctx.signal,
+          // S6: per-turn reasoning effort, validated by chatSubmitInputSchema.
+          // Absent → engine default ("medium" when the model supports
+          // reasoning; the param is omitted entirely otherwise).
+          input.reasoningEffort === undefined
+            ? undefined
+            : { reasoningEffort: input.reasoningEffort },
         );
         log.info(
           `[ipc:vex:chat:submit] ok sessionId=${input.sessionId} ` +

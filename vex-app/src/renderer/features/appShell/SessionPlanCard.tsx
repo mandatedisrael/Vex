@@ -1,24 +1,29 @@
 /**
- * SessionPlanCard — session-scoped plan-mode control (the agent-authored "HOW").
+ * SessionPlanCard — session-scoped plan display (the agent-authored "HOW").
  *
  * Shown for BOTH agent and mission sessions (plan-mode is session-scoped). The
- * engine is the authority: this card is UX only. Renders:
- *   - a plan-mode on/off toggle with a "recommended" badge,
+ * engine is the authority: this card is UX only. The on/off control lives in
+ * the composer's PLAN switch (S2) — this card only displays:
+ *   - the plan-mode description line (when enabled),
  *   - the active plan markdown (when present),
  *   - an "Accept plan" action when a plan is pending acceptance (the gate that
- *     unblocks execution / resumes a paused mission run).
+ *     unblocks execution / resumes a paused mission run),
+ *   - a "Resume mission" recovery action.
  *
  * Invalidate-based hooks (no optimistic write): a server refusal snaps back.
+ * The card itself never mutates plan mode (S2 moved toggling to the composer),
+ * so the old blocked-pending-acceptance hint was unreachable and was removed.
  */
 
 import type { JSX } from "react";
 import { MarkdownContent } from "../../lib/markdown/MarkdownContent.js";
-import {
-  useSessionPlan,
-  useSetPlanMode,
-  useAcceptPlan,
-} from "../../lib/api/sessions.js";
+import { useSessionPlan, useAcceptPlan } from "../../lib/api/sessions.js";
 import { useRequestResume } from "../../lib/api/runtime.js";
+import { Stamp } from "./SessionRows/Stamp.js";
+
+/** Accent-hairline action key (Accept/Resume) — quiet until hovered. */
+const ACTION_KEY =
+  "rounded-md border border-[var(--vex-accent-border)] px-3 py-1.5 text-xs font-medium text-[var(--vex-accent-text)] transition-colors hover:bg-[var(--vex-accent-fill-8)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] disabled:cursor-not-allowed disabled:opacity-50";
 
 export function SessionPlanCard({
   sessionId,
@@ -29,7 +34,6 @@ export function SessionPlanCard({
   missionStatus?: string | null;
 }): JSX.Element | null {
   const planQuery = useSessionPlan(sessionId);
-  const setPlanMode = useSetPlanMode();
   const acceptPlan = useAcceptPlan();
   const requestResume = useRequestResume();
 
@@ -43,62 +47,41 @@ export function SessionPlanCard({
   const awaitingResume =
     hasPlan && plan?.accepted === true && missionStatus === "paused_plan_acceptance";
 
-  const toggleBusy = setPlanMode.isPending;
   const acceptBusy = acceptPlan.isPending;
   const resumeBusy = requestResume.isPending;
-  const toggleBlockedPendingAcceptance =
-    setPlanMode.data?.ok === true
-    && setPlanMode.data.data.outcome === "blocked_pending_acceptance";
 
   return (
-    <section className="mb-3 rounded-lg border border-neutral-700 bg-neutral-900/40 px-4 py-3 text-sm">
-      <header className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-neutral-200">Plan mode</span>
-          <span className="rounded bg-emerald-900/50 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-emerald-300">
-            recommended
-          </span>
-        </div>
-        <button
-          type="button"
-          disabled={toggleBusy}
-          onClick={() => setPlanMode.mutate({ sessionId, enabled: !enabled })}
-          className="rounded border border-neutral-600 px-2 py-1 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
-          aria-pressed={enabled}
-        >
-          {enabled ? "On — turn off" : "Off — turn on"}
-        </button>
+    <section className="mb-3 rounded-lg border border-[var(--vex-line-strong)] bg-[var(--vex-surface-1)] px-4 py-3 text-sm">
+      <header className="flex items-center gap-2">
+        <span className="font-medium text-foreground">Plan mode</span>
+        <Stamp tone="accent">recommended</Stamp>
       </header>
 
       {enabled ? (
-        <p className="mt-1 text-xs text-neutral-400">
+        <p className="mt-1 text-xs text-[var(--vex-text-2)]">
           The agent researches first, writes an action plan (the “HOW”), and waits for
           your acceptance before executing.
-        </p>
-      ) : null}
-
-      {toggleBlockedPendingAcceptance ? (
-        <p className="mt-1 text-xs text-amber-300">
-          Can’t turn plan mode off while the mission is waiting for plan acceptance —
-          accept the plan below, or stop the mission first.
         </p>
       ) : null}
 
       {hasPlan ? (
         <div className="mt-3">
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-medium text-neutral-300">Action plan</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-text-2)]">
+              Action plan
+            </span>
             <span
               className={
                 pending
-                  ? "text-[11px] font-medium text-amber-300"
-                  : "text-[11px] font-medium text-emerald-300"
+                  ? "text-[11px] font-medium text-warning"
+                  : "text-[11px] font-medium text-success"
               }
             >
               {pending ? "Pending your acceptance" : "Accepted"}
             </span>
           </div>
-          <div className="max-h-72 overflow-auto rounded border border-neutral-800 bg-neutral-950/60 px-3 py-2">
+          {/* Recessed well — the plan reads like a filed document. */}
+          <div className="max-h-72 overflow-auto rounded-[6px] border border-[var(--vex-line)] bg-[var(--vex-surface-down)] px-3 py-2">
             <MarkdownContent text={plan?.planMd ?? ""} />
           </div>
           {pending ? (
@@ -109,7 +92,7 @@ export function SessionPlanCard({
                 onClick={() =>
                   acceptPlan.mutate({ sessionId, expectedPlanMd: plan?.planMd ?? "" })
                 }
-                className="rounded bg-emerald-700 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+                className={ACTION_KEY}
               >
                 {acceptBusy ? "Accepting…" : "Accept plan"}
               </button>
@@ -117,12 +100,12 @@ export function SessionPlanCard({
           ) : null}
           {awaitingResume ? (
             <div className="mt-2 flex items-center justify-end gap-2">
-              <span className="text-[11px] text-amber-300">Accepted, but the run didn’t resume.</span>
+              <span className="text-[11px] text-warning">Accepted, but the run didn’t resume.</span>
               <button
                 type="button"
                 disabled={resumeBusy}
                 onClick={() => requestResume.mutate({ sessionId })}
-                className="rounded bg-emerald-700 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+                className={ACTION_KEY}
               >
                 {resumeBusy ? "Resuming…" : "Resume mission"}
               </button>

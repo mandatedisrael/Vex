@@ -27,6 +27,14 @@ export interface ApprovalDecisionActionsProps {
   readonly onApprove: () => void;
 }
 
+// Shared key shape; tone classes below pick quiet/accent/armed variants. The
+// ARMED (confirm) state swaps the border to the danger mix on that button
+// only — the second click is the irreversible one.
+const KEY_BASE =
+  "rounded-md border px-3 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] disabled:opacity-50";
+const ARMED_BORDER =
+  "border-[color-mix(in_oklab,var(--color-destructive)_40%,transparent)]";
+
 export function ApprovalDecisionActions({
   isHighRisk,
   armedAction,
@@ -35,40 +43,32 @@ export function ApprovalDecisionActions({
   onReject,
   onApprove,
 }: ApprovalDecisionActionsProps): JSX.Element {
+  const rejectArmed = isHighRisk && armedAction === "reject";
+  const approveArmed = isHighRisk && armedAction === "approve";
   return (
-    <footer className="flex items-center justify-end gap-2 border-t border-white/[0.08] px-4 py-3">
+    <footer className="flex items-center justify-end gap-2 border-t border-[var(--vex-line)] px-4 py-3">
       <button
         ref={rejectRef}
         type="button"
         onClick={onReject}
         disabled={inFlight}
-        aria-label={
-          isHighRisk && armedAction === "reject" ? "Confirm reject" : "Reject"
-        }
-        className="rounded-md border border-white/[0.10] px-3 py-1.5 text-xs hover:bg-white/[0.05] disabled:opacity-50"
+        aria-label={rejectArmed ? "Confirm reject" : "Reject"}
+        className={`${KEY_BASE} text-[var(--vex-text-2)] hover:bg-white/[0.05] hover:text-foreground ${
+          rejectArmed ? ARMED_BORDER : "border-[var(--vex-line-strong)]"
+        }`}
       >
-        {isHighRisk && armedAction === "reject"
-          ? "Click again to confirm reject"
-          : "Reject"}
+        {rejectArmed ? "Click again to confirm reject" : "Reject"}
       </button>
       <button
         type="button"
         onClick={onApprove}
         disabled={inFlight}
-        aria-label={
-          isHighRisk && armedAction === "approve"
-            ? "Confirm approve"
-            : "Approve"
-        }
-        className={`rounded-md px-3 py-1.5 text-xs font-medium ${
-          isHighRisk
-            ? "border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/15"
-            : "border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/15"
-        } disabled:opacity-50`}
+        aria-label={approveArmed ? "Confirm approve" : "Approve"}
+        className={`${KEY_BASE} font-medium text-[var(--vex-accent-text)] hover:bg-[var(--vex-accent-fill-8)] ${
+          approveArmed ? ARMED_BORDER : "border-[var(--vex-accent-border)]"
+        }`}
       >
-        {isHighRisk && armedAction === "approve"
-          ? "Click again to confirm approve"
-          : "Approve"}
+        {approveArmed ? "Click again to confirm approve" : "Approve"}
       </button>
     </footer>
   );

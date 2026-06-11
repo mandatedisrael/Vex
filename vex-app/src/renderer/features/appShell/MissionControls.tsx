@@ -6,8 +6,8 @@
  *  - ACTIVE RUN → a status-gated toolbar:
  *      Continue (paused_wake/paused_user), Recover (paused_error),
  *      Edit (any status except paused_approval), Stop (always).
- *  - NO ACTIVE RUN + accepted/ready contract → a "Start mission" button
- *    (ShinyText label) → mission.start.
+ *  - NO ACTIVE RUN + accepted/ready contract → a "Start mission" key
+ *    (accent-hairline, S3) → mission.start.
  *  - NO ACTIVE RUN + a terminal accepted mission (the renew source) → a
  *    "Renew mission" button → mission.renew (clones it into a fresh draft).
  *
@@ -47,7 +47,13 @@ import {
 } from "../../lib/api/mission.js";
 import { useRuntimeState } from "../../lib/api/runtime.js";
 import { cn } from "../../lib/utils.js";
-import { ShinyText } from "../../components/ui/shiny-text.js";
+
+/**
+ * Primary mission action (Start/Renew) — full-width accent-hairline key:
+ * quiet at rest, accent fill only on hover, never a glow or gradient.
+ */
+const PRIMARY_KEY =
+  "flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-[var(--vex-accent-border)] text-sm font-medium text-[var(--vex-accent-text)] transition-colors hover:bg-[var(--vex-accent-fill-8)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] disabled:cursor-not-allowed disabled:opacity-50";
 
 export interface MissionControlsProps {
   readonly sessionId: string;
@@ -269,9 +275,9 @@ export function MissionControls({
             void run(() => start.mutateAsync({ sessionId, missionId }))
           }
           aria-label="Start mission"
-          className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-white/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8] disabled:cursor-not-allowed disabled:opacity-50"
+          className={PRIMARY_KEY}
         >
-          <ShinyText text="Start mission" />
+          Start mission
         </button>
         {notice !== null ? <ControlNoticeLine text={notice.text} /> : null}
       </div>
@@ -296,7 +302,7 @@ export function MissionControls({
             )
           }
           aria-label="Renew mission"
-          className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-white/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8] disabled:cursor-not-allowed disabled:opacity-50"
+          className={PRIMARY_KEY}
         >
           Renew mission
         </button>
@@ -326,10 +332,12 @@ function ControlButton({
       onClick={onClick}
       aria-label={`${label} mission`}
       className={cn(
-        "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8] disabled:cursor-not-allowed disabled:opacity-40",
+        // Toolbar keys: quiet white-hairline by default; Stop keeps the
+        // destructive tone with the one sanctioned danger fill (/10).
+        "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] disabled:cursor-not-allowed disabled:opacity-40",
         tone === "danger"
-          ? "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/16"
-          : "border-white/[0.08] bg-white/[0.03] text-[var(--color-text-secondary)] hover:bg-white/[0.06] hover:text-foreground",
+          ? "border-[color-mix(in_oklab,var(--color-destructive)_40%,transparent)] bg-destructive/10 text-destructive hover:bg-destructive/15"
+          : "border-[var(--vex-line-strong)] text-[var(--vex-text-2)] hover:bg-white/[0.06] hover:text-foreground",
       )}
     >
       {label}

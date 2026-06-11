@@ -1,85 +1,70 @@
+/**
+ * Main app shell — THE PROTOCOL DESK (Countersign, opened for business).
+ *
+ * Onboarding proved identity in a dark room (one light, one signature);
+ * the shell is the working register that signature unlocked. Same canvas
+ * (#04060f via --vex-surface-0), zero photography, zero gradients, zero
+ * resting glow: depth comes from the three solid luminance steps defined
+ * by the [data-vex-shell] scope in globals.css, separated by hairlines.
+ *
+ * Layout: sidebar rail (SessionsList) | content column under the DESK
+ * RULE — an h-12 header datum whose bottom hairline carries the onboarding
+ * plinth language (24px accent tick at the content column's left edge).
+ * Runtime status now lives in the sidebar registry footer (RuntimeLedger,
+ * S1); the rule carries only the version stamp on its right side.
+ *
+ * `data-vex-shell="true"` scopes the Protocol Desk tokens (sibling of
+ * data-vex-onboarding); `data-vex-screen="appShell"` stays the e2e/test
+ * selector. The window keeps its native OS frame, so no -webkit-app-region
+ * drag strip is mounted (S0 decision — revisit only if the frame goes
+ * custom).
+ */
+
 import type { JSX } from "react";
-import { Docker, Postgresql } from "@thesvg/react";
-import type { Result } from "@shared/ipc/result.js";
-import type { HealthReport } from "@shared/schemas/system.js";
-import { cn } from "../../lib/utils.js";
-import { useSystemHealth } from "../../lib/api/system.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { SessionCreator } from "./SessionCreator.js";
 import { SessionPanel } from "./SessionPanel.js";
 import { SessionsLibrary } from "./SessionsLibrary.js";
 import { SessionsList } from "./SessionsList.js";
-import { KnowledgePanel } from "./KnowledgePanel.js";
+import { MemoryPanel } from "./MemoryPanel.js";
 
 export function AppShell(): JSX.Element {
   const appShellView = useUiStore((s) => s.appShellView);
   const createSessionOpen = useUiStore((s) => s.createSessionOpen);
   const openCreateSession = useUiStore((s) => s.openCreateSession);
   const closeCreateSession = useUiStore((s) => s.closeCreateSession);
-  const healthQuery = useSystemHealth();
-  const runtime = getRuntimeStatus({
-    loading: healthQuery.isLoading,
-    result: healthQuery.data,
-  });
 
   return (
     <main
-      className="relative h-screen w-screen overflow-hidden bg-[var(--color-bg-primary)] text-foreground"
+      className="flex h-screen w-screen overflow-hidden bg-[var(--vex-surface-0)] text-foreground"
+      data-vex-shell="true"
       data-vex-screen="appShell"
     >
-      <img
-        src="/runtime.png"
-        alt=""
-        aria-hidden
-        draggable={false}
-        className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_49%_42%,rgba(14,38,112,0.16),transparent_34%),linear-gradient(90deg,rgba(1,4,16,0.84)_0%,rgba(3,7,21,0.58)_30%,rgba(3,7,21,0.18)_63%,rgba(2,5,17,0.76)_100%)]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-[rgba(1,4,15,0.92)] to-transparent"
-      />
+      <SessionsList onCreate={() => openCreateSession()} />
 
-      <div className="relative z-10 flex h-full min-h-0">
-        <SessionsList onCreate={() => openCreateSession()} />
+      <section className="flex min-w-0 flex-1 flex-col">
+        {/* DESK RULE — the working header datum: the onboarding plinth
+         * carried into the shell. The rule never moves, never animates. */}
+        <header className="relative flex h-12 shrink-0 items-center justify-end gap-3 border-b border-[var(--vex-line)] px-6">
+          <span
+            aria-hidden
+            className="absolute -bottom-px left-6 h-px w-6 bg-[var(--vex-accent)]"
+          />
+          <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--vex-text-3)]">
+            v{__VEX_APP_VERSION__}
+          </span>
+        </header>
 
-        <section className="min-w-0 flex-1 pb-12">
+        <div className="min-h-0 flex-1">
           {appShellView === "sessionsLibrary" ? (
             <SessionsLibrary />
-          ) : appShellView === "knowledge" ? (
-            <KnowledgePanel />
+          ) : appShellView === "memory" ? (
+            <MemoryPanel />
           ) : (
             <SessionPanel />
           )}
-        </section>
-      </div>
-
-      <footer className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex h-12 items-center justify-between px-6 text-xs text-[var(--color-text-secondary)]">
-        <div className="pointer-events-auto flex min-w-0 items-center gap-3 drop-shadow-[0_1px_14px_rgba(0,0,0,0.86)]">
-          <span
-            className={cn(
-              "inline-flex h-2.5 w-2.5 rounded-full shadow-[0_0_14px_currentColor]",
-              runtime.dotClass,
-            )}
-            aria-hidden
-          />
-          <span className="truncate">{runtime.label}</span>
-          <span
-            aria-hidden
-            className="hidden h-4 w-px bg-white/[0.08] sm:block"
-          />
-          <span className="hidden items-center gap-2 text-[var(--color-text-muted)] sm:inline-flex">
-            <Docker width={14} height={14} aria-hidden focusable={false} />
-            <Postgresql width={14} height={14} aria-hidden focusable={false} />
-          </span>
         </div>
-        <span className="pointer-events-auto font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--color-text-muted)] drop-shadow-[0_1px_14px_rgba(0,0,0,0.86)]">
-          v{__VEX_APP_VERSION__}
-        </span>
-      </footer>
+      </section>
 
       <SessionCreator
         open={createSessionOpen}
@@ -89,40 +74,4 @@ export function AppShell(): JSX.Element {
       />
     </main>
   );
-}
-
-interface RuntimeStatusInput {
-  readonly loading: boolean;
-  readonly result: Result<HealthReport> | undefined;
-}
-
-function getRuntimeStatus({ loading, result }: RuntimeStatusInput): {
-  readonly label: string;
-  readonly dotClass: string;
-} {
-  if (loading || result === undefined) {
-    return {
-      label: "Connecting to local runtime",
-      dotClass: "bg-warning text-warning",
-    };
-  }
-  if (!result.ok) {
-    return {
-      label: "Local runtime unavailable",
-      dotClass: "bg-destructive text-destructive",
-    };
-  }
-  if (result.data.overall === "ok") {
-    return {
-      label: "Connected to local runtime",
-      dotClass: "bg-success text-success",
-    };
-  }
-  return {
-    label:
-      result.data.overall === "degraded"
-        ? "Local runtime degraded"
-        : "Local runtime not ready",
-    dotClass: "bg-warning text-warning",
-  };
 }

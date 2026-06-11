@@ -93,8 +93,9 @@ export function ApprovalsRegion({
     <section
       data-vex-area="approvals-region"
       // Bound height (Codex F3 #2) so multiple pendings can't push the composer
-      // off-screen; scroll within the region instead.
-      className="max-h-[40vh] shrink-0 overflow-y-auto"
+      // off-screen; scroll within the region instead. S3: a single hairline
+      // separates the region from the transcript — no box of its own.
+      className="max-h-[40vh] shrink-0 overflow-y-auto border-t border-[var(--vex-line)]"
     >
       {view.rows.map((summary) => (
         <ApprovalCard

@@ -95,10 +95,10 @@ export const compactionKeys = {
   history: (sessionId: string) => ["compaction", "history", sessionId] as const,
 };
 
-/** Knowledge management (stage 7-2a) — global store list, keyed by status filter. */
-export const knowledgeKeys = {
-  all: ["knowledge"] as const,
-  list: (status: string) => ["knowledge", "list", status] as const,
+/** Long-term memory inspection (S9 rewire) — global store list, keyed by status filter. */
+export const longMemoryKeys = {
+  all: ["longMemory"] as const,
+  list: (status: string) => ["longMemory", "list", status] as const,
 };
 
 /** Session-memory management (stage 7-2a) — per-session list + stats. */

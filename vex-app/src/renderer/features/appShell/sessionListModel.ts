@@ -129,14 +129,14 @@ export function getMissionActivity(row: SessionListItem): MissionActivity | null
     return {
       label: "Active",
       tone: "active",
-      dotClass: "bg-success shadow-[0_0_10px_rgba(16,185,129,0.9)]",
+      dotClass: "bg-success",
     };
   }
   if (PAUSED_MISSION_STATUSES.has(row.missionStatus)) {
     return {
       label: "Paused",
       tone: "paused",
-      dotClass: "bg-warning shadow-[0_0_10px_rgba(245,158,11,0.9)]",
+      dotClass: "bg-warning",
     };
   }
   if (TERMINAL_MISSION_STATUSES.has(row.missionStatus)) {
@@ -149,7 +149,7 @@ export function getMissionActivity(row: SessionListItem): MissionActivity | null
   return {
     label: row.missionStatus,
     tone: "paused",
-    dotClass: "bg-warning shadow-[0_0_10px_rgba(245,158,11,0.9)]",
+    dotClass: "bg-warning",
   };
 }
 

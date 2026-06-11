@@ -1,13 +1,12 @@
 /**
  * CompactionMarker — static inline timeline marker for a committed Track-1
- * compaction (stage 8-4). The engine writes a `compaction_committed` row;
- * this renders it as a centered, muted, non-animated notice so the chat
- * timeline shows where a compaction landed.
+ * compaction (stage 8-4, S3 ledger-interruption grammar). The engine writes a
+ * `compaction_committed` row; this renders it as a centered hairline rule with
+ * a mono microtype label so the chat register shows where a compaction landed.
  *
  * It is NOT a live progress indicator — the live compaction state lives in
  * the SessionRuntimeBar chip (stage 7-1). A persisted row has no reliable
  * "in flight" state, so the marker is deliberately static (no dotmatrix).
- * ≤8px radius, no card-in-card.
  */
 
 import type { JSX } from "react";
@@ -25,12 +24,16 @@ export function CompactionMarker({
     <div
       data-vex-message-role="system"
       data-vex-marker="compaction"
-      className="flex justify-center"
+      className="flex items-center gap-3"
     >
-      <div className="flex max-w-[80%] items-center gap-1.5 rounded-md border border-white/[0.06] px-2.5 py-1 text-[11px] text-[var(--color-text-muted)]">
+      <span aria-hidden className="h-px flex-1 bg-[var(--vex-line)]" />
+      <span className="flex min-w-0 items-center gap-1.5 text-[var(--vex-text-3)]">
         <HugeiconsIcon icon={Archive02Icon} size={12} aria-hidden />
-        <span className="break-words">{label}</span>
-      </div>
+        <span className="break-words font-mono text-[10px] uppercase tracking-[0.3em]">
+          {label}
+        </span>
+      </span>
+      <span aria-hidden className="h-px flex-1 bg-[var(--vex-line)]" />
     </div>
   );
 }

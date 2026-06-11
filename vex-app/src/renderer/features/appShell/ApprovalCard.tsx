@@ -90,6 +90,11 @@ export function ApprovalCard({
   }, []);
 
   const [inlineError, setInlineError] = useState<string | null>(null);
+  // S5 signed glint — set in the approve success handler BEFORE invalidation
+  // so the one-shot light renders before the refetch unmounts the card. If
+  // the unmount wins the race that is acceptable: the light is a grace note,
+  // not a contract. Reject never lights (one-light rule).
+  const [signedGlint, setSignedGlint] = useState(false);
   const inFlight = approve.isPending || reject.isPending;
 
   const invalidateOnResolve = async (): Promise<void> => {
@@ -118,6 +123,7 @@ export function ApprovalCard({
         onSuccess: async (result) => {
           if (result.ok) {
             setArmedAction(null);
+            setSignedGlint(true);
             await invalidateOnResolve();
           } else {
             setInlineError(result.error.message);
@@ -176,7 +182,13 @@ export function ApprovalCard({
       aria-live="polite"
       data-vex-area="approval-card"
       data-approval-id={summary.id}
-      className="mt-3 overflow-hidden rounded-lg border border-white/[0.10] bg-white/[0.035] text-sm text-[var(--color-text-secondary)] backdrop-blur-xl"
+      // S5: the act ledger's "Awaiting signature" stamp-links jump here and
+      // call focus(); tabIndex={-1} makes the region programmatically
+      // focusable without entering the tab order.
+      tabIndex={-1}
+      // The accent border IS the "awaiting your signature" emphasis — this
+      // card is the one place the page asks for the user's pen (S3).
+      className="mt-3 overflow-hidden rounded-lg border border-[var(--vex-accent-border)] bg-[var(--vex-surface-1)] text-sm text-[var(--vex-text-2)]"
     >
       <ApprovalDetails
         summary={summary}
@@ -185,6 +197,7 @@ export function ApprovalCard({
         toolName={toolName}
         criticalArgs={criticalArgs}
         inlineError={inlineError}
+        signedGlint={signedGlint}
       />
       <ApprovalDecisionActions
         isHighRisk={isHighRisk}

@@ -5,10 +5,8 @@
     "types": ["node"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "outDir": "./dist/main",
-    "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"],
+      "@shared/*": ["./src/shared/*"],
       "@vex-lib/*": ["../src/lib/*"],
       "@vex-agent/*": ["../src/vex-agent/*"],
       "@tools/*": ["../src/tools/*"],
@@ -16,6 +14,5 @@
       "@config/*": ["../src/config/*"]
     }
   },
-  "include": ["src/main", "src/shared", "../src/lib"],
-  "references": [{ "path": "./tsconfig.shared.json" }]
+  "include": ["src/main", "src/shared", "../src/lib"]
 }

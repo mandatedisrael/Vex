@@ -25,7 +25,7 @@ export function RemoveButton({
         "inline-flex h-6 w-6 items-center justify-center rounded-md border border-transparent text-[var(--color-text-muted)] transition-colors",
         "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
         "hover:bg-destructive/10 hover:text-destructive",
-        "focus-visible:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[#3275f8]",
+        "focus-visible:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]",
       )}
     >
       <HugeiconsIcon icon={Delete02Icon} size={13} aria-hidden />

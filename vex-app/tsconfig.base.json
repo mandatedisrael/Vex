@@ -1,4 +1,18 @@
 {
+  // Shared compiler profile for the per-project configs (shared / main /
+  // preload / renderer / e2e). S7 repaired the typecheck gate: the old
+  // `tsc -p tsconfig.json` checked NOTHING (solution file, files: []).
+  // `lint:tsc` (wired into `lint`/CI) really checks the GREEN projects:
+  // shared + e2e. `lint:tsc:all` is the target state — main / preload /
+  // renderer still carry pre-existing errors under this strict profile
+  // (root ../src/tools tree was written without exactOptionalPropertyTypes /
+  // noUncheckedIndexedAccess; preload trips a dual-zod-install identity
+  // mismatch (root 4.3.6 vs vex-app 4.4.3); renderer has ~40 missing
+  // `import type { JSX } from "react"` + ~24 assorted errors). Burn those
+  // down, then fold each project into `lint:tsc`.
+  // NOTE: composite/references/baseUrl/rootDir/outDir were removed in S7 —
+  // illegal or meaningless for a noEmit-only gate under TypeScript 6
+  // (TS6310/TS6305/TS5101/TS6059); Vite owns all real emit.
   "compilerOptions": {
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -15,7 +29,6 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "noEmit": true,
-    "composite": true
+    "noEmit": true
   }
 }

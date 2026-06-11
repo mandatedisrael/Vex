@@ -396,7 +396,7 @@ describe("messages-db mapper", () => {
     expect(result.data.items[0]!.kind).toBe("runtime_notice");
   });
 
-  it("maps memory_recall / knowledge_recall tool-call rows to the recall kind and keeps assistant prose (8-4)", async () => {
+  it("maps session_memory_search / long_memory_search tool-call rows to the recall kind and keeps assistant prose (8-4)", async () => {
     mocks.query.mockResolvedValueOnce({
       rows: [
         {
@@ -405,7 +405,7 @@ describe("messages-db mapper", () => {
           role: "assistant",
           content: "Let me check what I remember.",
           tool_call_id: null,
-          tool_calls: [{ command: "memory_recall", args: { query: "x" } }],
+          tool_calls: [{ command: "session_memory_search", args: { query: "x" } }],
           created_at: "2026-05-21T10:00:00.000Z",
           source: "agent",
           message_type: "chat",
@@ -417,7 +417,7 @@ describe("messages-db mapper", () => {
           role: "assistant",
           content: "",
           tool_call_id: null,
-          tool_calls: [{ command: "knowledge_recall", args: {} }],
+          tool_calls: [{ command: "long_memory_search", args: {} }],
           created_at: "2026-05-21T10:01:00.000Z",
           source: "agent",
           message_type: "chat",
@@ -430,11 +430,11 @@ describe("messages-db mapper", () => {
     if (!result.ok) return;
     const byId = new Map(result.data.items.map((m) => [m.id, m]));
     expect(byId.get(8)!.kind).toBe("recall");
-    expect(byId.get(8)!.toolName).toBe("memory_recall");
+    expect(byId.get(8)!.toolName).toBe("session_memory_search");
     // Codex constraint: non-empty assistant prose on a recall row is preserved.
     expect(byId.get(8)!.content).toBe("Let me check what I remember.");
     expect(byId.get(9)!.kind).toBe("recall");
-    expect(byId.get(9)!.toolName).toBe("knowledge_recall");
+    expect(byId.get(9)!.toolName).toBe("long_memory_search");
   });
 
   it("keeps a normal tool-call row as tool_call (recall detection is narrow) (8-4)", async () => {

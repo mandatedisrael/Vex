@@ -366,7 +366,7 @@ export async function composeUp(
         composeOutPath: rendered.outPath,
         installId: rendered.installId,
         message:
-          "Docker Desktop has a stale bind-mount cache pointing at this install's Postgres password secret, and your setup is already complete. Vex will NOT auto-wipe your data. Try fully quitting Docker Desktop and restarting it, then retry — if the issue persists, contact support before any further action so we can guide you through a recovery that preserves your wallet keys and knowledge entries.",
+          "Docker Desktop has a stale bind-mount cache pointing at this install's Postgres password secret, and your setup is already complete. Vex will NOT auto-wipe your data. Try fully quitting Docker Desktop and restarting it, then retry — if the issue persists, contact support before any further action so we can guide you through a recovery that preserves your wallet keys and long-term memory.",
         pgPort,
         embedPort: rendered.embedPort,
         pgPasswordPath: rendered.pgPasswordComposePath,

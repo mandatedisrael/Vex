@@ -99,7 +99,7 @@ export function useCompactionLiveSync(sessionId: string | null): void {
 
 /**
  * Compaction-generation history for a session (stage 7-2a). Read-only
- * timeline for the knowledge/memory panel; gates on a non-empty session id.
+ * timeline for the memory panel; gates on a non-empty session id.
  */
 export function useCompactionHistory(
   sessionId: string | null,

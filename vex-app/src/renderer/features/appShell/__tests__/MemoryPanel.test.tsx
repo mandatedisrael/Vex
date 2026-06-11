@@ -1,7 +1,8 @@
 /**
- * KnowledgePanel render tests (stage 7-2a).
+ * MemoryPanel render tests (stage 7-2a, memory-system S9 rewire).
  *
- * Verifies: the global knowledge section renders sanitized rows; the
+ * Verifies: the global long-term memory section renders sanitized rows and
+ * exposes NO mutation affordances (lifecycle is manager-owned); the
  * session-scoped sections show a clear empty state AND issue NO session-scoped
  * query when no session is active; with an active session, memory + compaction
  * history render from their DTOs.
@@ -28,7 +29,7 @@ vi.mock("../../../stores/uiStore.js", () => ({
     }),
 }));
 
-const { KnowledgePanel } = await import("../KnowledgePanel.js");
+const { MemoryPanel } = await import("../MemoryPanel.js");
 
 const SESSION = "00000000-0000-4000-8000-0000000000d1";
 const ISO = "2026-05-21T10:00:00.000Z";
@@ -37,8 +38,7 @@ function ok<T>(data: T) {
   return { ok: true as const, data };
 }
 
-const knowledgeListMock = vi.fn();
-const updateStatusMock = vi.fn();
+const longMemoryListMock = vi.fn();
 const listSessionMock = vi.fn();
 const getStatsMock = vi.fn();
 const listHistoryMock = vi.fn();
@@ -49,7 +49,7 @@ function setVex(): void {
     configurable: true,
     writable: true,
     value: {
-      knowledge: { list: knowledgeListMock, updateStatus: updateStatusMock },
+      longMemory: { list: longMemoryListMock },
       memory: { listSession: listSessionMock, getStats: getStatsMock },
       compaction: { listHistory: listHistoryMock },
       models: { listAvailable: modelsListMock },
@@ -82,9 +82,9 @@ beforeEach(() => {
   );
 });
 
-describe("KnowledgePanel", () => {
-  it("renders knowledge audit fields (tags / source / created) without leaking raw narrative", async () => {
-    knowledgeListMock.mockResolvedValue(
+describe("MemoryPanel", () => {
+  it("renders long-memory audit fields (tags / source / maturity / created) without leaking raw narrative", async () => {
+    longMemoryListMock.mockResolvedValue(
       ok([
         {
           id: 1,
@@ -95,17 +95,17 @@ describe("KnowledgePanel", () => {
           confidence: 0.8,
           status: "active",
           source: "observed",
-          sourceSession: "sess-1234abcd",
+          maturityState: "established",
           pinned: false,
           createdAt: ISO,
           updatedAt: ISO,
           // Injected raw column the panel must NEVER render even if present.
-          content_md: "SECRET_KNOWLEDGE_BODY",
+          content_md: "SECRET_MEMORY_ENTRY_BODY",
         },
       ]),
     );
     setVex();
-    const { container } = render(createElement(KnowledgePanel), {
+    const { container } = render(createElement(MemoryPanel), {
       wrapper: makeWrapper(freshClient()),
     });
 
@@ -113,19 +113,59 @@ describe("KnowledgePanel", () => {
       expect(screen.getByText("Avoid X")).not.toBeNull();
     });
     expect(screen.getByText("Keep slippage low")).not.toBeNull();
-    // Audit fields required by 7-2a.
+    // Audit fields required by 7-2a + S9 (maturity).
     expect(screen.getByText("#risk")).not.toBeNull();
-    expect(screen.getByText(/src sess-123/i)).not.toBeNull();
+    expect(screen.getByText("observed")).not.toBeNull();
+    expect(screen.getByText("established")).not.toBeNull();
     expect(container.querySelector("[data-vex-created]")).not.toBeNull();
     // Raw narrative must never reach the DOM.
-    expect(screen.queryByText("SECRET_KNOWLEDGE_BODY")).toBeNull();
+    expect(screen.queryByText("SECRET_MEMORY_ENTRY_BODY")).toBeNull();
+  });
+
+  it("exposes NO mutation affordances — lifecycle is manager-owned (S9)", async () => {
+    longMemoryListMock.mockResolvedValue(
+      ok([
+        {
+          id: 1,
+          kind: "risk_rule",
+          title: "Avoid X",
+          summary: "s",
+          tags: [],
+          confidence: null,
+          status: "active",
+          source: "observed",
+          maturityState: "established",
+          pinned: false,
+          createdAt: ISO,
+          updatedAt: ISO,
+        },
+      ]),
+    );
+    setVex();
+    const { container } = render(createElement(MemoryPanel), {
+      wrapper: makeWrapper(freshClient()),
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Avoid X")).not.toBeNull();
+    });
+    // The only buttons in the long-memory section are the filter pills —
+    // a row must never carry an action button (Archive/Invalidate died
+    // with S9).
+    expect(
+      container.querySelectorAll('[data-vex-section="long-memory"] li button'),
+    ).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Archive Avoid X" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Invalidate Avoid X" })).toBeNull();
+    // Copy explains the manager owns the lifecycle.
+    expect(screen.getByText(/managed automatically/i)).not.toBeNull();
   });
 
   it("shows empty hints AND issues no session-scoped query when no session is active", async () => {
     uiState.activeSessionId = null;
-    knowledgeListMock.mockResolvedValue(ok([]));
+    longMemoryListMock.mockResolvedValue(ok([]));
     setVex();
-    render(createElement(KnowledgePanel), { wrapper: makeWrapper(freshClient()) });
+    render(createElement(MemoryPanel), { wrapper: makeWrapper(freshClient()) });
 
     await waitFor(() => {
       expect(screen.getByText(/Open a session to view its memory/i)).not.toBeNull();
@@ -141,7 +181,7 @@ describe("KnowledgePanel", () => {
 
   it("renders memory + compaction history for the active session", async () => {
     uiState.activeSessionId = SESSION;
-    knowledgeListMock.mockResolvedValue(ok([]));
+    longMemoryListMock.mockResolvedValue(ok([]));
     getStatsMock.mockResolvedValue(
       ok({
         activeCount: 2,
@@ -190,7 +230,7 @@ describe("KnowledgePanel", () => {
       ]),
     );
     setVex();
-    const { container } = render(createElement(KnowledgePanel), {
+    const { container } = render(createElement(MemoryPanel), {
       wrapper: makeWrapper(freshClient()),
     });
 
@@ -209,93 +249,15 @@ describe("KnowledgePanel", () => {
   });
 
   it("Back returns to the chat view", async () => {
-    knowledgeListMock.mockResolvedValue(ok([]));
+    longMemoryListMock.mockResolvedValue(ok([]));
     setVex();
-    render(createElement(KnowledgePanel), { wrapper: makeWrapper(freshClient()) });
+    render(createElement(MemoryPanel), { wrapper: makeWrapper(freshClient()) });
     fireEvent.click(screen.getByRole("button", { name: /Back to chat/i }));
     expect(mockSetAppShellView).toHaveBeenCalledWith("session");
   });
 
-  it("archives an active entry through the destructive confirm dialog (7-2b)", async () => {
-    knowledgeListMock.mockResolvedValue(
-      ok([
-        {
-          id: 1,
-          kind: "risk_rule",
-          title: "Avoid X",
-          summary: "s",
-          tags: [],
-          confidence: null,
-          status: "active",
-          source: "observed",
-          sourceSession: null,
-          pinned: false,
-          createdAt: ISO,
-          updatedAt: ISO,
-        },
-      ]),
-    );
-    updateStatusMock.mockResolvedValue(ok({ id: 1, status: "archived" }));
-    setVex();
-    render(createElement(KnowledgePanel), { wrapper: makeWrapper(freshClient()) });
-
-    await waitFor(() => {
-      expect(screen.getByText("Avoid X")).not.toBeNull();
-    });
-    // Row action opens the destructive confirm. `/re-activated/` is unique to
-    // the dialog copy (the section intro also mentions "one-way").
-    fireEvent.click(screen.getByRole("button", { name: "Archive Avoid X" }));
-    await waitFor(() => {
-      expect(screen.getByText(/re-activated/i)).not.toBeNull();
-    });
-    // jsdom does not implement <dialog>.showModal(), so the modal's buttons
-    // live in the hidden a11y tree — query with `hidden: true`.
-    fireEvent.click(
-      screen.getByRole("button", { name: "Archive", hidden: true }),
-    );
-    await waitFor(() => {
-      expect(updateStatusMock).toHaveBeenCalledWith({
-        id: 1,
-        status: "archived",
-      });
-    });
-  });
-
-  it("shows no disable actions on non-active rows", async () => {
-    knowledgeListMock.mockResolvedValue(
-      ok([
-        {
-          id: 2,
-          kind: "k",
-          title: "Old Note",
-          summary: "s",
-          tags: [],
-          confidence: null,
-          status: "archived",
-          source: "observed",
-          sourceSession: null,
-          pinned: false,
-          createdAt: ISO,
-          updatedAt: ISO,
-        },
-      ]),
-    );
-    setVex();
-    render(createElement(KnowledgePanel), { wrapper: makeWrapper(freshClient()) });
-
-    await waitFor(() => {
-      expect(screen.getByText("Old Note")).not.toBeNull();
-    });
-    expect(
-      screen.queryByRole("button", { name: "Archive Old Note" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Invalidate Old Note" }),
-    ).toBeNull();
-  });
-
   it("explains the Track-2 remote path and names the configured model (7-4)", async () => {
-    knowledgeListMock.mockResolvedValue(ok([]));
+    longMemoryListMock.mockResolvedValue(ok([]));
     modelsListMock.mockResolvedValue(
       ok({
         source: "global_default",
@@ -314,7 +276,7 @@ describe("KnowledgePanel", () => {
       }),
     );
     setVex();
-    render(createElement(KnowledgePanel), { wrapper: makeWrapper(freshClient()) });
+    render(createElement(MemoryPanel), { wrapper: makeWrapper(freshClient()) });
 
     // Live model — the same AGENT_MODEL the chunker calls — named via OpenRouter.
     await waitFor(() => {
@@ -337,12 +299,12 @@ describe("KnowledgePanel", () => {
   });
 
   it("shows the memory builder as idle when no model is configured (7-4)", async () => {
-    knowledgeListMock.mockResolvedValue(ok([]));
+    longMemoryListMock.mockResolvedValue(ok([]));
     modelsListMock.mockResolvedValue(
       ok({ source: "unconfigured", models: [], fetchedAt: null }),
     );
     setVex();
-    render(createElement(KnowledgePanel), { wrapper: makeWrapper(freshClient()) });
+    render(createElement(MemoryPanel), { wrapper: makeWrapper(freshClient()) });
 
     await waitFor(() => {
       expect(

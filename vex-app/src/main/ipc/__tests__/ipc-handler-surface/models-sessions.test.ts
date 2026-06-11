@@ -29,8 +29,6 @@ const mocks = vi.hoisted(() => ({
   // compaction-db
   getCompactionStatus: vi.fn(),
   listCompactionHistory: vi.fn(),
-  // knowledge-db
-  listKnowledge: vi.fn(),
   // memory-db
   listSessionMemories: vi.fn(),
   getMemoryStats: vi.fn(),
@@ -42,6 +40,8 @@ const mocks = vi.hoisted(() => ({
   getHistoryForSession: vi.fn(),
   // missions-db
   getDraftForSession: vi.fn(),
+  // engine inference registry (S6 — sessions.getModel capability probe)
+  resolveProvider: vi.fn(),
   log: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -81,10 +81,6 @@ vi.mock("../../../database/compaction-db.js", () => ({
   probeCompactJobsReady: vi.fn(),
 }));
 
-vi.mock("../../../database/knowledge-db.js", () => ({
-  listKnowledge: mocks.listKnowledge,
-}));
-
 vi.mock("../../../database/memory-db.js", () => ({
   listSessionMemories: mocks.listSessionMemories,
   getMemoryStats: mocks.getMemoryStats,
@@ -106,10 +102,15 @@ vi.mock("../../../database/missions-db.js", () => ({
 
 vi.mock("../../../logger/index.js", () => ({ log: mocks.log }));
 
+// S6: sessions.getModel probes the ENGINE inference config for reasoning
+// support — mock the registry so the surface test never touches env/network.
+vi.mock("@vex-agent/inference/registry.js", () => ({
+  resolveProvider: mocks.resolveProvider,
+}));
+
 const { registerMessagesHandlers } = await import("../../messages.js");
 const { registerUsageHandlers } = await import("../../usage.js");
 const { registerCompactionHandlers } = await import("../../compaction.js");
-const { registerKnowledgeHandlers } = await import("../../knowledge.js");
 const { registerMemoryHandlers } = await import("../../memory.js");
 const { registerRuntimeHandlers } = await import("../../runtime.js");
 const { registerMissionHandlers } = await import("../../mission.js");
@@ -139,7 +140,6 @@ beforeEach(() => {
   registerMessagesHandlers();
   registerUsageHandlers();
   registerCompactionHandlers();
-  registerKnowledgeHandlers();
   registerMemoryHandlers();
   registerRuntimeHandlers();
   registerMissionHandlers();
@@ -195,10 +195,19 @@ describe("models handler", () => {
   });
 });
 
+function providerWithReasoningPrice(reasoningPricePerM: number | null): {
+  loadConfig: () => Promise<{ reasoningPricePerM: number | null }>;
+} {
+  return {
+    loadConfig: async () => ({ reasoningPricePerM }),
+  };
+}
+
 describe("sessions.getModel handler", () => {
   it("getModel returns global_default when env present", async () => {
     process.env.AGENT_PROVIDER = "openrouter";
     process.env.AGENT_MODEL = "anthropic/claude-opus-4.7";
+    mocks.resolveProvider.mockResolvedValue(null);
     const result = await call(CH.sessions.getModel, { sessionId: SESSION });
     expect(result.ok).toBe(true);
     expect((result.data as { source: string }).source).toBe("global_default");
@@ -210,5 +219,42 @@ describe("sessions.getModel handler", () => {
     const result = await call(CH.sessions.getModel, { sessionId: SESSION });
     expect(result.ok).toBe(true);
     expect((result.data as { source: string }).source).toBe("unconfigured");
+    expect(
+      (result.data as { supportsReasoning: boolean | null }).supportsReasoning,
+    ).toBeNull();
+  });
+
+  it("getModel reports supportsReasoning=true when the catalog prices reasoning", async () => {
+    process.env.AGENT_PROVIDER = "openrouter";
+    process.env.AGENT_MODEL = "anthropic/claude-opus-4.7";
+    mocks.resolveProvider.mockResolvedValue(providerWithReasoningPrice(15));
+    const result = await call(CH.sessions.getModel, { sessionId: SESSION });
+    expect(result.ok).toBe(true);
+    expect(
+      (result.data as { supportsReasoning: boolean | null }).supportsReasoning,
+    ).toBe(true);
+  });
+
+  it("getModel reports supportsReasoning=false when the catalog has no reasoning price", async () => {
+    process.env.AGENT_PROVIDER = "openrouter";
+    process.env.AGENT_MODEL = "deepseek/deepseek-chat";
+    mocks.resolveProvider.mockResolvedValue(providerWithReasoningPrice(null));
+    const result = await call(CH.sessions.getModel, { sessionId: SESSION });
+    expect(result.ok).toBe(true);
+    expect(
+      (result.data as { supportsReasoning: boolean | null }).supportsReasoning,
+    ).toBe(false);
+  });
+
+  it("getModel degrades to supportsReasoning=null when the provider is unavailable", async () => {
+    process.env.AGENT_PROVIDER = "openrouter";
+    process.env.AGENT_MODEL = "anthropic/claude-opus-4.7";
+    mocks.resolveProvider.mockRejectedValue(new Error("vault locked"));
+    const result = await call(CH.sessions.getModel, { sessionId: SESSION });
+    expect(result.ok).toBe(true);
+    expect((result.data as { source: string }).source).toBe("global_default");
+    expect(
+      (result.data as { supportsReasoning: boolean | null }).supportsReasoning,
+    ).toBeNull();
   });
 });

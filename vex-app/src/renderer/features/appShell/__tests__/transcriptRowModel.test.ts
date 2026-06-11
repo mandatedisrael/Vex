@@ -9,7 +9,13 @@ import type {
   MessageRole,
   SessionMessageDto,
 } from "@shared/schemas/messages.js";
-import { toTranscriptRow, toTranscriptRows } from "../transcriptRowModel.js";
+import {
+  groupTranscriptRows,
+  toTranscriptRow,
+  toTranscriptRows,
+  type ToolGroupRowModel,
+  type TranscriptEntry,
+} from "../transcriptRowModel.js";
 
 function dto(p: {
   readonly role: MessageRole;
@@ -106,14 +112,14 @@ describe("toTranscriptRow", () => {
   it("maps the recall kind to the recall variant carrying the tool name as label (8-4)", () => {
     expect(
       toTranscriptRow(
-        dto({ role: "assistant", kind: "recall", toolName: "memory_recall" }),
+        dto({ role: "assistant", kind: "recall", toolName: "session_memory_search" }),
       ).variant,
     ).toBe("recall");
     expect(
       toTranscriptRow(
-        dto({ role: "assistant", kind: "recall", toolName: "knowledge_recall" }),
+        dto({ role: "assistant", kind: "recall", toolName: "long_memory_search" }),
       ).label,
-    ).toBe("knowledge_recall");
+    ).toBe("long_memory_search");
     // A recall row with no tool name keeps a null label (neutral marker copy).
     expect(
       toTranscriptRow(dto({ role: "assistant", kind: "recall", toolName: null }))
@@ -195,5 +201,169 @@ describe("toTranscriptRows — tool call/result correlation (batch 3)", () => {
     ]);
     // The second tool's result correlates to the second tool's name.
     expect(rows.find((r) => r.id === 6)!.label).toBe("dexscreener:search_output");
+  });
+});
+
+// ── S5: act-ledger grouping post-pass ───────────────────────────────────────
+
+/** Tool CALL dto with one act per name (call ids default to `c<id>-<i>`). */
+function callDto(id: number, names: readonly string[], content = ""): SessionMessageDto {
+  return dto({
+    id,
+    role: "assistant",
+    kind: "tool_call",
+    content,
+    toolCalls: names.map((toolName, i) => ({
+      toolCallId: `c${id}-${i}`,
+      toolName,
+      toolArgs: `{"n":${i}}`,
+    })),
+  });
+}
+
+function resultDto(id: number, toolCallId: string, content: string): SessionMessageDto {
+  return dto({ id, role: "tool", kind: "tool_result", content, toolCallId });
+}
+
+function group(entries: readonly TranscriptEntry[]): ToolGroupRowModel | undefined {
+  return entries.find(
+    (e): e is ToolGroupRowModel => e.variant === "tool_group",
+  );
+}
+
+describe("groupTranscriptRows (S5 act ledger)", () => {
+  it("a 1-call run stays individual and merges its adjacent output (result row dropped)", () => {
+    const entries = groupTranscriptRows(
+      toTranscriptRows([callDto(1, ["wallet:read"]), resultDto(2, "c1-0", "0.5 ETH")]),
+    );
+    expect(entries).toHaveLength(1);
+    const row = entries[0]!;
+    expect(row.variant).toBe("tool");
+    if (row.variant === "tool_group") throw new Error("unexpected group");
+    expect(row.toolActs).toEqual([
+      { toolCallId: "c1-0", toolName: "wallet:read", toolArgs: '{"n":0}', output: "0.5 ETH" },
+    ]);
+  });
+
+  it("a 2-call run stays individual (below the ≥3 threshold)", () => {
+    const entries = groupTranscriptRows(
+      toTranscriptRows([callDto(1, ["a"]), callDto(2, ["b"])]),
+    );
+    expect(group(entries)).toBeUndefined();
+    expect(entries).toHaveLength(2);
+  });
+
+  it("3 consecutive single-call rows collapse into ONE group with merged outputs", () => {
+    const entries = groupTranscriptRows(
+      toTranscriptRows([
+        callDto(1, ["search:web"]),
+        resultDto(2, "c1-0", "r1"),
+        callDto(3, ["file:read"]),
+        resultDto(4, "c3-0", "r2"),
+        callDto(5, ["wallet:read"]),
+      ]),
+    );
+    expect(entries).toHaveLength(1);
+    const g = group(entries)!;
+    expect(g.id).toBe(1); // first contributing call row
+    expect(g.createdAt).toBe("2026-05-26T10:00:00.000Z");
+    expect(g.calls.map((c) => c.output)).toEqual(["r1", "r2", null]);
+    expect(g.distinctToolNames).toEqual(["search:web", "file:read", "wallet:read"]);
+  });
+
+  it("a multi-call batch row counts every call toward the threshold", () => {
+    const entries = groupTranscriptRows(toTranscriptRows([callDto(1, ["a", "b", "c"])]));
+    expect(group(entries)?.calls).toHaveLength(3);
+  });
+
+  it("a 2-call batch plus a 1-call row in the same run reach the threshold together", () => {
+    const entries = groupTranscriptRows(
+      toTranscriptRows([callDto(1, ["a", "b"]), callDto(2, ["c"])]),
+    );
+    const g = group(entries)!;
+    expect(g.calls.map((c) => c.toolName)).toEqual(["a", "b", "c"]);
+  });
+
+  it("any non-tool row interrupts the run — split runs below the threshold stay individual", () => {
+    const entries = groupTranscriptRows(
+      toTranscriptRows([
+        callDto(1, ["a"]),
+        callDto(2, ["b"]),
+        dto({ id: 3, role: "assistant", kind: "text", content: "thinking aloud" }),
+        callDto(4, ["c"]),
+        callDto(5, ["d"]),
+      ]),
+    );
+    expect(group(entries)).toBeUndefined();
+    expect(entries.map((e) => e.id)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("an orphan result (unknown call id) stays a standalone row exactly as today", () => {
+    const entries = groupTranscriptRows(
+      toTranscriptRows([callDto(1, ["a"]), resultDto(2, "missing", "lost output")]),
+    );
+    expect(entries).toHaveLength(2);
+    const orphan = entries[1]!;
+    if (orphan.variant === "tool_group") throw new Error("unexpected group");
+    expect(orphan.toolKind).toBe("result");
+    expect(orphan.content).toBe("lost output");
+    // The unpaired call carries no output.
+    const call = entries[0]!;
+    if (call.variant === "tool_group") throw new Error("unexpected group");
+    expect(call.toolActs?.[0]?.output).toBeNull();
+  });
+
+  it("a result separated from its call by a non-tool row does NOT merge (different run)", () => {
+    const entries = groupTranscriptRows(
+      toTranscriptRows([
+        callDto(1, ["a"]),
+        dto({ id: 2, role: "user", kind: "text", content: "interrupt" }),
+        resultDto(3, "c1-0", "late output"),
+      ]),
+    );
+    expect(entries.map((e) => e.id)).toEqual([1, 2, 3]);
+    const call = entries[0]!;
+    if (call.variant === "tool_group") throw new Error("unexpected group");
+    expect(call.toolActs?.[0]?.output).toBeNull();
+    const late = entries[2]!;
+    if (late.variant === "tool_group") throw new Error("unexpected group");
+    expect(late.toolKind).toBe("result");
+  });
+
+  it("assistant prose on grouped call rows survives as document-only rows above the group", () => {
+    const entries = groupTranscriptRows(
+      toTranscriptRows([
+        callDto(1, ["a"], "Let me check three things."),
+        callDto(2, ["b"]),
+        callDto(3, ["c"], "And one more."),
+      ]),
+    );
+    // prose(1) → group(1) → prose(3)
+    expect(entries).toHaveLength(3);
+    const [prose1, g, prose3] = entries;
+    if (prose1!.variant === "tool_group" || prose3!.variant === "tool_group") {
+      throw new Error("prose rows must not be groups");
+    }
+    expect(prose1!.content).toBe("Let me check three things.");
+    expect(prose1!.toolActs).toEqual([]); // acts folded into the group
+    expect(g!.variant).toBe("tool_group");
+    expect(prose3!.content).toBe("And one more.");
+  });
+
+  it("deduplicates distinctToolNames in first-appearance order", () => {
+    const entries = groupTranscriptRows(
+      toTranscriptRows([callDto(1, ["a", "b", "a", "c", "b"])]),
+    );
+    expect(group(entries)?.distinctToolNames).toEqual(["a", "b", "c"]);
+  });
+
+  it("passes every non-tool variant through untouched", () => {
+    const rows = toTranscriptRows([
+      dto({ id: 1, role: "user", kind: "text", content: "hi" }),
+      dto({ id: 2, role: "assistant", kind: "text", content: "yo" }),
+      dto({ id: 3, role: "system", kind: "runtime_notice", content: "n" }),
+      dto({ id: 4, role: "system", kind: "compaction", content: "c" }),
+    ]);
+    expect(groupTranscriptRows(rows)).toEqual(rows);
   });
 });

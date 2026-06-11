@@ -49,8 +49,21 @@ describe("SessionContext header (slice C)", () => {
     expect(header?.getAttribute("role")).toBe("group");
     expect(header?.getAttribute("aria-label")).toBe("Session: Research session");
     expect(screen.getByText("Research session")).not.toBeNull();
-    expect(screen.getByText("agent")).not.toBeNull();
+    // S3 exception stamps: the default agent mode earns silence; only the
+    // deviating `restricted` permission is stamped.
+    expect(screen.queryByText("agent")).toBeNull();
     expect(screen.getByText("restricted")).not.toBeNull();
+  });
+
+  it("stamps mission mode but stays silent for full permission", () => {
+    const { container } = renderCtx({
+      activeSession: { ...SESSION, mode: "mission", permission: "full" },
+    });
+    expect(
+      container.querySelector('[data-vex-area="session-header"]'),
+    ).not.toBeNull();
+    expect(screen.getByText("mission")).not.toBeNull();
+    expect(screen.queryByText("restricted")).toBeNull();
   });
 
   it("does not render the header in the loading or not-found states", () => {

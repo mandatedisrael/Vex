@@ -241,6 +241,15 @@ export const sessionModelDtoSchema = z
      * Kept on the DTO for a stable shape the chat header can render.
      */
     updatedAt: z.string().datetime({ offset: true }).nullable(),
+    /**
+     * Whether the resolved model supports reasoning (S6). Derived in main
+     * from the engine inference config: `true` when the OpenRouter catalog
+     * reports internal-reasoning pricing for the model, `false` when the
+     * catalog says it has none, `null` when unknown (unconfigured, provider
+     * locked, or catalog unreachable). The renderer shows the composer
+     * reasoning-effort control ONLY for `true`.
+     */
+    supportsReasoning: z.boolean().nullable(),
   })
   .strict();
 export type SessionModelDto = z.infer<typeof sessionModelDtoSchema>;

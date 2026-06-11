@@ -1,10 +1,14 @@
 /**
- * SessionPlanCard — render + interaction states for the plan-mode control.
+ * SessionPlanCard — render + interaction states for the plan display card.
  *
- * Directly exercises all four hooks the card depends on (useSessionPlan,
- * useSetPlanMode, useAcceptPlan, useRequestResume) so the component is covered
- * on its own — the regression that broke SessionPanel-approval.test.tsx was a
- * missing useRequestResume mock, which this card lacked any direct test to catch.
+ * The on/off toggle moved to the composer's PLAN switch (S2) — its behavior
+ * is pinned in `AppShell/composer-plan-switch.test.tsx`; here we pin that the
+ * card no longer renders a toggle. Still exercises the hooks the card depends
+ * on (useSessionPlan, useAcceptPlan, useRequestResume; the sessions-api mock
+ * keeps a useSetPlanMode stub for the module surface) so the component is
+ * covered on its own — the regression that broke
+ * SessionPanel-approval.test.tsx was a missing useRequestResume mock, which
+ * this card lacked any direct test to catch.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -47,13 +51,13 @@ beforeEach(() => {
 });
 
 describe("SessionPlanCard", () => {
-  it("renders the off state and toggles plan mode on", () => {
+  it("renders no plan-mode toggle (the control point is the composer's PLAN switch)", () => {
     render(<SessionPlanCard sessionId={SESSION} />);
-    expect(screen.getByText("Off — turn on")).toBeTruthy();
+    expect(screen.queryByText("Off — turn on")).toBeNull();
+    expect(screen.queryByText("On — turn off")).toBeNull();
     expect(screen.queryByTestId("plan-md")).toBeNull();
     expect(screen.queryByText("Accept plan")).toBeNull();
-    fireEvent.click(screen.getByText("Off — turn on"));
-    expect(mockSetPlanMode.mutate).toHaveBeenCalledWith({ sessionId: SESSION, enabled: true });
+    expect(mockSetPlanMode.mutate).not.toHaveBeenCalled();
   });
 
   it("shows a pending plan and accepts it with the exact reviewed content", () => {
@@ -80,9 +84,7 @@ describe("SessionPlanCard", () => {
     expect(screen.queryByText("Resume mission")).toBeNull();
   });
 
-  it("surfaces the blocked-pending-acceptance hint after a refused disable", () => {
-    mockSetPlanMode.data = { ok: true, data: { outcome: "blocked_pending_acceptance" } };
-    render(<SessionPlanCard sessionId={SESSION} />);
-    expect(screen.getByText(/Can.t turn plan mode off/)).toBeTruthy();
-  });
+  // The blocked-pending-acceptance hint was removed in S3: the card no longer
+  // calls useSetPlanMode (S2 moved toggling to the composer's PLAN switch), so
+  // its mutation-refusal state could never fire from this component.
 });

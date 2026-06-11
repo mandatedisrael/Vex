@@ -3,17 +3,11 @@
   "compilerOptions": {
     "lib": ["ES2024", "DOM"],
     "types": ["node"],
-    "module": "CommonJS",
-    "moduleResolution": "Node",
     "verbatimModuleSyntax": false,
-    "outDir": "./dist/preload",
-    "rootDir": ".",
-    "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"],
+      "@shared/*": ["./src/shared/*"],
       "@vex-lib/*": ["../src/lib/*"]
     }
   },
-  "include": ["src/preload", "src/shared", "../src/lib"],
-  "references": [{ "path": "./tsconfig.shared.json" }]
+  "include": ["src/preload", "src/shared", "../src/lib"]
 }

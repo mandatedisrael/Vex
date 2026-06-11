@@ -33,7 +33,7 @@ export interface CardHeaderProps {
 export function CardHeader({ kind, title }: CardHeaderProps): JSX.Element {
   const meta = headerMeta(kind);
   return (
-    <header className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-3">
+    <header className="flex items-center justify-between gap-3 border-b border-[var(--vex-line)] px-4 py-3">
       <div className="flex min-w-0 items-center gap-2">
         <HugeiconsIcon
           icon={meta.icon}
@@ -48,9 +48,10 @@ export function CardHeader({ kind, title }: CardHeaderProps): JSX.Element {
           {title}
         </h2>
       </div>
+      {/* Status stamp — NOTARY grammar: hairline tone border, text in tone. */}
       <span
         className={cn(
-          "rounded-md px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em]",
+          "shrink-0 rounded-[3px] border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]",
           meta.badgeClass,
         )}
         data-vex-state={meta.dataState}
@@ -74,33 +75,36 @@ function headerMeta(kind: CardStateKind): HeaderMeta {
     case "setup-needed":
       return {
         icon: Target02Icon,
-        iconClass: "text-[#8da5ff]",
+        iconClass: "text-[var(--vex-accent-text)]",
         badge: "Setup needed",
-        badgeClass: "text-[var(--color-text-muted)]",
+        badgeClass: "border-[var(--vex-line-strong)] text-[var(--vex-text-3)]",
         dataState: "setup-needed",
       };
     case "awaiting-acceptance":
       return {
         icon: InformationCircleIcon,
-        iconClass: "text-[#8da5ff]",
+        iconClass: "text-[var(--vex-accent-text)]",
         badge: "Awaiting acceptance",
-        badgeClass: "text-[#8da5ff]",
+        badgeClass:
+          "border-[color-mix(in_oklab,var(--vex-accent)_40%,transparent)] text-[var(--vex-accent-text)]",
         dataState: "awaiting-acceptance",
       };
     case "accepted":
       return {
         icon: CheckmarkCircle02Icon,
-        iconClass: "text-emerald-400",
+        iconClass: "text-success",
         badge: "Accepted",
-        badgeClass: "text-emerald-300",
+        badgeClass:
+          "border-[color-mix(in_oklab,var(--color-success)_40%,transparent)] text-success",
         dataState: "accepted",
       };
     case "dirty-acceptance":
       return {
         icon: InformationCircleIcon,
-        iconClass: "text-amber-300",
+        iconClass: "text-warning",
         badge: "Contract changed",
-        badgeClass: "text-amber-300",
+        badgeClass:
+          "border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] text-warning",
         dataState: "dirty-acceptance",
       };
   }
@@ -114,11 +118,11 @@ export function CardBody({ draft }: CardBodyProps): JSX.Element {
   const constraints = formatConstraints(draft);
   const restrictions = formatRestrictions(draft);
   return (
-    <div className="space-y-3 px-4 py-3 text-[var(--color-text-secondary)]">
+    <div className="space-y-3 px-4 py-3 text-[var(--vex-text-2)]">
       <Field label="Goal">
         <p className="text-foreground">
           {draft.goal?.trim() || (
-            <span className="italic text-[var(--color-text-muted)]">
+            <span className="italic text-[var(--vex-text-3)]">
               (no goal yet — talk to Vex to outline one)
             </span>
           )}
@@ -152,7 +156,7 @@ export function CardBody({ draft }: CardBodyProps): JSX.Element {
         </Field>
       ) : null}
       {draft.renewedFromMissionId !== null ? (
-        <p className="text-xs italic text-[var(--color-text-muted)]">
+        <p className="text-xs italic text-[var(--vex-text-3)]">
           Renewed from mission{" "}
           <span className="font-mono">{draft.renewedFromMissionId}</span>
         </p>
@@ -170,7 +174,7 @@ interface FieldProps {
 function Field({ label, hint, children }: FieldProps): JSX.Element {
   return (
     <div className="space-y-1">
-      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
+      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]">
         <span>{label}</span>
         {hint ? <span className="text-[10px] italic">· {hint}</span> : null}
       </div>
@@ -185,7 +189,7 @@ function ChipList({ items }: { readonly items: readonly string[] }): JSX.Element
       {items.map((item) => (
         <span
           key={item}
-          className="rounded-md border border-white/[0.06] px-2 py-0.5 font-mono text-[11px] text-foreground"
+          className="rounded-[3px] border border-[var(--vex-line-strong)] px-1.5 py-0.5 font-mono text-[11px] text-foreground"
         >
           {item}
         </span>
@@ -252,13 +256,13 @@ export function AutoRetrySection({
   onToggle,
 }: AutoRetrySectionProps): JSX.Element {
   return (
-    <div className="border-t border-white/[0.06] px-4 py-3">
+    <div className="border-t border-[var(--vex-line)] px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
-          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
+          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]">
             Auto-retry on error
           </div>
-          <p className="text-xs text-[var(--color-text-secondary)]">
+          <p className="text-xs text-[var(--vex-text-2)]">
             Re-attempt up to 5× after a provider or runtime error. Turns itself
             off once the run performs a wallet, signing, or other
             state-changing action.
@@ -273,15 +277,15 @@ export function AutoRetrySection({
           onClick={() => onToggle(!enabled)}
           data-vex-action="toggle-auto-retry"
           className={cn(
-            "relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8] disabled:cursor-not-allowed disabled:opacity-50",
+            "relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] disabled:cursor-not-allowed disabled:opacity-50",
             enabled
-              ? "border-[#3758ff]/60 bg-[#3758ff]/70"
+              ? "border-[var(--vex-accent-border-strong)] bg-[var(--vex-accent)]"
               : "border-white/[0.12] bg-white/[0.06]",
           )}
         >
           <span
             className={cn(
-              "inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform",
+              "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
               enabled ? "translate-x-[18px]" : "translate-x-[3px]",
             )}
           />
@@ -306,33 +310,34 @@ export function CardFooter({
 }: CardFooterProps): JSX.Element | null {
   if (kind === "setup-needed") {
     return (
-      <footer className="border-t border-white/[0.06] px-4 py-3 text-xs text-[var(--color-text-muted)]">
+      <footer className="border-t border-[var(--vex-line)] px-4 py-3 text-xs text-[var(--vex-text-3)]">
         Add a goal, constraints, and stop conditions to enable Accept.
       </footer>
     );
   }
   if (kind === "accepted") {
     return (
-      <footer className="border-t border-white/[0.06] px-4 py-3 text-xs text-[var(--color-text-muted)]">
-        Use the <span className="text-[#8da5ff]">Start mission</span> button below to dispatch.
+      <footer className="border-t border-[var(--vex-line)] px-4 py-3 text-xs text-[var(--vex-text-3)]">
+        Use the <span className="text-[var(--vex-accent-text)]">Start mission</span> button below to dispatch.
       </footer>
     );
   }
   if (currentHash === null) return null;
   const isDirty = kind === "dirty-acceptance";
   return (
-    <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] px-4 py-3">
-      <span className="text-xs text-[var(--color-text-muted)]">
+    <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--vex-line)] px-4 py-3">
+      <span className="text-xs text-[var(--vex-text-3)]">
         {isDirty
           ? "Re-accept to bring the runtime back in sync with the draft."
           : "Accepting locks the contract for this mission run."}
       </span>
+      {/* Accent-hairline key — the signing action stays quiet until hovered. */}
       <Button
         type="button"
         onClick={() => onAccept(currentHash)}
         disabled={pending}
         data-vex-action="accept-contract"
-        className="h-8 px-3 text-xs bg-[#3758ff] text-white hover:bg-[#4668ff]"
+        className="h-8 border border-[var(--vex-accent-border)] bg-transparent px-3 text-xs text-[var(--vex-accent-text)] hover:bg-[var(--vex-accent-fill-8)]"
       >
         {pending ? "Accepting…" : isDirty ? "Accept new contract" : "Accept contract"}
       </Button>

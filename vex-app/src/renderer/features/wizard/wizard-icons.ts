@@ -52,7 +52,7 @@ export const WIZARD_STEP_META: Readonly<Record<WizardStepId, WizardStepMeta>> = 
     icon: AiBrain05Icon,
     label: "Embedding",
     description:
-      "Pick the embedding endpoint that powers knowledge recall.",
+      "Pick the embedding endpoint that powers long-term memory recall.",
   },
   agentCore: {
     icon: CpuIcon,

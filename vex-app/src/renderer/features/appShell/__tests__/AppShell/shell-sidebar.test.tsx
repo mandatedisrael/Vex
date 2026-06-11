@@ -25,6 +25,11 @@ vi.mock("@hugeicons/react", () => ({
 vi.mock("@hugeicons/core-free-icons", () => ({
   Add01Icon: "Add01Icon",
   AiChat01Icon: "AiChat01Icon",
+  // S5 act ledger — ToolLedger/toolGlyph.ts imports these four.
+  AiWebBrowsingIcon: "AiWebBrowsingIcon",
+  File01Icon: "File01Icon",
+  TerminalIcon: "TerminalIcon",
+  Wrench01Icon: "Wrench01Icon",
   AlertCircleIcon: "AlertCircleIcon",
   Archive02Icon: "Archive02Icon",
   ArrowDown01Icon: "ArrowDown01Icon",
@@ -42,7 +47,8 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   Delete02Icon: "Delete02Icon",
   Exchange01Icon: "Exchange01Icon",
   FilterHorizontalIcon: "FilterHorizontalIcon",
-  Knowledge01Icon: "Knowledge01Icon",
+  Brain01Icon: "Brain01Icon",
+  MapPinIcon: "MapPinIcon",
   PanelLeftCloseIcon: "PanelLeftCloseIcon",
   PanelLeftOpenIcon: "PanelLeftOpenIcon",
   Search01Icon: "Search01Icon",
@@ -260,7 +266,7 @@ describe("AppShell", () => {
     renderShell();
 
     expect(
-      screen.getByRole("heading", { name: /Your chain\. Your rules\./i }),
+      screen.getByRole("heading", { name: /What should I execute\?/i }),
     ).not.toBeNull();
     expect(screen.getAllByRole("button", { name: /New session/i }).length).toBeGreaterThan(0);
     await screen.findByText("Connected to local runtime");

@@ -46,24 +46,28 @@ export function SessionDeleteDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onCancel(); }}>
-      <DialogContent className="max-w-md border-white/[0.10] bg-[#071024]/92 text-foreground shadow-[0_0_80px_rgba(22,68,190,0.28)] backdrop:bg-black/70 backdrop:backdrop-blur-sm">
-        <DialogHeader className="border-white/[0.08]">
-          <DialogTitle className="text-xl">Remove session?</DialogTitle>
-          <DialogDescription className="text-[var(--color-text-secondary)]">
+      {/* Solid raised surface + hairline — no glass, no glow (S7; the
+       * backdrop-blur-none override beats the dialog base's blur-sm). */}
+      <DialogContent className="max-w-md rounded-xl border-[var(--vex-line-strong)] bg-[var(--vex-surface-2)] text-foreground shadow-none backdrop:bg-black/70 backdrop:backdrop-blur-none">
+        <DialogHeader className="border-[var(--vex-line)]">
+          <DialogTitle className="font-mono text-[13px] font-medium uppercase tracking-[0.3em]">
+            Remove session?
+          </DialogTitle>
+          <DialogDescription className="text-[var(--vex-text-2)]">
             {describeOutcome(title, blockedOutcome)}
           </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="gap-3" />
 
-        <DialogFooter className="border-white/[0.08]">
+        <DialogFooter className="border-[var(--vex-line)]">
           <Button
             type="button"
             variant="ghost"
             onClick={onCancel}
             disabled={pending}
             autoFocus
-            className="text-[var(--color-text-secondary)] hover:bg-white/[0.06] hover:text-foreground"
+            className="text-[var(--vex-text-2)] hover:bg-white/[0.06] hover:text-foreground"
           >
             Cancel
           </Button>

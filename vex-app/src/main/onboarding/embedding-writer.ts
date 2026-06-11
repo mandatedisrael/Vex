@@ -92,7 +92,7 @@ export async function writeEmbeddingConfig(
         code: "embedding.dim_locked",
         domain: "embedding",
         message:
-          `Existing knowledge entries use a different embedding dimension. ` +
+          `Existing long-term memory entries use a different embedding dimension. ` +
           `Changing to dim=${input.dim} would make ${countResult.data} entries unavailable ` +
           `until you export, wipe, and re-import them.`,
         retryable: false,

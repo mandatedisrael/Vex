@@ -4,7 +4,6 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Add01Icon,
   ArrowRight01Icon,
-  FilterHorizontalIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
 } from "@hugeicons/core-free-icons";
@@ -13,7 +12,6 @@ import type {
   SessionListItem,
 } from "@shared/schemas/sessions.js";
 import { cn } from "../../lib/utils.js";
-import { ShinyText } from "../../components/ui/shiny-text.js";
 import {
   useDeleteSession,
   useSessionsList,
@@ -21,7 +19,8 @@ import {
 } from "../../lib/api/sessions.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { SessionDeleteDialog } from "./SessionDeleteDialog.js";
-import { KnowledgeButton } from "./KnowledgeButton.js";
+import { MemoryButton } from "./MemoryButton.js";
+import { RuntimeLedger } from "./RuntimeLedger.js";
 import { SettingsButton } from "./SettingsButton.js";
 import {
   SessionGroups,
@@ -49,6 +48,10 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
   const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
   const sessionModeFilter = useUiStore((s) => s.sessionModeFilter);
   const setSessionModeFilter = useUiStore((s) => s.setSessionModeFilter);
+  // Signing-stroke state for the New-session key: SessionCreator drives
+  // the transitions; this component only renders ink + glint.
+  const signingState = useUiStore((s) => s.signingState);
+  const setSigningState = useUiStore((s) => s.setSigningState);
   const query = useSessionsList();
   const pinMutation = useSetSessionPinned();
   const deleteMutation = useDeleteSession();
@@ -149,16 +152,11 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
   }, [setSidebarOpen, sidebarOpen]);
 
   const totalRows = visibleRows.length;
-  const browseAllLabel = sidebarOpen
-    ? hiddenCount > 0
-      ? `Browse all sessions (${hiddenCount} more)`
-      : "Browse all sessions"
-    : "Browse all sessions";
 
   return (
     <aside
       className={cn(
-        "relative z-10 flex h-full shrink-0 flex-col border-r border-white/[0.045] bg-[#030916]/[0.16] pb-12 shadow-[inset_-1px_0_0_rgba(255,255,255,0.025),0_0_48px_rgba(0,0,0,0.16)] backdrop-blur-xl backdrop-saturate-150 transition-[width] duration-300",
+        "relative z-10 flex h-full shrink-0 flex-col border-r border-[var(--vex-line)] bg-[var(--vex-surface-1)] transition-[width] duration-200",
         sidebarOpen ? "w-[296px]" : "w-[72px]",
       )}
       data-vex-area="sessions-sidebar"
@@ -166,19 +164,19 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
     >
       <header
         className={cn(
-          "flex h-16 items-center border-b border-white/[0.045]",
+          "flex h-12 shrink-0 items-center border-b border-[var(--vex-line)]",
           sidebarOpen ? "justify-between px-4" : "justify-center px-2",
         )}
       >
-        <div className={cn("flex min-w-0 items-center gap-3", !sidebarOpen && "hidden")}>
+        <div className={cn("flex min-w-0 items-center gap-2.5", !sidebarOpen && "hidden")}>
           <img
-            src="/vex.jpg"
+            src="/logo_clean.png"
             alt=""
             draggable={false}
-            className="h-9 w-9 rounded-full object-cover ring-1 ring-[#3275f8]/42"
+            className="h-[18px] w-auto opacity-90"
           />
-          <span className="truncate text-sm font-semibold tracking-tight">
-            Vex
+          <span className="font-mono text-[11px] uppercase tracking-[0.3em] text-foreground">
+            VEX
           </span>
         </div>
         <SidebarIconButton
@@ -193,53 +191,94 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
         </SidebarIconButton>
       </header>
 
-      <div className={cn("border-b border-white/[0.045] p-3", !sidebarOpen && "px-2")}>
-        <button
-          type="button"
-          onClick={onCreate}
-          className={cn(
-            // Neutral container so the silver→white ShinyText label reads as
-            // the accent (was electric-blue text on a blue tint). Focus ring
-            // kept #3275f8 for app-shell consistency + visible focus.
-            "flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-white/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8]",
-            sidebarOpen ? "px-3" : "px-0",
-          )}
-          aria-label="New session"
-        >
-          <HugeiconsIcon icon={Add01Icon} size={17} aria-hidden />
-          {sidebarOpen ? <ShinyText text="New session" /> : null}
-        </button>
+      <div className={cn("p-3", !sidebarOpen && "px-2")}>
+        {/* The signing key: a recessed slot (canvas bg) sunk into a full-width
+         * plinth hairline that passes visibly behind it — the onboarding
+         * KeyButton DNA. The ink stroke draws on hover/focus (globals.css
+         * owns the draw) and loops while SessionCreator's mutation is in
+         * flight; the glint is the one-shot success light. */}
+        <div className="relative">
+          <span
+            aria-hidden
+            className={cn(
+              "absolute top-1/2 h-px bg-[var(--vex-line)]",
+              sidebarOpen ? "-inset-x-3" : "-inset-x-2",
+            )}
+          />
+          <span
+            aria-hidden
+            className={cn(
+              "absolute top-1/2 h-px bg-[color-mix(in_oklab,var(--vex-accent)_60%,transparent)]",
+              // The tick anchors to the plinth's left end, which tracks the
+              // wrapper padding (p-3 open / px-2 collapsed).
+              sidebarOpen ? "-left-3 w-6" : "-left-2 w-3",
+            )}
+          />
+          <button
+            type="button"
+            onClick={onCreate}
+            aria-label="New session"
+            className={cn(
+              "vex-sign-key relative flex h-11 items-center justify-center gap-2 rounded-lg border border-[var(--vex-line-strong)] bg-[var(--vex-surface-0)] text-[13px] font-medium text-[var(--vex-text-2)] transition-colors duration-150",
+              "hover:border-[var(--vex-accent-border)] hover:text-[var(--vex-accent-text)]",
+              "active:scale-[0.99] active:border-[var(--vex-accent-border-strong)] active:bg-[var(--vex-accent-fill-8)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--vex-surface-1)]",
+              sidebarOpen ? "w-full px-3" : "mx-auto w-10",
+            )}
+          >
+            <HugeiconsIcon icon={Add01Icon} size={16} aria-hidden />
+            {sidebarOpen ? <span>New session</span> : null}
+            <span
+              aria-hidden
+              className={cn(
+                "vex-sign-stroke absolute bottom-[7px] h-[1.5px] rounded-full bg-[var(--vex-accent)]",
+                sidebarOpen ? "inset-x-3.5" : "inset-x-2.5",
+                signingState === "signing" && "vex-sign-stroke--signing",
+              )}
+            />
+            {signingState === "signed" ? (
+              <span
+                aria-hidden
+                onAnimationEnd={() => setSigningState("idle")}
+                className="vex-intro-glint absolute bottom-[4px] right-3 h-1.5 w-1.5 rounded-full bg-[var(--vex-accent-text)]"
+              />
+            ) : null}
+          </button>
+        </div>
       </div>
 
       {sidebarOpen ? (
-        <div className="border-b border-white/[0.045] px-3 py-3">
-          <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--color-text-muted)]">
-            <HugeiconsIcon icon={FilterHorizontalIcon} size={13} aria-hidden />
-            <span>Sessions</span>
-          </div>
-          <div
-            role="tablist"
-            aria-label="Filter sessions"
-            className="grid grid-cols-3 rounded-lg border border-white/[0.045] bg-white/[0.025] p-1"
-          >
-            {SESSION_MODE_FILTERS.map((filter) => (
+        <div
+          role="tablist"
+          aria-label="Filter sessions"
+          className="flex items-end gap-5 border-b border-[var(--vex-line)] px-3"
+        >
+          {SESSION_MODE_FILTERS.map((filter) => {
+            const active = sessionModeFilter === filter.value;
+            return (
               <button
                 key={filter.value}
                 type="button"
                 role="tab"
-                aria-selected={sessionModeFilter === filter.value}
+                aria-selected={active}
                 onClick={() => setSessionModeFilter(filter.value)}
                 className={cn(
-                  "h-8 rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8]",
-                  sessionModeFilter === filter.value
-                    ? "bg-[#3275f8]/18 text-foreground shadow-[0_0_18px_rgba(50,117,248,0.12)]"
-                    : "text-[var(--color-text-secondary)] hover:bg-white/[0.055] hover:text-foreground",
+                  "relative pb-2 pt-1 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]",
+                  active
+                    ? "text-foreground"
+                    : "text-[var(--vex-text-3)] hover:text-foreground",
                 )}
               >
                 {filter.label}
+                {active ? (
+                  <span
+                    aria-hidden
+                    className="absolute inset-x-0 -bottom-px h-0.5 bg-[var(--vex-accent)]"
+                  />
+                ) : null}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
       ) : null}
 
@@ -273,12 +312,9 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
       </div>
 
       {totalRows > 0 ? (
-        <div
-          className={cn(
-            "border-t border-white/[0.045] px-3 py-3",
-            !sidebarOpen && "px-2",
-          )}
-        >
+        // Ledger row, never blue-filled: the row itself is the touch target
+        // (no inner padding box), hairline-separated like the rows above it.
+        <div className="border-t border-[var(--vex-line)]">
           <button
             type="button"
             onClick={handleBrowseAll}
@@ -288,27 +324,30 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
                 : "Open sessions library"
             }
             className={cn(
-              "flex h-10 w-full items-center justify-center gap-2 rounded-lg border text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8]",
-              hiddenCount > 0
-                ? "border-[#3275f8]/32 bg-[#3275f8]/10 text-[#8da5ff] hover:bg-[#3275f8]/16 hover:text-[#adc0ff]"
-                : "border-white/[0.045] bg-transparent text-[var(--color-text-muted)] hover:bg-white/[0.035] hover:text-foreground",
+              "flex h-9 w-full items-center font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--vex-text-2)] transition-colors hover:bg-white/[0.035] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--vex-accent)]",
+              sidebarOpen ? "justify-between px-3" : "justify-center px-0",
             )}
           >
-            {sidebarOpen ? <span className="truncate">{browseAllLabel}</span> : null}
-            <HugeiconsIcon icon={ArrowRight01Icon} size={13} aria-hidden />
+            {sidebarOpen ? (
+              <span className="truncate">
+                {hiddenCount > 0 ? `Browse all · ${hiddenCount} more` : "Browse all"}
+              </span>
+            ) : null}
+            <HugeiconsIcon icon={ArrowRight01Icon} size={12} aria-hidden />
           </button>
         </div>
       ) : null}
 
       <footer
         className={cn(
-          "flex border-t border-white/[0.045] p-3",
-          sidebarOpen ? "items-center justify-between gap-2" : "flex-col gap-2 px-2",
+          "flex flex-col border-t border-[var(--vex-line)]",
+          sidebarOpen ? "" : "items-stretch",
         )}
       >
-        <KnowledgeButton compact={!sidebarOpen} />
+        <MemoryButton compact={!sidebarOpen} />
         <SettingsButton compact={!sidebarOpen} />
         {/* Report issue intentionally hidden for now; ReportIssueButton/Dialog retained for re-enable. */}
+        <RuntimeLedger sidebarOpen={sidebarOpen} />
       </footer>
 
       <SessionDeleteDialog

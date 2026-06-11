@@ -275,7 +275,7 @@ function ContextMeter({
         aria-hidden
       >
         <span
-          className="absolute inset-y-0 left-0 rounded-full bg-[#6f91ff]"
+          className="absolute inset-y-0 left-0 rounded-full bg-[var(--vex-accent)]"
           style={{ width: `${pct}%` }}
         />
       </span>

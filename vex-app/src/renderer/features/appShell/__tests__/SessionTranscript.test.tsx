@@ -23,6 +23,9 @@ import { useStreamStore } from "../../../stores/streamStore.js";
 const SESSION = "00000000-0000-4000-8000-0000000000aa";
 const ISO = "2026-05-26T10:00:00.000Z";
 const listMock = vi.fn();
+// S5: SessionTranscript now observes pending approvals (act-ledger stamps +
+// the working strip's circuit-break). Default: none pending.
+const listPendingMock = vi.fn();
 
 function ok<T>(data: T) {
   return { ok: true as const, data };
@@ -70,10 +73,14 @@ const failure = {
 };
 
 function setVex(): void {
+  listPendingMock.mockResolvedValue(ok([]));
   Object.defineProperty(window, "vex", {
     configurable: true,
     writable: true,
-    value: { messages: { list: listMock } },
+    value: {
+      messages: { list: listMock },
+      approvals: { listPending: listPendingMock },
+    },
   });
 }
 
@@ -147,7 +154,8 @@ describe("SessionTranscript", () => {
     expect(screen.getByText("context compacted")).not.toBeNull();
     expect(screen.getByText(/onerror="alert\(1\)"/)).not.toBeNull();
     expect(container.querySelector("img[onerror]")).toBeNull();
-    expect(container.querySelector('img[src="/vex.jpg"]')).not.toBeNull();
+    // S3 ledger anatomy: the shell is photo-free — no avatar img, ever.
+    expect(container.querySelector("img")).toBeNull();
     expect(listMock).toHaveBeenCalledWith({
       sessionId: SESSION,
       cursor: null,
@@ -171,7 +179,16 @@ describe("SessionTranscript", () => {
     setVex();
     useStreamStore.setState({
       bySessionId: {
-        [SESSION]: { streamId: "s1", text: "streaming…", phase: "streaming", toolName: null },
+        [SESSION]: {
+          streamId: "s1",
+          text: "streaming…",
+          phase: "streaming",
+          toolName: null,
+          reasoningText: "",
+          reasoningTokens: null,
+          startedAtMs: Date.now(),
+          status: "writing",
+        },
       },
     });
     const { container } = render(

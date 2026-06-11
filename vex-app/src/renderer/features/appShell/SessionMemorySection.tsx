@@ -1,5 +1,5 @@
 /**
- * Session-memory section of the Knowledge & Memory panel (7-2a).
+ * Session-memory section of the Memory panel (7-2a).
  *
  * The active session's memories — theme + outstanding work as COUNTS +
  * importance/confidence — gated on an active session. Read-only; every value
@@ -16,7 +16,7 @@ import {
   PILL,
   SECTION,
   fmtDate,
-} from "./KnowledgePanelShared.js";
+} from "./MemoryPanelShared.js";
 
 export function MemorySection({
   sessionId,
@@ -29,8 +29,10 @@ export function MemorySection({
   return (
     <section data-vex-section="memory" className={SECTION}>
       <div>
-        <h2 className="text-sm font-semibold">Session memory</h2>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+        <h2 className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]">
+          Session memory
+        </h2>
+        <p className="mt-1 text-xs text-[var(--vex-text-2)]">
           What the agent remembers from this session (read-only). Outstanding
           work is shown as counts.
         </p>
@@ -60,7 +62,7 @@ function MemoryStatsRow({
   return (
     <div
       data-vex-memory-stats
-      className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-secondary)]"
+      className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--vex-text-2)]"
     >
       <span className={PILL}>{stats.activeCount} memories</span>
       <span className={PILL}>gen {stats.compactCount}</span>
@@ -94,8 +96,9 @@ function MemoryList({
   if (res.data.length === 0) {
     return <Empty label="No memories recorded for this session yet." />;
   }
+  // Hairline-separated ledger rows — no card boxes, no gaps.
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className="flex flex-col">
       {res.data.map((m) => (
         <MemoryRow key={m.id} memory={m} />
       ))}
@@ -107,7 +110,7 @@ function MemoryRow({ memory }: { readonly memory: SessionMemoryDto }): JSX.Eleme
   return (
     <li
       data-vex-memory-id={memory.id}
-      className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2"
+      className="border-b border-[var(--vex-line)] px-1 py-2 last:border-b-0"
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="truncate text-xs font-medium text-foreground">
@@ -128,7 +131,7 @@ function MemoryRow({ memory }: { readonly memory: SessionMemoryDto }): JSX.Eleme
         <span
           data-vex-created
           title={memory.createdAt}
-          className="ml-auto text-[10px] text-[var(--color-text-muted)]"
+          className="ml-auto font-mono text-[10px] tabular-nums text-[var(--vex-text-3)]"
         >
           {fmtDate(memory.createdAt)}
         </span>

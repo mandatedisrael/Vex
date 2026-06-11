@@ -2,8 +2,8 @@
  * Public session-list building blocks for the sidebar and the library view:
  * the grouped list (`SessionGroups`), the loading / error / empty placeholders,
  * and the small `SidebarIconButton`. The presentational internals — a single
- * row, its trash/pin actions, the status badge, and the shared placeholder
- * strip — live as co-located subcomponents under `./SessionRows/`.
+ * ledger row, its trash/pin actions, the exception stamp, and the shared
+ * placeholder strip — live as co-located subcomponents under `./SessionRows/`.
  *
  * This file keeps the existing public export surface; importers are unchanged.
  */
@@ -61,12 +61,14 @@ export function SessionGroups({
             {sidebarOpen ? (
               <h2
                 id={sectionId}
-                className="mb-2 px-2 text-[11px] font-semibold text-[#6f91ff]"
+                className="mb-1 flex h-7 items-center px-2 font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]"
               >
                 {group.title}
               </h2>
             ) : null}
-            <ol className="flex flex-col gap-1">
+            {/* Rows are hairline-separated (border-b on each <li>), not
+             * gapped — SIDEBAR_ROW_GAP_PX = 0 must stay in lockstep. */}
+            <ol className="flex flex-col">
               {group.rows.map((row) => (
                 <SessionRow
                   key={row.id}
@@ -100,7 +102,7 @@ export function SessionsLoadingPlaceholder({
         <DotmSquare3
           size={26}
           dotSize={4}
-          color="#6f91ff"
+          color="var(--vex-accent)"
           ariaLabel="Loading sessions"
         />
       }
@@ -153,7 +155,7 @@ export function SidebarIconButton({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.025] text-[var(--color-text-secondary)] transition-colors hover:bg-white/[0.07] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8]"
+      className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[var(--vex-text-2)] transition-colors hover:bg-white/[0.04] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]"
     >
       {children}
     </button>

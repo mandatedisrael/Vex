@@ -82,7 +82,7 @@ export type CompactionStatusResult = z.infer<
 
 // ── Compaction history (stage 7-2a) ──────────────────────────────────────
 // Replayable timeline of a session's compaction generations — the "what
-// happened" surface in the knowledge/memory panel (until inline transcript
+// happened" surface in the memory panel (until inline transcript
 // markers become possible at stage 08). Read-only, app-scoped.
 
 export const COMPACTION_HISTORY_DEFAULT_LIMIT = 50;

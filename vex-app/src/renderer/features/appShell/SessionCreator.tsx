@@ -58,6 +58,7 @@ export function SessionCreator({
     (s) => s.createSessionInitialMessage,
   );
   const setPendingFirstMessage = useUiStore((s) => s.setPendingFirstMessage);
+  const setSigningState = useUiStore((s) => s.setSigningState);
   const createMutation = useCreateSession();
   const availableWallets = useAvailableWallets();
   const inventory =
@@ -112,24 +113,37 @@ export function SessionCreator({
         mode === "mission"
           ? { mode: "mission", name: trimmedName, permission, selectedEvmWalletId, selectedSolanaWalletId }
           : { mode: "agent", name: trimmedName, permission, selectedEvmWalletId, selectedSolanaWalletId };
-      const outcome = await createMutation.mutateAsync(input);
-      if (!outcome.ok) {
-        setSubmitError(outcome.error.message);
-        return;
+      // The sidebar's New-session key mirrors this mutation: ink loop while
+      // in flight, one-shot glint on success (the glint's animationend
+      // returns the state to idle). The try/catch exists only so an
+      // unexpected mutateAsync throw can never leave the stroke looping
+      // forever — IPC normally resolves with a Result, never throws.
+      setSigningState("signing");
+      try {
+        const outcome = await createMutation.mutateAsync(input);
+        if (!outcome.ok) {
+          setSigningState("idle");
+          setSubmitError(outcome.error.message);
+          return;
+        }
+        setSigningState("signed");
+        // Hand the welcome-typed first message to the new session's composer,
+        // which owns the actual chat.submit (+ failure/preserve UX). Set the
+        // hand-off BEFORE activating so the composer's consume-effect sees it on
+        // mount; `closeCreateSession` (via onOpenChange) clears only modal state,
+        // never this hand-off.
+        if (createSessionInitialMessage !== null) {
+          setPendingFirstMessage({
+            sessionId: outcome.data.id,
+            message: createSessionInitialMessage,
+          });
+        }
+        setActiveSessionId(outcome.data.id);
+        onOpenChange(false);
+      } catch (error: unknown) {
+        setSigningState("idle");
+        throw error;
       }
-      // Hand the welcome-typed first message to the new session's composer,
-      // which owns the actual chat.submit (+ failure/preserve UX). Set the
-      // hand-off BEFORE activating so the composer's consume-effect sees it on
-      // mount; `closeCreateSession` (via onOpenChange) clears only modal state,
-      // never this hand-off.
-      if (createSessionInitialMessage !== null) {
-        setPendingFirstMessage({
-          sessionId: outcome.data.id,
-          message: createSessionInitialMessage,
-        });
-      }
-      setActiveSessionId(outcome.data.id);
-      onOpenChange(false);
     },
     [
       createMutation,
@@ -141,6 +155,7 @@ export function SessionCreator({
       selectedSolanaWalletId,
       setActiveSessionId,
       setPendingFirstMessage,
+      setSigningState,
       submitDisabled,
       trimmedName,
     ],
@@ -148,11 +163,18 @@ export function SessionCreator({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl border-white/[0.10] bg-[#071024]/92 text-foreground shadow-[0_0_80px_rgba(22,68,190,0.28)] backdrop:bg-black/70 backdrop:backdrop-blur-sm">
+      <DialogContent className="max-w-xl rounded-xl border-[var(--vex-line-strong)] bg-[var(--vex-surface-2)] text-foreground shadow-none backdrop:bg-black/70 backdrop:backdrop-blur-none">
         <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
-          <DialogHeader className="border-white/[0.08]">
-            <DialogTitle className="text-xl">New session</DialogTitle>
-            <DialogDescription className="text-[var(--color-text-secondary)]">
+          <DialogHeader className="border-[var(--vex-line)]">
+            <DialogTitle className="font-mono text-[13px] font-medium uppercase tracking-[0.3em]">
+              New session
+            </DialogTitle>
+            {/* Ceremony subline — the retired welcome headline, read once
+             * per new act (where ceremony belongs). */}
+            <p className="text-xs text-[var(--vex-text-2)]">
+              Your chain. Your rules. I execute.
+            </p>
+            <DialogDescription className="text-[var(--vex-text-3)]">
               Choose how the session behaves. Mode and permission are
               locked once the session is created.
             </DialogDescription>
@@ -180,20 +202,22 @@ export function SessionCreator({
             <SubmitError submitError={submitError} />
           </DialogBody>
 
-          <DialogFooter className="border-white/[0.08]">
+          <DialogFooter className="border-[var(--vex-line)]">
             <Button
               type="button"
               variant="ghost"
               onClick={() => onOpenChange(false)}
               disabled={createMutation.isPending}
-              className="text-[var(--color-text-secondary)] hover:bg-white/[0.06] hover:text-foreground"
+              className="text-[var(--vex-text-2)] hover:bg-white/[0.06] hover:text-foreground"
             >
               Cancel
             </Button>
+            {/* Key form, not a filled pill — disabled dimming rides the
+             * tokens, never an opacity stack. */}
             <Button
               type="submit"
               disabled={submitDisabled}
-              className="bg-[#3758ff] text-white hover:bg-[#4668ff]"
+              className="h-10 rounded-lg border border-[var(--vex-accent-border)] bg-transparent font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--vex-accent-text)] hover:border-[var(--vex-accent-border-strong)] hover:bg-[var(--vex-accent-fill-8)] disabled:border-[var(--vex-line-strong)] disabled:text-[var(--vex-text-3)] disabled:opacity-100"
             >
               {createMutation.isPending ? "Creating…" : "Create"}
             </Button>

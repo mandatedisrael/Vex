@@ -1,5 +1,5 @@
 /**
- * Compaction-history section of the Knowledge & Memory panel (7-2a) + retry
+ * Compaction-history section of the Memory panel (7-2a) + retry
  * (8-5).
  *
  * The active session's compaction-generation timeline — when older messages
@@ -22,7 +22,7 @@ import {
   PILL,
   SECTION,
   fmtDate,
-} from "./KnowledgePanelShared.js";
+} from "./MemoryPanelShared.js";
 
 export function CompactionHistorySection({
   sessionId,
@@ -56,8 +56,10 @@ export function CompactionHistorySection({
   return (
     <section data-vex-section="compaction-history" className={SECTION}>
       <div>
-        <h2 className="text-sm font-semibold">Compaction history</h2>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+        <h2 className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]">
+          Compaction history
+        </h2>
+        <p className="mt-1 text-xs text-[var(--vex-text-2)]">
           When this session&apos;s older messages were compacted into memory.
         </p>
       </div>
@@ -101,8 +103,9 @@ function CompactionHistoryList({
   if (res.data.length === 0) {
     return <Empty label="No compactions have run for this session yet." />;
   }
+  // Hairline-separated ledger rows — no card boxes, no gaps.
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className="flex flex-col">
       {res.data.map((h) => (
         <CompactionRow
           key={h.checkpointGeneration}
@@ -134,24 +137,25 @@ function CompactionRow({
     <li
       data-vex-compaction-generation={item.checkpointGeneration}
       data-status={item.status}
-      className="flex flex-wrap items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs text-[var(--color-text-secondary)]"
+      className="flex flex-wrap items-center gap-2 border-b border-[var(--vex-line)] px-1 py-2 text-xs text-[var(--vex-text-2)] last:border-b-0"
     >
       <span className={PILL}>gen {item.checkpointGeneration}</span>
       <span className={PILL}>{item.status}</span>
       <span className={PILL}>msgs {range}</span>
       <span className={PILL}>{item.chunksInserted} chunks</span>
       {item.status === "permanently_failed" ? (
+        // The one user action in the panel — a quiet accent key, not a fill.
         <button
           type="button"
           onClick={() => onRetry(item.checkpointGeneration)}
           disabled={pending}
           aria-label={`Retry compaction generation ${item.checkpointGeneration}`}
-          className="rounded px-1.5 py-0.5 text-[10px] text-[#8da5ff] hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-[3px] border border-[var(--vex-accent-border)] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-accent-text)] transition-colors hover:border-[var(--vex-accent-border-strong)] hover:bg-[var(--vex-accent-fill-8)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] disabled:cursor-not-allowed disabled:border-[var(--vex-line-strong)] disabled:text-[var(--vex-text-3)]"
         >
           {pending ? "Retrying…" : "Retry"}
         </button>
       ) : null}
-      <span className="ml-auto text-[10px] text-[var(--color-text-muted)]">
+      <span className="ml-auto font-mono text-[10px] tabular-nums text-[var(--vex-text-3)]">
         {fmtDate(item.completedAt ?? item.createdAt)}
       </span>
     </li>

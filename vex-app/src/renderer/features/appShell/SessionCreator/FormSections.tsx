@@ -47,7 +47,7 @@ export function NameField({
         className={cn(
           "h-10 w-full rounded-lg border border-white/[0.08] bg-white/[0.035] px-3 text-sm shadow-sm",
           "placeholder:text-muted-foreground",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]",
         )}
       />
       <div className="flex items-center justify-between gap-3 text-xs text-[var(--color-text-secondary)]">

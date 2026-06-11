@@ -1,12 +1,15 @@
 /**
- * Session composer (puzzle 04 phase 7 extract).
+ * Session composer — THE COMMAND DECK (S2 rebrand of the puzzle 04 extract).
  *
  * Owns:
- *   - textarea + auto-grow + send button,
+ *   - textarea + auto-grow + the send/stop/stopping key,
+ *   - the PLAN switch (chrome row, left) — the single control point for
+ *     session-scoped plan mode; `SessionPlanCard` only displays the plan,
  *   - mission-run-status gating on free-text submit,
  *   - composer notice (success / error / inline Retry on a retryable error),
- *   - quick-action chips (hidden in mission mode — replaced by the
- *     mission contract card the parent renders).
+ *   - starter ledger rows (hidden in mission mode — replaced by the
+ *     mission contract card the parent renders),
+ *   - the welcome trust letterpress (no-session state only).
  *
  * Pure helpers (gating reasons, placeholders) live in `composer-helpers.ts`.
  * Mission controls (start/continue/recover/stop/edit/renew) are buttons in
@@ -32,6 +35,11 @@ import {
   useTranscriptInfinite,
 } from "../../lib/api/messages.js";
 import { useRuntimeState } from "../../lib/api/runtime.js";
+import {
+  useSessionModel,
+  useSessionPlan,
+  useSetPlanMode,
+} from "../../lib/api/sessions.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { cn } from "../../lib/utils.js";
 import {
@@ -42,6 +50,15 @@ import {
   submitSuccessText,
 } from "./composer-helpers.js";
 import { ComposerQuickActions } from "./ComposerQuickActions.js";
+import { PlanSwitch } from "./PlanSwitch.js";
+import { nextReasoningEffort, ReasoningSwitch } from "./ReasoningSwitch.js";
+
+/**
+ * Shared slot geometry for the send key's three states (send / stop /
+ * stopping) — hard-cut swaps must never shift the chrome row.
+ */
+const SEND_KEY_BASE =
+  "inline-flex h-9 w-[68px] shrink-0 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]";
 
 type ComposerNotice =
   | {
@@ -84,11 +101,41 @@ export function SessionComposer({
   const openCreateSession = useUiStore((s) => s.openCreateSession);
   const pendingFirstMessage = useUiStore((s) => s.pendingFirstMessage);
   const clearPendingFirstMessage = useUiStore((s) => s.clearPendingFirstMessage);
+  const setSessionReasoningEffort = useUiStore(
+    (s) => s.setSessionReasoningEffort,
+  );
+  // Per-session reasoning-effort choice (S6) — launch-ephemeral; absent key
+  // means the engine default "medium". Selector returns a primitive, so the
+  // subscription stays referentially stable.
+  const reasoningEffort = useUiStore((s) =>
+    sessionId === null
+      ? "medium"
+      : (s.reasoningEffortBySession[sessionId] ?? "medium"),
+  );
   const handedOffRef = useRef<string | null>(null);
   const runtimeQuery = useRuntimeState(sessionId);
+  // Reasoning capability (S6) — same cached query the runtime bar reads
+  // (`sessions.getModel`, shared key, no extra fetch). The REASON control
+  // mounts ONLY for an explicit `supportsReasoning === true`; `false`,
+  // `null` (unknown: locked vault, catalog unreachable) and the welcome
+  // state all hide it, and the submit input then omits the field so
+  // non-reasoning models keep their exact request shape. Declared ABOVE
+  // `runChatSubmit`, which closes over `supportsReasoning`.
+  const modelQuery = useSessionModel(sessionId);
+  const supportsReasoning =
+    modelQuery.data?.ok === true &&
+    modelQuery.data.data.supportsReasoning === true;
+  const cycleReasoningEffort = useCallback((): void => {
+    if (sessionId === null) return;
+    setSessionReasoningEffort(sessionId, nextReasoningEffort(reasoningEffort));
+  }, [sessionId, setSessionReasoningEffort, reasoningEffort]);
 
   const [draft, setDraft] = useState<string>("");
   const [notice, setNotice] = useState<ComposerNotice>(null);
+  // Stop acknowledgment: first click on Stop cancels the turn AND flips the
+  // key to a disabled "Stopping" state so the user sees the request landed.
+  // stopTurn stays idempotent — this state is purely the acknowledgment.
+  const [stopRequested, setStopRequested] = useState<boolean>(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   // Synchronous in-flight mutex (render `submitPending` lags a tick) + a mirror
@@ -111,6 +158,12 @@ export function SessionComposer({
     setNotice(null);
   }, [sessionId]);
 
+  // Reset the stop acknowledgment when the turn settles (success, error, or
+  // the retry path re-arming) so the next turn starts from a clean Stop key.
+  useEffect(() => {
+    if (!submitPending) setStopRequested(false);
+  }, [submitPending]);
+
   // Single owner of a chat-turn submit + its failure/success notice. A
   // retryable provider error in a KNOWN agent session arms an inline Retry
   // bound to that session; every other failure keeps the restore-draft
@@ -123,7 +176,14 @@ export function SessionComposer({
       inFlightRef.current = true;
       setNotice(null);
       try {
-        const outcome = await submitTurn({ sessionId: targetSessionId, message });
+        // `reasoningEffort` rides along ONLY when the active model supports
+        // reasoning (schema-optional) — omitted, the engine applies its own
+        // default and never sends a reasoning param to non-reasoning models.
+        const outcome = await submitTurn({
+          sessionId: targetSessionId,
+          message,
+          ...(supportsReasoning && { reasoningEffort }),
+        });
         if (sessionIdRef.current !== targetSessionId) return;
         if (!outcome.ok) {
           const armRetry =
@@ -150,7 +210,7 @@ export function SessionComposer({
         inFlightRef.current = false;
       }
     },
-    [sessionId, submitTurn, activeSession],
+    [sessionId, submitTurn, activeSession, supportsReasoning, reasoningEffort],
   );
 
   const handleRetry = useCallback(async (): Promise<void> => {
@@ -183,6 +243,24 @@ export function SessionComposer({
 
   const runStatus = readRunStatus(runtimeQuery.data);
   const freeTextGate = runStatus !== null && FREE_TEXT_DISALLOWED.has(runStatus);
+
+  // Plan mode — same engine-owned, session-scoped state SessionPlanCard
+  // displays (same query key, no extra fetch). The PLAN switch is the single
+  // control point; no optimistic write, so a server refusal snaps back on
+  // the invalidate-driven refetch.
+  const planQuery = useSessionPlan(sessionId);
+  const setPlanMode = useSetPlanMode();
+  const plan = planQuery.data?.ok === true ? planQuery.data.data : null;
+  const planOn = plan?.enabled ?? false;
+  // Parked-for-acceptance is the state where the engine refuses a toggle
+  // (`blocked_pending_acceptance`) — disable up front instead of bouncing.
+  const planMissionBlocked =
+    activeSession?.missionStatus === "paused_plan_acceptance";
+  const { mutate: mutatePlanMode } = setPlanMode;
+  const togglePlanMode = useCallback((): void => {
+    if (sessionId === null) return;
+    mutatePlanMode({ sessionId, enabled: !planOn });
+  }, [sessionId, mutatePlanMode, planOn]);
 
   // Quick-action chips are starters for an EMPTY conversation. Show them on the
   // welcome screen and in a freshly created, still-empty session; hide them
@@ -259,8 +337,18 @@ export function SessionComposer({
           ref={formRef}
           onSubmit={onSubmit}
           data-vex-area="chat-composer"
-          className="overflow-hidden rounded-3xl border border-[#3275f8]/38 bg-[#061026]/66 shadow-[0_0_54px_rgba(30,78,210,0.16)] backdrop-blur-2xl"
+          className="relative overflow-hidden rounded-xl border border-[var(--vex-line-strong)] bg-[var(--vex-surface-1)] transition-colors focus-within:border-[var(--vex-accent-border)]"
         >
+          {/* MODE LINE — 1px accent ink along the top edge, drawn (scaleX
+           * 0→1) when plan mode turns on. Reuses the .vex-sign-stroke draw
+           * transition; .vex-mode-line--on holds it at full width. */}
+          <span
+            aria-hidden
+            className={cn(
+              "vex-sign-stroke pointer-events-none absolute inset-x-0 top-0 h-px rounded-none bg-[var(--vex-accent)]",
+              planOn && "vex-mode-line--on",
+            )}
+          />
           <textarea
             ref={textareaRef}
             value={draft}
@@ -280,50 +368,99 @@ export function SessionComposer({
               }
             }}
             rows={1}
-            placeholder={placeholderFor(activeSession)}
+            placeholder={
+              planOn
+                ? "Describe the goal — Vex proposes a plan before anything executes."
+                : placeholderFor(activeSession)
+            }
             aria-label="Session draft"
             className={cn(
-              "block w-full resize-none overflow-y-auto bg-transparent px-5 pt-3.5 pb-2 text-base leading-7 text-foreground outline-none",
+              "block w-full resize-none overflow-y-auto bg-transparent px-4 pt-3.5 pb-2 text-[15px] leading-[1.7] text-foreground caret-[var(--vex-accent)] outline-none",
               "min-h-[52px] max-h-[200px]",
-              "placeholder:text-[var(--color-text-muted)]",
+              "placeholder:text-[var(--vex-text-3)]",
             )}
           />
 
-          <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-1">
-            <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--color-text-muted)]">
-              <span className="truncate">
-                {sessionId === null
-                  ? "type a message to start a session"
-                  : "Enter to send · Shift+Enter for a newline"}
-              </span>
-              {submitPending ? (
-                <span role="status" className="ml-2 hidden text-[#8da5ff] sm:inline">
-                  Working…
-                </span>
-              ) : null}
-            </div>
+          <div className="flex h-11 items-center gap-3 border-t border-[var(--vex-line)] px-3">
+            <PlanSwitch
+              sessionId={sessionId}
+              planOn={planOn}
+              busy={setPlanMode.isPending}
+              missionBlocked={planMissionBlocked}
+              onToggle={togglePlanMode}
+            />
 
+            {/* REASON control (S6) — only when the active model supports
+             * reasoning; welcome (no session) hides it (capability unknown). */}
+            {sessionId !== null && supportsReasoning ? (
+              <ReasoningSwitch
+                effort={reasoningEffort}
+                busy={submitPending}
+                onCycle={cycleReasoningEffort}
+              />
+            ) : null}
+
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]">
+              {sessionId === null
+                ? "type a message to start a session"
+                : "Enter ↵ send · Shift+Enter newline"}
+            </span>
+
+            {/* THE SEND KEY — three hard-cut states in one slot geometry. */}
             {submitPending ? (
-              <button
-                type="button"
-                onClick={() => stopTurn()}
-                aria-label="Stop generating"
-                className="flex h-10 w-12 shrink-0 items-center justify-center rounded-full bg-[#3758ff] text-white shadow-[0_0_28px_rgba(55,88,255,0.36)] transition-colors hover:bg-[#4668ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8da5ff]"
-              >
-                <HugeiconsIcon icon={StopCircleIcon} size={20} aria-hidden />
-              </button>
+              stopRequested ? (
+                <button
+                  type="button"
+                  disabled
+                  aria-label="Stopping"
+                  className={cn(
+                    SEND_KEY_BASE,
+                    "border-[var(--vex-accent-border-strong)] bg-[var(--vex-surface-0)] font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]",
+                  )}
+                >
+                  Stopping
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStopRequested(true);
+                    stopTurn();
+                  }}
+                  aria-label="Stop generating"
+                  className={cn(
+                    SEND_KEY_BASE,
+                    "border-[var(--vex-accent-border-strong)] bg-[var(--vex-accent-fill-12)] text-[var(--vex-accent-text)]",
+                  )}
+                >
+                  <HugeiconsIcon icon={StopCircleIcon} size={16} aria-hidden />
+                </button>
+              )
             ) : (
               <button
                 type="submit"
                 disabled={submitDisabled}
                 aria-label="Send message"
-                className="flex h-10 w-12 shrink-0 items-center justify-center rounded-full bg-[#3758ff] text-white shadow-[0_0_28px_rgba(55,88,255,0.36)] transition-colors hover:bg-[#4668ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8da5ff] disabled:cursor-not-allowed disabled:opacity-45"
+                className={cn(
+                  SEND_KEY_BASE,
+                  "bg-[var(--vex-surface-0)]",
+                  submitDisabled
+                    ? "border-[var(--vex-line-strong)] text-[var(--vex-text-3)]"
+                    : "border-[var(--vex-accent-border)] text-[var(--vex-accent-text)] hover:border-[var(--vex-accent-border-strong)] hover:bg-[var(--vex-accent-fill-8)] active:scale-[0.98]",
+                )}
               >
-                <HugeiconsIcon icon={ArrowUp01Icon} size={20} aria-hidden />
+                <HugeiconsIcon icon={ArrowUp01Icon} size={16} aria-hidden />
               </button>
             )}
           </div>
         </form>
+
+        {/* TRUST LETTERPRESS — welcome only; the old hero badges, set in type. */}
+        {sessionId === null ? (
+          <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--vex-text-3)]">
+            Local-first · Private by default · You sign every action
+          </p>
+        ) : null}
       </div>
 
       {notice !== null ? (
@@ -333,7 +470,9 @@ export function SessionComposer({
         >
           <span
             className={
-              notice.tone === "error" ? "text-destructive" : "text-[#8da5ff]"
+              notice.tone === "error"
+                ? "text-destructive"
+                : "text-[var(--vex-accent-text)]"
             }
           >
             {notice.text}
@@ -344,7 +483,7 @@ export function SessionComposer({
               onClick={() => void handleRetry()}
               disabled={submitPending}
               aria-label="Retry sending the message"
-              className="inline-flex h-6 shrink-0 items-center rounded-md border border-[#3275f8]/40 bg-[#3275f8]/10 px-2 font-medium text-[#9bb2ff] transition-colors hover:bg-[#3275f8]/16 hover:text-[#bcccff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex shrink-0 items-center rounded-[3px] border border-[color-mix(in_oklab,var(--vex-accent)_40%,transparent)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-accent-text)] transition-colors hover:bg-[var(--vex-accent-fill-8)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] disabled:cursor-not-allowed disabled:border-[var(--vex-line-strong)] disabled:text-[var(--vex-text-3)]"
             >
               Retry
             </button>

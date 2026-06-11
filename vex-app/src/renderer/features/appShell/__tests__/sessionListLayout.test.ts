@@ -40,6 +40,11 @@ function rowsForBucket(count: number, startedAt: string): SessionListItem[] {
 }
 
 describe("computeVisibleGroups", () => {
+  it("pins the ledger-row height the packer budgets with", () => {
+    // The 56px ledger-row redesign (h-14 in SessionRow.tsx) and the packer must move together.
+    expect(SIDEBAR_ROW_HEIGHT_PX).toBe(56);
+  });
+
   it("returns the input untouched when availableHeight <= 0 (initial render / no ResizeObserver)", () => {
     const groups: readonly SessionGroup[] = [
       makeGroup("today", rowsForBucket(5, new Date().toISOString())),

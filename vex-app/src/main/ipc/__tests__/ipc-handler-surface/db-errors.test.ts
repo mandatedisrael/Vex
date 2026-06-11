@@ -29,8 +29,8 @@ const mocks = vi.hoisted(() => ({
   // compaction-db
   getCompactionStatus: vi.fn(),
   listCompactionHistory: vi.fn(),
-  // knowledge-db
-  listKnowledge: vi.fn(),
+  // long-memory-db
+  listLongMemory: vi.fn(),
   // memory-db
   listSessionMemories: vi.fn(),
   getMemoryStats: vi.fn(),
@@ -81,8 +81,8 @@ vi.mock("../../../database/compaction-db.js", () => ({
   probeCompactJobsReady: vi.fn(),
 }));
 
-vi.mock("../../../database/knowledge-db.js", () => ({
-  listKnowledge: mocks.listKnowledge,
+vi.mock("../../../database/long-memory-db.js", () => ({
+  listLongMemory: mocks.listLongMemory,
 }));
 
 vi.mock("../../../database/memory-db.js", () => ({
@@ -109,7 +109,7 @@ vi.mock("../../../logger/index.js", () => ({ log: mocks.log }));
 const { registerMessagesHandlers } = await import("../../messages.js");
 const { registerUsageHandlers } = await import("../../usage.js");
 const { registerCompactionHandlers } = await import("../../compaction.js");
-const { registerKnowledgeHandlers } = await import("../../knowledge.js");
+const { registerLongMemoryHandlers } = await import("../../long-memory.js");
 const { registerMemoryHandlers } = await import("../../memory.js");
 const { registerRuntimeHandlers } = await import("../../runtime.js");
 const { registerMissionHandlers } = await import("../../mission.js");
@@ -139,7 +139,7 @@ beforeEach(() => {
   registerMessagesHandlers();
   registerUsageHandlers();
   registerCompactionHandlers();
-  registerKnowledgeHandlers();
+  registerLongMemoryHandlers();
   registerMemoryHandlers();
   registerRuntimeHandlers();
   registerMissionHandlers();

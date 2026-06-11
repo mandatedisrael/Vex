@@ -15,6 +15,7 @@
 
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import type { ReasoningEffort } from "@shared/schemas/chat.js";
 
 export const MAX_RENDER_LOGS = 500;
 
@@ -34,15 +35,15 @@ export type SessionModeFilter = "all" | "agent" | "mission";
 /**
  * Sub-view of the app shell panel area. `session` is the default chat/
  * welcome panel; `sessionsLibrary` is the dedicated "browse all sessions"
- * screen; `knowledge` is the read-only knowledge + session-memory panel.
+ * screen; `memory` is the read-only long-term + session-memory panel.
  * Settings is NOT a sub-view — the Settings button opens the onboarding
  * wizard (reconfigure). NOT persisted — launch-ephemeral, like activeSessionId.
  */
 export type AppShellView =
   | "session"
   | "sessionsLibrary"
-  // Read-only knowledge + session-memory management panel (stage 7-2a).
-  | "knowledge";
+  // Read-only long-term + session-memory panel (stage 7-2a, S9 rewire).
+  | "memory";
 
 export interface UiLogEntry {
   readonly id: string;
@@ -83,6 +84,20 @@ interface UiState {
   readonly createSessionOpen: boolean;
   readonly createSessionInitialMessage: string | null;
   readonly pendingFirstMessage: PendingFirstMessage | null;
+  /**
+   * Signing-stroke state for the sidebar's New-session key: "signing"
+   * while the create mutation is in flight (the ink loop runs), "signed"
+   * for the one-shot success glint, then back to "idle" when the glint's
+   * animationend fires. UI-only, NOT persisted (see partialize).
+   */
+  readonly signingState: "idle" | "signing" | "signed";
+  /**
+   * Per-session reasoning-effort choice for the composer's REASON control
+   * (S6). Absent key = engine default ("medium"). NOT persisted —
+   * launch-ephemeral by design (see partialize), so a fresh launch starts
+   * every session back at the default; the engine owns the real default.
+   */
+  readonly reasoningEffortBySession: Readonly<Record<string, ReasoningEffort>>;
   readonly setSidebarOpen: (value: boolean) => void;
   readonly setSessionModeFilter: (value: SessionModeFilter) => void;
   readonly setCurrentView: (value: View) => void;
@@ -96,6 +111,11 @@ interface UiState {
   readonly closeCreateSession: () => void;
   readonly setPendingFirstMessage: (value: PendingFirstMessage) => void;
   readonly clearPendingFirstMessage: () => void;
+  readonly setSessionReasoningEffort: (
+    sessionId: string,
+    effort: ReasoningEffort,
+  ) => void;
+  readonly setSigningState: (value: "idle" | "signing" | "signed") => void;
   readonly appendLog: (entry: UiLogEntry) => void;
   readonly clearLogs: () => void;
 }
@@ -114,6 +134,8 @@ export const useUiStore = create<UiState>()(
       createSessionOpen: false,
       createSessionInitialMessage: null,
       pendingFirstMessage: null,
+      signingState: "idle",
+      reasoningEffortBySession: {},
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
       setSessionModeFilter: (sessionModeFilter) => set({ sessionModeFilter }),
       setCurrentView: (currentView) => set({ currentView }),
@@ -136,6 +158,14 @@ export const useUiStore = create<UiState>()(
       setPendingFirstMessage: (pendingFirstMessage) =>
         set({ pendingFirstMessage }),
       clearPendingFirstMessage: () => set({ pendingFirstMessage: null }),
+      setSessionReasoningEffort: (sessionId, effort) =>
+        set((state) => ({
+          reasoningEffortBySession: {
+            ...state.reasoningEffortBySession,
+            [sessionId]: effort,
+          },
+        })),
+      setSigningState: (signingState) => set({ signingState }),
       appendLog: (entry) =>
         set((state) => ({
           logBuffer: [...state.logBuffer, entry].slice(-MAX_RENDER_LOGS),

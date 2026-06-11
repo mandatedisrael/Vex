@@ -216,7 +216,7 @@ describe("EmbeddingStep", () => {
     fireEvent.change(getByLabelText("Provider tag"), { target: { value: "local" } });
     const form = container.querySelector('[data-vex-wizard-embedding="form"] form')!;
     fireEvent.submit(form);
-    await findByText(/42 existing knowledge entries/i);
+    await findByText(/42 existing long-term memory entries/i);
     expect(container.querySelector('[data-vex-embedding-warning="dim-locked"]')).not.toBeNull();
     expect(mockOnAdvance).not.toHaveBeenCalled();
   });

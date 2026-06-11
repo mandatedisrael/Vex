@@ -49,7 +49,6 @@ describe("VEX_DOMAINS / VEX_ERROR_CODES bridge coverage", () => {
       "models",
       "usage",
       "compaction",
-      "knowledge",
       "memory",
       "sessions",
     ] as const;
@@ -68,11 +67,6 @@ describe("VEX_DOMAINS / VEX_ERROR_CODES bridge coverage", () => {
     for (const code of required) {
       expect(VEX_ERROR_CODES).toContain(code);
     }
-  });
-
-  it("includes the knowledge mutation error codes (7-2b)", () => {
-    expect(VEX_ERROR_CODES).toContain("knowledge.not_found");
-    expect(VEX_ERROR_CODES).toContain("knowledge.invalid_state");
   });
 
   it("includes the compaction retry error codes (8-5)", () => {

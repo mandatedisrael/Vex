@@ -14,11 +14,16 @@
  *   - GFM tables + task lists render as semantic elements (cells/items go
  *     through the same escaped-React-text path — no HTML sink);
  *   - raw-HTML and any still-unsupported tokens render as escaped text;
- *   - if `lexer` throws, the original text is shown verbatim, never blanked.
+ *   - if `lexer` throws, the original text is shown verbatim, never blanked;
+ *   - the code-block copy key (S3) writes the token's raw string straight to
+ *     the clipboard API — no HTML sink is introduced.
  */
 
 import { lexer, type Token } from "marked";
+import { useEffect, useRef, useState } from "react";
 import type { JSX, ReactNode } from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Copy01Icon } from "@hugeicons/core-free-icons";
 
 /** ASCII control chars (U+0000–U+001F) and DEL (U+007F) are never valid in a URL. */
 function hasControlChars(value: string): boolean {
@@ -78,7 +83,7 @@ function renderInline(tokens: readonly Token[] | undefined): ReactNode[] {
         return (
           <code
             key={i}
-            className="rounded bg-white/[0.08] px-1 py-0.5 font-mono text-[0.85em]"
+            className="rounded-[3px] bg-white/[0.06] px-1.5 py-0.5 font-mono text-[13px]"
           >
             {token.text}
           </code>
@@ -94,7 +99,7 @@ function renderInline(tokens: readonly Token[] | undefined): ReactNode[] {
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[#8da5ff] underline-offset-2 hover:underline"
+            className="text-[var(--vex-accent-text)] underline underline-offset-2"
           >
             {children}
           </a>
@@ -119,25 +124,29 @@ function renderBlock(token: Token, key: number): ReactNode {
     case "paragraph":
       return <p key={key}>{renderInline(token.tokens)}</p>;
     case "heading":
+      // Semantic decision unchanged (no h-tags in chat prose) — S3 restyles
+      // the document scale only: h1/h2-level lead, h3+ subordinate.
       return (
-        <p key={key} className="font-semibold text-foreground">
+        <p
+          key={key}
+          className={
+            token.depth <= 2
+              ? "mt-5 text-[17px] font-semibold text-foreground"
+              : "text-[15px] font-semibold text-foreground"
+          }
+        >
           {renderInline(token.tokens)}
         </p>
       );
     case "code":
       return (
-        <pre
-          key={key}
-          className="overflow-x-auto rounded-md bg-white/[0.06] p-2 font-mono text-[12px] leading-snug"
-        >
-          <code>{token.text}</code>
-        </pre>
+        <CodeBlock key={key} lang={codeLang(token.lang)} code={token.text} />
       );
     case "blockquote":
       return (
         <blockquote
           key={key}
-          className="border-l-2 border-white/20 pl-3 text-[var(--color-text-secondary)]"
+          className="border-l-2 border-[var(--vex-line-strong)] pl-3 text-[var(--vex-text-2)]"
         >
           {renderBlocks(token.tokens)}
         </blockquote>
@@ -155,7 +164,7 @@ function renderBlock(token: Token, key: number): ReactNode {
               checked={item.checked === true}
               disabled
               aria-hidden
-              className="mt-1.5 accent-[#3275f8]"
+              className="mt-1.5 accent-[var(--vex-accent)]"
             />
             <span className="min-w-0">
               {renderBlocks(item.tokens.filter((t) => t.type !== "checkbox"))}
@@ -181,7 +190,7 @@ function renderBlock(token: Token, key: number): ReactNode {
       );
     }
     case "hr":
-      return <hr key={key} className="border-white/10" />;
+      return <hr key={key} className="border-[var(--vex-line)]" />;
     case "text":
       return (
         <p key={key}>
@@ -204,11 +213,11 @@ function renderBlock(token: Token, key: number): ReactNode {
         <div key={key} className="overflow-x-auto">
           <table className="w-full border-collapse text-[0.95em]">
             <thead>
-              <tr className="border-b border-white/15">
+              <tr>
                 {token.header.map((cell, i) => (
                   <th
                     key={i}
-                    className={`px-2 py-1 font-semibold ${alignClass(i)}`}
+                    className={`border-b border-[var(--vex-line-strong)] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-text-2)] ${alignClass(i)}`}
                   >
                     {renderInline(cell.tokens)}
                   </th>
@@ -217,11 +226,11 @@ function renderBlock(token: Token, key: number): ReactNode {
             </thead>
             <tbody>
               {token.rows.map((cells, r) => (
-                <tr key={r} className="border-b border-white/[0.06]">
+                <tr key={r}>
                   {cells.map((cell, c) => (
                     <td
                       key={c}
-                      className={`px-2 py-1 align-top ${alignClass(c)}`}
+                      className={`border-b border-[var(--vex-line)] px-2 py-1 align-top ${alignClass(c)}`}
                     >
                       {renderInline(cell.tokens)}
                     </td>
@@ -245,6 +254,78 @@ function renderBlock(token: Token, key: number): ReactNode {
 
 function renderBlocks(tokens: readonly Token[]): ReactNode[] {
   return tokens.map((token, i) => renderBlock(token, i));
+}
+
+/** First word of the fence info string ("ts foo" → "ts"); "code" when absent. */
+function codeLang(raw: string | undefined): string {
+  const first = raw?.trim().split(/\s+/)[0];
+  return first !== undefined && first.length > 0 ? first : "code";
+}
+
+const COPY_RESET_MS = 1_500;
+
+/**
+ * Fenced code block — recessed case file (S3): hairline wrapper on the
+ * surface-down well with a language strip + copy key. The copy button writes
+ * the token's RAW string via the clipboard API — it never re-enters the React
+ * tree, so the no-HTML-sink invariant is untouched.
+ */
+function CodeBlock({
+  lang,
+  code,
+}: {
+  readonly lang: string;
+  readonly code: string;
+}): JSX.Element {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle",
+  );
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The reset timer must not fire setState after unmount.
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current !== null) clearTimeout(resetTimerRef.current);
+    };
+  }, []);
+
+  const onCopy = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopyState("copied");
+    } catch {
+      // Clipboard can be denied/unavailable — surface it instead of lying.
+      setCopyState("failed");
+    }
+    if (resetTimerRef.current !== null) clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = setTimeout(() => setCopyState("idle"), COPY_RESET_MS);
+  };
+
+  return (
+    <div className="overflow-hidden rounded-[6px] border border-[var(--vex-line)] bg-[var(--vex-surface-down)]">
+      <div className="flex h-7 items-center justify-between border-b border-[var(--vex-line)] px-3">
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]">
+          {lang}
+        </span>
+        <button
+          type="button"
+          aria-label="Copy code"
+          onClick={() => void onCopy()}
+          className="flex items-center text-[var(--vex-text-3)] transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]"
+        >
+          {copyState === "idle" ? (
+            <HugeiconsIcon icon={Copy01Icon} size={12} aria-hidden />
+          ) : (
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em]">
+              {copyState === "copied" ? "Copied" : "Copy failed"}
+            </span>
+          )}
+        </button>
+      </div>
+      <pre className="max-h-[480px] overflow-auto px-4 py-3 font-mono text-[12.5px] leading-[1.6] text-[var(--vex-text-2)]">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
 }
 
 export function MarkdownContent({

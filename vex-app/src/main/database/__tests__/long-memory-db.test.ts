@@ -1,5 +1,6 @@
 /**
- * knowledge-db tests — sanitization + status filter + bounded list.
+ * long-memory-db tests — sanitization + status filter + bounded list
+ * (memory-system S9 rewire).
  *
  * `pg.Client` + `buildPoolConfig` are mocked. The critical assertion is the
  * SANITIZATION contract: the SELECT must never reference `content_md`,
@@ -35,7 +36,7 @@ vi.mock("../../logger/index.js", () => ({
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const { listKnowledge } = await import("../knowledge-db.js");
+const { listLongMemory } = await import("../long-memory-db.js");
 
 const FORBIDDEN_COLUMNS = [
   "content_md",
@@ -51,7 +52,7 @@ afterEach(() => {
   endMock.mockReset();
 });
 
-describe("listKnowledge", () => {
+describe("listLongMemory", () => {
   it("never SELECTs a sanitized column and maps a row", async () => {
     connectMock.mockResolvedValue(undefined);
     queryMock.mockResolvedValueOnce({
@@ -65,7 +66,7 @@ describe("listKnowledge", () => {
           confidence: 0.8,
           status: "active",
           source: "observed",
-          source_session: "sess-1",
+          maturity_state: "established",
           pinned: false,
           created_at: ISO,
           updated_at: ISO,
@@ -74,7 +75,7 @@ describe("listKnowledge", () => {
     });
     endMock.mockResolvedValue(undefined);
 
-    const res = await listKnowledge({ limit: 100 });
+    const res = await listLongMemory({ limit: 100 });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data[0]).toEqual({
@@ -86,7 +87,7 @@ describe("listKnowledge", () => {
         confidence: 0.8,
         status: "active",
         source: "observed",
-        sourceSession: "sess-1",
+        maturityState: "established",
         pinned: false,
         createdAt: ISO,
         updatedAt: ISO,
@@ -107,13 +108,13 @@ describe("listKnowledge", () => {
     queryMock.mockResolvedValueOnce({ rows: [] });
     endMock.mockResolvedValue(undefined);
 
-    await listKnowledge({ status: "archived", limit: 50 });
+    await listLongMemory({ status: "archived", limit: 50 });
     const [sql, params] = queryMock.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain("WHERE status = $1");
     expect(params).toEqual(["archived", 50]);
   });
 
-  it("coerces an unknown source to null and defaults null tags to []", async () => {
+  it("coerces unknown source/maturity values to null and defaults null tags to []", async () => {
     connectMock.mockResolvedValue(undefined);
     queryMock.mockResolvedValueOnce({
       rows: [
@@ -126,7 +127,7 @@ describe("listKnowledge", () => {
           confidence: null,
           status: "active",
           source: "weird_legacy_value",
-          source_session: null,
+          maturity_state: "weird_legacy_state",
           pinned: true,
           created_at: ISO,
           updated_at: ISO,
@@ -135,25 +136,26 @@ describe("listKnowledge", () => {
     });
     endMock.mockResolvedValue(undefined);
 
-    const res = await listKnowledge({ limit: 10 });
+    const res = await listLongMemory({ limit: 10 });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.data[0]?.source).toBeNull();
+      expect(res.data[0]?.maturityState).toBeNull();
       expect(res.data[0]?.tags).toEqual([]);
       expect(res.data[0]?.confidence).toBeNull();
     }
   });
 
-  it("maps a query failure to internal.unexpected on the knowledge domain", async () => {
+  it("maps a query failure to internal.unexpected on the memory domain", async () => {
     connectMock.mockResolvedValue(undefined);
     queryMock.mockRejectedValueOnce(new Error("boom"));
     endMock.mockResolvedValue(undefined);
 
-    const res = await listKnowledge({ limit: 10 });
+    const res = await listLongMemory({ limit: 10 });
     expect(res.ok).toBe(false);
     if (!res.ok) {
       expect(res.error.code).toBe("internal.unexpected");
-      expect(res.error.domain).toBe("knowledge");
+      expect(res.error.domain).toBe("memory");
     }
   });
 });

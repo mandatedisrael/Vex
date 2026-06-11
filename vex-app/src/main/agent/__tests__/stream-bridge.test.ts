@@ -69,6 +69,27 @@ describe("stream bridge", () => {
     }
   });
 
+  it("broadcasts a reasoning delta unchanged (live working-strip feed)", () => {
+    const teardown = setupStreamBridge();
+    try {
+      streamDeltaBus.emit(
+        baseEvent({
+          deltaType: "reasoning",
+          delta: { kind: "reasoning", text: "weighing the options" },
+        }) as never,
+      );
+      expect(broadcastMock).toHaveBeenCalledTimes(1);
+      expect(broadcastMock.mock.calls[0]![0]).toBe(EV.engine.streamDelta);
+      expect(lastBroadcast()).toMatchObject({
+        deltaType: "reasoning",
+        delta: { kind: "reasoning", text: "weighing the options" },
+      });
+      expect(logWarn).not.toHaveBeenCalled();
+    } finally {
+      teardown();
+    }
+  });
+
   it("drops the raw argsDelta from tool_call deltas (sanitization-by-omission)", () => {
     const teardown = setupStreamBridge();
     try {

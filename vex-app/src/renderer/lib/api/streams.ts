@@ -3,7 +3,8 @@
  *
  * Subscribes the active session to the engine stream spine and drives the
  * ephemeral `streamStore`:
- *  - `onStreamDelta` → accumulate the preview (text/tool/phase);
+ *  - `onStreamDelta` → accumulate the preview (text/tool/reasoning/usage/
+ *    phase/status — reasoning is batched inside the store, see `applyDelta`);
  *  - `onTranscriptAppend` (assistant role) → the streamed text is now
  *    persisted, so clear the preview. We AWAIT the transcript query refetch
  *    first (TanStack v5 `invalidateQueries` resolves after active refetches)

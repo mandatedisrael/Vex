@@ -19,7 +19,7 @@ import { approvals } from "./approvals.js";
 import { chat } from "./chat.js";
 import { compaction } from "./compaction.js";
 import { engine } from "./engine.js";
-import { knowledge } from "./knowledge.js";
+import { longMemory } from "./long-memory.js";
 import { memory } from "./memory.js";
 import { messages } from "./messages.js";
 import { mission } from "./mission.js";
@@ -40,7 +40,7 @@ export const agentBridge = {
   models,
   usage,
   compaction,
-  knowledge,
+  longMemory,
   memory,
   engine,
 } satisfies VexAgentBridge;

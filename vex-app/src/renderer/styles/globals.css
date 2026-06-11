@@ -243,6 +243,169 @@
   scrollbar-width: thin;
 }
 
+/* THE PROTOCOL DESK — main-app shell scope (Countersign, opened for
+ * business). Sibling of [data-vex-onboarding]: applied via
+ * `data-vex-shell="true"` on the AppShell root. Onboarding proved identity
+ * in a dark room; the shell is the working register that signature
+ * unlocked — same #04060f canvas (the cut from onboarding is invisible),
+ * depth from three SOLID luminance steps + one recessed tone (no photo,
+ * no gradient, no backdrop-filter, no resting glow anywhere), one accent
+ * family derived from #3275f8 (the raw gray-blue hexes died repo-wide in
+ * S7 — pinned by features/appShell/__tests__/shell-design-guard.test.ts). */
+[data-vex-shell="true"] {
+  /* canvas + 3-layer luminance model */
+  --vex-surface-0: #04060f; /* canvas — identical to --vex-onboarding-bg */
+  --vex-surface-1: #090e1d; /* working panel: sidebar rail, composer, cards */
+  --vex-surface-2: #0f1729; /* raised/active: popovers, expanded tool bodies */
+  --vex-surface-down: #02040a; /* recessed: code blocks, args/output wells */
+  /* hairlines — layering is luminance step + hairline, never shadow */
+  --vex-line: rgba(255, 255, 255, 0.06);
+  --vex-line-strong: rgba(255, 255, 255, 0.1);
+  /* text — re-pins the global trio; NEVER opacity-stacked */
+  --vex-text: #e5e7eb; /* all body/content */
+  --vex-text-2: #d4d6dc; /* true metadata only (timestamps, sublines) */
+  --vex-text-3: #b5b7c0; /* placeholders, disabled, group headers */
+  /* accent scale — the ONLY blue family in the shell */
+  --vex-accent: #3275f8;
+  --vex-accent-hover: color-mix(in oklab, #3275f8 82%, white);
+  --vex-accent-active: color-mix(in oklab, #3275f8 85%, black);
+  --vex-accent-text: color-mix(in oklab, #3275f8 55%, white);
+  --vex-accent-border: color-mix(in oklab, #3275f8 55%, transparent);
+  --vex-accent-border-strong: color-mix(in oklab, #3275f8 85%, transparent);
+  --vex-accent-fill-8: color-mix(in oklab, #3275f8 8%, transparent);
+  --vex-accent-fill-12: color-mix(in oklab, #3275f8 12%, transparent);
+  /* shadcn projection — stock Button/Input/Dialog inside the shell speak
+   * Countersign automatically (same mechanism as the onboarding scope). */
+  --color-primary: var(--vex-accent);
+  --color-ring: var(--vex-accent);
+  --color-background: var(--vex-surface-0);
+  --color-card: var(--vex-surface-1);
+  --color-popover: var(--vex-surface-2);
+  --color-border: var(--vex-line-strong);
+  --color-input: var(--vex-line-strong);
+  --color-muted-foreground: var(--vex-text-3);
+}
+
+/* Shell scrollbar — the onboarding recipe (38%/60% accent thumb) under the
+ * shell scope; wins specificity over the global `*` fallback below. */
+[data-vex-shell="true"]::-webkit-scrollbar,
+[data-vex-shell="true"] *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+[data-vex-shell="true"]::-webkit-scrollbar-track,
+[data-vex-shell="true"] *::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-vex-shell="true"]::-webkit-scrollbar-thumb,
+[data-vex-shell="true"] *::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--vex-accent) 38%, transparent);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+[data-vex-shell="true"]::-webkit-scrollbar-thumb:hover,
+[data-vex-shell="true"] *::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--vex-accent) 60%, transparent);
+  background-clip: content-box;
+}
+[data-vex-shell="true"]::-webkit-scrollbar-corner,
+[data-vex-shell="true"] *::-webkit-scrollbar-corner {
+  background: transparent;
+}
+[data-vex-shell="true"] {
+  scrollbar-color: color-mix(in oklab, var(--vex-accent) 38%, transparent)
+    transparent;
+  scrollbar-width: thin;
+}
+
+/* Desk entry settle — a live-appended transcript row settles onto the page.
+ * One-shot, applied ONLY to rows appended after mount (history pagination
+ * mounts at the final frame — see S3). Stylesheet @keyframes (CSP-safe). */
+@keyframes vex-entry-settle {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.vex-entry-settle {
+  animation: vex-entry-settle 180ms ease-out both;
+}
+
+/* Dissolves the oldest visible line of the working strip's reasoning tail
+ * (S4) — a mask, not a painted gradient. */
+.vex-fade-top {
+  mask-image: linear-gradient(to bottom, transparent, black 18px);
+}
+
+/* The signing stroke — ink drawing the signature line inside the
+ * New-session key (S1). Base span scales from the left on hover (CSS
+ * transition on a class toggle); while a session is being created the
+ * `--signing` modifier runs this loop: ink enters left, travels the slot,
+ * exits right (the origin flips while scaleX=1, so the flip is invisible).
+ * The only infinite animations in the shell are this stroke and DotMatrix —
+ * both bound to verifiable in-flight work. */
+.vex-sign-stroke {
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes vex-stroke-signing {
+  0% {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  45% {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  55% {
+    transform: scaleX(1);
+    transform-origin: right;
+  }
+  100% {
+    transform: scaleX(0);
+    transform-origin: right;
+  }
+}
+
+.vex-sign-stroke--signing {
+  animation: vex-stroke-signing 1100ms cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+
+/* Reduced motion: a steady half-ink line still reads "in progress".
+ * `animation: none` clears animation-name (the global 0.01ms rule only
+ * forces duration/iteration), so the loop never runs and the static
+ * transform/opacity below carry the intent. */
+@media (prefers-reduced-motion: reduce) {
+  .vex-sign-stroke--signing {
+    animation: none;
+    transform: scaleX(1);
+    opacity: 0.55;
+  }
+}
+
+/* Hover/focus draws the signature line; a plain Tailwind group-hover
+ * utility would lose the cascade to .vex-sign-stroke (same specificity,
+ * later source order in this sheet), so the draw lives here. */
+.vex-sign-key:hover .vex-sign-stroke,
+.vex-sign-key:focus-visible .vex-sign-stroke {
+  transform: scaleX(1);
+}
+
+/* Composer mode line held at full width while plan mode is on — lives here
+ * (not a Tailwind arbitrary utility) so source order beats .vex-sign-stroke's
+ * scaleX(0) at equal specificity. */
+.vex-mode-line--on {
+  transform: scaleX(1);
+}
+
 html,
 body,
 #root {
@@ -274,47 +437,6 @@ body,
   animation: vex-cascade-row 240ms ease-out both;
 }
 
-/* New-session button shine — silver→white sweep across gradient-clipped text.
- * Implemented as build-time CSS @keyframes (NOT motion/react inline styles) so
- * it stays CSP-safe under `style-src 'self'` and passes check-build-artifacts.
- * Reduced-motion users get static, readable silver text (see the rule below;
- * with `animation: none` the background-position rests at its silver start).
- * `color` is a fallback if `background-clip: text` is unsupported — full
- * support on Electron/Chromium. */
-@keyframes vex-shine {
-  from {
-    background-position: 150% center;
-  }
-  to {
-    background-position: -50% center;
-  }
-}
-
-.vex-shiny-text {
-  --shiny-base: #b5b5b5;
-  --shiny-shine: #ffffff;
-  background-image: linear-gradient(
-    120deg,
-    var(--shiny-base) 0%,
-    var(--shiny-base) 35%,
-    var(--shiny-shine) 50%,
-    var(--shiny-base) 65%,
-    var(--shiny-base) 100%
-  );
-  background-size: 200% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: var(--shiny-base);
-  animation: vex-shine 2s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .vex-shiny-text {
-    animation: none;
-  }
-}
-
 /* Respect reduced-motion preference (WCAG AA) */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -329,22 +451,25 @@ body,
 
 /* Custom scrollbar for long lists (sessions library, future log views).
  * WebKit uses ::-webkit-scrollbar; Firefox falls back to scrollbar-width
- * + scrollbar-color. The thumb tint matches the #3275f8 accent we use
- * throughout the app shell. */
+ * + scrollbar-color. S7: the thumb tint is expressed as color-mix on the
+ * #3275f8 accent (same recipe as the [data-vex-shell] / global blocks)
+ * instead of a hand-derived rgba — one notation for the accent family.
+ * Raw #3275f8 (not var(--vex-accent)) so the class keeps working on
+ * surfaces outside the shell scope. */
 .vex-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(50, 117, 248, 0.32) transparent;
+  scrollbar-color: color-mix(in oklab, #3275f8 32%, transparent) transparent;
 }
 .vex-scroll::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 .vex-scroll::-webkit-scrollbar-thumb {
-  background-color: rgba(50, 117, 248, 0.32);
+  background-color: color-mix(in oklab, #3275f8 32%, transparent);
   border-radius: 4px;
 }
 .vex-scroll::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(50, 117, 248, 0.48);
+  background-color: color-mix(in oklab, #3275f8 48%, transparent);
 }
 .vex-scroll::-webkit-scrollbar-track {
   background: transparent;

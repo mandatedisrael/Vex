@@ -1,18 +1,17 @@
 /**
- * Selected-session context strip (puzzle 04 phase 7 extract).
+ * Selected-session register line (S3 — the desk rule).
  *
- * Lifted from `SessionPanel.tsx` to keep the parent file under the
- * 350-LOC budget. Shows the active session's title + mode/permission/
- * missionStatus chips, plus a loading skeleton and a "Session not
- * found" empty state.
+ * One slim hairline-ruled line above the transcript: session title plus
+ * EXCEPTION stamps only (silence-by-default — `restricted` permission and
+ * `mission` mode deviate from the defaults; agent/full earn no chrome).
+ * Loading/error/not-found states are boxless lines on the same rule height.
  */
 
 import type { JSX } from "react";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import { AiChat01Icon, Target02Icon } from "@hugeicons/core-free-icons";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import { DotmHex3 } from "../../components/ui/dotm-hex-3.js";
 import { SessionRuntimeBar } from "./SessionRuntimeBar.js";
+import { Stamp } from "./SessionRows/Stamp.js";
 import { getSessionTitle } from "./sessionListModel.js";
 
 export interface SessionContextProps {
@@ -30,11 +29,11 @@ export function SessionContext({
 }: SessionContextProps): JSX.Element {
   if (loading) {
     return (
-      <div className="mt-7 inline-flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.035] px-3 py-2 text-xs text-[var(--color-text-secondary)] backdrop-blur-xl">
+      <div className="flex h-9 items-center gap-2 font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--vex-text-3)]">
         <DotmHex3
-          size={18}
-          dotSize={3}
-          color="#6f91ff"
+          size={14}
+          dotSize={2}
+          color="var(--vex-accent)"
           ariaLabel="Loading session"
         />
         Loading session
@@ -44,7 +43,7 @@ export function SessionContext({
 
   if (error !== null) {
     return (
-      <div className="mt-7 rounded-lg border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm text-destructive backdrop-blur-xl">
+      <div className="flex h-9 items-center text-xs text-destructive">
         {error}
       </div>
     );
@@ -52,34 +51,30 @@ export function SessionContext({
 
   if (activeSessionId !== null && activeSession === null) {
     return (
-      <div className="mt-7 rounded-lg border border-white/[0.08] bg-white/[0.035] px-3 py-2 text-sm text-[var(--color-text-secondary)] backdrop-blur-xl">
+      <div className="flex h-9 items-center text-sm text-[var(--vex-text-2)]">
         Session not found
       </div>
     );
   }
 
   if (activeSession !== null) {
-    const icon: IconSvgElement =
-      activeSession.mode === "mission" ? Target02Icon : AiChat01Icon;
     const title = getSessionTitle(activeSession);
     return (
-      <div className="mt-7 flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         <div
           data-vex-area="session-header"
           role="group"
           aria-label={`Session: ${title}`}
-          className="flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.035] px-3 py-2 text-xs text-[var(--color-text-secondary)] backdrop-blur-xl"
+          className="flex h-9 items-center gap-3 border-b border-[var(--vex-line)]"
         >
-          <span className="flex h-8 w-8 items-center justify-center text-[#8da5ff]">
-            <HugeiconsIcon icon={icon} size={16} aria-hidden />
-          </span>
-          <span className="min-w-[180px] flex-1 truncate text-sm text-foreground">
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
             {title}
           </span>
-          <ContextPill>{activeSession.mode}</ContextPill>
-          <ContextPill>{activeSession.permission}</ContextPill>
-          {activeSession.missionStatus !== null ? (
-            <ContextPill>{activeSession.missionStatus}</ContextPill>
+          {activeSession.permission !== "full" ? (
+            <Stamp tone="warn">restricted</Stamp>
+          ) : null}
+          {activeSession.mode === "mission" ? (
+            <Stamp tone="accent">mission</Stamp>
           ) : null}
         </div>
         <SessionRuntimeBar sessionId={activeSession.id} />
@@ -91,12 +86,4 @@ export function SessionContext({
   // panel keeps the layout spacer so the chat input position is
   // identical in the empty-state and the has-sessions empty-active state.
   return <div className="mt-7 h-0" aria-hidden />;
-}
-
-function ContextPill({ children }: { readonly children: string }): JSX.Element {
-  return (
-    <span className="rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
-      {children}
-    </span>
-  );
 }

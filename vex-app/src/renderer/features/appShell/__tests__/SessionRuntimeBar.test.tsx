@@ -67,6 +67,8 @@ const MODEL_CONFIGURED = {
   modelId: "anthropic/claude-opus-4.7",
   source: "global_default" as const,
   updatedAt: null,
+  // S6: capability field on the model DTO — runtime bar ignores it.
+  supportsReasoning: null,
 };
 const MODEL_UNCONFIGURED = {
   sessionId: SESSION,
@@ -74,6 +76,7 @@ const MODEL_UNCONFIGURED = {
   modelId: null,
   source: "unconfigured" as const,
   updatedAt: null,
+  supportsReasoning: null,
 };
 
 function totals(requestCount: number, totalCost: number | null) {

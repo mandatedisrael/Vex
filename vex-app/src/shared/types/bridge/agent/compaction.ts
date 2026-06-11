@@ -13,7 +13,7 @@ import type {
  *  - `getStatus` (7-1): latest job + active count for the runtime-bar chip;
  *    `null` for a missing/deleted/out-of-scope session.
  *  - `listHistory` (7-2a): the session's compaction-generation timeline for
- *    the knowledge/memory panel; `null` for a missing/foreign session.
+ *    the memory panel; `null` for a missing/foreign session.
  *  - `retry` (8-5): re-enqueue a permanently-failed generation for another
  *    attempt. The renderer never controls the executor's scheduling.
  */

@@ -34,8 +34,8 @@ export type MessageRole = z.infer<typeof messageRoleSchema>;
  *   - `compaction`: an engine-written `compaction_committed` marker row
  *     (a Track-1 compaction checkpoint), rendered as a static timeline
  *     marker — distinct from the live SessionRuntimeBar compaction chip.
- *   - `recall`: an assistant tool-call row invoking `memory_recall`
- *     (per-session) or `knowledge_recall` (cross-session), rendered as a
+ *   - `recall`: an assistant tool-call row invoking `session_memory_search`
+ *     (per-session) or a `long_memory_*` read (cross-session), rendered as a
  *     static recall indicator that still shows any assistant prose.
  * Stage 9-5b adds:
  *   - `assistant_stopped`: an assistant prose row whose streaming turn was

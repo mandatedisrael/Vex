@@ -9,7 +9,7 @@
  *     loading/error/empty states never sit under onboarding copy.
  *
  * Sub-components keep this file small:
- *   - hero + trust badges → `SessionWelcomeHero`
+ *   - hero (register head; trust line lives in the composer) → `SessionWelcomeHero`
  *   - context strip/header → `SessionContext` (+ `SessionRuntimeBar`)
  *   - mission card        → `MissionContractCard` (mission sessions only)
  *   - transcript          → `SessionTranscript`
@@ -71,7 +71,7 @@ export function SessionPanel(): JSX.Element {
         data-vex-state={panelState}
         className="flex h-full min-h-0 w-full items-center px-8 py-10 sm:px-12 lg:px-20"
       >
-        <div className="w-full max-w-[780px]">
+        <div className="w-full max-w-[680px]">
           <SessionWelcomeHero />
           <SessionContext
             activeSession={null}

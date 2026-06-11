@@ -1,10 +1,14 @@
 /**
- * A single session list row: icon + activity dot, title/time, subtitle, and
- * mode/permission/activity badges. The row-select control and the row actions
- * (trash + pin) are SIBLINGS inside a non-interactive wrapper — never nested
- * buttons — so Enter/Space on an action cannot bubble into row selection.
+ * A single ledger row (56px): mode glyph, two text lines (title + time/
+ * activity, subtitle + exception stamps), hairline-separated — no card box,
+ * no resting glow. Selection is a 2px accent bar on the left edge plus a
+ * one-step surface lift. Mode/permission badge pairs are gone: the glyph
+ * already says mode, and stamps appear only when state deviates from the
+ * default (restricted / live / paused — terminal sessions earn silence).
  *
- * Extracted verbatim from `SessionRows.tsx`.
+ * The row-select control and the row actions (trash + pin) are SIBLINGS
+ * inside a non-interactive wrapper — never nested buttons — so Enter/Space
+ * on an action cannot bubble into row selection.
  */
 
 import type { JSX, MouseEvent } from "react";
@@ -12,13 +16,14 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { AiChat01Icon, Target02Icon } from "@hugeicons/core-free-icons";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import { cn } from "../../../lib/utils.js";
+import { DotmSquare3 } from "../../../components/ui/dotm-square-3.js";
 import {
   formatSessionTime,
   getMissionActivity,
   getSessionSubtitle,
   getSessionTitle,
 } from "../sessionListModel.js";
-import { Badge } from "./Badge.js";
+import { Stamp } from "./Stamp.js";
 import { RemoveButton } from "./RemoveButton.js";
 import { PinToggle } from "./PinToggle.js";
 
@@ -65,41 +70,45 @@ export function SessionRow({
   // bubble from the pin into a row-level keydown handler. Container holds
   // the visual styling; both children focus / click independently.
   return (
-    <li>
+    <li className="border-b border-[var(--vex-line)] last:border-b-0">
       <div
         className={cn(
-          "group relative flex w-full rounded-lg border transition-colors",
-          selected
-            ? "border-[#3275f8]/42 bg-[#3275f8]/13 shadow-[0_0_24px_rgba(50,117,248,0.12)]"
-            : "border-transparent hover:border-white/[0.055] hover:bg-white/[0.035]",
+          "group relative flex w-full transition-colors",
+          selected ? "bg-white/[0.03]" : "hover:bg-white/[0.035]",
           // Fixed height drives the fit-to-height packer; see
           // SIDEBAR_ROW_HEIGHT_PX in sessionListLayout.ts.
-          sidebarOpen ? "h-[88px]" : "h-11",
+          sidebarOpen ? "h-14" : "h-11",
         )}
       >
+        {selected ? (
+          <span
+            aria-hidden
+            className="absolute inset-y-2 left-0 w-0.5 bg-[var(--vex-accent)]"
+          />
+        ) : null}
         <button
           type="button"
           onClick={() => onSelect(row.id)}
           aria-current={selected ? "true" : undefined}
           aria-label={!sidebarOpen ? title : undefined}
           className={cn(
-            "flex h-full w-full rounded-lg text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3275f8]",
-            // pr-16 (sidebarOpen) reserves 64px on the right for the
+            "flex h-full w-full text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]",
+            // pr-14 (sidebarOpen) reserves room on the right for the
             // absolutely positioned Trash + Pin sibling cluster so the
             // title flex never paints under them. Collapsed sidebar
             // hides both actions, so no reservation.
-            sidebarOpen ? "gap-3 px-3 py-3 pr-16" : "items-center justify-center px-0",
+            sidebarOpen ? "items-center gap-3 px-3 pr-14" : "items-center justify-center px-0",
           )}
           title={sidebarOpen ? undefined : title}
         >
           <span
             className={cn(
-              "relative flex h-9 w-9 shrink-0 items-center justify-center text-[#8da5ff]",
-              selected && "text-[#adc0ff]",
+              "relative flex h-8 w-8 shrink-0 items-center justify-center",
+              selected ? "text-[var(--vex-accent-text)]" : "text-[var(--vex-text-3)]",
             )}
           >
-            <HugeiconsIcon icon={Icon} size={17} aria-hidden />
-            {activity !== null ? (
+            <HugeiconsIcon icon={Icon} size={15} aria-hidden />
+            {!sidebarOpen && activity !== null ? (
               <span
                 aria-hidden
                 className={cn(
@@ -112,26 +121,36 @@ export function SessionRow({
 
           {sidebarOpen ? (
             <span className="min-w-0 flex-1">
-              <span className="flex items-start gap-2">
-                <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+              <span className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
                   {title}
                 </span>
-                <span className="shrink-0 font-mono text-[10px] text-[var(--color-text-muted)]">
-                  {startedLabel}
+                {activity?.tone === "active" ? (
+                  <DotmSquare3
+                    size={12}
+                    dotSize={2}
+                    color="var(--vex-accent)"
+                    animated
+                    ariaLabel="Session active"
+                  />
+                ) : (
+                  <span className="shrink-0 font-mono text-[10px] tabular-nums text-[var(--vex-text-2)]">
+                    {startedLabel}
+                  </span>
+                )}
+              </span>
+              <span className="mt-0.5 flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--vex-text-2)]">
+                  {subtitle}
                 </span>
-              </span>
-              <span className="mt-1 block truncate text-xs text-[var(--color-text-secondary)]">
-                {subtitle}
-              </span>
-              <span className="mt-2 flex items-center gap-2">
-                <Badge tone={row.mode === "mission" ? "mission" : "agent"}>
-                  {row.mode}
-                </Badge>
-                <Badge tone={row.permission === "full" ? "full" : "restricted"}>
-                  {row.permission}
-                </Badge>
-                {activity !== null ? (
-                  <Badge tone={activity.tone}>{activity.label}</Badge>
+                {row.permission !== "full" ? (
+                  <Stamp tone="warn">restricted</Stamp>
+                ) : null}
+                {activity?.tone === "active" ? (
+                  <Stamp tone="accent">live</Stamp>
+                ) : null}
+                {activity?.tone === "paused" ? (
+                  <Stamp tone="warn">paused</Stamp>
                 ) : null}
               </span>
             </span>
@@ -143,7 +162,7 @@ export function SessionRow({
           // button. Native buttons inside a non-interactive wrapper —
           // no nested buttons, no role="button" parent, so Enter/Space
           // on either action cannot bubble into a row-select handler.
-          <div className="absolute bottom-3 right-3 flex items-center gap-1">
+          <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
             <RemoveButton onClick={handleRemoveClick} />
             <PinToggle
               pinned={isPinned}

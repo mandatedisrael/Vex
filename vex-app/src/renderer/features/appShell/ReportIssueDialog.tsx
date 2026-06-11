@@ -146,11 +146,15 @@ export function ReportIssueDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      {/* Solid raised surface + hairline — no glass, no glow (S7; the
+       * backdrop-blur-none override beats the dialog base's blur-sm). */}
+      <DialogContent className="max-w-lg rounded-xl border-[var(--vex-line-strong)] bg-[var(--vex-surface-2)] text-foreground shadow-none backdrop:bg-black/70 backdrop:backdrop-blur-none">
         <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
-          <DialogHeader>
-            <DialogTitle>Report an issue</DialogTitle>
-            <DialogDescription>
+          <DialogHeader className="border-[var(--vex-line)]">
+            <DialogTitle className="font-mono text-[13px] font-medium uppercase tracking-[0.3em]">
+              Report an issue
+            </DialogTitle>
+            <DialogDescription className="text-[var(--vex-text-3)]">
               The report is saved locally on this machine. Secrets are
               automatically redacted before storage. Nothing is sent to a
               remote server in this build.
@@ -181,10 +185,10 @@ export function ReportIssueDialog({
                   <label
                     key={opt.value}
                     className={cn(
-                      "cursor-pointer rounded-md border border-border bg-background px-3 py-1.5 text-xs transition-colors",
+                      "cursor-pointer rounded-[6px] border px-3 py-1.5 text-xs transition-colors",
                       severity === opt.value
-                        ? "border-primary bg-primary/10 ring-1 ring-primary"
-                        : "hover:bg-accent",
+                        ? "border-[var(--vex-accent-border-strong)] bg-[var(--vex-accent-fill-8)] text-[var(--vex-accent-text)]"
+                        : "border-[var(--vex-line-strong)] text-[var(--vex-text-2)] hover:bg-white/[0.04] hover:text-foreground",
                     )}
                   >
                     <input
@@ -211,7 +215,7 @@ export function ReportIssueDialog({
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Short summary of the issue"
               />
-              <div className="flex items-center justify-end text-xs text-[var(--color-text-secondary)]">
+              <div className="flex items-center justify-end font-mono text-[10px] tabular-nums text-[var(--vex-text-3)]">
                 <span aria-live="polite">{title.length} / {TITLE_MAX}</span>
               </div>
             </div>
@@ -226,12 +230,12 @@ export function ReportIssueDialog({
                 rows={6}
                 placeholder="What happened? What did you expect to happen?"
                 className={cn(
-                  "min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm",
-                  "placeholder:text-muted-foreground",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  "min-h-24 w-full rounded-[6px] border border-[var(--vex-line-strong)] bg-[var(--vex-surface-down)] px-3 py-2 text-sm shadow-none",
+                  "placeholder:text-[var(--vex-text-3)]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]",
                 )}
               />
-              <div className="flex items-center justify-between gap-3 text-xs text-[var(--color-text-secondary)]">
+              <div className="flex items-center justify-between gap-3 text-xs text-[var(--vex-text-2)]">
                 <p>
                   Don&apos;t paste passwords, mnemonics, or private keys —
                   redaction is a safety net, not a guarantee.
@@ -254,16 +258,23 @@ export function ReportIssueDialog({
             ) : null}
           </DialogBody>
 
-          <DialogFooter>
+          <DialogFooter className="border-[var(--vex-line)]">
             <Button
               type="button"
               variant="ghost"
               onClick={() => onOpenChange(false)}
               disabled={submitting}
+              className="text-[var(--vex-text-2)] hover:bg-white/[0.06] hover:text-foreground"
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={submitDisabled}>
+            {/* Key form, not a filled pill — disabled dimming rides the
+             * tokens, never an opacity stack (mirrors SessionCreator). */}
+            <Button
+              type="submit"
+              disabled={submitDisabled}
+              className="rounded-lg border border-[var(--vex-accent-border)] bg-transparent font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--vex-accent-text)] hover:border-[var(--vex-accent-border-strong)] hover:bg-[var(--vex-accent-fill-8)] disabled:border-[var(--vex-line-strong)] disabled:text-[var(--vex-text-3)] disabled:opacity-100"
+            >
               {submitting ? "Saving…" : "Save report"}
             </Button>
           </DialogFooter>
@@ -291,10 +302,10 @@ function CategoryRadio({
   return (
     <label
       className={cn(
-        "flex cursor-pointer flex-col gap-1 rounded-md border border-border bg-background px-3 py-2 text-sm transition-colors",
+        "flex cursor-pointer flex-col gap-1 rounded-[6px] border px-3 py-2 text-sm transition-colors",
         checked
-          ? "border-primary bg-primary/10 ring-1 ring-primary"
-          : "hover:bg-accent",
+          ? "border-[var(--vex-accent-border-strong)] bg-[var(--vex-accent-fill-8)]"
+          : "border-[var(--vex-line-strong)] hover:bg-white/[0.04]",
       )}
     >
       <input
@@ -306,7 +317,7 @@ function CategoryRadio({
         className="sr-only"
       />
       <span className="font-medium">{title}</span>
-      <span className="text-xs text-[var(--color-text-secondary)]">
+      <span className="text-xs text-[var(--vex-text-2)]">
         {description}
       </span>
     </label>

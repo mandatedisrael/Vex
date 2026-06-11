@@ -34,17 +34,22 @@ export function isHighRisk(summary: ApprovalSummaryDto): boolean {
   return false;
 }
 
+/**
+ * Stamp-grammar tone classes (S3): hairline color-mix border + text in tone;
+ * fill is reserved for danger (`critical` only, at /10). The caller supplies
+ * the shared stamp shape (radius/spacing/type) — these add tone only.
+ */
 export function riskChipClasses(level: string): string {
   switch (level) {
     case "critical":
-      return "border border-red-500/40 bg-red-500/10 text-red-300";
+      return "border-[color-mix(in_oklab,var(--color-destructive)_40%,transparent)] bg-destructive/10 text-destructive";
     case "high":
-      return "border border-amber-500/40 bg-amber-500/10 text-amber-300";
+      return "border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] text-warning";
     case "medium":
-      return "border border-yellow-500/30 bg-yellow-500/10 text-yellow-300";
+      return "border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] text-warning";
     case "low":
-      return "border border-blue-500/30 bg-blue-500/10 text-blue-300";
+      return "border-[color-mix(in_oklab,var(--vex-accent)_40%,transparent)] text-[var(--vex-accent-text)]";
     default:
-      return "border border-white/[0.10] bg-white/[0.05]";
+      return "border-[var(--vex-line-strong)] text-[var(--vex-text-2)]";
   }
 }

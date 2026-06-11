@@ -23,8 +23,8 @@ export function ListPlaceholder({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 rounded-lg border border-white/[0.045] bg-white/[0.025] p-3 text-xs",
-        tone === "error" ? "text-destructive" : "text-[var(--color-text-secondary)]",
+        "flex items-center gap-2 p-3 text-xs",
+        tone === "error" ? "text-destructive" : "text-[var(--vex-text-2)]",
         !sidebarOpen && "justify-center px-0",
       )}
     >

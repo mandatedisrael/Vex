@@ -1,5 +1,5 @@
 /**
- * Memory & privacy section of the Knowledge & Memory panel (7-4).
+ * Memory & privacy section of the Memory panel (7-4).
  *
  * Read-only transparency for the remote compaction path. Names the model that
  * builds memory (the SAME global `AGENT_MODEL` the agent uses, via
@@ -12,7 +12,7 @@
 
 import type { JSX } from "react";
 import { useAvailableModels } from "../../lib/api/models.js";
-import { SECTION } from "./KnowledgePanelShared.js";
+import { SECTION } from "./MemoryPanelShared.js";
 
 export function MemoryPrivacySection(): JSX.Element {
   const models = useAvailableModels();
@@ -25,15 +25,17 @@ export function MemoryPrivacySection(): JSX.Element {
   return (
     <section data-vex-section="memory-privacy" className={SECTION}>
       <div>
-        <h2 className="text-sm font-semibold">Memory &amp; privacy</h2>
-        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+        <h2 className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]">
+          Memory &amp; privacy
+        </h2>
+        <p className="mt-1 text-xs text-[var(--vex-text-2)]">
           How Vex builds long-term memory, and what leaves your machine.
         </p>
       </div>
 
       <p
         data-vex-memory-model
-        className="text-xs text-[var(--color-text-secondary)]"
+        className="text-xs text-[var(--vex-text-2)]"
       >
         {models.isLoading ? (
           "Checking the configured model…"
@@ -48,7 +50,7 @@ export function MemoryPrivacySection(): JSX.Element {
         )}
       </p>
 
-      <div className="flex flex-col gap-2 text-xs text-[var(--color-text-secondary)]">
+      <div className="flex flex-col gap-2 text-xs text-[var(--vex-text-2)]">
         <p>
           When older messages are compacted into memory, Vex sends a{" "}
           <span className="text-foreground">redacted</span> copy of that
@@ -62,7 +64,7 @@ export function MemoryPrivacySection(): JSX.Element {
           support reports never include unredacted memory payloads: raw
           transcript text and embeddings are not attached to them.
         </p>
-        <p className="text-[var(--color-text-muted)]">
+        <p className="text-[var(--vex-text-3)]">
           This runs automatically in the background (enabled by default).
         </p>
       </div>

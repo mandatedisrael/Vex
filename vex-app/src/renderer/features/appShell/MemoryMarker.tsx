@@ -1,13 +1,14 @@
 /**
- * MemoryMarker — static inline recall indicator (stage 8-4). Rendered for an
- * assistant tool-call row that invoked `memory_recall` (per-session narrative
- * memory) or `knowledge_recall` (durable cross-session knowledge). The copy
- * stays distinct so cross-session knowledge is never mislabeled as session
- * memory; an unknown/missing recall tool falls back to neutral copy.
+ * MemoryMarker — static inline recall indicator (stage 8-4, S3
+ * ledger-interruption grammar). Rendered for an assistant tool-call row that
+ * invoked `session_memory_search` (per-session narrative memory) or a
+ * `long_memory_*` read (durable cross-session memory). The copy stays
+ * distinct so cross-session memory is never mislabeled as session memory; an
+ * unknown/missing recall tool falls back to neutral copy.
  *
- * Any assistant prose on the row is preserved below the indicator as plain
- * text (never markdown/HTML). Static by design — a persisted row has no
- * reliable "recalling…" state, so there is no animation. ≤8px radius.
+ * Any assistant prose on the row is preserved below the centered hairline
+ * indicator as a recessed well (plain text — never markdown/HTML). Static by
+ * design — a persisted row has no reliable "recalling…" state.
  */
 
 import type { JSX } from "react";
@@ -25,11 +26,13 @@ interface RecallCopy {
 
 function recallCopy(toolName: string | null): RecallCopy {
   switch (toolName) {
-    case "memory_recall":
+    case "session_memory_search":
       return { label: "Recalled session memory", icon: Brain01Icon };
-    case "knowledge_recall":
+    case "long_memory_search":
+    case "long_memory_get":
+    case "long_memory_history":
       return {
-        label: "Recalled cross-session knowledge",
+        label: "Recalled long-term memory",
         icon: BookOpen01Icon,
       };
     default:
@@ -49,22 +52,26 @@ export function MemoryMarker({
     <div
       data-vex-message-role="system"
       data-vex-marker="recall"
-      className="flex justify-start"
+      className="flex flex-col gap-1.5"
     >
-      <div className="flex max-w-[80%] flex-col gap-1 rounded-md border border-white/[0.06] px-2.5 py-1.5 text-[11px]">
-        <span className="flex items-center gap-1.5 text-[var(--color-text-muted)]">
+      <div className="flex items-center gap-3">
+        <span aria-hidden className="h-px flex-1 bg-[var(--vex-line)]" />
+        <span className="flex min-w-0 items-center gap-1.5 text-[var(--vex-text-3)]">
           <HugeiconsIcon icon={icon} size={12} aria-hidden />
-          <span>{label}</span>
-        </span>
-        {content.length > 0 ? (
-          <span
-            data-vex-marker-content=""
-            className="whitespace-pre-wrap break-words text-[var(--color-text-secondary)]"
-          >
-            {content}
+          <span className="break-words font-mono text-[10px] uppercase tracking-[0.3em]">
+            {label}
           </span>
-        ) : null}
+        </span>
+        <span aria-hidden className="h-px flex-1 bg-[var(--vex-line)]" />
       </div>
+      {content.length > 0 ? (
+        <span
+          data-vex-marker-content=""
+          className="block whitespace-pre-wrap break-words rounded-[6px] border border-[var(--vex-line)] bg-[var(--vex-surface-down)] px-3 py-2 text-xs text-[var(--vex-text-2)]"
+        >
+          {content}
+        </span>
+      ) : null}
     </div>
   );
 }

@@ -106,11 +106,16 @@ function extractToolCalls(raw: unknown): ToolCallDisplay[] | null {
 
 /**
  * Tool names whose assistant tool-call row renders as a static recall
- * indicator (`kind: "recall"`, stage 8-4). `memory_recall` is per-session
- * narrative memory; `knowledge_recall` is durable cross-session knowledge —
- * the renderer keeps the copy distinct.
+ * indicator (`kind: "recall"`, stage 8-4 + S9 rename). `session_memory_search`
+ * is per-session narrative memory; the `long_memory_*` reads are durable
+ * cross-session memory — the renderer keeps the copy distinct.
  */
-const RECALL_TOOL_NAMES = new Set(["memory_recall", "knowledge_recall"]);
+const RECALL_TOOL_NAMES = new Set([
+  "session_memory_search",
+  "long_memory_search",
+  "long_memory_get",
+  "long_memory_history",
+]);
 
 /**
  * Engine `message_type` for a Track-1 compaction checkpoint marker
