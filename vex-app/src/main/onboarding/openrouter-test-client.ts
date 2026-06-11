@@ -38,6 +38,7 @@ import {
   RequestAbortedError,
   RequestTimeoutError,
 } from "@vex-lib/openrouter-client.js";
+import { extractCauseCode } from "@vex-lib/error-cause.js";
 import { err, ok, type Result, type VexError } from "@shared/ipc/result.js";
 import { log } from "../logger/index.js";
 
@@ -110,15 +111,26 @@ function defaultClientFactory(apiKey: string, timeoutMs: number) {
  * not carry `.statusCode`; check them first via `instanceof` so the
  * subsequent OpenRouterError branch can rely on `statusCode` being
  * present.
+ *
+ * Cause-code diagnostics (error-diagnostics plan D-WIZARD): every
+ * branch surfaces the errno-shaped cause code extracted from the
+ * caught value's `.cause` chain — appended to the existing log line
+ * and attached as `details.causeCode` on the returned VexError.
+ * ONLY the matched errno string crosses (never message text); when
+ * no code exists, `details` is omitted entirely.
  */
 function mapSdkError(
   cause: unknown,
   correlationId: string,
 ): VexError {
   const baseLog = `[openrouter-test-client] verify failed correlationId=${correlationId}`;
+  const causeCode = extractCauseCode(cause);
+  const causeSuffix = causeCode === null ? "" : ` causeCode=${causeCode}`;
+  const details =
+    causeCode === null ? {} : { details: { causeCode } as const };
 
   if (cause instanceof RequestAbortedError) {
-    log.warn(`${baseLog} class=RequestAbortedError`);
+    log.warn(`${baseLog} class=RequestAbortedError${causeSuffix}`);
     return {
       code: "provider.unavailable",
       domain: "onboarding",
@@ -128,10 +140,11 @@ function mapSdkError(
       userActionable: true,
       redacted: true,
       correlationId,
+      ...details,
     };
   }
   if (cause instanceof RequestTimeoutError) {
-    log.warn(`${baseLog} class=RequestTimeoutError`);
+    log.warn(`${baseLog} class=RequestTimeoutError${causeSuffix}`);
     return {
       code: "provider.unavailable",
       domain: "onboarding",
@@ -141,10 +154,11 @@ function mapSdkError(
       userActionable: true,
       redacted: true,
       correlationId,
+      ...details,
     };
   }
   if (cause instanceof ConnectionError) {
-    log.warn(`${baseLog} class=ConnectionError`);
+    log.warn(`${baseLog} class=ConnectionError${causeSuffix}`);
     return {
       code: "provider.unavailable",
       domain: "onboarding",
@@ -154,12 +168,15 @@ function mapSdkError(
       userActionable: true,
       redacted: true,
       correlationId,
+      ...details,
     };
   }
 
   if (cause instanceof OpenRouterError) {
     const status = cause.statusCode;
-    log.warn(`${baseLog} class=OpenRouterError statusCode=${status}`);
+    log.warn(
+      `${baseLog} class=OpenRouterError statusCode=${status}${causeSuffix}`,
+    );
     if (status === 401) {
       return {
         code: "provider.invalid_api_key",
@@ -170,6 +187,7 @@ function mapSdkError(
         userActionable: true,
         redacted: true,
         correlationId,
+        ...details,
       };
     }
     if (status === 402) {
@@ -182,6 +200,7 @@ function mapSdkError(
         userActionable: true,
         redacted: true,
         correlationId,
+        ...details,
       };
     }
     if (status === 404) {
@@ -194,6 +213,7 @@ function mapSdkError(
         userActionable: true,
         redacted: true,
         correlationId,
+        ...details,
       };
     }
     if (status === 429 || (typeof status === "number" && status >= 500)) {
@@ -206,6 +226,7 @@ function mapSdkError(
         userActionable: true,
         redacted: true,
         correlationId,
+        ...details,
       };
     }
   }
@@ -215,7 +236,7 @@ function mapSdkError(
   // the renderer.
   const className =
     cause instanceof Error ? cause.constructor.name : typeof cause;
-  log.warn(`${baseLog} class=${className}`);
+  log.warn(`${baseLog} class=${className}${causeSuffix}`);
   return {
     code: "provider.test_failed",
     domain: "onboarding",
@@ -225,6 +246,7 @@ function mapSdkError(
     userActionable: true,
     redacted: true,
     correlationId,
+    ...details,
   };
 }
 

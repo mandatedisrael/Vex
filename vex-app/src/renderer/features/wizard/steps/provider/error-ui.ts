@@ -15,6 +15,12 @@ import type { VexErrorCode } from "@shared/ipc/result.js";
 export interface ServerError {
   readonly code: VexErrorCode | string;
   readonly correlationId: string | null;
+  /**
+   * Errno-shaped cause code from `VexError.details.causeCode`
+   * (error-diagnostics plan D-WIZARD). Always a closed-dictionary
+   * errno string extracted main-side — never raw SDK message text.
+   */
+  readonly causeCode: string | null;
 }
 
 export interface ErrorCopy {
@@ -69,3 +75,33 @@ const FALLBACK_COPY: ErrorCopy = {
 export function uiCopyFor(code: string): ErrorCopy {
   return PROVIDER_ERROR_UI[code] ?? FALLBACK_COPY;
 }
+
+/**
+ * Closed hint map for errno-shaped cause codes (error-diagnostics plan
+ * D-WIZARD). Fixed inline-English copy per code group — a code outside
+ * this map renders the Cause line WITHOUT a hint; codes never come from
+ * user data (main extracts only errno-shaped `.code` strings).
+ */
+const TLS_HINT =
+  "TLS certificate could not be verified — antivirus or proxy HTTPS " +
+  "inspection is a common cause. Check your antivirus 'HTTPS scanning' " +
+  "setting.";
+const DNS_HINT =
+  "DNS lookup failed — check your network connection or DNS settings.";
+const CONNECT_HINT =
+  "Connection could not be established — a firewall, VPN, or proxy may " +
+  "be blocking the app.";
+
+export const CAUSE_HINTS: Readonly<Record<string, string>> = {
+  UNABLE_TO_VERIFY_LEAF_SIGNATURE: TLS_HINT,
+  SELF_SIGNED_CERT_IN_CHAIN: TLS_HINT,
+  UNABLE_TO_GET_ISSUER_CERT_LOCALLY: TLS_HINT,
+  DEPTH_ZERO_SELF_SIGNED_CERT: TLS_HINT,
+  CERT_HAS_EXPIRED: TLS_HINT,
+  ENOTFOUND: DNS_HINT,
+  EAI_AGAIN: DNS_HINT,
+  ECONNREFUSED: CONNECT_HINT,
+  ETIMEDOUT: CONNECT_HINT,
+  ECONNRESET: CONNECT_HINT,
+  UND_ERR_CONNECT_TIMEOUT: CONNECT_HINT,
+};

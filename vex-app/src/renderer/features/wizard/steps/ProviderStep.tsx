@@ -56,7 +56,7 @@ import {
 } from "../../../lib/api/wizard.js";
 import { WIZARD_STEP_META } from "../wizard-icons.js";
 import { WizardStepPanel } from "../WizardStepPanel.js";
-import { uiCopyFor, type ServerError } from "./provider/error-ui.js";
+import { CAUSE_HINTS, uiCopyFor, type ServerError } from "./provider/error-ui.js";
 import { ModelBrandIcon } from "./provider/ModelBrandIcon.js";
 
 export interface ProviderStepProps {
@@ -89,6 +89,12 @@ export function ProviderStep({
   const configured = providerState?.configured ?? false;
   const effectiveName = providerState?.name ?? null;
   const effectiveModel = providerState?.modelLabel ?? null;
+
+  const openLogsFolder = useCallback(() => {
+    // Fire-and-forget one-shot action: opening the OS file manager has no
+    // renderer state to track; failures are logged main-side.
+    void window.vex.support.openLogsFolder().catch(() => undefined);
+  }, []);
 
   const advanceToReview = useCallback(async () => {
     setClientError(null);
@@ -146,9 +152,15 @@ export function ProviderStep({
         }
         const result = await persistProvider(payload);
         if (!result.ok) {
+          // `details.causeCode` is the errno-shaped cause code attached by
+          // main (mapSdkError) — narrow defensively like AgentCoreStep's
+          // `details.violation`.
+          const causeCodeRaw = result.error.details?.causeCode;
           setServerError({
             code: result.error.code,
             correlationId: result.error.correlationId ?? null,
+            causeCode:
+              typeof causeCodeRaw === "string" ? causeCodeRaw : null,
           });
           return;
         }
@@ -323,12 +335,31 @@ export function ProviderStep({
             <p className="mt-1">
               {uiCopyFor(String(serverError.code)).body}
             </p>
+            {serverError.causeCode !== null ? (
+              <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+                Cause:{" "}
+                <code className="font-mono">{serverError.causeCode}</code>
+              </p>
+            ) : null}
+            {serverError.causeCode !== null &&
+            CAUSE_HINTS[serverError.causeCode] !== undefined ? (
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                {CAUSE_HINTS[serverError.causeCode]}
+              </p>
+            ) : null}
             {serverError.correlationId ? (
               <p className="mt-2 text-xs text-[var(--color-text-muted)]">
                 Correlation id:{" "}
                 <code className="font-mono">
                   {serverError.correlationId}
-                </code>
+                </code>{" "}
+                <button
+                  type="button"
+                  onClick={openLogsFolder}
+                  className="text-[var(--vex-onboarding-accent)] underline-offset-2 hover:underline"
+                >
+                  Open logs folder
+                </button>
               </p>
             ) : null}
           </div>

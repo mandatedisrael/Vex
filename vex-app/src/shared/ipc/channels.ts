@@ -239,8 +239,11 @@ export const CH = {
   },
 
   // Support — local-first bug report sink (Phase 1: persist; Phase 3: upload)
+  // + "Open logs folder" (error-diagnostics phase D-FOLDER): main opens the
+  // electron-log directory via shell.openPath; no in-app log viewer.
   support: {
     createBugReport: "vex:support:createBugReport",
+    openLogsFolder: "vex:support:openLogsFolder",
   },
 
   // Cancellation

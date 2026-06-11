@@ -465,3 +465,125 @@ describe("ProviderStep", () => {
     }
   });
 });
+
+// ── causeCode diagnostics + Open logs folder (error-diagnostics D-WIZARD) ───
+
+describe("ProviderStep cause-code diagnostics", () => {
+  const openLogsFolderMock = vi.fn();
+
+  beforeEach(() => {
+    openLogsFolderMock
+      .mockReset()
+      .mockResolvedValue({ ok: true, data: { opened: true } });
+    // Partial window.vex stub — only the support bridge surface this
+    // feature touches. defineProperty keeps it re-definable per test file.
+    Object.defineProperty(window, "vex", {
+      configurable: true,
+      value: { support: { openLogsFolder: openLogsFolderMock } },
+    });
+    mockUseEnvState.mockReturnValue(makeQueryResult(envState()));
+  });
+
+  /** Render the form, submit valid input, and wait for the error card. */
+  async function submitWithError(error: Record<string, unknown>) {
+    mockPersistProvider.mockResolvedValue({ ok: false, error });
+    const utils = renderWithQuery(
+      <ProviderStep
+        completedSteps={["keystore", "wallets", "apiKeys", "embedding", "agentCore"]}
+        onAdvance={mockOnAdvance}
+        flowMode="first-pass"
+      />,
+    );
+    fireEvent.input(utils.getByLabelText("OpenRouter API key"), {
+      target: { value: "sk-or-test" },
+    });
+    fireEvent.change(utils.getByLabelText("Model id"), {
+      target: { value: "anthropic/claude-sonnet-4.5" },
+    });
+    fireEvent.submit(
+      utils.container.querySelector(
+        '[data-vex-wizard-provider-form="openrouter"]',
+      )!,
+    );
+    await waitFor(() => {
+      expect(
+        utils.container.querySelector("[data-vex-provider-error]"),
+      ).not.toBeNull();
+    });
+    return utils;
+  }
+
+  const baseError = {
+    code: "provider.unavailable",
+    domain: "onboarding",
+    message: "RAW_SDK_MESSAGE_SHOULD_NEVER_RENDER",
+    retryable: true,
+    userActionable: true,
+    redacted: true,
+    correlationId: "req-cause-ui",
+  };
+
+  it("renders the Cause line + fixed hint for a known TLS cause code", async () => {
+    const { container } = await submitWithError({
+      ...baseError,
+      details: { causeCode: "UNABLE_TO_VERIFY_LEAF_SIGNATURE" },
+    });
+    const text = container.textContent ?? "";
+    expect(text).toContain("Cause:");
+    expect(text).toContain("UNABLE_TO_VERIFY_LEAF_SIGNATURE");
+    // Fixed-map hint for the TLS group.
+    expect(text).toContain("HTTPS scanning");
+  });
+
+  it("renders the Cause line WITHOUT a hint for an unknown errno", async () => {
+    const { container } = await submitWithError({
+      ...baseError,
+      details: { causeCode: "EWEIRD_FAILURE" },
+    });
+    const text = container.textContent ?? "";
+    expect(text).toContain("Cause:");
+    expect(text).toContain("EWEIRD_FAILURE");
+    // No hint copy from any of the three groups.
+    expect(text).not.toContain("antivirus");
+    expect(text).not.toContain("DNS lookup failed");
+    expect(text).not.toContain("firewall");
+  });
+
+  it("renders NO Cause line when details.causeCode is absent", async () => {
+    const { container, queryByText } = await submitWithError(baseError);
+    expect(queryByText(/Cause:/)).toBeNull();
+    expect(container.textContent).toContain("req-cause-ui");
+  });
+
+  it("ignores a non-string details.causeCode (defensive narrowing)", async () => {
+    const { queryByText } = await submitWithError({
+      ...baseError,
+      details: { causeCode: 1017 },
+    });
+    expect(queryByText(/Cause:/)).toBeNull();
+  });
+
+  it("'Open logs folder' calls the support bridge (fire-and-forget)", async () => {
+    const { getByText } = await submitWithError({
+      ...baseError,
+      details: { causeCode: "ENOTFOUND" },
+    });
+    fireEvent.click(getByText("Open logs folder"));
+    await waitFor(() => {
+      expect(openLogsFolderMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("swallows a rejected openLogsFolder call (no unhandled rejection surface)", async () => {
+    openLogsFolderMock.mockRejectedValue(new Error("bridge down"));
+    const { getByText, container } = await submitWithError(baseError);
+    fireEvent.click(getByText("Open logs folder"));
+    await waitFor(() => {
+      expect(openLogsFolderMock).toHaveBeenCalledTimes(1);
+    });
+    // Error card still rendered; no crash.
+    expect(
+      container.querySelector("[data-vex-provider-error]"),
+    ).not.toBeNull();
+  });
+});

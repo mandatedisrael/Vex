@@ -11,4 +11,7 @@ export const support = {
       createBugReportInputSchema
     );
   },
+  openLogsFolder() {
+    return invokeWithSchema(CH.support.openLogsFolder, {});
+  },
 } satisfies SupportBridge;

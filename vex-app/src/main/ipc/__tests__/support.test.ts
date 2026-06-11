@@ -21,6 +21,12 @@ interface MockFrame {
 const handlers = new Map<string, Handler>();
 const cleanupTasks = new Set<() => void | Promise<void>>();
 const serviceMock = vi.fn();
+const openPathMock = vi.fn();
+const mkdirMock = vi.fn();
+const realpathMock = vi.fn();
+const statMock = vi.fn();
+
+const FAKE_USER_DATA = "/fake/user-data";
 
 vi.mock("electron", () => ({
   ipcMain: {
@@ -33,6 +39,20 @@ vi.mock("electron", () => ({
   },
   app: {
     isPackaged: true,
+    getPath: () => FAKE_USER_DATA,
+  },
+  shell: {
+    openPath: (target: string) => openPathMock(target),
+  },
+}));
+
+// `support.ts` is the only module in this import graph that touches node:fs
+// (containment for openLogsFolder).
+vi.mock("node:fs", () => ({
+  promises: {
+    mkdir: (...args: unknown[]) => mkdirMock(...args),
+    realpath: (...args: unknown[]) => realpathMock(...args),
+    stat: (...args: unknown[]) => statMock(...args),
   },
 }));
 
@@ -86,11 +106,13 @@ const validPayload = {
   refs: {},
 };
 
-async function loadAndRegister(): Promise<Handler> {
+async function loadAndRegister(
+  channel = "vex:support:createBugReport",
+): Promise<Handler> {
   vi.resetModules();
   const mod = await import("../support.js");
   mod.registerSupportHandler();
-  const fn = handlers.get("vex:support:createBugReport");
+  const fn = handlers.get(channel);
   if (!fn) throw new Error("handler not registered");
   return fn;
 }
@@ -176,5 +198,104 @@ describe("registerSupportHandler", () => {
     expect(result.error.code).toBe("support.persist_failed");
     expect(result.error.domain).toBe("support");
     expect(result.error.correlationId).toBe(REQ_4);
+  });
+});
+
+// ── openLogsFolder (error-diagnostics plan D-FOLDER / §3.6) ──────────────────
+
+const REQ_5 = "55555555-aaaa-4aaa-8aaa-555555555555";
+const REAL_USER_DATA = "/real/user-data";
+const REAL_LOGS_DIR = "/real/user-data/logs";
+
+describe("registerSupportHandler — openLogsFolder", () => {
+  beforeEach(() => {
+    handlers.clear();
+    cleanupTasks.clear();
+    openPathMock.mockReset().mockResolvedValue("");
+    mkdirMock.mockReset().mockResolvedValue(undefined);
+    statMock.mockReset().mockResolvedValue({ isDirectory: () => true });
+    // Default: containment holds — logs dir resolves inside userData.
+    realpathMock.mockReset().mockImplementation(async (p: unknown) => {
+      if (p === FAKE_USER_DATA) return REAL_USER_DATA;
+      if (p === `${FAKE_USER_DATA}/logs`) return REAL_LOGS_DIR;
+      throw new Error(`unexpected realpath: ${String(p)}`);
+    });
+  });
+
+  it("opens the realpath-resolved logs dir and returns {opened:true} (output schema)", async () => {
+    const fn = await loadAndRegister("vex:support:openLogsFolder");
+    const result = await fn(trustedSender, { requestId: REQ_5, payload: {} });
+    expect(result).toEqual({ ok: true, data: { opened: true } });
+    // mkdir ensures the dir exists before realpath.
+    expect(mkdirMock).toHaveBeenCalledWith(`${FAKE_USER_DATA}/logs`, {
+      recursive: true,
+    });
+    // shell.openPath receives the RESOLVED path, never the joined candidate.
+    expect(openPathMock).toHaveBeenCalledTimes(1);
+    expect(openPathMock).toHaveBeenCalledWith(REAL_LOGS_DIR);
+  });
+
+  it("rejects when realpath escapes userData (symlink traversal) — openPath never called", async () => {
+    realpathMock.mockImplementation(async (p: unknown) => {
+      if (p === FAKE_USER_DATA) return REAL_USER_DATA;
+      // Symlink swap: logs dir resolves OUTSIDE userData.
+      return "/evil/elsewhere";
+    });
+    const fn = await loadAndRegister("vex:support:openLogsFolder");
+    const result = (await fn(trustedSender, {
+      requestId: REQ_5,
+      payload: {},
+    })) as { ok: false; error: { code: string; domain: string } };
+    expect(result.ok).toBe(false);
+    expect(result.error.code).toBe("internal.unexpected");
+    expect(result.error.domain).toBe("support");
+    expect(openPathMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the resolved path is not a directory", async () => {
+    statMock.mockResolvedValue({ isDirectory: () => false });
+    const fn = await loadAndRegister("vex:support:openLogsFolder");
+    const result = (await fn(trustedSender, {
+      requestId: REQ_5,
+      payload: {},
+    })) as { ok: false; error: { code: string } };
+    expect(result.ok).toBe(false);
+    expect(result.error.code).toBe("internal.unexpected");
+    expect(openPathMock).not.toHaveBeenCalled();
+  });
+
+  it("maps a shell.openPath failure message to internal.unexpected", async () => {
+    openPathMock.mockResolvedValue("no file manager available");
+    const fn = await loadAndRegister("vex:support:openLogsFolder");
+    const result = (await fn(trustedSender, {
+      requestId: REQ_5,
+      payload: {},
+    })) as { ok: false; error: { code: string; domain: string; correlationId: string } };
+    expect(result.ok).toBe(false);
+    expect(result.error.code).toBe("internal.unexpected");
+    expect(result.error.domain).toBe("support");
+    expect(result.error.correlationId).toBe(REQ_5);
+  });
+
+  it("rejects a non-empty payload at the schema boundary (strict empty input)", async () => {
+    const fn = await loadAndRegister("vex:support:openLogsFolder");
+    const result = (await fn(trustedSender, {
+      requestId: REQ_5,
+      payload: { path: "/etc" },
+    })) as { ok: false; error: { code: string } };
+    expect(result.ok).toBe(false);
+    expect(result.error.code).toBe("validation.invalid_input");
+    expect(openPathMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an untrusted sender frame", async () => {
+    const fn = await loadAndRegister("vex:support:openLogsFolder");
+    const result = (await fn(senderFrame("https://evil.example/"), {
+      requestId: REQ_5,
+      payload: {},
+    })) as { ok: false; error: { code: string } };
+    expect(result.ok).toBe(false);
+    expect(result.error.code).toBe("validation.invalid_sender");
+    expect(openPathMock).not.toHaveBeenCalled();
   });
 });

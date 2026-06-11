@@ -82,6 +82,8 @@ vi.mock("../../logger/index.js", () => ({
 const { verifyOpenRouterConnection } = await import(
   "../openrouter-test-client.js"
 );
+const { log } = await import("../../logger/index.js");
+const { isValidVexErrorShape } = await import("../../ipc/error-normalize.js");
 
 beforeEach(() => {
   sdkSpies.ctor.mockReset();
@@ -289,5 +291,135 @@ describe("verifyOpenRouterConnection", () => {
       { correlationId: "req-cid-test" },
     );
     if (!r.ok) expect(r.error.correlationId).toBe("req-cid-test");
+  });
+});
+
+// ── causeCode diagnostics (error-diagnostics plan D-WIZARD) ──────────────────
+
+/** Build an errno-carrying low-level Error (like Node net/tls failures). */
+function errnoError(code: unknown, message = "low-level transport failure"): Error {
+  const e = new Error(message);
+  Object.assign(e, { code });
+  return e;
+}
+
+function warnLines(): string[] {
+  return vi.mocked(log.warn).mock.calls.map((call) => String(call[0]));
+}
+
+describe("mapSdkError causeCode diagnostics", () => {
+  beforeEach(() => {
+    vi.mocked(log.warn).mockClear();
+  });
+
+  it("ConnectionError with a nested errno cause → details.causeCode + causeCode= in the log line", async () => {
+    const sdkErr = new FakeConnectionError("net");
+    Object.assign(sdkErr, {
+      cause: errnoError(
+        "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+        "unable to verify the first certificate RAW_CAUSE_LEAK",
+      ),
+    });
+    sdkSpies.chatSend.mockRejectedValue(sdkErr);
+    const r = await verifyOpenRouterConnection(
+      { apiKey: "sk-or-test", model: "x" },
+      { correlationId: "req-cause-1" },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe("provider.unavailable");
+      expect(r.error.details).toEqual({
+        causeCode: "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+      });
+      // Still a valid VexError shape (details is whitelisted).
+      expect(isValidVexErrorShape(r.error)).toBe(true);
+      // The cause's raw message text never crosses.
+      expect(r.error.message).not.toContain("RAW_CAUSE_LEAK");
+      expect(JSON.stringify(r.error)).not.toContain("RAW_CAUSE_LEAK");
+    }
+    expect(
+      warnLines().some((line) =>
+        line.includes("causeCode=UNABLE_TO_VERIFY_LEAF_SIGNATURE"),
+      ),
+    ).toBe(true);
+  });
+
+  it("finds the errno deeper in the cause chain (depth 3)", async () => {
+    const deep = new Error("wrap-2", {
+      cause: new Error("wrap-1", { cause: errnoError("ENOTFOUND") }),
+    });
+    const sdkErr = new FakeRequestAbortedError("aborted");
+    Object.assign(sdkErr, { cause: deep });
+    sdkSpies.chatSend.mockRejectedValue(sdkErr);
+    const r = await verifyOpenRouterConnection(
+      { apiKey: "sk-or-test", model: "x" },
+      { correlationId: "req-cause-2" },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.details).toEqual({ causeCode: "ENOTFOUND" });
+    }
+    expect(
+      warnLines().some((line) => line.includes("causeCode=ENOTFOUND")),
+    ).toBe(true);
+  });
+
+  it("OpenRouterError branch also carries details.causeCode when a cause exists", async () => {
+    const sdkErr = new FakeOpenRouterError("svc", 503);
+    Object.assign(sdkErr, { cause: errnoError("ECONNRESET") });
+    sdkSpies.chatSend.mockRejectedValue(sdkErr);
+    const r = await verifyOpenRouterConnection(
+      { apiKey: "sk-or-test", model: "x" },
+      { correlationId: "req-cause-3" },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe("provider.unavailable");
+      expect(r.error.details).toEqual({ causeCode: "ECONNRESET" });
+      expect(isValidVexErrorShape(r.error)).toBe(true);
+    }
+  });
+
+  it("generic fallback branch carries details.causeCode too", async () => {
+    sdkSpies.chatSend.mockRejectedValue(
+      new Error("fetch failed", { cause: errnoError("EAI_AGAIN") }),
+    );
+    const r = await verifyOpenRouterConnection(
+      { apiKey: "sk-or-test", model: "x" },
+      { correlationId: "req-cause-4" },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe("provider.test_failed");
+      expect(r.error.details).toEqual({ causeCode: "EAI_AGAIN" });
+    }
+  });
+
+  it("absent cause → details omitted entirely", async () => {
+    sdkSpies.chatSend.mockRejectedValue(new FakeRequestTimeoutError("t"));
+    const r = await verifyOpenRouterConnection(
+      { apiKey: "sk-or-test", model: "x" },
+      { correlationId: "req-cause-5" },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect("details" in r.error).toBe(false);
+      expect(isValidVexErrorShape(r.error)).toBe(true);
+    }
+    expect(warnLines().some((line) => line.includes("causeCode="))).toBe(false);
+  });
+
+  it("numeric cause code is ignored (different dictionary) → no details", async () => {
+    const sdkErr = new FakeConnectionError("net");
+    Object.assign(sdkErr, { cause: errnoError(1017) });
+    sdkSpies.chatSend.mockRejectedValue(sdkErr);
+    const r = await verifyOpenRouterConnection(
+      { apiKey: "sk-or-test", model: "x" },
+      { correlationId: "req-cause-6" },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect("details" in r.error).toBe(false);
+    }
   });
 });

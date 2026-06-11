@@ -31,6 +31,7 @@ import { registerAllIpcHandlers } from "./ipc/register-all.js";
 import { cleanupOnBoot, cleanupOnQuit } from "./lifecycle/secret-cleanup.js";
 import { globalCleanup } from "./lifecycle/cleanup-registry.js";
 import { makeOrderedQuitCleanup } from "./lifecycle/ordered-quit-cleanup.js";
+import { installEngineLogBridge } from "./agent/engine-log-bridge.js";
 import { setupCompactWorker } from "./agent/compact-worker.js";
 import { setupWakeWorker } from "./agent/wake-worker.js";
 import { setupSyncWorker } from "./agent/sync-worker.js";
@@ -55,6 +56,16 @@ mkdirSync(ELECTRON_STATE_DIR, { recursive: true });
 app.setPath("userData", ELECTRON_STATE_DIR);
 
 configureLogger();
+
+/**
+ * Engine runtime logs (winston → stderr only) additionally forward into the
+ * electron-log file sink so packaged-app failures (inference api_unreachable,
+ * sync fails, stale recovery, …) are diagnosable from disk. Installed right
+ * after logger init — BEFORE IPC handlers and the agent workers start — so no
+ * engine code path can log before the bridge exists. One-way by design:
+ * electron-log never writes back through winston (no loop).
+ */
+installEngineLogBridge();
 
 /**
  * WSL2 GPU mitigation: WSLg's virtualized GPU sometimes fails Chromium's

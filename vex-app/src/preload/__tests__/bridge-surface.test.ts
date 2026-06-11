@@ -149,6 +149,8 @@ describe("preload bridge surface", () => {
       "CH.memory.listSession",
       "CH.memory.getStats",
       "CH.sessions.getModel",
+      // Error-diagnostics phase (D-FOLDER) — "Open logs folder".
+      "CH.support.openLogsFolder",
     ];
     const corpus = PRELOAD_FILES.map((f) => readFileSync(f, "utf8")).join("\n");
     for (const channel of expected) {
