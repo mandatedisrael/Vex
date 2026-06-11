@@ -31,6 +31,15 @@ export const turnUsageDtoSchema = z
     reasoningTokens: z.number().int().min(0),
     /** `null` when the DB `NUMERIC` could not be coerced to a finite JS number. */
     cost: z.number().nullable(),
+    /**
+     * NET cache savings (read savings − write surcharge) for this turn.
+     * Deliberately NO `.min(0)` — a write-heavy explicit-cache request
+     * yields a real NEGATIVE net, and clamping it would turn every read of
+     * such a session into a contract violation. `null` when the NUMERIC
+     * could not be coerced.
+     */
+    cachedSavings: z.number().nullable(),
+    cacheWriteTokens: z.number().int().min(0),
     currency: z.string().min(1).max(8),
     provider: z.string().nullable(),
     model: z.string().nullable(),
@@ -52,7 +61,13 @@ export const sessionUsageTotalsDtoSchema = z
     totalPromptTokens: z.number().int().min(0),
     totalCompletionTokens: z.number().int().min(0),
     totalTokens: z.number().int().min(0),
+    totalCachedTokens: z.number().int().min(0),
     totalCost: z.number().nullable(),
+    /**
+     * Session-summed NET cache savings. NO `.min(0)` (negative net is
+     * real — see `turnUsageDtoSchema.cachedSavings`).
+     */
+    totalCachedSavings: z.number().nullable(),
     currency: z.string().min(1).max(8),
     requestCount: z.number().int().min(0),
     lastRequestAt: z.string().datetime({ offset: true }).nullable(),

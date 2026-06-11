@@ -74,7 +74,9 @@ describe("usage-db mapper", () => {
           total_prompt: "0",
           total_completion: "0",
           total_total: "0",
+          total_cached_tokens: "0",
           total_cost: null,
+          total_cached_savings: null,
           request_count: "0",
           last_request_at: null,
         },
@@ -88,21 +90,44 @@ describe("usage-db mapper", () => {
       totalPromptTokens: 0,
       totalCompletionTokens: 0,
       totalTokens: 0,
+      totalCachedTokens: 0,
       totalCost: null,
+      totalCachedSavings: null,
       currency: "USD",
       requestCount: 0,
       lastRequestAt: null,
     });
   });
 
-  it("coerces NUMERIC strings to JS numbers", async () => {
+  it("zero-row result (no rows at all) falls back to the all-zero DTO with new fields", async () => {
+    mocks.query.mockResolvedValueOnce({ rows: [] });
+    const result = await getSessionTotals(SESSION, "USD");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toEqual({
+      sessionId: SESSION,
+      totalPromptTokens: 0,
+      totalCompletionTokens: 0,
+      totalTokens: 0,
+      totalCachedTokens: 0,
+      totalCost: null,
+      totalCachedSavings: null,
+      currency: "USD",
+      requestCount: 0,
+      lastRequestAt: null,
+    });
+  });
+
+  it("coerces NUMERIC strings to JS numbers (incl. cached SUMs)", async () => {
     mocks.query.mockResolvedValueOnce({
       rows: [
         {
           total_prompt: "1500",
           total_completion: "750",
           total_total: "2250",
+          total_cached_tokens: "900",
           total_cost: "0.0023",
+          total_cached_savings: "0.0011",
           request_count: "5",
           last_request_at: "2026-05-21T10:00:00.000Z",
         },
@@ -113,8 +138,31 @@ describe("usage-db mapper", () => {
     if (!result.ok) return;
     expect(result.data.totalPromptTokens).toBe(1500);
     expect(result.data.totalCompletionTokens).toBe(750);
+    expect(result.data.totalCachedTokens).toBe(900);
     expect(result.data.totalCost).toBeCloseTo(0.0023, 6);
+    expect(result.data.totalCachedSavings).toBeCloseTo(0.0011, 6);
     expect(result.data.requestCount).toBe(5);
+  });
+
+  it("preserves a NEGATIVE cached-savings sum (write-heavy session — never clamped)", async () => {
+    mocks.query.mockResolvedValueOnce({
+      rows: [
+        {
+          total_prompt: "1000",
+          total_completion: "100",
+          total_total: "1100",
+          total_cached_tokens: "200",
+          total_cost: "0.01",
+          total_cached_savings: "-0.0033",
+          request_count: "1",
+          last_request_at: "2026-05-21T10:00:00.000Z",
+        },
+      ],
+    });
+    const result = await getSessionTotals(SESSION, "USD");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.totalCachedSavings).toBeCloseTo(-0.0033, 6);
   });
 
   it("collapses unparseable NUMERIC strings to null cost", async () => {
@@ -124,7 +172,9 @@ describe("usage-db mapper", () => {
           total_prompt: "10",
           total_completion: "5",
           total_total: "15",
+          total_cached_tokens: "0",
           total_cost: "not-a-number",
+          total_cached_savings: "not-a-number",
           request_count: "1",
           last_request_at: "2026-05-21T10:00:00.000Z",
         },
@@ -134,6 +184,7 @@ describe("usage-db mapper", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.data.totalCost).toBeNull();
+    expect(result.data.totalCachedSavings).toBeNull();
   });
 
   it("getLastTurn returns null for empty session, never an error", async () => {
@@ -155,6 +206,8 @@ describe("usage-db mapper", () => {
           cached_tokens: null,
           reasoning_tokens: "5",
           cost: "0.001",
+          cached_savings: "0.0004",
+          cache_write_tokens: "12",
           provider: "openrouter",
           model: "anthropic/claude-opus-4.7",
           currency: "USD",
@@ -171,6 +224,35 @@ describe("usage-db mapper", () => {
     expect(result.data.cachedTokens).toBe(0);
     expect(result.data.reasoningTokens).toBe(5);
     expect(result.data.cost).toBeCloseTo(0.001, 6);
+    expect(result.data.cachedSavings).toBeCloseTo(0.0004, 6);
+    expect(result.data.cacheWriteTokens).toBe(12);
+  });
+
+  it("getLastTurn preserves NEGATIVE cached_savings (cache overhead) via toCost", async () => {
+    mocks.query.mockResolvedValueOnce({
+      rows: [
+        {
+          session_id: SESSION,
+          prompt_tokens: "100",
+          completion_tokens: 50,
+          total_tokens: "150",
+          cached_tokens: "20",
+          reasoning_tokens: "0",
+          cost: "0.001",
+          cached_savings: "-0.0021",
+          cache_write_tokens: "8000",
+          provider: "openrouter",
+          model: "anthropic/claude-opus-4.7",
+          currency: "USD",
+          created_at: "2026-05-21T10:00:00.000Z",
+        },
+      ],
+    });
+    const result = await getLastTurn(SESSION, "USD");
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.data === null) return;
+    expect(result.data.cachedSavings).toBeCloseTo(-0.0021, 6);
+    expect(result.data.cacheWriteTokens).toBe(8000);
   });
 
   it("getContextWindow returns null when the session row is missing/deleted/out-of-scope", async () => {

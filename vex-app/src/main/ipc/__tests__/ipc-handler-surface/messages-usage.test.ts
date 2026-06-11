@@ -231,7 +231,9 @@ describe("usage handlers", () => {
         totalPromptTokens: 0,
         totalCompletionTokens: 0,
         totalTokens: 0,
+        totalCachedTokens: 0,
         totalCost: null,
+        totalCachedSavings: null,
         currency: "USD",
         requestCount: 0,
         lastRequestAt: null,
@@ -242,6 +244,57 @@ describe("usage handlers", () => {
       currency: "USD",
     });
     expect(result.ok).toBe(true);
+  });
+
+  it("getSessionTotals passes a NEGATIVE cached-savings total through the result schema (no .min(0))", async () => {
+    mocks.getSessionTotals.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        sessionId: SESSION,
+        totalPromptTokens: 1000,
+        totalCompletionTokens: 100,
+        totalTokens: 1100,
+        totalCachedTokens: 200,
+        totalCost: 0.01,
+        totalCachedSavings: -0.0033,
+        currency: "USD",
+        requestCount: 1,
+        lastRequestAt: "2026-05-21T10:00:00.000Z",
+      },
+    });
+    const result = await call(CH.usage.getSessionTotals, {
+      sessionId: SESSION,
+      currency: "USD",
+    });
+    expect(result.ok).toBe(true);
+    expect((result.data as { totalCachedSavings: number }).totalCachedSavings).toBeCloseTo(-0.0033, 6);
+  });
+
+  it("getLastTurn returns a turn DTO carrying the cache-savings fields", async () => {
+    mocks.getLastTurn.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        sessionId: SESSION,
+        promptTokens: 100,
+        completionTokens: 50,
+        totalTokens: 150,
+        cachedTokens: 30,
+        reasoningTokens: 0,
+        cost: 0.001,
+        cachedSavings: 0.0004,
+        cacheWriteTokens: 12,
+        currency: "USD",
+        provider: "openrouter",
+        model: "anthropic/claude-opus-4.7",
+        createdAt: "2026-05-21T10:00:00.000Z",
+      },
+    });
+    const result = await call(CH.usage.getLastTurn, {
+      sessionId: SESSION,
+      currency: "USD",
+    });
+    expect(result.ok).toBe(true);
+    expect((result.data as { cacheWriteTokens: number }).cacheWriteTokens).toBe(12);
   });
 
   it("getLastTurn rejects payload without sessionId", async () => {

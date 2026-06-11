@@ -9,8 +9,14 @@
  *     id SERIAL PK,
  *     session_id, prompt_tokens, completion_tokens, total_tokens,
  *     cached_tokens, reasoning_tokens,
- *     cost NUMERIC, provider, model, currency, created_at
+ *     cost NUMERIC, provider, model, currency, created_at,
+ *     cached_savings NUMERIC, cache_write_tokens INT   -- migration 032
  *   )
+ *
+ * `cached_savings` is the NET cache effect (read savings − write
+ * surcharge) and can legitimately be NEGATIVE (first request of an
+ * explicit-cache prefix writes more than it reads) — mapped via `toCost`,
+ * never clamped.
  */
 
 import { Client, type ClientConfig } from "pg";
@@ -101,6 +107,8 @@ interface UsageRow {
   readonly cached_tokens: number | string | null;
   readonly reasoning_tokens: number | string | null;
   readonly cost: number | string | null;
+  readonly cached_savings: number | string | null;
+  readonly cache_write_tokens: number | string | null;
   readonly provider: string | null;
   readonly model: string | null;
   readonly currency: string | null;
@@ -111,7 +119,9 @@ interface UsageTotalsRow {
   readonly total_prompt: number | string | null;
   readonly total_completion: number | string | null;
   readonly total_total: number | string | null;
+  readonly total_cached_tokens: number | string | null;
   readonly total_cost: number | string | null;
+  readonly total_cached_savings: number | string | null;
   readonly request_count: number | string;
   readonly last_request_at: string | Date | null;
 }
@@ -154,6 +164,9 @@ function toTurnDto(row: UsageRow): TurnUsageDto {
     cachedTokens: toInt(row.cached_tokens),
     reasoningTokens: toInt(row.reasoning_tokens),
     cost: toCost(row.cost),
+    // NET savings — NUMERIC, can be negative; `toCost` preserves the sign.
+    cachedSavings: toCost(row.cached_savings),
+    cacheWriteTokens: toInt(row.cache_write_tokens),
     currency: row.currency ?? USAGE_DEFAULT_CURRENCY,
     provider: row.provider,
     model: row.model,
@@ -172,7 +185,9 @@ export async function getSessionTotals(
             COALESCE(SUM(prompt_tokens), 0)     AS total_prompt,
             COALESCE(SUM(completion_tokens), 0) AS total_completion,
             COALESCE(SUM(total_tokens), 0)      AS total_total,
+            COALESCE(SUM(cached_tokens), 0)     AS total_cached_tokens,
             SUM(cost)                            AS total_cost,
+            SUM(cached_savings)                  AS total_cached_savings,
             COUNT(*)                             AS request_count,
             MAX(created_at)                      AS last_request_at
            FROM usage_log
@@ -187,7 +202,9 @@ export async function getSessionTotals(
           totalPromptTokens: 0,
           totalCompletionTokens: 0,
           totalTokens: 0,
+          totalCachedTokens: 0,
           totalCost: null,
+          totalCachedSavings: null,
           currency,
           requestCount: 0,
           lastRequestAt: null,
@@ -198,7 +215,10 @@ export async function getSessionTotals(
         totalPromptTokens: toInt(row.total_prompt),
         totalCompletionTokens: toInt(row.total_completion),
         totalTokens: toInt(row.total_total),
+        totalCachedTokens: toInt(row.total_cached_tokens),
         totalCost: toCost(row.total_cost),
+        // NET savings sum — can be negative; sign preserved.
+        totalCachedSavings: toCost(row.total_cached_savings),
         currency,
         requestCount: toInt(row.request_count),
         lastRequestAt: toIsoOrNull(row.last_request_at),
@@ -217,7 +237,8 @@ export async function getLastTurn(
     try {
       const result = await client.query<UsageRow>(
         `SELECT session_id, prompt_tokens, completion_tokens, total_tokens,
-                cached_tokens, reasoning_tokens, cost, provider, model,
+                cached_tokens, reasoning_tokens, cost, cached_savings,
+                cache_write_tokens, provider, model,
                 currency, created_at
            FROM usage_log
           WHERE session_id = $1

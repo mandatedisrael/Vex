@@ -13,8 +13,9 @@ const SESSION = "00000000-0000-4000-8000-000000000005";
 const ISO = "2026-05-21T10:00:00.000Z";
 
 describe("usage schemas", () => {
-  it("turnUsageDtoSchema accepts a typical row with USD currency", () => {
-    const parsed = turnUsageDtoSchema.safeParse({
+  // Canonical strict fixtures — the new cache-savings fields are REQUIRED.
+  function turnFixture(overrides: Record<string, unknown> = {}) {
+    return {
       sessionId: SESSION,
       promptTokens: 100,
       completionTokens: 50,
@@ -22,60 +23,127 @@ describe("usage schemas", () => {
       cachedTokens: 10,
       reasoningTokens: 5,
       cost: 0.001,
+      cachedSavings: 0.0004,
+      cacheWriteTokens: 12,
       currency: "USD",
       provider: "openrouter",
       model: "anthropic/claude-opus-4.7",
       createdAt: ISO,
-    });
-    expect(parsed.success).toBe(true);
-  });
+      ...overrides,
+    };
+  }
 
-  it("turnUsageDtoSchema rejects negative token counts", () => {
-    const parsed = turnUsageDtoSchema.safeParse({
-      sessionId: SESSION,
-      promptTokens: -1,
-      completionTokens: 0,
-      totalTokens: 0,
-      cachedTokens: 0,
-      reasoningTokens: 0,
-      cost: null,
-      currency: "USD",
-      provider: null,
-      model: null,
-      createdAt: ISO,
-    });
-    expect(parsed.success).toBe(false);
-  });
-
-  it("turnUsageDtoSchema permits nullable provider/model/cost for legacy rows", () => {
-    const parsed = turnUsageDtoSchema.safeParse({
-      sessionId: SESSION,
-      promptTokens: 0,
-      completionTokens: 0,
-      totalTokens: 0,
-      cachedTokens: 0,
-      reasoningTokens: 0,
-      cost: null,
-      currency: "USD",
-      provider: null,
-      model: null,
-      createdAt: ISO,
-    });
-    expect(parsed.success).toBe(true);
-  });
-
-  it("sessionUsageTotalsDtoSchema accepts all-zero totals (empty session)", () => {
-    const parsed = sessionUsageTotalsDtoSchema.safeParse({
+  function totalsFixture(overrides: Record<string, unknown> = {}) {
+    return {
       sessionId: SESSION,
       totalPromptTokens: 0,
       totalCompletionTokens: 0,
       totalTokens: 0,
+      totalCachedTokens: 0,
       totalCost: null,
+      totalCachedSavings: null,
       currency: "USD",
       requestCount: 0,
       lastRequestAt: null,
-    });
+      ...overrides,
+    };
+  }
+
+  it("turnUsageDtoSchema accepts a typical row with USD currency", () => {
+    const parsed = turnUsageDtoSchema.safeParse(turnFixture());
     expect(parsed.success).toBe(true);
+  });
+
+  it("turnUsageDtoSchema requires the cache fields (missing cachedSavings/cacheWriteTokens fails)", () => {
+    const { cachedSavings: _s, cacheWriteTokens: _w, ...withoutCacheFields } = turnFixture();
+    expect(turnUsageDtoSchema.safeParse(withoutCacheFields).success).toBe(false);
+  });
+
+  it("turnUsageDtoSchema accepts NEGATIVE cachedSavings (net cache overhead is real — no .min(0))", () => {
+    const parsed = turnUsageDtoSchema.safeParse(
+      turnFixture({ cachedSavings: -0.0021, cacheWriteTokens: 8000 }),
+    );
+    expect(parsed.success).toBe(true);
+  });
+
+  it("turnUsageDtoSchema rejects negative cacheWriteTokens (int ≥ 0)", () => {
+    expect(
+      turnUsageDtoSchema.safeParse(turnFixture({ cacheWriteTokens: -1 })).success,
+    ).toBe(false);
+  });
+
+  it("turnUsageDtoSchema rejects unknown keys (strict)", () => {
+    expect(
+      turnUsageDtoSchema.safeParse(turnFixture({ extraKey: true })).success,
+    ).toBe(false);
+  });
+
+  it("turnUsageDtoSchema rejects negative token counts", () => {
+    const parsed = turnUsageDtoSchema.safeParse(
+      turnFixture({
+        promptTokens: -1,
+        completionTokens: 0,
+        totalTokens: 0,
+        cachedTokens: 0,
+        reasoningTokens: 0,
+        cost: null,
+        provider: null,
+        model: null,
+      }),
+    );
+    expect(parsed.success).toBe(false);
+  });
+
+  it("turnUsageDtoSchema permits nullable provider/model/cost/cachedSavings for legacy rows", () => {
+    const parsed = turnUsageDtoSchema.safeParse(
+      turnFixture({
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        cachedTokens: 0,
+        reasoningTokens: 0,
+        cost: null,
+        cachedSavings: null,
+        cacheWriteTokens: 0,
+        provider: null,
+        model: null,
+      }),
+    );
+    expect(parsed.success).toBe(true);
+  });
+
+  it("sessionUsageTotalsDtoSchema accepts all-zero totals (empty session)", () => {
+    const parsed = sessionUsageTotalsDtoSchema.safeParse(totalsFixture());
+    expect(parsed.success).toBe(true);
+  });
+
+  it("sessionUsageTotalsDtoSchema requires the new cache totals fields", () => {
+    const { totalCachedTokens: _t, totalCachedSavings: _s, ...without } = totalsFixture();
+    expect(sessionUsageTotalsDtoSchema.safeParse(without).success).toBe(false);
+  });
+
+  it("sessionUsageTotalsDtoSchema accepts a NEGATIVE totalCachedSavings (no .min(0))", () => {
+    const parsed = sessionUsageTotalsDtoSchema.safeParse(
+      totalsFixture({
+        totalPromptTokens: 1000,
+        totalTokens: 1100,
+        totalCachedTokens: 200,
+        totalCost: 0.01,
+        totalCachedSavings: -0.0033,
+        requestCount: 1,
+        lastRequestAt: ISO,
+      }),
+    );
+    expect(parsed.success).toBe(true);
+  });
+
+  it("sessionUsageTotalsDtoSchema rejects negative totalCachedTokens and unknown keys", () => {
+    expect(
+      sessionUsageTotalsDtoSchema.safeParse(totalsFixture({ totalCachedTokens: -1 })).success,
+    ).toBe(false);
+    expect(
+      sessionUsageTotalsDtoSchema.safeParse(totalsFixture({ extraKey: 1 })).success,
+    ).toBe(false);
   });
 
   it("usageInputSchema defaults currency to USD", () => {
@@ -87,19 +155,20 @@ describe("usage schemas", () => {
   it("lastTurnUsageResultSchema accepts null (empty session) and a turn DTO", () => {
     expect(lastTurnUsageResultSchema.safeParse(null).success).toBe(true);
     expect(
-      lastTurnUsageResultSchema.safeParse({
-        sessionId: SESSION,
-        promptTokens: 1,
-        completionTokens: 1,
-        totalTokens: 2,
-        cachedTokens: 0,
-        reasoningTokens: 0,
-        cost: 0,
-        currency: "USD",
-        provider: null,
-        model: null,
-        createdAt: ISO,
-      }).success,
+      lastTurnUsageResultSchema.safeParse(
+        turnFixture({
+          promptTokens: 1,
+          completionTokens: 1,
+          totalTokens: 2,
+          cachedTokens: 0,
+          reasoningTokens: 0,
+          cost: 0,
+          cachedSavings: 0,
+          cacheWriteTokens: 0,
+          provider: null,
+          model: null,
+        }),
+      ).success,
     ).toBe(true);
   });
 

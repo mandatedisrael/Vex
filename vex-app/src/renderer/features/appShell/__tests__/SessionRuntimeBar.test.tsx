@@ -77,12 +77,17 @@ const MODEL_UNCONFIGURED = {
 };
 
 function totals(requestCount: number, totalCost: number | null) {
+  // window.vex stubs are untyped — fields updated DELIBERATELY in lockstep
+  // with sessionUsageTotalsDtoSchema (totalCachedTokens/totalCachedSavings);
+  // tsc cannot catch drift here.
   return {
     sessionId: SESSION,
     totalPromptTokens: 50,
     totalCompletionTokens: 25,
     totalTokens: 75,
+    totalCachedTokens: 0,
     totalCost,
+    totalCachedSavings: null as number | null,
     currency: "USD",
     requestCount,
     lastRequestAt: requestCount > 0 ? ISO : null,
@@ -90,6 +95,7 @@ function totals(requestCount: number, totalCost: number | null) {
 }
 
 function lastTurn() {
+  // Deliberate lockstep with turnUsageDtoSchema (cachedSavings/cacheWriteTokens).
   return {
     sessionId: SESSION,
     promptTokens: 50,
@@ -98,6 +104,8 @@ function lastTurn() {
     cachedTokens: 0,
     reasoningTokens: 0,
     cost: 0.01,
+    cachedSavings: null as number | null,
+    cacheWriteTokens: 0,
     currency: "USD",
     provider: "openrouter",
     model: "anthropic/claude-opus-4.7",
@@ -299,6 +307,84 @@ describe("SessionRuntimeBar", () => {
     expect(
       container.querySelector('[aria-label="cached tokens"]'),
     ).toBeNull();
+  });
+
+  // ── Cache savings lines (D-UI-COST) ───────────────────────────
+
+  async function renderUsageTitle(
+    lastTurnDto: Record<string, unknown>,
+    totalsDto: Record<string, unknown>,
+  ): Promise<string> {
+    setVex({
+      getModel: vi.fn().mockResolvedValue(ok(MODEL_CONFIGURED)),
+      getLastTurn: vi.fn().mockResolvedValue(ok(lastTurnDto)),
+      getSessionTotals: vi.fn().mockResolvedValue(ok(totalsDto)),
+      getContextWindow: vi.fn().mockResolvedValue(ok(null)),
+    });
+    const { container } = render(
+      createElement(SessionRuntimeBar, { sessionId: SESSION }),
+      { wrapper: makeWrapper(freshClient()) },
+    );
+    let title = "";
+    await waitFor(() => {
+      const meter = container.querySelector('[data-vex-area="usage-meter"]');
+      expect(meter).not.toBeNull();
+      title = meter?.getAttribute("title") ?? "";
+      expect(title.length).toBeGreaterThan(0);
+    });
+    return title;
+  }
+
+  it("tooltip shows positive per-turn savings + session savings total", async () => {
+    const title = await renderUsageTitle(
+      { ...lastTurn(), cachedTokens: 800, cachedSavings: 0.0021 },
+      { ...totals(3, 0.05), totalCachedTokens: 800, totalCachedSavings: 0.0123 },
+    );
+    expect(title).toContain("Cached: 800 tokens (saved ~$0.0021)");
+    expect(title).toContain("Cache savings: $0.0123 total");
+    expect(title).not.toContain("Cache net:");
+    expect(title).not.toContain("cache overhead");
+  });
+
+  it("tooltip shows NEGATIVE savings as cache overhead / Cache net (sign-aware, never '$-')", async () => {
+    const title = await renderUsageTitle(
+      { ...lastTurn(), cachedTokens: 20, cachedSavings: -0.0021, cacheWriteTokens: 8000 },
+      { ...totals(1, 0.05), totalCachedTokens: 20, totalCachedSavings: -0.0033 },
+    );
+    expect(title).toContain("Cached: 20 tokens (cache overhead $0.0021)");
+    expect(title).toContain("Cache net: −$0.0033 total");
+    expect(title).not.toContain("$-");
+  });
+
+  it("tooltip omits savings lines when savings are null/zero (keeps the legacy cached line)", async () => {
+    const title = await renderUsageTitle(
+      { ...lastTurn(), cachedTokens: 800 }, // cachedSavings: null
+      { ...totals(1, 0.05), totalCachedTokens: 800, totalCachedSavings: 0 },
+    );
+    expect(title).toContain("Cached: 800 tokens read from cache");
+    expect(title).not.toContain("saved ~");
+    expect(title).not.toContain("Cache savings:");
+    expect(title).not.toContain("Cache net:");
+  });
+
+  it("⚡ chip gating unchanged: shows on cachedTokens > 0 even with negative savings", async () => {
+    setVex({
+      getModel: vi.fn().mockResolvedValue(ok(MODEL_CONFIGURED)),
+      getLastTurn: vi
+        .fn()
+        .mockResolvedValue(ok({ ...lastTurn(), cachedTokens: 800, cachedSavings: -0.001 })),
+      getSessionTotals: vi.fn().mockResolvedValue(ok(totals(1, 0.01))),
+      getContextWindow: vi.fn().mockResolvedValue(ok(null)),
+    });
+    const { container } = render(
+      createElement(SessionRuntimeBar, { sessionId: SESSION }),
+      { wrapper: makeWrapper(freshClient()) },
+    );
+    await waitFor(() => {
+      expect(
+        container.querySelector('[aria-label="cached tokens"]')?.textContent,
+      ).toContain("800");
+    });
   });
 });
 

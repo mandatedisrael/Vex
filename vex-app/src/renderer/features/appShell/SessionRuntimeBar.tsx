@@ -96,6 +96,16 @@ function fmtCost(cost: number): string {
   return cost >= 1 ? `$${cost.toFixed(2)}` : `$${cost.toFixed(4)}`;
 }
 
+/**
+ * Sign-aware cost formatter for cache savings. `fmtCost(-0.0012)` would
+ * render the misleading "$-0.0012"; negative NET savings (cache overhead /
+ * cache net) format the magnitude and carry an explicit minus sign. No
+ * pricing math here — the value arrives computed from the main process.
+ */
+function fmtSignedCost(cost: number): string {
+  return cost < 0 ? `−${fmtCost(Math.abs(cost))}` : fmtCost(cost);
+}
+
 function ModelIndicator({
   model,
 }: {
@@ -185,7 +195,18 @@ function buildUsageTitle(
       `Last turn: ${lastTurn.promptTokens} in / ${lastTurn.completionTokens} out` +
         ` (${lastTurn.totalTokens} total)`,
     );
-    if (lastTurn.cachedTokens > 0) {
+    // Per-turn cache line: when a NET savings figure exists and is non-zero
+    // it annotates the cached-token count (positive = saved, negative =
+    // overhead from cache writes); otherwise fall back to the plain
+    // cached-token line. Values arrive computed — no pricing math here.
+    const turnSavings = lastTurn.cachedSavings;
+    if (turnSavings !== null && turnSavings !== 0) {
+      lines.push(
+        turnSavings > 0
+          ? `Cached: ${lastTurn.cachedTokens} tokens (saved ~${fmtSignedCost(turnSavings)})`
+          : `Cached: ${lastTurn.cachedTokens} tokens (cache overhead ${fmtCost(Math.abs(turnSavings))})`,
+      );
+    } else if (lastTurn.cachedTokens > 0) {
       lines.push(`Cached: ${lastTurn.cachedTokens} tokens read from cache`);
     }
     if (lastTurn.reasoningTokens > 0) {
@@ -198,6 +219,14 @@ function buildUsageTitle(
     );
     if (totals.totalCost !== null) {
       lines.push(`Cost: ${fmtCost(totals.totalCost)} ${totals.currency}`);
+    }
+    const sessionSavings = totals.totalCachedSavings;
+    if (sessionSavings !== null && sessionSavings !== 0) {
+      lines.push(
+        sessionSavings > 0
+          ? `Cache savings: ${fmtSignedCost(sessionSavings)} total`
+          : `Cache net: ${fmtSignedCost(sessionSavings)} total`,
+      );
     }
   }
   return lines.join("\n");
