@@ -1,12 +1,15 @@
 /**
  * Memory panel — a read-only AppShell sub-view.
- * A thin composer over four sections, each in its own
+ * A thin composer over seven sections, each in its own
  * module so every file stays under the 400-line budget:
  *
  *  1. **Long-term memory** (S9 rewire) — `LongMemorySection.tsx`
- *  2. **Session memory** (7-2a) — `SessionMemorySection.tsx`
- *  3. **Compaction history** (7-2a) — `CompactionHistorySection.tsx`
- *  4. **Memory & privacy** (7-4) — `MemoryPrivacySection.tsx`
+ *  2. **Memory candidates** (S10 inspector) — `CandidatesSection.tsx`
+ *  3. **Manager decisions** (S10 inspector) — `DecisionsSection.tsx`
+ *  4. **Memory jobs** (S10 inspector) — `JobsSection.tsx`
+ *  5. **Session memory** (7-2a) — `SessionMemorySection.tsx`
+ *  6. **Compaction history** (7-2a) — `CompactionHistorySection.tsx`
+ *  7. **Memory & privacy** (7-4) — `MemoryPrivacySection.tsx`
  *
  * Every value is the sanitized DTO from main — never raw narrative bodies,
  * outstanding-item text, or embeddings. Session-scoped sections show a clear
@@ -19,6 +22,9 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { useUiStore } from "../../stores/uiStore.js";
 import { LongMemorySection } from "./LongMemorySection.js";
+import { CandidatesSection } from "./CandidatesSection.js";
+import { DecisionsSection } from "./DecisionsSection.js";
+import { JobsSection } from "./JobsSection.js";
 import { MemorySection } from "./SessionMemorySection.js";
 import { CompactionHistorySection } from "./CompactionHistorySection.js";
 import { MemoryPrivacySection } from "./MemoryPrivacySection.js";
@@ -54,6 +60,10 @@ export function MemoryPanel(): JSX.Element {
          * not on flex gaps, so the page reads as one continuous register. */}
         <div className="mx-auto flex w-full max-w-[760px] flex-col">
           <LongMemorySection />
+          {/* S10 inspector trio — read-only manager pipeline views. */}
+          <CandidatesSection />
+          <DecisionsSection />
+          <JobsSection />
           <MemorySection sessionId={activeSessionId} />
           <CompactionHistorySection sessionId={activeSessionId} />
           <MemoryPrivacySection />

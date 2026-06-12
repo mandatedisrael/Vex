@@ -79,6 +79,9 @@ describe("CH / EV channel constants", () => {
     expect(typeof CH.compaction.getStatus).toBe("string");
     expect(typeof CH.compaction.listHistory).toBe("string");
     expect(typeof CH.longMemory.list).toBe("string");
+    expect(typeof CH.memoryInspector.listCandidates).toBe("string");
+    expect(typeof CH.memoryInspector.listDecisions).toBe("string");
+    expect(typeof CH.memoryInspector.jobsSummary).toBe("string");
     expect(typeof CH.memory.listSession).toBe("string");
     expect(typeof CH.memory.getStats).toBe("string");
     expect(typeof CH.sessions.getModel).toBe("string");

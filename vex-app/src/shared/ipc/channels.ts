@@ -214,6 +214,17 @@ export const CH = {
     list: "vex:longMemory:list",
   },
 
+  // Memory-manager inspector (memory-system S10) — read-only window into the
+  // manager's pipeline: pending candidates, decision audit, and job queue
+  // status. Sanitized DTOs only (no content_md / evidence_refs / decision_hash
+  // / embeddings / last_error). ZERO mutation channels by doctrine: the memory
+  // lifecycle is exclusively manager-owned (S9).
+  memoryInspector: {
+    listCandidates: "vex:memoryInspector:listCandidates",
+    listDecisions: "vex:memoryInspector:listDecisions",
+    jobsSummary: "vex:memoryInspector:jobsSummary",
+  },
+
   // Memory — read-only per-session memory list + stats (stage 7-2a).
   // Sanitized HARD (no narrative bodies / raw outstanding items / embeddings);
   // outstanding work is exposed as counts. App-scoped; null for missing sessions.

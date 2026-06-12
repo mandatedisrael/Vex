@@ -145,6 +145,10 @@ describe("preload bridge surface", () => {
       "CH.compaction.listHistory",
       "CH.compaction.retry",
       "CH.longMemory.list",
+      // Memory-system S10 — read-only memory-manager inspector.
+      "CH.memoryInspector.listCandidates",
+      "CH.memoryInspector.listDecisions",
+      "CH.memoryInspector.jobsSummary",
       "CH.memory.listSession",
       "CH.memory.getStats",
       "CH.sessions.getModel",

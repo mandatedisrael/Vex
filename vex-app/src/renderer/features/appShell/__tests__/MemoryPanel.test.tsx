@@ -43,6 +43,9 @@ const listSessionMock = vi.fn();
 const getStatsMock = vi.fn();
 const listHistoryMock = vi.fn();
 const modelsListMock = vi.fn();
+const inspectorCandidatesMock = vi.fn();
+const inspectorDecisionsMock = vi.fn();
+const inspectorJobsSummaryMock = vi.fn();
 
 function setVex(): void {
   Object.defineProperty(window, "vex", {
@@ -50,6 +53,11 @@ function setVex(): void {
     writable: true,
     value: {
       longMemory: { list: longMemoryListMock },
+      memoryInspector: {
+        listCandidates: inspectorCandidatesMock,
+        listDecisions: inspectorDecisionsMock,
+        jobsSummary: inspectorJobsSummaryMock,
+      },
       memory: { listSession: listSessionMock, getStats: getStatsMock },
       compaction: { listHistory: listHistoryMock },
       models: { listAvailable: modelsListMock },
@@ -79,6 +87,22 @@ beforeEach(() => {
   // Tests that exercise the configured path override this.
   modelsListMock.mockResolvedValue(
     ok({ source: "unconfigured", models: [], fetchedAt: null }),
+  );
+  // S10 inspector defaults: empty pipeline. Tests that exercise the
+  // inspector sections override these.
+  inspectorCandidatesMock.mockResolvedValue(ok([]));
+  inspectorDecisionsMock.mockResolvedValue(ok([]));
+  inspectorJobsSummaryMock.mockResolvedValue(
+    ok({
+      countsByStatus: {
+        pending: 0,
+        running: 0,
+        completed: 0,
+        failed: 0,
+        permanently_failed: 0,
+      },
+      recentJobs: [],
+    }),
   );
 });
 
@@ -122,7 +146,7 @@ describe("MemoryPanel", () => {
     expect(screen.queryByText("SECRET_MEMORY_ENTRY_BODY")).toBeNull();
   });
 
-  it("exposes NO mutation affordances — lifecycle is manager-owned (S9)", async () => {
+  it("exposes NO mutation affordances — lifecycle is manager-owned (S9/S10)", async () => {
     longMemoryListMock.mockResolvedValue(
       ok([
         {
@@ -141,6 +165,82 @@ describe("MemoryPanel", () => {
         },
       ]),
     );
+    // Populate the S10 inspector sections too so the no-mutation pin
+    // covers rendered rows, not just empty states.
+    inspectorCandidatesMock.mockResolvedValue(
+      ok([
+        {
+          id: "00000000-0000-4000-8000-0000000000c1",
+          kind: "risk_rule",
+          title: "Candidate Y",
+          summary: "s",
+          tags: [],
+          source: "observed",
+          confidence: null,
+          importance: 5,
+          sensitivity: "normal",
+          evidenceStrength: "none",
+          retrievalVisibility: "not_consolidated",
+          status: "pending",
+          recordedAt: ISO,
+          promotedKnowledgeId: null,
+          createdAt: ISO,
+          updatedAt: ISO,
+        },
+      ]),
+    );
+    inspectorDecisionsMock.mockResolvedValue(
+      ok([
+        {
+          id: "42",
+          candidateId: "00000000-0000-4000-8000-0000000000c1",
+          reconcileEntryId: null,
+          jobId: 7,
+          decisionVersion: 0,
+          decisionType: "promote",
+          rejectReason: null,
+          promotedKnowledgeId: 12,
+          supersedesKnowledgeId: null,
+          mergeTargetKnowledgeId: null,
+          outcomeVersion: null,
+          inferenceProvider: null,
+          inferenceModel: null,
+          costUsd: null,
+          decidedBy: "manager",
+          decidedAt: ISO,
+        },
+      ]),
+    );
+    inspectorJobsSummaryMock.mockResolvedValue(
+      ok({
+        countsByStatus: {
+          pending: 1,
+          running: 0,
+          completed: 0,
+          failed: 0,
+          permanently_failed: 0,
+        },
+        recentJobs: [
+          {
+            id: 3,
+            jobKind: "consolidate",
+            status: "pending",
+            attemptCount: 0,
+            maxAttempts: 3,
+            wakePending: false,
+            nextAttemptAt: ISO,
+            itemsDone: 0,
+            itemsFailed: 0,
+            itemsTotal: 0,
+            costUsd: null,
+            llmCallCount: 0,
+            createdAt: ISO,
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+      }),
+    );
     setVex();
     const { container } = render(createElement(MemoryPanel), {
       wrapper: makeWrapper(freshClient()),
@@ -149,14 +249,29 @@ describe("MemoryPanel", () => {
     await waitFor(() => {
       expect(screen.getByText("Avoid X")).not.toBeNull();
     });
-    // The only buttons in the long-memory section are the filter pills —
-    // a row must never carry an action button (Archive/Invalidate died
-    // with S9).
-    expect(
-      container.querySelectorAll('[data-vex-section="long-memory"] li button'),
-    ).toHaveLength(0);
+    await waitFor(() => {
+      expect(screen.getByText("Candidate Y")).not.toBeNull();
+    });
+    // The only buttons in the memory sections are the filter pills — a row
+    // must never carry an action button (Archive/Invalidate died with S9;
+    // the S10 inspector is read-only by doctrine).
+    for (const section of [
+      "long-memory",
+      "memory-candidates",
+      "memory-decisions",
+      "memory-jobs",
+    ]) {
+      expect(
+        container.querySelectorAll(`[data-vex-section="${section}"] li button`),
+        section,
+      ).toHaveLength(0);
+    }
     expect(screen.queryByRole("button", { name: "Archive Avoid X" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Invalidate Avoid X" })).toBeNull();
+    // No retry/reset affordances on the inspector either (filter pills are
+    // type names like "Reject", so the pin targets action verbs only).
+    expect(screen.queryByRole("button", { name: /retry/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /reset/i })).toBeNull();
     // Copy explains the manager owns the lifecycle.
     expect(screen.getByText(/managed automatically/i)).not.toBeNull();
   });

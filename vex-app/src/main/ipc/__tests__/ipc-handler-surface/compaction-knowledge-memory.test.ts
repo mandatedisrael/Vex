@@ -31,6 +31,10 @@ const mocks = vi.hoisted(() => ({
   listCompactionHistory: vi.fn(),
   // long-memory-db
   listLongMemory: vi.fn(),
+  // memory-inspector-db
+  listInspectorCandidates: vi.fn(),
+  listInspectorDecisions: vi.fn(),
+  getJobsSummary: vi.fn(),
   // memory-db
   listSessionMemories: vi.fn(),
   getMemoryStats: vi.fn(),
@@ -85,6 +89,12 @@ vi.mock("../../../database/long-memory-db.js", () => ({
   listLongMemory: mocks.listLongMemory,
 }));
 
+vi.mock("../../../database/memory-inspector-db.js", () => ({
+  listInspectorCandidates: mocks.listInspectorCandidates,
+  listInspectorDecisions: mocks.listInspectorDecisions,
+  getJobsSummary: mocks.getJobsSummary,
+}));
+
 vi.mock("../../../database/memory-db.js", () => ({
   listSessionMemories: mocks.listSessionMemories,
   getMemoryStats: mocks.getMemoryStats,
@@ -110,6 +120,9 @@ const { registerMessagesHandlers } = await import("../../messages.js");
 const { registerUsageHandlers } = await import("../../usage.js");
 const { registerCompactionHandlers } = await import("../../compaction.js");
 const { registerLongMemoryHandlers } = await import("../../long-memory.js");
+const { registerMemoryInspectorHandlers } = await import(
+  "../../memory-inspector.js"
+);
 const { registerMemoryHandlers } = await import("../../memory.js");
 const { registerRuntimeHandlers } = await import("../../runtime.js");
 const { registerMissionHandlers } = await import("../../mission.js");
@@ -140,6 +153,7 @@ beforeEach(() => {
   registerUsageHandlers();
   registerCompactionHandlers();
   registerLongMemoryHandlers();
+  registerMemoryInspectorHandlers();
   registerMemoryHandlers();
   registerRuntimeHandlers();
   registerMissionHandlers();
@@ -255,6 +269,75 @@ describe("long-memory handler", () => {
 
   it("list rejects an out-of-range limit (bounded input)", async () => {
     const result = await call(CH.longMemory.list, { limit: 100_000 });
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation.invalid_input");
+  });
+});
+
+describe("memory-inspector handlers (S10 — read-only)", () => {
+  it("listCandidates returns the sanitized array and passes the parsed input", async () => {
+    mocks.listInspectorCandidates.mockResolvedValueOnce({ ok: true, data: [] });
+    const result = await call(CH.memoryInspector.listCandidates, {
+      limit: 100,
+    });
+    expect(result.ok).toBe(true);
+    expect(mocks.listInspectorCandidates).toHaveBeenCalledWith({ limit: 100 });
+  });
+
+  it("listCandidates rejects an out-of-range limit (bounded input)", async () => {
+    const result = await call(CH.memoryInspector.listCandidates, {
+      limit: 100_000,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation.invalid_input");
+  });
+
+  it("listDecisions returns the sanitized array and passes the parsed input", async () => {
+    mocks.listInspectorDecisions.mockResolvedValueOnce({ ok: true, data: [] });
+    const result = await call(CH.memoryInspector.listDecisions, {
+      decisionType: "promote",
+      limit: 50,
+    });
+    expect(result.ok).toBe(true);
+    expect(mocks.listInspectorDecisions).toHaveBeenCalledWith({
+      decisionType: "promote",
+      limit: 50,
+    });
+  });
+
+  it("listDecisions rejects an out-of-range limit (bounded input)", async () => {
+    const result = await call(CH.memoryInspector.listDecisions, {
+      limit: 100_000,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation.invalid_input");
+  });
+
+  it("jobsSummary returns the summary DTO and passes the parsed input", async () => {
+    mocks.getJobsSummary.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        countsByStatus: {
+          pending: 0,
+          running: 0,
+          completed: 0,
+          failed: 0,
+          permanently_failed: 0,
+        },
+        recentJobs: [],
+      },
+    });
+    const result = await call(CH.memoryInspector.jobsSummary, {
+      recentLimit: 20,
+    });
+    expect(result.ok).toBe(true);
+    expect(mocks.getJobsSummary).toHaveBeenCalledWith({ recentLimit: 20 });
+  });
+
+  it("jobsSummary rejects an out-of-range recentLimit (bounded input)", async () => {
+    const result = await call(CH.memoryInspector.jobsSummary, {
+      recentLimit: 100_000,
+    });
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("validation.invalid_input");
   });

@@ -19,6 +19,7 @@ import type { CompactionBridge } from "./compaction.js";
 import type { EngineEventsBridge } from "./engine.js";
 import type { LongMemoryBridge } from "./long-memory.js";
 import type { MemoryBridge } from "./memory.js";
+import type { MemoryInspectorBridge } from "./memory-inspector.js";
 import type { MessagesBridge } from "./messages.js";
 import type { MissionBridge } from "./mission.js";
 import type { ModelsBridge } from "./models.js";
@@ -33,6 +34,7 @@ export type { CompactionBridge } from "./compaction.js";
 export type { EngineEventsBridge } from "./engine.js";
 export type { LongMemoryBridge } from "./long-memory.js";
 export type { MemoryBridge } from "./memory.js";
+export type { MemoryInspectorBridge } from "./memory-inspector.js";
 export type { MessagesBridge } from "./messages.js";
 export type { MissionBridge } from "./mission.js";
 export type { ModelsBridge } from "./models.js";
@@ -56,6 +58,8 @@ export interface VexAgentBridge {
   /** Read-only long-term memory + per-session memory lists (7-2a, S9 rewire). */
   readonly longMemory: LongMemoryBridge;
   readonly memory: MemoryBridge;
+  /** Read-only memory-manager inspector: candidates / decisions / jobs (S10). */
+  readonly memoryInspector: MemoryInspectorBridge;
   /**
    * Engine -> renderer push events (transcript spine, future runtime
    * deltas, etc.). The namespace mirrors `EV.engine.<topic>` so the

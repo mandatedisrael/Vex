@@ -15,6 +15,7 @@ import { registerCompactionHandlers } from "./compaction.js";
 import { registerDatabaseHandlers } from "./database.js";
 import { registerLongMemoryHandlers } from "./long-memory.js";
 import { registerMemoryHandlers } from "./memory.js";
+import { registerMemoryInspectorHandlers } from "./memory-inspector.js";
 import { registerDockerHandlers } from "./docker.js";
 import { registerMessagesHandlers } from "./messages.js";
 import { registerMissionHandlers } from "./mission.js";
@@ -85,6 +86,9 @@ export function registerAllIpcHandlers(): void {
   teardowns.push(...registerCompactionHandlers());
   teardowns.push(...registerLongMemoryHandlers());
   teardowns.push(...registerMemoryHandlers());
+  // Memory-system S10: read-only memory-manager inspector (candidates /
+  // decisions / job queue). No mutation surface by doctrine.
+  teardowns.push(...registerMemoryInspectorHandlers());
   teardowns.push(...registerRuntimeHandlers());
   teardowns.push(...registerMissionHandlers());
   teardowns.push(...registerApprovalsHandlers());

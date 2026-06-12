@@ -21,6 +21,7 @@ import { compaction } from "./compaction.js";
 import { engine } from "./engine.js";
 import { longMemory } from "./long-memory.js";
 import { memory } from "./memory.js";
+import { memoryInspector } from "./memory-inspector.js";
 import { messages } from "./messages.js";
 import { mission } from "./mission.js";
 import { models } from "./models.js";
@@ -42,5 +43,6 @@ export const agentBridge = {
   compaction,
   longMemory,
   memory,
+  memoryInspector,
   engine,
 } satisfies VexAgentBridge;

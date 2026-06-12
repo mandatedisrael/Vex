@@ -101,6 +101,19 @@ export const longMemoryKeys = {
   list: (status: string) => ["longMemory", "list", status] as const,
 };
 
+/**
+ * Memory-manager inspector (S10) — global candidate buffer / decision audit /
+ * job queue, keyed by the active filter. Read-only; no mutation hooks exist.
+ */
+export const memoryInspectorKeys = {
+  all: ["memoryInspector"] as const,
+  candidates: (status: string) =>
+    ["memoryInspector", "candidates", status] as const,
+  decisions: (decisionType: string) =>
+    ["memoryInspector", "decisions", decisionType] as const,
+  jobsSummary: () => ["memoryInspector", "jobsSummary"] as const,
+};
+
 /** Session-memory management (stage 7-2a) — per-session list + stats. */
 export const memoryKeys = {
   all: ["memory"] as const,
