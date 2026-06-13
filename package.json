@@ -15,6 +15,7 @@
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest/integration.config.ts",
     "test:eval": "vitest run --config vitest/eval.config.ts",
+    "test:eval:e2e": "VEX_E2E_MEMORY_EVAL=1 vitest run --config vitest/eval.config.ts src/__tests__/integration/eval/e2e-memory-correctness.int.test.ts",
     "test:eval:dense": "VEX_REAL_DENSE_EVAL=1 vitest run --config vitest/dense-eval.config.ts",
     "test:eval:latency": "VEX_REAL_LATENCY_EVAL=1 vitest run --config vitest/latency-eval.config.ts",
     "test:all": "pnpm test && pnpm test:integration",
