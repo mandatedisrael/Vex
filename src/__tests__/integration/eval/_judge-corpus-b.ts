@@ -372,7 +372,7 @@ export const CLUSTER_B: JudgeCorpusItem[] = [
     suggest: {
       title: "Last epoch's elevated Drift maker rebate has reverted to the standard schedule",
       summary:
-        "For one past epoch Drift ran a temporarily elevated maker rebate; the note records that the epoch has since closed and the rebate has reverted to the standard schedule, so the elevated figure no longer applies.",
+        "For one past epoch Drift ran a temporarily elevated maker rebate; the note records that the epoch has since closed, and the rebate has reverted to the standard schedule, so the elevated figure no longer applies.",
       contentMd:
         "Epoch-bound fact that has expired: the elevated maker rebate applied only to a now-closed epoch and has reverted. Acting on the old rebate would misprice maker flow.",
       importance: 6,
@@ -413,7 +413,7 @@ export const CLUSTER_B: JudgeCorpusItem[] = [
     suggest: {
       title: "Every Pump.fun token has a permanently fixed one billion supply",
       summary:
-        "Claims as a universal protocol guarantee that all Pump.fun tokens are minted with exactly one billion supply that can never be altered, so supply risk never needs checking.",
+        "Claims as a universal protocol guarantee that all Pump.fun tokens are minted with exactly 1 billion supply that can never be altered, so supply risk never needs checking.",
       contentMd:
         "False universal: supply and mint-authority state vary per token. Treating a fixed one billion supply as guaranteed would skip the mint-authority check entirely.",
       importance: 6,
@@ -596,7 +596,7 @@ export const CLUSTER_B: JudgeCorpusItem[] = [
     suggest: {
       title: "Today's SOL flash-crash fear has already fully recovered",
       summary:
-        "A note that SOL spiked down on a brief liquidation cascade earlier today and that the move has since fully retraced back to where it started — a momentary market state that no longer holds.",
+        "A note that SOL spiked down on a brief liquidation cascade earlier today, and that the move has since fully retraced back to where it started — a momentary market state that no longer holds.",
       contentMd:
         "Transient, now-resolved market state: the intraday SOL fear spike has fully recovered. The note describes a moment that has already passed and carries no forward value.",
       importance: 5,

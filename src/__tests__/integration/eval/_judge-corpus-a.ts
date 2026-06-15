@@ -72,7 +72,7 @@ export const CLUSTER_A: JudgeCorpusItem[] = [
       summary:
         "Across two separate WIF momentum entries, waiting for price to set a higher low after the initial impulse — rather than chasing the first green candle — produced a materially better average entry and a cleaner stop placement below that swing low.",
       contentMd:
-        "Process note: the rule that repeated was 'do not chase the first impulse; wait for the pullback to hold a higher low, then enter against that structure.' Both anchored entries followed this sequence and the realized exits cleared the average entry comfortably. The lesson is about the entry trigger (higher-low confirmation), not the size or the specific token.",
+        "Process note: the rule that repeated was 'do not chase the first impulse; wait for the pullback to hold a higher low, then enter against that structure.' Both anchored entries followed this sequence, and the realized exits cleared the average entry comfortably. The lesson is about the entry trigger (higher-low confirmation), not the size or the specific token.",
       importance: 7,
       confidence: 0.72,
     },
@@ -273,7 +273,7 @@ export const CLUSTER_A: JudgeCorpusItem[] = [
     suggest: {
       title: "Stop trading for the day after the daily loss limit is hit",
       summary:
-        "Two days where losses snowballed into revenge trades taught that hitting a predefined daily loss limit should halt all new entries until the next session, because the worst decisions clustered after the limit was already breached.",
+        "Two days where losses snowballed into revenge trades taught that hitting a predefined daily loss limit should immediately halt all new entries until the next session, because the worst decisions clustered after the limit was already breached.",
       contentMd:
         "Risk note: the rule is 'define a daily loss limit; once it is reached, take no new positions until the next day.' Both anchored days showed that trading past the limit turned a normal red day into a large one. The rule is a behavioral circuit breaker against tilt, independent of market conditions.",
       importance: 8,

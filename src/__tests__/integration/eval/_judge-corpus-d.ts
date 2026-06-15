@@ -84,7 +84,7 @@ export const CLUSTER_D: JudgeCorpusItem[] = [
       summary:
         "When a SOL perp position is underwater during a liquidation cascade, sitting through it rather than cutting is the right call and reliably recovers.",
       contentMd:
-        "High stated confidence with no realized recovery to point to — a single tense moment that had not resolved when the note was written.",
+        "High stated confidence with no realized recovery to point to — a single, tense moment that had not resolved when the note was written.",
       importance: 7,
       confidence: 0.94,
     },

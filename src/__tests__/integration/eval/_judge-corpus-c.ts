@@ -211,7 +211,7 @@ export const CLUSTER_C: JudgeCorpusItem[] = [
     suggest: {
       title: "Only enter memecoins with at least 1 million of 24 hour volume",
       summary:
-        "Raise the memecoin entry volume floor from 250000 to 1000000 dollars of trailing 24 hour volume; at 250k the exits slipped badly when the move faded and the spread widened.",
+        "Raise the memecoin entry volume floor from 250000 to 1000000 dollars of trailing 24 hour volume; at 250k the exits slipped badly when the move faded, and the spread widened.",
       contentMd:
         "Revision: 250k of 24h volume looked tradeable on entry but the book vanished on the way out and slippage ate the edge. A 1M floor keeps a real two-sided book at the exit.",
       importance: 7,
@@ -381,7 +381,7 @@ export const CLUSTER_C: JudgeCorpusItem[] = [
     suggest: {
       title: "Allocate at most 15 percent of the book to JUP staking for yield",
       summary:
-        "Cut the JUP staking allocation cap from 30 to 15 percent; the unstake cooldown left too much capital locked when fast memecoin setups appeared and the missed trades cost more than the staking yield earned.",
+        "Cut the JUP staking allocation cap from 30 to 15 percent; the unstake cooldown locked up too much capital when fast memecoin setups appeared, and the missed trades cost more than the staking yield earned.",
       contentMd:
         "Revision: 30 percent in JUP staking looked efficient but the unbonding delay meant we could not redeploy into setups quickly. Capping at 15 percent keeps dry powder liquid for opportunistic entries.",
       importance: 6,
@@ -625,9 +625,9 @@ export const CLUSTER_C: JudgeCorpusItem[] = [
     suggest: {
       title: "Reject a Jupiter quote older than 2 seconds before signing",
       summary:
-        "Tighten the stale-quote guard from 5 seconds to 2 seconds; in fast tape a 5 second old quote was already off the market and the fill diverged from the displayed price.",
+        "Tighten the stale-quote guard from 5 seconds to 2 seconds; in fast tape a 5 second old quote was already off the market, and the fill diverged from the displayed price.",
       contentMd:
-        "Revision: 5 seconds was an eternity during volatile memecoin moves and the executed price drifted well off the quoted route. A 2 second freshness window keeps the signed price close to the live market.",
+        "Revision: 5 seconds was an eternity during volatile memecoin moves, and the executed price drifted well off the quoted route. A 2 second freshness window keeps the signed price close to the live market.",
       importance: 7,
       confidence: 0.72,
     },
@@ -650,7 +650,7 @@ export const CLUSTER_C: JudgeCorpusItem[] = [
     suggest: {
       title: "Scale out of a winner by selling 33 percent at each profit rung",
       summary:
-        "Increase the scale-out fraction from 25 percent to 33 percent per rung; selling only a quarter at a time left too much size exposed when memecoin trends ended abruptly and the late rungs never filled.",
+        "Increase the scale-out fraction from 25 percent to 33 percent per rung; selling only a quarter at a time left too much size exposed when memecoin trends ended abruptly, and the late rungs never filled.",
       contentMd:
         "Revision: at 25 percent per rung the position stayed too heavy into the back of the move, and abrupt memecoin reversals stranded the unsold size. Selling 33 percent per rung de-risks faster while still leaving a runner.",
       importance: 6,
