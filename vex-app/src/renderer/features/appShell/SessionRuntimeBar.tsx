@@ -73,7 +73,7 @@ export function SessionRuntimeBar({
       data-vex-area="runtime-status"
       role="group"
       aria-label="Session runtime status"
-      className="flex w-full flex-wrap items-center gap-2 text-[11px] text-[var(--color-text-muted)]"
+      className="flex w-full flex-wrap items-center gap-2 text-[11px] text-[var(--vex-text-3)]"
     >
       <ModelIndicator model={model} />
       <UsageChip lastTurn={lastTurn} totals={totals} />
@@ -117,7 +117,7 @@ function ModelIndicator({
         data-vex-area="session-model-indicator"
         data-state="unconfigured"
         aria-label="Model not configured"
-        className="inline-flex items-center rounded-md px-2 py-1 text-[10px] text-[var(--color-text-muted)]"
+        className="inline-flex items-center rounded-md px-2 py-1 text-[10px] text-[var(--vex-text-3)]"
       >
         Model not configured
       </span>
@@ -163,7 +163,7 @@ function UsageChip({
   return (
     <span
       data-vex-area="usage-meter"
-      className={`${PILL} text-[var(--color-text-muted)]`}
+      className={`${PILL} text-[var(--vex-text-3)]`}
       title={buildUsageTitle(lastTurn, totals)}
     >
       {lastTurn !== null ? (
@@ -321,8 +321,8 @@ function CompactionChip({
       data-state={state}
       className={`${PILL} ${
         state === "failed"
-          ? "text-[#f0a0a0]"
-          : "text-[var(--color-text-muted)]"
+          ? "text-[var(--vex-warn-text)]"
+          : "text-[var(--vex-text-3)]"
       }`}
       title={`${label} · ${COMPACTION_REMOTE_NOTE}`}
       aria-label={`Compaction status: ${label}. ${COMPACTION_REMOTE_NOTE}`}

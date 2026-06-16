@@ -5,8 +5,10 @@
  * Switches on the pure `TranscriptEntry.variant`. The transcript reads as
  * an asymmetric register: USER turns are compact right-aligned cards with a
  * persistent "You · HH:MM" caption; ASSISTANT turns are full-width document
- * flow countersigned by an accent tick in a 28px gutter (no bubble, no
- * avatar — the shell is photo-free). Assistant prose renders through
+ * flow hung off the Signal Tape spine by a quiet node in a 28px gutter (no
+ * bubble, no avatar — the shell is photo-free; accent is rationed to the
+ * live/pending node, so a settled node rests in --vex-text-3). Assistant prose
+ * renders through
  * `MarkdownContent` (stage 8-2a) — safe React elements, never an HTML
  * string; user/tool/notice rows + the `compaction`/`recall` markers (stage
  * 8-4) render as plain React text nodes. Either way model/tool output cannot
@@ -47,12 +49,17 @@ function captionText(who: string, createdAt: string): string {
   return clock === null ? who : `${who} · ${clock}`;
 }
 
-/** The countersign tick — Vex's mark in the assistant gutter. */
-function CountersignTick(): JSX.Element {
+/**
+ * A settled entry's node on the Signal Tape spine (the monotonic time axis the
+ * transcript hangs off, drawn once in SessionTranscript). Quiet at rest — accent
+ * is rationed to the live/pending node — and centered on the spine x (left-[9px])
+ * with a canvas-colored ring so the spine reads as passing cleanly around it.
+ */
+function TapeNode(): JSX.Element {
   return (
     <span
       aria-hidden
-      className="absolute left-0 top-[5px] h-4 w-0.5 bg-[var(--vex-accent)]"
+      className="absolute left-[6px] top-[5px] h-1.5 w-1.5 rounded-[1.5px] bg-[var(--vex-text-3)] ring-2 ring-[var(--vex-surface-0)]"
     />
   );
 }
@@ -105,7 +112,7 @@ export function TranscriptMessage({
     case "assistant":
       return (
         <div data-vex-message-role="assistant" className="relative pl-7">
-          <CountersignTick />
+          <TapeNode />
           <AssistantCaption createdAt={row.createdAt} />
           <AssistantBody content={row.content} />
         </div>
@@ -117,7 +124,7 @@ export function TranscriptMessage({
           data-vex-stopped=""
           className="relative pl-7"
         >
-          <CountersignTick />
+          <TapeNode />
           <AssistantCaption createdAt={row.createdAt} />
           <AssistantBody content={row.content} />
           <div className="mt-1.5 flex items-center gap-1 text-[11px] text-[var(--vex-text-3)]">
@@ -148,7 +155,7 @@ export function TranscriptMessage({
           {/* Assistant prose accompanying the tool call (often empty). */}
           {row.content.length > 0 ? (
             <div className="relative pl-7">
-              <CountersignTick />
+              <TapeNode />
               <AssistantCaption createdAt={row.createdAt} />
               <AssistantBody content={row.content} />
             </div>

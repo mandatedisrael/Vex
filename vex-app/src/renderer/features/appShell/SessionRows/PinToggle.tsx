@@ -33,8 +33,8 @@ export function PinToggle({
       className={cn(
         "inline-flex h-6 w-6 items-center justify-center rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]",
         pinned
-          ? "border-[#ffd35c]/40 bg-[#ffd35c]/10 text-[#ffd35c] hover:bg-[#ffd35c]/16"
-          : "border-transparent text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-white/[0.06] hover:text-foreground",
+          ? "border-[var(--vex-pin-border)] bg-[var(--vex-pin-fill)] text-[var(--vex-pin)] hover:bg-[var(--vex-pin-fill-hover)]"
+          : "border-transparent text-[var(--vex-text-3)] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-white/[0.06] hover:text-foreground",
         pending && "cursor-wait opacity-60",
         className,
       )}

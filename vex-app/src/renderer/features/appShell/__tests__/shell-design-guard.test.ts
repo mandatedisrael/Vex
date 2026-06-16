@@ -74,6 +74,11 @@ const BANNED: readonly BannedPattern[] = [
     regex: /#(?:6f91ff|8da5ff|adc0ff|3758ff|4668ff|9bb2ff|4d72ff|b2a3ff)/i,
   },
   { name: "resting glow shadow", regex: /shadow-\[0_0_/ },
+  // Signal Tape foundation (§0.4): the retired indigo/violet accent and the
+  // two raw status hexes are now tokens (--vex-pin / --vex-warn-text). Any raw
+  // re-introduction in shell sources is a red build.
+  { name: "legacy indigo/violet accent", regex: /#(?:6366f1|8b5cf6)/i },
+  { name: "raw pin/warn status hex", regex: /#(?:ffd35c|f0a0a0)/i },
 ];
 
 /**
@@ -173,6 +178,19 @@ describe("shell design guard (S7)", () => {
     expect(matchNames("bg-[#6F91FF]")).toContain("legacy gray-blue raw hex");
     // #3275f8 is the accent ROOT — it lives in globals.css token definitions
     // and is not part of this hex ban (CSS is out of scope here).
+    expect(matchNames("#3275f8")).toEqual([]);
+  });
+
+  it("flags the retired indigo/violet accent and raw pin/warn status hexes", () => {
+    expect(matchNames("bg-[#6366f1]")).toContain("legacy indigo/violet accent");
+    expect(matchNames("text-[#8B5CF6]")).toContain(
+      "legacy indigo/violet accent",
+    );
+    expect(matchNames("text-[#ffd35c]")).toContain("raw pin/warn status hex");
+    expect(matchNames("text-[#f0a0a0]")).toContain("raw pin/warn status hex");
+    // The accent root and the new semantic tokens are NOT raw-hex violations.
+    expect(matchNames("text-[var(--vex-pin)]")).toEqual([]);
+    expect(matchNames("text-[var(--vex-warn-text)]")).toEqual([]);
     expect(matchNames("#3275f8")).toEqual([]);
   });
 

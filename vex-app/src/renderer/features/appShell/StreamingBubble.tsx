@@ -21,6 +21,7 @@ import type { StreamPreview, StreamWorkingStatus } from "../../stores/streamStor
 import { MarkdownContent } from "../../lib/markdown/MarkdownContent.js";
 import { DotmCircular8 } from "../../components/ui/dotm-circular-8.js";
 import { DotmHex3 } from "../../components/ui/dotm-hex-3.js";
+import { cn } from "../../lib/utils.js";
 
 /** m:ss from elapsed ms — clamped at 0 so clock skew never prints "-1:-7". */
 function formatElapsed(elapsedMs: number): string {
@@ -158,7 +159,10 @@ export function StreamingBubble({
   const answerBody = useMemo(
     () =>
       preview.text.length > 0 ? (
-        <div className="break-words text-[15px] leading-[1.7] text-foreground">
+        // Resolves in once beneath the needle bloom — clarity "earned" by the
+        // thinking. One-shot on first mount; text deltas reuse the same node so
+        // it never re-triggers.
+        <div className="vex-answer-resolve break-words text-[15px] leading-[1.7] text-foreground">
           <MarkdownContent text={preview.text} />
         </div>
       ) : null,
@@ -194,7 +198,16 @@ export function StreamingBubble({
               Circuit-break (S5): a pending approval FREEZES the mark — the
               only animations in the shell are bound to verifiable work, and
               waiting on a signature is not work. */}
-          <span aria-hidden className="absolute left-0 top-0">
+          <span
+            aria-hidden
+            className={cn(
+              "absolute left-0 top-0",
+              // Needle bloom fires ONCE when the class is added — i.e. the
+              // instant the answer starts — unless a pending approval is
+              // freezing the strip (trust = stillness, no flare while waiting).
+              answering && !awaitingApproval && "vex-signal-resolve",
+            )}
+          >
             {preview.status === "thinking" ? (
               <DotmCircular8
                 size={14}

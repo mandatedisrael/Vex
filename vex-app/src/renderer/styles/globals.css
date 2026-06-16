@@ -48,12 +48,18 @@
 }
 
 @theme {
-  /* Vex semantic palette — verified against /mnt/x/Vex/uiux.png */
-  --color-bg-primary: #0a0e27;
+  /* Vex semantic palette — electric-blue (#3275f8) brand family. The Signal
+   * Tape foundation pass retired the legacy indigo/violet accent
+   * (#6366f1 / #8b5cf6) and aligned the base canvas to the Protocol Desk
+   * #04060f. --color-bg-elevated/-overlay are intentionally RETAINED: the
+   * onboarding/wizard shadcn surfaces (card/border/input/popover) resolve to
+   * them and that finished flow must stay visually unchanged
+   * (see docs/SIGNAL_TAPE_REDESIGN.md §0.1). */
+  --color-bg-primary: #04060f;
   --color-bg-elevated: #161b3f;
   --color-bg-overlay: #1f2552;
-  --color-accent-primary: #6366f1;
-  --color-accent-secondary: #8b5cf6;
+  --color-accent-primary: #3275f8;
+  --color-accent-secondary: color-mix(in oklab, #3275f8 65%, white);
   --color-text-primary: #e5e7eb;
   /* Brightened for contrast: gray secondary/muted text + numbers + muted icons
    * were near-invisible on the dark glass surfaces. Kept below
@@ -274,6 +280,16 @@
   --vex-accent-border-strong: color-mix(in oklab, #3275f8 85%, transparent);
   --vex-accent-fill-8: color-mix(in oklab, #3275f8 8%, transparent);
   --vex-accent-fill-12: color-mix(in oklab, #3275f8 12%, transparent);
+  /* pin flag — tokenized warm semantic (replaces the raw #ffd35c literal in
+   * SessionRows/PinToggle). A sanctioned NON-blue status (like
+   * success/warning/danger), deliberately outside the single accent family. */
+  --vex-pin: #ffd35c;
+  --vex-pin-border: color-mix(in oklab, #ffd35c 40%, transparent);
+  --vex-pin-fill: color-mix(in oklab, #ffd35c 10%, transparent);
+  --vex-pin-fill-hover: color-mix(in oklab, #ffd35c 16%, transparent);
+  /* compaction permanently-failed text — danger family (unrecoverable),
+   * replaces the raw #f0a0a0 literal in SessionRuntimeBar. */
+  --vex-warn-text: color-mix(in oklab, var(--color-danger) 70%, white);
   /* shadcn projection — stock Button/Input/Dialog inside the shell speak
    * Countersign automatically (same mechanism as the onboarding scope). */
   --color-primary: var(--vex-accent);
@@ -335,6 +351,55 @@
 
 .vex-entry-settle {
   animation: vex-entry-settle 180ms ease-out both;
+}
+
+/* SIGNAL TAPE — Needle Bloom-and-Resolve. The signature motion: at
+ * reasoning-end / answer-start the live gutter node fires ONE accent bloom
+ * (asymmetric — peaks ~38% then decays, a resolve arc not a blink) and the
+ * answer body resolves in beneath it. One-shot, `both`, rests perfectly still:
+ * the only blue flare outside a continuous in-flight needle. CSP-safe
+ * (build-time @keyframes; the bloom is a one-shot animated drop-shadow, never a
+ * resting glow). Gated in StreamingBubble so it does NOT fire while a pending
+ * approval freezes the strip (trust = stillness). Reduced motion: the global
+ * 0.01ms rule below collapses both to their final frame (static node, instant
+ * reveal). */
+@keyframes vex-signal-resolve {
+  0% {
+    filter: drop-shadow(0 0 0 transparent);
+    transform: scale(0.92);
+    opacity: 0.65;
+  }
+  38% {
+    filter: drop-shadow(
+      0 0 6px color-mix(in oklab, var(--vex-accent) 80%, transparent)
+    );
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    filter: drop-shadow(0 0 0 transparent);
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.vex-signal-resolve {
+  animation: vex-signal-resolve 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes vex-answer-resolve {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.vex-answer-resolve {
+  animation: vex-answer-resolve 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Dissolves the oldest visible line of the working strip's reasoning tail

@@ -284,43 +284,58 @@ export function SessionTranscript({
       onScroll={onScroll}
       data-vex-area="chat-transcript"
       data-state="ready"
-      className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 py-4"
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto px-1 py-4"
     >
-      {query.isFetchingNextPage ? (
-        <div className="flex justify-center py-1">
-          <DotmHex3 size={18} dotSize={3} color="var(--vex-accent)" ariaLabel="Loading older messages" />
-        </div>
-      ) : null}
-      {olderError ? (
-        <div
-          role="alert"
-          className="mx-auto rounded-[6px] border border-[color-mix(in_oklab,var(--color-destructive)_40%,transparent)] bg-destructive/10 px-2.5 py-1 text-[11px] text-destructive"
-        >
-          Couldn&apos;t load older messages.
-        </div>
-      ) : null}
-      {rows.map((row) => (
-        // Turn rhythm: the list gap is the 12px intra-turn beat; a USER row
-        // starts a new turn, so its extra mt-4 totals the 28px turn spacing.
-        // Live-appended rows (id outside the settled set) print with the
-        // one-shot entry settle; historical rows hard-cut. A tool group keeps
-        // its first call row's id, so its settle status matches its members'.
-        <div
-          key={entryKey(row)}
-          className={cn(
-            row.variant === "user" && "mt-4",
-            settledIds !== null && !settledIds.has(row.id) && "vex-entry-settle",
-          )}
-        >
-          <TranscriptMessage row={row} pendingApprovals={pendingApprovals} />
-        </div>
-      ))}
-      {preview !== null ? (
-        <StreamingBubble
-          preview={preview}
-          awaitingApproval={hasPendingApproval}
+      {/* SIGNAL TAPE content wrapper — holds the single monotonic spine the
+          whole session hangs off. It sizes to content, so the outer scroll
+          math is unchanged: scrollHeight still equals total row height + py-4
+          (the bottom-follow + load-older anchoring on scrollRef are untouched). */}
+      <div className="relative flex flex-col gap-3">
+        {/* The spine: a quiet hairline time/sequence axis at the gutter x
+            (left-[9px] = the 9px gutter centre; px-1 on the scroll parent puts
+            it 13px from the panel edge). Accent is rationed OUT of the resting
+            axis — the live/pending node (StreamingBubble) is the only blue that
+            ever lights on it. aria-hidden: pure structure. */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute left-[9px] top-0 bottom-0 w-px bg-[var(--vex-line)]"
         />
-      ) : null}
+        {query.isFetchingNextPage ? (
+          <div className="flex justify-center py-1">
+            <DotmHex3 size={18} dotSize={3} color="var(--vex-accent)" ariaLabel="Loading older messages" />
+          </div>
+        ) : null}
+        {olderError ? (
+          <div
+            role="alert"
+            className="mx-auto rounded-[6px] border border-[color-mix(in_oklab,var(--color-destructive)_40%,transparent)] bg-destructive/10 px-2.5 py-1 text-[11px] text-destructive"
+          >
+            Couldn&apos;t load older messages.
+          </div>
+        ) : null}
+        {rows.map((row) => (
+          // Turn rhythm: the list gap is the 12px intra-turn beat; a USER row
+          // starts a new turn, so its extra mt-4 totals the 28px turn spacing.
+          // Live-appended rows (id outside the settled set) print with the
+          // one-shot entry settle; historical rows hard-cut. A tool group keeps
+          // its first call row's id, so its settle status matches its members'.
+          <div
+            key={entryKey(row)}
+            className={cn(
+              row.variant === "user" && "mt-4",
+              settledIds !== null && !settledIds.has(row.id) && "vex-entry-settle",
+            )}
+          >
+            <TranscriptMessage row={row} pendingApprovals={pendingApprovals} />
+          </div>
+        ))}
+        {preview !== null ? (
+          <StreamingBubble
+            preview={preview}
+            awaitingApproval={hasPendingApproval}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }
