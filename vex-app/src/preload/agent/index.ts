@@ -25,6 +25,7 @@ import { memoryInspector } from "./memory-inspector.js";
 import { messages } from "./messages.js";
 import { mission } from "./mission.js";
 import { models } from "./models.js";
+import { portfolio } from "./portfolio.js";
 import { runtime } from "./runtime.js";
 import { sessions } from "./sessions.js";
 import { usage } from "./usage.js";
@@ -44,5 +45,6 @@ export const agentBridge = {
   longMemory,
   memory,
   memoryInspector,
+  portfolio,
   engine,
 } satisfies VexAgentBridge;

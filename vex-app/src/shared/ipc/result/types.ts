@@ -62,6 +62,15 @@ export type VexDomain =
    */
   | "memory"
   /**
+   * Stage 3 — read-only dual-scope POSITION portfolio (`portfolio.read`).
+   * Resolves a server-side wallet address allow-list (global inventory or
+   * a session's wallet scope) and aggregates `proj_balances` /
+   * `proj_portfolio_snapshots` into a renderer-safe DTO. No addresses,
+   * balances, or USD amounts are ever logged. DB unavailability maps to
+   * `internal.unexpected` like the other read domains.
+   */
+  | "portfolio"
+  /**
    * Used by the read-only `sessions.getModel` handler (global runtime
    * model resolution). Existing sessions handlers
    * (`vex:sessions:create|list|get|setPinned|delete`) deliberately keep

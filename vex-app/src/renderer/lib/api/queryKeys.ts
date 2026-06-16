@@ -174,3 +174,15 @@ export const sessionModelKeys = {
   detail: (sessionId: string) =>
     ["sessionModel", "detail", sessionId] as const,
 };
+
+/**
+ * Portfolio (stage 3) — dual-scope POSITION portfolio. `scope` lives at
+ * index 1 and `activeSessionId` at index 2 so a global read and a
+ * per-session read stay distinct cache entries. The session key carries
+ * the session id; the global key uses `null`.
+ */
+export const portfolioKeys = {
+  all: ["portfolio"] as const,
+  read: (scope: "global" | "session", activeSessionId: string | null) =>
+    ["portfolio", scope, activeSessionId] as const,
+};

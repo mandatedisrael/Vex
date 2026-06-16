@@ -94,6 +94,7 @@ export const VEX_DOMAINS = [
   "usage",
   "compaction",
   "memory",
+  "portfolio",
   "sessions",
   "preload",
   "internal",

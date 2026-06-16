@@ -21,6 +21,7 @@ import { registerMessagesHandlers } from "./messages.js";
 import { registerMissionHandlers } from "./mission.js";
 import { registerModelsHandlers } from "./models.js";
 import { registerOnboardingHandlers } from "./onboarding.js";
+import { registerPortfolioHandlers } from "./portfolio.js";
 import { registerAgentCoreHandler } from "./onboarding/agent-core.js";
 import { registerApiKeysHandler } from "./onboarding/api-keys.js";
 import { registerEmbeddingHandler } from "./onboarding/embedding.js";
@@ -78,6 +79,11 @@ export function registerAllIpcHandlers(): void {
   // the backing runtime ships in puzzles 03/04/05.
   teardowns.push(...registerMessagesHandlers());
   teardowns.push(...registerUsageHandlers());
+  // Stage 3: read-only dual-scope POSITION portfolio. Resolves a server-side
+  // wallet address allow-list (global inventory / session wallet scope) and
+  // aggregates proj_balances + proj_portfolio_snapshots into a renderer-safe
+  // DTO. Renderer supplies only scope (+ sessionId); addresses never cross.
+  teardowns.push(...registerPortfolioHandlers());
   // Agent integration stage 7-1: read-only Track-2 compaction status for the
   // runtime bar. The Track-2 executor itself is owned by main and started in
   // `index.ts` (see `setupCompactWorker`), not here. Stage 7-2a extends this

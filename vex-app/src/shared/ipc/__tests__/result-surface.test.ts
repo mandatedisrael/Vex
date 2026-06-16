@@ -130,6 +130,7 @@ describe("result barrel surface", () => {
       "usage",
       "compaction",
       "memory",
+      "portfolio",
       "sessions",
       "preload",
       "internal",

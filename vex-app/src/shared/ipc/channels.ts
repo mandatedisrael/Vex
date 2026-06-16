@@ -233,6 +233,16 @@ export const CH = {
     getStats: "vex:memory:getStats",
   },
 
+  // Portfolio — read-only dual-scope POSITION portfolio (stage 3). `read`
+  // resolves a server-side wallet address allow-list (global inventory or a
+  // session's wallet scope) and aggregates `proj_balances` /
+  // `proj_portfolio_snapshots` into a renderer-safe DTO. Renderer sends only
+  // `scope` (+ `sessionId` for the session scope); addresses are resolved in
+  // main and never crosses the boundary.
+  portfolio: {
+    read: "vex:portfolio:read",
+  },
+
   // Settings — read-only Phase 1 (Phase 2 dodaje setters)
   settings: {
     getPreferences: "vex:settings:getPreferences",

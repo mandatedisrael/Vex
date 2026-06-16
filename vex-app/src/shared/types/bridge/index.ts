@@ -42,6 +42,7 @@ export type {
   MessagesBridge,
   MissionBridge,
   ModelsBridge,
+  PortfolioBridge,
   RuntimeBridge,
   SessionsBridge,
   UsageBridge,

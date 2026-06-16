@@ -151,6 +151,8 @@ describe("preload bridge surface", () => {
       "CH.memoryInspector.jobsSummary",
       "CH.memory.listSession",
       "CH.memory.getStats",
+      // Stage 3 — read-only dual-scope POSITION portfolio.
+      "CH.portfolio.read",
       "CH.sessions.getModel",
       // Error-diagnostics phase (D-FOLDER) — "Open logs folder".
       "CH.support.openLogsFolder",
