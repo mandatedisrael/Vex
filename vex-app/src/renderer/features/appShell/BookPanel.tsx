@@ -29,20 +29,20 @@ export function BookPanel({
     <aside
       data-vex-area="book-panel"
       aria-label="Session instrument"
-      className="vex-book-enter flex h-full w-[320px] shrink-0 flex-col overflow-y-auto border-l border-[var(--vex-line)] bg-[var(--vex-surface-1)]"
+      className="vex-book-enter flex h-full w-[320px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-[var(--vex-line)] bg-[var(--vex-surface-1)] p-3"
     >
       {activeSessionId !== null ? (
         <>
+          <PositionBlock activeSessionId={activeSessionId} hero />
           <MovesBlock sessionId={activeSessionId} />
           <BookBlock title="Runtime & Cost">
             <SessionRuntimeBar sessionId={activeSessionId} layout="stack" />
           </BookBlock>
           <SessionBlock sessionId={activeSessionId} />
-          <PositionBlock activeSessionId={activeSessionId} />
         </>
       ) : (
         // Global portfolio (no active session) — the configured inventory.
-        <PositionBlock activeSessionId={null} />
+        <PositionBlock activeSessionId={null} hero />
       )}
     </aside>
   );

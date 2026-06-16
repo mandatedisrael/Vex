@@ -103,7 +103,7 @@ describe("uiStore", () => {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     expect(raw).not.toBeNull();
     const parsed = JSON.parse(raw!);
-    expect(parsed.state).toEqual({ sidebarOpen: true, bookOpen: false });
+    expect(parsed.state).toEqual({ sidebarOpen: true, bookOpen: true });
     expect(parsed.state.createSessionOpen).toBeUndefined();
     expect(parsed.state.createSessionInitialMessage).toBeUndefined();
     expect(parsed.state.pendingFirstMessage).toBeUndefined();
@@ -184,7 +184,7 @@ describe("uiStore", () => {
     expect(raw).not.toBeNull();
     const parsed = JSON.parse(raw!);
 
-    expect(parsed.state).toEqual({ sidebarOpen: false, bookOpen: false });
+    expect(parsed.state).toEqual({ sidebarOpen: false, bookOpen: true });
     expect(parsed.state.logBuffer).toBeUndefined();
     expect(parsed.state.currentView).toBeUndefined();
     expect(parsed.state.wizardEntryMode).toBeUndefined();

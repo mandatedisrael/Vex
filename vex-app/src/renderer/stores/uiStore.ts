@@ -132,7 +132,7 @@ export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
       sidebarOpen: true,
-      bookOpen: false,
+      bookOpen: true,
       currentView: "splash",
       wizardEntryMode: "setup",
       unlockReturnView: "appShell",
@@ -185,12 +185,20 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "vex-ui",
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         sidebarOpen: state.sidebarOpen,
         bookOpen: state.bookOpen,
       }),
+      // v2: BOOK now opens by default. Force it open once on upgrade from v1 so
+      // existing installs pick up the new default; subsequent toggles persist.
+      migrate: (persisted, version) => {
+        if (version < 2 && persisted !== null && typeof persisted === "object") {
+          return { ...(persisted as Record<string, unknown>), bookOpen: true };
+        }
+        return persisted;
+      },
     }
   )
 );

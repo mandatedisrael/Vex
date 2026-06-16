@@ -32,8 +32,10 @@ const TOKENS_VISIBLE = 8;
 
 export function PositionBlock({
   activeSessionId,
+  hero = false,
 }: {
   readonly activeSessionId: string | null;
+  readonly hero?: boolean;
 }): JSX.Element {
   const isSession = activeSessionId !== null;
   const title = isSession ? "Position" : "Portfolio";
@@ -44,7 +46,7 @@ export function PositionBlock({
 
   if (query.isLoading) {
     return (
-      <BookBlock title={title}>
+      <BookBlock title={title} hero={hero}>
         <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]">
           Loading…
         </p>
@@ -54,7 +56,7 @@ export function PositionBlock({
 
   if ((result !== undefined && !result.ok) || query.isError) {
     return (
-      <BookBlock title={title}>
+      <BookBlock title={title} hero={hero}>
         <p className="text-[11px] text-[var(--vex-warn-text)]">
           Couldn&apos;t load your portfolio.
         </p>
@@ -64,7 +66,7 @@ export function PositionBlock({
 
   if (portfolio === null || portfolio.walletCount === 0) {
     return (
-      <BookBlock title={title}>
+      <BookBlock title={title} hero={hero}>
         <p className="text-[11px] text-[var(--vex-text-3)]">
           {isSession
             ? "No wallets in this session."
@@ -77,6 +79,7 @@ export function PositionBlock({
   return (
     <BookBlock
       title={title}
+      hero={hero}
       trailing={`${portfolio.walletCount} ${
         portfolio.walletCount === 1 ? "wallet" : "wallets"
       }`}
@@ -138,7 +141,7 @@ function TotalRow({
       <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]">
         Total
       </span>
-      <span className="text-[17px] font-medium tabular-nums text-[var(--vex-accent-text)]">
+      <span className="text-[22px] font-medium tabular-nums text-[var(--vex-accent-text)]">
         {formatUsd(liveTotalUsd)}
       </span>
       {snapshotTotalUsd !== null ? (
