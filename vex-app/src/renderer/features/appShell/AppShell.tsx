@@ -22,6 +22,7 @@
 
 import type { JSX } from "react";
 import { useUiStore } from "../../stores/uiStore.js";
+import { DeskRuleTapeState } from "./DeskRuleTapeState.js";
 import { SessionCreator } from "./SessionCreator.js";
 import { SessionPanel } from "./SessionPanel.js";
 import { SessionsLibrary } from "./SessionsLibrary.js";
@@ -43,14 +44,17 @@ export function AppShell(): JSX.Element {
       <SessionsList onCreate={() => openCreateSession()} />
 
       <section className="flex min-w-0 flex-1 flex-col">
-        {/* DESK RULE — the working header datum: the onboarding plinth
-         * carried into the shell. The rule never moves, never animates. */}
-        <header className="relative flex h-12 shrink-0 items-center justify-end gap-3 border-b border-[var(--vex-line)] px-6">
+        {/* DESK RULE — the working header datum and the head of the tape: its
+         * accent tick sits over the left-anchored spine, with the live tape
+         * state on the left and the version stamp pinned right. The rule itself
+         * never moves; only the tape-state word changes. */}
+        <header className="relative flex h-12 shrink-0 items-center gap-3 border-b border-[var(--vex-line)] px-6">
           <span
             aria-hidden
             className="absolute -bottom-px left-6 h-px w-6 bg-[var(--vex-accent)]"
           />
-          <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--vex-text-3)]">
+          <DeskRuleTapeState />
+          <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--vex-text-3)]">
             v{__VEX_APP_VERSION__}
           </span>
         </header>

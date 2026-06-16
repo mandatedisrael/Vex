@@ -94,8 +94,11 @@ export function SessionPanel(): JSX.Element {
     <div
       data-vex-area="session-panel"
       data-vex-state={panelState}
-      className="flex h-full min-h-0 w-full justify-center"
+      className="flex h-full min-h-0 w-full justify-start"
     >
+      {/* Left-anchored TAPE column: the reading column hugs the left so the
+          DESK RULE tick, the transcript spine, and the composer share one left
+          axis (one continuous tape) instead of floating in a centred canvas. */}
       <div className="flex h-full min-h-0 w-full max-w-[860px] flex-col px-6 py-4">
         <SessionContext
           activeSession={activeSession}
