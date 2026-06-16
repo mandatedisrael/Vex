@@ -44,9 +44,16 @@ function formatClock(iso: string): string | null {
   return `${hh}:${mm}`;
 }
 
-function captionText(who: string, createdAt: string): string {
+/**
+ * The tape's clock readout for one entry — HH:MM in --vex-text-2 (the data), or
+ * nothing for an unparseable timestamp. Pairs with a speaker label to form a
+ * tape stamp: the time leads on the assistant rail and trails on the user rail.
+ */
+function TapeClock({ createdAt }: { readonly createdAt: string }): JSX.Element | null {
   const clock = formatClock(createdAt);
-  return clock === null ? who : `${who} · ${clock}`;
+  return clock === null ? null : (
+    <span className="text-[var(--vex-text-2)]">{clock}</span>
+  );
 }
 
 /**
@@ -64,15 +71,20 @@ function TapeNode(): JSX.Element {
   );
 }
 
-/** Persistent "Vex · HH:MM" caption above an assistant document block. */
+/**
+ * Tape stamp above an assistant document block. The time LEADS (the readout)
+ * and the speaker label trails (chrome) — the left-aligned HH:MM forms a clock
+ * column down the assistant rail of the tape.
+ */
 function AssistantCaption({
   createdAt,
 }: {
   readonly createdAt: string;
 }): JSX.Element {
   return (
-    <span className="mb-1 block font-mono text-[10px] uppercase tracking-[0.14em] tabular-nums text-[var(--vex-text-2)]">
-      {captionText("Vex", createdAt)}
+    <span className="mb-1 flex items-baseline gap-2 font-mono text-[10px] uppercase tracking-[0.14em] tabular-nums">
+      <TapeClock createdAt={createdAt} />
+      <span className="text-[var(--vex-text-3)]">Vex</span>
     </span>
   );
 }
@@ -104,8 +116,9 @@ export function TranscriptMessage({
           <div className="max-w-[70%] whitespace-pre-wrap break-words rounded-lg border border-[var(--vex-line-strong)] bg-white/[0.04] px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
             {row.content}
           </div>
-          <span className="mt-1 block text-right font-mono text-[10px] uppercase tabular-nums text-[var(--vex-text-2)]">
-            {captionText("You", row.createdAt)}
+          <span className="mt-1 flex items-baseline justify-end gap-2 font-mono text-[10px] uppercase tabular-nums">
+            <span className="text-[var(--vex-text-3)]">You</span>
+            <TapeClock createdAt={row.createdAt} />
           </span>
         </div>
       );

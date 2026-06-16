@@ -232,10 +232,11 @@ renders no plan indicator. The relocation you described was completed in a prior
 
 ## Section 3 — Shell · timeline-gutter spine & BOOK panel
 
-> **Build status:** 🟡 Stage 1 shipped — the **continuous timeline-gutter spine**
-> + quiet per-entry `TapeNode` (blue rationed out of resting nodes) in
-> `SessionTranscript.tsx` + `TranscriptMessage.tsx`. Remaining: DESK RULE tape-head
-> promotion, BOOK panel, inline PLAN BRIEF entry (next stages).
+> **Build status:** 🟡 Shipped — the **continuous timeline-gutter spine** + quiet
+> per-entry `TapeNode` (blue rationed out of resting nodes), the **left-anchored
+> tape** (`SessionPanel` `justify-start` → one shared left axis: header tick →
+> spine → composer), and the **DESK RULE tape-head** (`DeskRuleTapeState` reports
+> LIVE / AWAITING / IDLE). Remaining: BOOK panel + inline PLAN BRIEF entry.
 >
 > _Recon area: Shell, Timeline-Gutter spine & BOOK panel (vex-app renderer — AppShell + SessionPanel + SessionContext + uiStore)_
 
@@ -419,6 +420,14 @@ _Generic traps to avoid:_
 
 ## Section 5 — Transcript · message variants & PLAN BRIEF entry
 
+> **Build status:** 🟡 Tape time-stamps shipped — every entry leads with its
+> HH:MM as the instrument readout (time = `--vex-text-2` data, speaker =
+> `--vex-text-3` chrome): a left clock column on the assistant rail, a right one
+> on the user rail. **Deferred:** a literal vertical in-gutter stamp (needs a
+> wider gutter than the current 28px) and a per-entry **sequence index** (an
+> honest per-session ordinal is unreliable under backward pagination — the row
+> `id` is a global serial, not a 1-based count). Remaining: PLAN BRIEF entry.
+>
 > _Recon area: Transcript, message variants & PLAN BRIEF entry — the Signal Tape body_
 
 **Intent.** This is the scrolling body of the agent workspace: the chronological record of one session as a single continuous SIGNAL TAPE. Every turn — user prompt, Vex answer, stopped answer, tool act, tool-group aggregation, runtime/error notice, compaction marker, memory recall, and (new) the inline PLAN BRIEF — hangs off ONE monotonic time/sequence spine on the left. It is where trust is earned: at rest the tape is a monotone instrument readout (hairlines + the text trio), and the single electric-blue accent is rationed to exactly one thing at a time — the live/streaming node, a pending signature, or the focused node. The redesign converts today's seven loosely-styled variants into one register hanging off a shared 28px gutter, absorbs the floating SessionPlanCard into a PLAN BRIEF tape entry so the plan reads as part of the record (not a card above it), retires the off-brand WelcomeBanner Card-shadow empty state in favour of SessionWelcomeHero, and introduces opt-in virtualization for long sessions using the already-installed @tanstack/react-virtual.
