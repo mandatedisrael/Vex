@@ -69,11 +69,11 @@ vi.mock("@thesvg/react", () => ({
   Postgresql: () => null,
 }));
 
-// SessionContext now mounts SessionRuntimeBar → ModelBrandIcon, which
-// statically imports ~20 brand icons from "@thesvg/react". Mock the
-// component so this suite's partial @thesvg mock (AppShell.tsx's own
-// icons) stays sufficient and the runtime bar's model-name path is
-// isolated from the icon lib.
+// Stage 4: the always-mounted BookPanel renders SessionRuntimeBar (in the
+// RUNTIME & COST block) → ModelBrandIcon, which statically imports ~20 brand
+// icons from "@thesvg/react". Mock the component so this suite's partial
+// @thesvg mock (AppShell.tsx's own icons) stays sufficient and the runtime
+// bar's model-name path is isolated from the icon lib.
 vi.mock("../../../wizard/steps/provider/ModelBrandIcon.js", () => ({
   ModelBrandIcon: () => null,
 }));

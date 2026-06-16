@@ -5,12 +5,15 @@
  * EXCEPTION stamps only (silence-by-default — `restricted` permission and
  * `mission` mode deviate from the defaults; agent/full earn no chrome).
  * Loading/error/not-found states are boxless lines on the same rule height.
+ *
+ * Stage 4: the runtime bar (model/usage/context/compaction) moved OUT of this
+ * header — it now lives solely in the BOOK panel's RUNTIME & COST block, so the
+ * desk rule stays a single quiet title line.
  */
 
 import type { JSX } from "react";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import { DotmHex3 } from "../../components/ui/dotm-hex-3.js";
-import { SessionRuntimeBar } from "./SessionRuntimeBar.js";
 import { Stamp } from "./SessionRows/Stamp.js";
 import { getSessionTitle } from "./sessionListModel.js";
 
@@ -60,24 +63,21 @@ export function SessionContext({
   if (activeSession !== null) {
     const title = getSessionTitle(activeSession);
     return (
-      <div className="flex flex-col gap-2">
-        <div
-          data-vex-area="session-header"
-          role="group"
-          aria-label={`Session: ${title}`}
-          className="flex h-9 items-center gap-3 border-b border-[var(--vex-line)]"
-        >
-          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
-            {title}
-          </span>
-          {activeSession.permission !== "full" ? (
-            <Stamp tone="warn">restricted</Stamp>
-          ) : null}
-          {activeSession.mode === "mission" ? (
-            <Stamp tone="accent">mission</Stamp>
-          ) : null}
-        </div>
-        <SessionRuntimeBar sessionId={activeSession.id} />
+      <div
+        data-vex-area="session-header"
+        role="group"
+        aria-label={`Session: ${title}`}
+        className="flex h-9 items-center gap-3 border-b border-[var(--vex-line)]"
+      >
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
+          {title}
+        </span>
+        {activeSession.permission !== "full" ? (
+          <Stamp tone="warn">restricted</Stamp>
+        ) : null}
+        {activeSession.mode === "mission" ? (
+          <Stamp tone="accent">mission</Stamp>
+        ) : null}
       </div>
     );
   }

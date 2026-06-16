@@ -10,7 +10,7 @@
  *
  * Sub-components keep this file small:
  *   - hero (register head; trust line lives in the composer) → `SessionWelcomeHero`
- *   - context strip/header → `SessionContext` (+ `SessionRuntimeBar`)
+ *   - context strip/header → `SessionContext` (runtime bar now lives in BOOK)
  *   - mission card        → `MissionContractCard` (mission sessions only)
  *   - transcript          → `SessionTranscript`
  *   - composer + slash    → `SessionComposer`

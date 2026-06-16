@@ -2,20 +2,15 @@
  * SessionContext header tests (slice C — a11y labels + canonical selectors).
  *
  * Pins the `session-header` data selector + the labeled group for the active
- * session strip. `SessionRuntimeBar` is mocked so this test stays free of its
- * model/usage/compaction data hooks.
+ * session strip. Stage 4 moved the runtime bar OUT of this header into the
+ * BOOK panel; the header now renders no runtime-status group (pinned below).
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import { SessionContext, type SessionContextProps } from "../SessionContext.js";
-
-vi.mock("../SessionRuntimeBar.js", () => ({
-  SessionRuntimeBar: () =>
-    createElement("div", { "data-testid": "runtime-bar-stub" }),
-}));
 
 const SESSION: SessionListItem = {
   id: "00000000-0000-4000-8000-0000000000e1",
@@ -53,6 +48,11 @@ describe("SessionContext header (slice C)", () => {
     // deviating `restricted` permission is stamped.
     expect(screen.queryByText("agent")).toBeNull();
     expect(screen.getByText("restricted")).not.toBeNull();
+    // Stage 4: the runtime bar moved to the BOOK panel — the header must NOT
+    // mount it any more.
+    expect(
+      container.querySelector('[data-vex-area="runtime-status"]'),
+    ).toBeNull();
   });
 
   it("stamps mission mode but stays silent for full permission", () => {
