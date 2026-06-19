@@ -39,8 +39,21 @@ export interface HydratedSession {
  * mirrors `session.permission` and is the single source for approval
  * gates throughout the turn — no per-call DB queries downstream.
  */
+// `freezeDraft` (mission/mapper.ts) nests the mission fields under
+// `frozenMission.draft`, so the accepted contract's allowed wallets live at
+// `frozenMission.draft.allowedWallets` — NOT at the top of `frozenMission`.
+// Reading the shallower (non-existent) path made EVERY active run resolve to an
+// empty set → `empty_allowed_wallets` → invalid policy → every mission swap and
+// bridge failed closed at the prequote gate. `.passthrough()` tolerates the
+// other frozen fields (id/title/goal/approvedAt/constraintsJson).
 const FrozenAllowedWalletsSchema = z
-  .object({ allowedWallets: z.array(z.string()).nullable().optional() })
+  .object({
+    draft: z
+      .object({ allowedWallets: z.array(z.string()).nullable().optional() })
+      .passthrough()
+      .nullable()
+      .optional(),
+  })
   .passthrough();
 
 /**
@@ -58,7 +71,7 @@ export function resolveWalletPolicy(
       ?.frozenMission;
     const parsed = FrozenAllowedWalletsSchema.safeParse(frozen ?? null);
     if (!parsed.success) return { kind: "invalid", reason: "missing_or_malformed_snapshot" };
-    const allowed = parsed.data.allowedWallets ?? [];
+    const allowed = parsed.data.draft?.allowedWallets ?? [];
     if (allowed.length === 0) return { kind: "invalid", reason: "empty_allowed_wallets" };
     return { kind: "mission_allowed", allowedWallets: allowed };
   }
