@@ -226,12 +226,35 @@ describe("evaluatePrequoteGate — bridge", () => {
     }
   });
 
-  it("fail-closed on a wallet-resolve throw → block(gate_error), no fabricated address", async () => {
+  it("fail-closed on a WALLET_NOT_SELECTED throw → block(wallet_not_selected), accurate message", async () => {
     mockResolveSelectedAddress.mockImplementation(() => {
       throw new VexError(ErrorCodes.WALLET_NOT_SELECTED, "no wallet");
     });
     const d = await mod.evaluatePrequoteGate("khalani.bridge", bridgeParams(), ctx());
-    expect(d.kind === "block" && d.reason).toBe("gate_error");
+    expect(d.kind).toBe("block");
+    if (d.kind === "block") {
+      expect(d.reason).toBe("wallet_not_selected");
+      expect(d.message).toMatch(/no wallet is selected/i);
+      expect(d.message).not.toMatch(/could not verify a fresh bridge quote/i);
+    }
+    expect(mockExistsFail).not.toHaveBeenCalled();
+  });
+
+  it("fail-closed on a mission-setup invalid policy → block(wallet_setup), bridge-flavored accurate message", async () => {
+    mockResolveSelectedAddress.mockImplementation(() => {
+      throw new VexError(ErrorCodes.WALLET_SCOPE_MISMATCH, "Mission wallet policy is invalid");
+    });
+    const d = await mod.evaluatePrequoteGate(
+      "khalani.bridge",
+      bridgeParams(),
+      ctx({ walletPolicy: { kind: "invalid", reason: "mission_without_active_run" } }),
+    );
+    expect(d.kind).toBe("block");
+    if (d.kind === "block") {
+      expect(d.reason).toBe("wallet_setup");
+      expect(d.message).toMatch(/Bridge blocked/);
+      expect(d.message).toMatch(/setup|active run/i);
+    }
     expect(mockExistsFail).not.toHaveBeenCalled();
   });
 

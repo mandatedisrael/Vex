@@ -410,13 +410,94 @@ describe("evaluateSwapPrequoteGate", () => {
     expect(mockExistsFail).not.toHaveBeenCalled();
   });
 
-  it("R3: a resolveSelectedAddress throw → block(gate_error), no fabricated address", async () => {
+  // A wallet-resolution throw is STILL a fail-closed block (no DB read, no
+  // fabricated address), but the reason/message is now ACCURATE instead of the
+  // misleading "could not verify a fresh quote" that previously looped the agent.
+  it("R3: WALLET_NOT_SELECTED throw → block(wallet_not_selected), accurate message, no DB read", async () => {
     mockResolveSelectedAddress.mockImplementation(() => {
       throw new VexError(ErrorCodes.WALLET_NOT_SELECTED, "no wallet selected");
     });
     const d = await mod.evaluateSwapPrequoteGate("kyberswap.swap.sell", EVM_PARAMS, ctx());
-    expect(d.kind === "block" && d.reason).toBe("gate_error");
+    expect(d.kind).toBe("block");
+    if (d.kind === "block") {
+      expect(d.reason).toBe("wallet_not_selected");
+      expect(d.message).toMatch(/no wallet is selected/i);
+      // Must NOT regress to the misleading loop-inducing message.
+      expect(d.message).not.toMatch(/could not verify a fresh quote/i);
+      // No raw thrown text leaks.
+      expect(d.message).not.toContain("no wallet selected");
+    }
     expect(mockExistsFail).not.toHaveBeenCalled();
+  });
+
+  it("R3: WALLET_SCOPE_MISMATCH during mission setup (invalid policy, no active run) → block(wallet_setup)", async () => {
+    // resolveSelectedEntry succeeds, but the fail-closed policy assert rejects an
+    // invalid setup policy — the real cause of the reported 100%-block bug.
+    mockResolveSelectedAddress.mockImplementation(() => {
+      throw new VexError(ErrorCodes.WALLET_SCOPE_MISMATCH, "Mission wallet policy is invalid");
+    });
+    const d = await mod.evaluateSwapPrequoteGate(
+      "solana.swap.execute",
+      SOL_PARAMS,
+      ctx({ walletPolicy: { kind: "invalid", reason: "mission_without_active_run" } }),
+    );
+    expect(d.kind).toBe("block");
+    if (d.kind === "block") {
+      expect(d.reason).toBe("wallet_setup");
+      expect(d.message).toMatch(/setup|active run/i);
+      expect(d.message).not.toMatch(/could not verify a fresh quote/i);
+    }
+    expect(mockExistsFail).not.toHaveBeenCalled();
+  });
+
+  it("R3: WALLET_SCOPE_MISMATCH with a valid (non-setup) policy → block(wallet_scope)", async () => {
+    // A valid mission_allowed policy but the selected wallet is not in the set →
+    // a genuine scope mismatch (NOT setup), distinct actionable message.
+    mockResolveSelectedAddress.mockImplementation(() => {
+      throw new VexError(ErrorCodes.WALLET_SCOPE_MISMATCH, "not in the allowed wallet set");
+    });
+    const d = await mod.evaluateSwapPrequoteGate(
+      "kyberswap.swap.sell",
+      EVM_PARAMS,
+      ctx({ walletPolicy: { kind: "mission_allowed", allowedWallets: ["0xOTHER"] } }),
+    );
+    expect(d.kind).toBe("block");
+    if (d.kind === "block") {
+      expect(d.reason).toBe("wallet_scope");
+      expect(d.message).toMatch(/can't be used|allowed set/i);
+      expect(d.message).not.toMatch(/could not verify a fresh quote/i);
+    }
+    expect(mockExistsFail).not.toHaveBeenCalled();
+  });
+
+  it("R3: WALLET_SCOPE_MISMATCH from wallet drift WITHOUT a mission (policy none) → block(wallet_scope), message does NOT claim setup", async () => {
+    // resolveSelectedEntry throws WALLET_SCOPE_MISMATCH for a removed/drifted
+    // selected wallet BEFORE any policy check. With no mission (policy "none")
+    // this must NOT be mislabeled wallet_setup, and the message must not falsely
+    // assert a mission setup / active-run requirement.
+    mockResolveSelectedAddress.mockImplementation(() => {
+      throw new VexError(ErrorCodes.WALLET_SCOPE_MISMATCH, "The wallet selected for this session is no longer available.");
+    });
+    const d = await mod.evaluateSwapPrequoteGate("kyberswap.swap.sell", EVM_PARAMS, ctx());
+    expect(d.kind).toBe("block");
+    if (d.kind === "block") {
+      expect(d.reason).toBe("wallet_scope");
+      expect(d.message).not.toMatch(/setup|active run/i);
+      expect(d.message).not.toMatch(/could not verify a fresh quote/i);
+    }
+  });
+
+  it("R3: WALLET_NOT_CONFIGURED (default resolution, no wallet) → block(wallet_not_selected)", async () => {
+    mockResolveSelectedAddress.mockImplementation(() => {
+      throw new VexError(ErrorCodes.WALLET_NOT_CONFIGURED, "No solana wallet is configured.");
+    });
+    const d = await mod.evaluateSwapPrequoteGate("kyberswap.swap.sell", EVM_PARAMS, ctx());
+    expect(d.kind).toBe("block");
+    if (d.kind === "block") {
+      expect(d.reason).toBe("wallet_not_selected");
+      expect(d.message).toMatch(/no wallet is selected/i);
+      expect(d.message).not.toContain("No solana wallet is configured");
+    }
   });
 
   it("R3: missing sessionId → block(no_session), no execution", async () => {

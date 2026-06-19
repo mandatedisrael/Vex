@@ -14,6 +14,11 @@ export type GateBlockReason =
   | "unresolved_token"  // EVM bare-symbol leg at execute (un-gateable identity)
   | "no_quote"          // no fresh matching prequote for these exact params
   | "safety_fail"       // a fresh prequote flagged the trade as a confirmed scam
+  | "wallet_setup"      // mission SETUP — a mission exists with no active run yet, so
+                        // the fail-closed resolver rejects (a broadcast needs a run)
+  | "wallet_scope"      // selected wallet can't be used: drift/removal, or — when a
+                        // mission is active — not in the accepted allowed set
+  | "wallet_not_selected" // no wallet selected for the required chain family
   | "unbindable_param"; // bridge execute carries an EXECUTE-ONLY param (routeId /
                         // depositMethod) the quote can never bind — fail-closed
 

@@ -21,9 +21,10 @@ import { NATIVE_TOKEN_ADDRESS } from "@tools/kyberswap/constants.js";
 import { resolveChainSlug, slugToChainId } from "@tools/kyberswap/chains.js";
 import { requireJupiterResolvedToken } from "@tools/solana-ecosystem/jupiter/jupiter-tokens/service.js";
 import { resolveSelectedAddress } from "@vex-agent/tools/internal/wallet/resolve.js";
+import type { WalletPolicy } from "@vex-agent/engine/types.js";
 import logger from "@utils/logger.js";
 
-import { VexError } from "../../../../errors.js";
+import { VexError, ErrorCodes } from "../../../../errors.js";
 import type { ProtocolExecutionContext } from "../types.js";
 import * as prequoteRepo from "@vex-agent/db/repos/swap-prequotes.js";
 import type {
@@ -70,6 +71,12 @@ const SWAP_BLOCK_MESSAGES: Record<GateBlockReason, string> = {
     "Swap blocked: no fresh quote for these exact params. Call the swap quote first, then retry.",
   safety_fail:
     "Swap blocked: the quoted token was flagged unsafe (honeypot/scam). Aborting.",
+  wallet_setup:
+    "Swap blocked: the mission is still in setup (no active run), so swaps cannot broadcast yet. Accept and start the mission run, then swap — do NOT re-quote.",
+  wallet_scope:
+    "Swap blocked: the selected wallet can't be used — it may have changed or been removed, or it isn't in the mission's allowed set. Re-select a valid wallet (re-accept the mission contract if a mission is active), then retry — do NOT re-quote.",
+  wallet_not_selected:
+    "Swap blocked: no wallet is selected (or configured) for this swap's chain in the current session. Select a wallet, then retry — do NOT re-quote.",
   // Unreachable on the swap path (only the bridge execute carries these params),
   // but the reason map must be total over GateBlockReason.
   unbindable_param:
@@ -89,6 +96,12 @@ const BRIDGE_BLOCK_MESSAGES: Record<GateBlockReason, string> = {
     "Bridge blocked: no fresh bridge quote for these exact params. Call bridge_quote first, then retry.",
   safety_fail:
     "Bridge blocked: the quoted route was flagged unsafe. Aborting.",
+  wallet_setup:
+    "Bridge blocked: the mission is still in setup (no active run), so bridges cannot broadcast yet. Accept and start the mission run, then bridge — do NOT re-quote.",
+  wallet_scope:
+    "Bridge blocked: a wallet for this bridge can't be used — it may have changed or been removed, or it isn't in the mission's allowed set. Re-select a valid wallet (re-accept the mission contract if a mission is active), then retry — do NOT re-quote.",
+  wallet_not_selected:
+    "Bridge blocked: no wallet is selected (or configured) for one of the bridge's chains in the current session. Select a wallet, then retry — do NOT re-quote.",
   unbindable_param:
     "Bridge blocked: routeId/depositMethod cannot be bound to a quote — omit them (the bridge selects the best route) or this execute can't be verified.",
 };
@@ -96,6 +109,48 @@ const BRIDGE_BLOCK_MESSAGES: Record<GateBlockReason, string> = {
 function block(reason: GateBlockReason, kind: PrequoteKind): GateDecision {
   const messages = kind === "bridge" ? BRIDGE_BLOCK_MESSAGES : SWAP_BLOCK_MESSAGES;
   return { kind: "block", reason, message: messages[reason] };
+}
+
+/**
+ * Map a caught gate failure to a bounded block reason. Most throws are a genuine
+ * fail-closed `gate_error`. A wallet-resolution VexError, however, means the
+ * execute is CORRECTLY blocked (no usable signer / not authorized) yet the agent
+ * must be told the ACCURATE cause — never the misleading "re-run the quote",
+ * which sends it into a re-quote→re-execute loop. `resolveSelectedAddress`
+ * (called at `computeGateMatch`, BEFORE any DB read) throws either
+ * `WALLET_NOT_SELECTED` (no wallet for the family) or `WALLET_SCOPE_MISMATCH`
+ * (invalid policy OR wallet-not-in-allowed-set); the latter splits on the
+ * already-structured `walletPolicy` into the mission-SETUP case (a mission with
+ * no active run) vs a contract-drift/scope case. Only the bounded reason class
+ * flows onward — never raw wallet/DB/policy text — so the gate's no-leak doctrine
+ * (and its fail-closed BLOCK outcome) are preserved; only the message becomes
+ * truthful.
+ */
+function classifyGateBlockReason(err: unknown, policy: WalletPolicy): GateBlockReason {
+  if (err instanceof GateIdentityError) return err.gateReason;
+  if (err instanceof VexError) {
+    // No usable wallet for the family: none selected for the session, or none
+    // configured at all (default resolution). Both → "select a wallet".
+    if (
+      err.code === ErrorCodes.WALLET_NOT_SELECTED ||
+      err.code === ErrorCodes.WALLET_NOT_CONFIGURED
+    ) {
+      return "wallet_not_selected";
+    }
+    // WALLET_SCOPE_MISMATCH is overloaded: it is thrown for a mission-policy
+    // rejection (assertWalletPolicy) AND for a selected-wallet drift/removal
+    // (resolveSelectedEntry, which runs FIRST). We can only safely call it the
+    // SETUP case when the policy itself is the invalid mission-setup one; every
+    // other shape (active-run drift, wallet removed/changed, not-in-allowed-set,
+    // or a non-mission session whose selected wallet drifted) maps to the
+    // generic `wallet_scope`, whose message does NOT falsely assert a mission.
+    if (err.code === ErrorCodes.WALLET_SCOPE_MISMATCH) {
+      return policy.kind === "invalid" && policy.reason === "mission_without_active_run"
+        ? "wallet_setup"
+        : "wallet_scope";
+    }
+  }
+  return "gate_error";
 }
 
 /**
@@ -336,11 +391,10 @@ export async function evaluatePrequoteGate(
     const allow: GateDecision = { kind: "allow", verdict: latest.safetyVerdict, prequoteId: latest.prequoteId };
     return fotTax !== undefined ? { ...allow, fotTax } : allow;
   } catch (err) {
-    const reason =
-      err instanceof GateIdentityError
-        ? err.gateReason
-        : ("gate_error" as const);
-    // Bounded structural log only — never raw provider/DB/wallet text.
+    const reason = classifyGateBlockReason(err, context.walletPolicy);
+    // Bounded structural log only — never raw provider/DB/wallet text. `reason`
+    // now disambiguates the wallet cases (wallet_setup / wallet_scope /
+    // wallet_not_selected) that previously all collapsed to `gate_error`.
     logger.warn("protocol.prequote.gate.error", {
       toolId,
       reason,
