@@ -21,6 +21,7 @@ import type { ChainFamily } from "@tools/khalani/types.js";
 import type { ProtocolHandler, ProtocolExecutionContext } from "../../types.js";
 import { resolveSelectedAddress, walletScopeErrorToResult } from "../../../internal/wallet/resolve.js";
 import { str, toResultData } from "../../handler-helpers.js";
+import { projectChain, projectChains, projectToken, projectTokens } from "../projectors.js";
 
 // ── Shared helpers (exported for bridge handler) ────────────────
 
@@ -68,9 +69,12 @@ export const READ_HANDLERS: Record<string, ProtocolHandler> = {
   "khalani.chains.list": async (params) => {
     const refresh = params.refresh === true;
     const chains = await getCachedKhalaniChains(refresh);
+    // Project to concise chain rows (P0-4): drop rpcUrls/blockExplorers — the
+    // internal rpc/explorer resolvers read those off the cached registry, not
+    // this output.
     return {
       success: true,
-      output: JSON.stringify({ chains: chains.length, data: chains }, null, 2),
+      output: JSON.stringify({ chains: chains.length, data: projectChains(chains) }, null, 2),
       data: { chains },
     };
   },
@@ -78,9 +82,11 @@ export const READ_HANDLERS: Record<string, ProtocolHandler> = {
   "khalani.tokens.top": async (params) => {
     const chainIds = await parseChainIds(str(params, "chainIds"));
     const tokens = await getKhalaniClient().getTopTokens(chainIds);
+    // Project to concise token rows (P0-4): keep identity + lifted
+    // priceUsd/balance/isRiskToken, drop logoURI + open extensions bag.
     return {
       success: true,
-      output: JSON.stringify({ count: tokens.length, tokens }, null, 2),
+      output: JSON.stringify({ count: tokens.length, tokens: projectTokens(tokens) }, null, 2),
       data: { tokens },
     };
   },
@@ -91,9 +97,11 @@ export const READ_HANDLERS: Record<string, ProtocolHandler> = {
 
     const chainIds = await parseChainIds(str(params, "chainIds"));
     const result = await getKhalaniClient().searchTokens(query, chainIds);
+    // Project to concise token rows (P0-4) — this is the hot pre-mutation
+    // contract-resolver path, so the surfaced address + price signal matters.
     return {
       success: true,
-      output: JSON.stringify({ count: result.data.length, tokens: result.data }, null, 2),
+      output: JSON.stringify({ count: result.data.length, tokens: projectTokens(result.data) }, null, 2),
       data: { tokens: result.data },
     };
   },
@@ -105,9 +113,22 @@ export const READ_HANDLERS: Record<string, ProtocolHandler> = {
     const chainIds = await parseChainIds(str(params, "chainIds"));
     const limit = typeof params.limit === "number" ? params.limit : undefined;
     const result = await getKhalaniClient().autocompleteToken(keyword, { chainIds, limit });
+    // Project to concise rows (P0-4): each entry nests a FULL chain AND token —
+    // project both, keep the semantic fields (description/amount/usdAmount) and
+    // the top-level parse hints (parsed/nextSlots).
     return {
       success: true,
-      output: JSON.stringify(result, null, 2),
+      output: JSON.stringify({
+        data: result.data.map(entry => ({
+          description: entry.description,
+          chain: projectChain(entry.chain),
+          token: projectToken(entry.token),
+          amount: entry.amount,
+          usdAmount: entry.usdAmount,
+        })),
+        parsed: result.parsed,
+        nextSlots: result.nextSlots,
+      }, null, 2),
       data: toResultData(result),
     };
   },
@@ -136,7 +157,9 @@ export const READ_HANDLERS: Record<string, ProtocolHandler> = {
         totalUsd: scan.totalUsd,
         scannedChainIds: scan.scannedChainIds,
         chainErrors: scan.chainErrors,
-        tokens: scan.tokens,
+        // Project to concise token rows (P0-4): the balances path is where
+        // `extensions.balance` lives, so the lifted balance/price stay surfaced.
+        tokens: projectTokens(scan.tokens),
       }, null, 2),
       data: {
         address,
