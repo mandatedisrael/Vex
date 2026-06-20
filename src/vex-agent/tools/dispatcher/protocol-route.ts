@@ -7,6 +7,10 @@
 
 import type { ToolCallRequest, ToolResult } from "../types.js";
 import type { InternalToolContext } from "../internal/types.js";
+import type {
+  ProtocolDiscoveryResult,
+  ProtocolDiscoveryModelResult,
+} from "../protocols/types.js";
 import { isInternalTool, isMutatingTool, isToolBlockedForRole } from "../registry.js";
 import { discoverProtocolCapabilities } from "../protocols/runtime.js";
 import { executeProtocolTool } from "../protocols/runtime.js";
@@ -20,6 +24,24 @@ import { toResultData } from "../protocols/handler-helpers.js";
 import logger from "@utils/logger.js";
 import { dispatchTargetIsMutating } from "./mutating-targets.js";
 import { INTERNAL_TOOL_LOADERS } from "./internal-loaders.js";
+
+/**
+ * Project a discovery result into its model-facing shape: strip the
+ * telemetry-only `embeddingModel`/`embeddingDim` from the `retrieval` block.
+ * The input `result` is NOT mutated — telemetry/logging downstream still reads
+ * the full meta (`discovery.telemetry.ts` logs both embedding fields).
+ */
+export function toModelDiscoveryResult(
+  result: ProtocolDiscoveryResult,
+): ProtocolDiscoveryModelResult {
+  if (!result.retrieval) {
+    // Preserve the original (absent) retrieval key rather than forcing it on.
+    const { retrieval: _retrieval, ...rest } = result;
+    return rest;
+  }
+  const { embeddingModel: _model, embeddingDim: _dim, ...modelRetrieval } = result.retrieval;
+  return { ...result, retrieval: modelRetrieval };
+}
 
 export async function routeToolCall(
   call: ToolCallRequest,
@@ -48,14 +70,17 @@ export async function routeToolCall(
       contextUsageBand: context.contextUsageBand,
     };
     const result = await discoverProtocolCapabilities(discoveryRequest);
+    // Telemetry reads the FULL result (incl. embeddingModel/embeddingDim).
     logDiscoveryTelemetry({
       request: discoveryRequest, result, discoveryRunId: newDiscoveryRunId(),
       sourceSurface: context.sourceSurface, sourceSession: context.sourceSession,
     });
+    // The model only sees the trimmed copy — retrieval mechanics stripped.
+    const modelResult = toModelDiscoveryResult(result);
     return {
-      success: result.success,
-      output: JSON.stringify(result, null, 2),
-      data: toResultData(result),
+      success: modelResult.success,
+      output: JSON.stringify(modelResult, null, 2),
+      data: toResultData(modelResult),
     };
   }
 

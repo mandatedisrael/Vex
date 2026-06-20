@@ -23,11 +23,9 @@ function toDiscoveryItem(
   const item: ProtocolDiscoveryItem = {
     toolId: entry.manifest.toolId,
     namespace: entry.manifest.namespace,
-    lifecycle: entry.manifest.lifecycle,
     description: entry.manifest.description,
     mutating: entry.manifest.mutating,
     params: entry.manifest.params,
-    exampleParams: entry.manifest.exampleParams,
     score: entry.score,
     whyMatched: entry.whyMatched,
   };

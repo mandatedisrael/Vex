@@ -157,11 +157,9 @@ export interface ProtocolDiscoveryRequest {
 export interface ProtocolDiscoveryItem {
   toolId: string;
   namespace: ProtocolNamespace;
-  lifecycle: ToolLifecycle;
   description: string;
   mutating: boolean;
   params: ProtocolParamDef[];
-  exampleParams: Record<string, unknown>;
   /** Retrieval score for this match (0 when no query, >0 for ranked matches). */
   score: number;
   /**
@@ -183,22 +181,36 @@ export interface ProtocolDiscoveryItem {
 /**
  * Retrieval metadata attached to a discovery result. Surfaces whether the
  * response was an unranked catalog listing, dense-ranked, or lexical fallback,
- * plus audit columns of the embedding used. Surfaced to the LLM via
- * dispatcher JSON serialization — model uses `method` and `denseFailed` to
- * interpret weak matches (lexical fallback often signals embedding-sidecar
- * issues, not query problems). Also consumed by telemetry.
+ * plus audit columns of the embedding used. The `embeddingModel`/`embeddingDim`
+ * columns are internal retrieval mechanics consumed ONLY by telemetry — they
+ * are stripped from the model-facing copy (see {@link ProtocolDiscoveryModelRetrievalMeta}
+ * and the dispatcher's `toModelDiscoveryResult`). The model uses `method` and
+ * `denseFailed` to interpret weak matches (lexical fallback often signals
+ * embedding-sidecar issues, not query problems).
  */
 export interface ProtocolDiscoveryRetrievalMeta {
   method: "catalog" | "dense" | "lexical";
   /** True when dense retrieval was attempted but lexical fallback produced the result. */
   denseFailed: boolean;
-  /** Provider-reported embedding model (only set when dense retrieval ran). */
+  /** Provider-reported embedding model (only set when dense retrieval ran). Telemetry-only. */
   embeddingModel?: string;
-  /** Provider-reported embedding dim (only set when dense retrieval ran). */
+  /** Provider-reported embedding dim (only set when dense retrieval ran). Telemetry-only. */
   embeddingDim?: number;
   /** Number of candidates before scoring (post env/advertised/lifecycle filters). */
   candidateCount: number;
 }
+
+/**
+ * Model-facing projection of {@link ProtocolDiscoveryRetrievalMeta}: the same
+ * shape minus the telemetry-only `embeddingModel`/`embeddingDim` mechanics.
+ * Built by the dispatcher's `toModelDiscoveryResult` for serialization into the
+ * `discover_tools` output string; the full meta stays on the result object for
+ * telemetry/logging.
+ */
+export type ProtocolDiscoveryModelRetrievalMeta = Omit<
+  ProtocolDiscoveryRetrievalMeta,
+  "embeddingModel" | "embeddingDim"
+>;
 
 export interface ProtocolDiscoveryResult {
   success: boolean;
@@ -212,6 +224,18 @@ export interface ProtocolDiscoveryResult {
   warnings: string[];
   /** Optional retrieval metadata for telemetry. */
   retrieval?: ProtocolDiscoveryRetrievalMeta;
+}
+
+/**
+ * Model-facing projection of {@link ProtocolDiscoveryResult}: identical except
+ * the `retrieval` block carries only the model-relevant fields (no
+ * `embeddingModel`/`embeddingDim`). The dispatcher serializes THIS shape into
+ * the `discover_tools` tool-output string while keeping the full result for
+ * telemetry. See `toModelDiscoveryResult` in `dispatcher/protocol-route.ts`.
+ */
+export interface ProtocolDiscoveryModelResult
+  extends Omit<ProtocolDiscoveryResult, "retrieval"> {
+  retrieval?: ProtocolDiscoveryModelRetrievalMeta;
 }
 
 // ── Execute request ──────────────────────────────────────────────

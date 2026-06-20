@@ -3,6 +3,8 @@ import { discoverProtocolCapabilities } from "../../../vex-agent/tools/protocols
 import {
   PROTOCOL_ADVERTISED_NAMESPACE_ALLOWLIST,
 } from "../../../vex-agent/tools/protocols/catalog.js";
+import { toModelDiscoveryResult } from "../../../vex-agent/tools/dispatcher/protocol-route.js";
+import type { ProtocolDiscoveryResult } from "../../../vex-agent/tools/protocols/types.js";
 
 describe("protocol discovery", () => {
   // Snapshot env-gating keys so each test sees a deterministic baseline.
@@ -138,12 +140,22 @@ describe("protocol discovery", () => {
     expect(bigLimitResult.totalCount).toBe(allResult.totalCount);
   });
 
-  // ── Lifecycle filter ─────────────────────────────────────────────
+  // ── Trimmed discovery item shape (P0-7) ──────────────────────────
+  //
+  // `lifecycle` (always "active" for advertised tools) and `exampleParams`
+  // (duplicate guidance — the agent is told to use `params`) were dropped
+  // from the model-visible discovery item. They remain on the underlying
+  // manifest; only the surfaced ITEM loses them.
 
-  it("returns only active tools by default", async () => {
-    const result = await discoverProtocolCapabilities({});
+  it("discovery items omit lifecycle and exampleParams", async () => {
+    const result = await discoverProtocolCapabilities({ namespace: "khalani", limit: 50 });
+    expect(result.tools.length).toBeGreaterThan(0);
     for (const tool of result.tools) {
-      expect(tool.lifecycle).toBe("active");
+      expect(tool).not.toHaveProperty("lifecycle");
+      expect(tool).not.toHaveProperty("exampleParams");
+      // Retained item fields — guidance now points at `params`.
+      expect(tool.toolId).toBeTruthy();
+      expect(Array.isArray(tool.params)).toBe(true);
     }
   });
 
@@ -304,5 +316,94 @@ describe("protocol discovery", () => {
     for (const t of nonMutating) {
       expect(t.unavailable_at_pressure).toBeUndefined();
     }
+  });
+});
+
+// ── Model-copy vs result split for embedding fields (P0-7) ──────────
+//
+// `embeddingModel`/`embeddingDim` are internal retrieval mechanics consumed
+// only by telemetry. The dispatcher serializes a model-facing COPY that omits
+// them; the original result object (read by telemetry/logging) keeps them.
+// `toModelDiscoveryResult` is the pure projection that performs that split.
+
+describe("toModelDiscoveryResult — embedding-field split", () => {
+  function baseResult(
+    retrieval: ProtocolDiscoveryResult["retrieval"],
+  ): ProtocolDiscoveryResult {
+    return {
+      success: true,
+      count: 1,
+      totalCount: 1,
+      hasMore: false,
+      tools: [
+        {
+          toolId: "khalani.bridge",
+          namespace: "khalani",
+          description: "bridge tokens",
+          mutating: true,
+          params: [],
+          score: 0.9,
+          whyMatched: ["description"],
+        },
+      ],
+      warnings: [],
+      retrieval,
+    };
+  }
+
+  it("strips embeddingModel/embeddingDim from the model copy's retrieval", () => {
+    const result = baseResult({
+      method: "dense",
+      denseFailed: false,
+      embeddingModel: "test-embed-model",
+      embeddingDim: 768,
+      candidateCount: 12,
+    });
+
+    const modelResult = toModelDiscoveryResult(result);
+
+    // Model copy: retrieval present, mechanics removed, signal fields kept.
+    expect(modelResult.retrieval).toBeDefined();
+    expect(modelResult.retrieval).not.toHaveProperty("embeddingModel");
+    expect(modelResult.retrieval).not.toHaveProperty("embeddingDim");
+    expect(modelResult.retrieval?.method).toBe("dense");
+    expect(modelResult.retrieval?.denseFailed).toBe(false);
+    expect(modelResult.retrieval?.candidateCount).toBe(12);
+  });
+
+  it("leaves the original result object intact for telemetry", () => {
+    const result = baseResult({
+      method: "dense",
+      denseFailed: false,
+      embeddingModel: "test-embed-model",
+      embeddingDim: 768,
+      candidateCount: 12,
+    });
+
+    toModelDiscoveryResult(result);
+
+    // Original untouched — telemetry still reads both embedding fields.
+    expect(result.retrieval?.embeddingModel).toBe("test-embed-model");
+    expect(result.retrieval?.embeddingDim).toBe(768);
+  });
+
+  it("preserves an absent retrieval block (catalog/lexical with no embedding)", () => {
+    const result = baseResult(undefined);
+    const modelResult = toModelDiscoveryResult(result);
+    expect(modelResult.retrieval).toBeUndefined();
+    expect(modelResult).not.toHaveProperty("retrieval");
+  });
+
+  it("does not surface embedding fields when retrieval has none set", () => {
+    // catalog/lexical retrieval present but embedding fields unset.
+    const result = baseResult({
+      method: "lexical",
+      denseFailed: true,
+      candidateCount: 5,
+    });
+    const modelResult = toModelDiscoveryResult(result);
+    expect(modelResult.retrieval).not.toHaveProperty("embeddingModel");
+    expect(modelResult.retrieval).not.toHaveProperty("embeddingDim");
+    expect(modelResult.retrieval?.method).toBe("lexical");
   });
 });

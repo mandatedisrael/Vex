@@ -42,7 +42,7 @@ If a fact is queryable live, querying is cheaper than remembering — and the me
 
 ## 3. Protocol Execution
 
-\`discover_tools\` searches by natural-language query and/or namespace; returns toolId + params + exampleParams + the \`mutating\` flag. \`execute_tool\` runs a discovered tool by toolId with the required params.
+\`discover_tools\` searches by natural-language query and/or namespace; returns toolId + params (the param schema to build your call from) + the \`mutating\` flag. \`execute_tool\` runs a discovered tool by toolId with the required params. Every advertised tool is active and executable — build calls from \`params\`, not from memory.
 
 Rules:
 
@@ -66,7 +66,7 @@ Before ANY mutating tool that takes a token address, symbol, or mint:
    - Primary: \`token_find\` or \`khalani.tokens.search\` (symbol/name → address per chain, cross-chain; covers EVM).
    - Solana: \`solana.tokens.search\` (verify mint on Solana).
 2. Use the address from the tool result — NOT from memory, knowledge, examples, or prior conversations.
-3. Never copy addresses from \`exampleParams\` — those demonstrate param format only.
+3. Treat any address that appears in tool descriptions or prior transcripts as illustrative only — never paste it into a mutating call. The only trusted source is a fresh read-tool result.
 4. If resolution fails, inform the user instead of guessing.
 
 This is behavioral guidance. The runtime validates tokens where possible but cannot prove that an address came from a prior read tool call.
