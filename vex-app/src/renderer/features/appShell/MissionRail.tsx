@@ -43,7 +43,12 @@ import type {
 import type { PlanGetResult } from "@shared/schemas/session-plan.js";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import { Target02Icon, Route01Icon } from "@hugeicons/core-free-icons";
-import { useMissionDiff, useMissionDraft } from "../../lib/api/mission.js";
+import {
+  useMissionDiff,
+  useMissionDraft,
+  useRenewableMissionSource,
+} from "../../lib/api/mission.js";
+import { useRuntimeState } from "../../lib/api/runtime.js";
 import { useSession, useSessionPlan } from "../../lib/api/sessions.js";
 import { MissionContractModal } from "./MissionContractModal.js";
 import { PlanDisplayModal } from "./PlanDisplayModal.js";
@@ -77,11 +82,27 @@ export function MissionRail({
   const shouldRender =
     activeSessionId !== null && session !== null && (isMission || planEnabled);
 
+  // Runtime + renewable-source reads, fired ONLY for mission sessions. Both
+  // hooks coerce a null sessionId to "" and gate on length, so a non-mission
+  // session passes null and fires no IPC. Placed unconditionally above the
+  // early return to honour the rules of hooks.
+  const runtimeQuery = useRuntimeState(isMission ? activeSessionId : null);
+  const renewableQuery = useRenewableMissionSource(
+    isMission ? activeSessionId : null,
+  );
+  // hasActiveRun: a running/paused run (mirrors MissionControls' runtime unwrap).
+  const hasActiveRun =
+    runtimeQuery.data?.ok === true && runtimeQuery.data.data.hasActiveRun === true;
+  // hasRenewable: a non-null renewable source means a terminal accepted mission
+  // exists (completed/failed/stopped/cancelled), proving the contract was accepted.
+  const hasRenewable =
+    renewableQuery.data?.ok === true && renewableQuery.data.data !== null;
+
   const [open, setOpen] = useState<OpenModal>("none");
 
   const mission = useMemo(
-    () => deriveMissionBadge(isMission, draft, diff, plan),
-    [isMission, draft, diff, plan],
+    () => deriveMissionBadge(isMission, draft, diff, plan, hasActiveRun, hasRenewable),
+    [isMission, draft, diff, plan, hasActiveRun, hasRenewable],
   );
   const planBadge = useMemo(
     () => derivePlanBadge(plan, session?.missionStatus ?? null),
@@ -167,8 +188,35 @@ function deriveMissionBadge(
   draft: MissionDraftDto | null,
   diff: ReadyDiff | null,
   plan: PlanGetResult | null,
+  hasActiveRun: boolean,
+  hasRenewable: boolean,
 ): BadgeDerivation | null {
   if (!isMission) return null;
+  // A mission past contract-acceptance is "accepted" — never "preparing".
+  // hasActiveRun covers running/paused; hasRenewable (a non-null renewable
+  // source) covers terminal accepted missions (completed/failed/stopped/
+  // cancelled). Once accepted the draft drops out of `getDraftForSession`
+  // (draft === null), which would otherwise fall through to "preparing".
+  //
+  // The `draft === null` guard on the renewable branch is load-bearing:
+  // `getRenewableSourceForSession` returns the OLD terminal accepted mission
+  // for the session whenever one exists and does NOT exclude sessions that
+  // also have a fresh draft. After `mission.renew` a new status='draft'
+  // mission is inserted under the same root_session_id, and after
+  // `mission.edit` the parent mission returns to draft while its accepted-
+  // contract columns stay set — in both cases hasRenewable stays true while a
+  // current draft exists. Gating on `draft === null` lets that fresh draft
+  // fall THROUGH to the normal draft/ready/stale derivation instead of being
+  // masked as "accepted" by a stale renewable source. hasActiveRun stays
+  // unconditional: a live run is authoritative regardless of any draft.
+  //
+  // Pass-1 trade-off: a failed/stopped/cancelled mission reuses the `accepted`
+  // badge whose caption reads "Accepted" — here it means "contract accepted /
+  // no accept action pending", not "mission succeeded". A dedicated
+  // RUNNING/DONE state is a deferred Stage-2 follow-up.
+  if (hasActiveRun || (draft === null && hasRenewable)) {
+    return { state: "accepted", shimmer: false };
+  }
   if (draft === null || draft.status === "draft" || diff === null) {
     return { state: "preparing", shimmer: false };
   }

@@ -35,6 +35,8 @@ const mockUseSession = vi.fn();
 const mockUseMissionDraft = vi.fn();
 const mockUseMissionDiff = vi.fn();
 const mockUseSessionPlan = vi.fn();
+const mockUseRenewableMissionSource = vi.fn();
+const mockUseRuntimeState = vi.fn();
 
 vi.mock("../../../lib/api/sessions.js", () => ({
   useSession: (...a: unknown[]) => mockUseSession(...a),
@@ -43,6 +45,11 @@ vi.mock("../../../lib/api/sessions.js", () => ({
 vi.mock("../../../lib/api/mission.js", () => ({
   useMissionDraft: (...a: unknown[]) => mockUseMissionDraft(...a),
   useMissionDiff: (...a: unknown[]) => mockUseMissionDiff(...a),
+  useRenewableMissionSource: (...a: unknown[]) =>
+    mockUseRenewableMissionSource(...a),
+}));
+vi.mock("../../../lib/api/runtime.js", () => ({
+  useRuntimeState: (...a: unknown[]) => mockUseRuntimeState(...a),
 }));
 
 // Stub the modals to a marker that reports whether it's open + which one it is,
@@ -129,6 +136,30 @@ function plan(over: Partial<PlanGetResult> = {}): PlanGetResult {
   } as PlanGetResult;
 }
 
+// Minimal runtime Result — the rail only reads `hasActiveRun`. Defaults to no
+// active run (agent-mode shape); pass `hasActiveRun: true` for a running mission.
+function runtime(hasActiveRun = false) {
+  return ok({
+    sessionId: SESSION,
+    hasActiveRun,
+    missionRunId: null,
+    status: null,
+    stopReason: null,
+    lastCheckpointAt: null,
+    startedAt: null,
+    iterationCount: null,
+    leaseActive: false,
+    leaseExpiresAt: null,
+    pendingControlKind: null,
+  });
+}
+
+// Renewable-source Result — `{ missionId } | null`. Default null (no terminal
+// accepted mission); pass a missionId for a completed/failed/cancelled run.
+function renewable(missionId: string | null = null) {
+  return ok(missionId === null ? null : { missionId });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   // Sensible defaults: no draft/diff/plan; tests override per case.
@@ -136,6 +167,10 @@ beforeEach(() => {
   mockUseMissionDraft.mockReturnValue({ data: ok(null) });
   mockUseMissionDiff.mockReturnValue({ data: undefined });
   mockUseSessionPlan.mockReturnValue({ data: ok(plan()) });
+  // No active run / no renewable source by default, so existing badge cases
+  // (preparing / ready / accepted-via-diff) keep their expectations.
+  mockUseRuntimeState.mockReturnValue({ data: runtime(false) });
+  mockUseRenewableMissionSource.mockReturnValue({ data: renewable(null) });
 });
 
 function rail(activeSessionId: string | null = SESSION) {
@@ -222,6 +257,80 @@ describe("MissionRail badge derivation", () => {
     expect(
       screen.getByRole("button", { name: /Mission/i }).getAttribute("data-vex-state"),
     ).toBe("accepted");
+  });
+
+  it("Mission badge is Accepted (not Preparing) when the draft is gone but a run is active", () => {
+    // Accepted → running → draft drops out of getDraftForSession (draft null).
+    mockUseSession.mockReturnValue({ data: ok(sessionRow({ mode: "mission" })) });
+    mockUseMissionDraft.mockReturnValue({ data: ok(null) });
+    mockUseRuntimeState.mockReturnValue({ data: runtime(true) });
+    rail();
+    expect(
+      screen.getByRole("button", { name: /Mission/i }).getAttribute("data-vex-state"),
+    ).toBe("accepted");
+    expect(screen.queryByText("Preparing")).toBeNull();
+  });
+
+  it("Mission badge is Accepted (not Preparing) for a terminal mission via a renewable source", () => {
+    // Completed/failed/cancelled: no active run, but a non-null renewable
+    // source proves the contract was accepted.
+    mockUseSession.mockReturnValue({ data: ok(sessionRow({ mode: "mission" })) });
+    mockUseMissionDraft.mockReturnValue({ data: ok(null) });
+    mockUseRuntimeState.mockReturnValue({ data: runtime(false) });
+    mockUseRenewableMissionSource.mockReturnValue({ data: renewable(MISSION) });
+    rail();
+    expect(
+      screen.getByRole("button", { name: /Mission/i }).getAttribute("data-vex-state"),
+    ).toBe("accepted");
+    expect(screen.queryByText("Preparing")).toBeNull();
+  });
+
+  it("Mission badge is Preparing (not masked Accepted) for a fresh renewal draft over a renewable source", () => {
+    // mission.renew/edit inserts a NEW status='draft' mission under the same
+    // root_session_id while the OLD terminal accepted mission still matches
+    // getRenewableSourceForSession (hasRenewable stays true). The fresh draft
+    // must derive normally, NOT be masked "accepted" by the stale source.
+    mockUseSession.mockReturnValue({ data: ok(sessionRow({ mode: "mission" })) });
+    mockUseMissionDraft.mockReturnValue({
+      data: ok({ ...READY_DRAFT, status: "draft" }),
+    });
+    mockUseRuntimeState.mockReturnValue({ data: runtime(false) });
+    mockUseRenewableMissionSource.mockReturnValue({ data: renewable(MISSION) });
+    rail();
+    const missionBtn = screen.getByRole("button", { name: /Mission/i });
+    expect(missionBtn.getAttribute("data-vex-state")).toBe("preparing");
+    expect(missionBtn.getAttribute("data-vex-state")).not.toBe("accepted");
+  });
+
+  it("Mission badge stays Stale (not masked Accepted) for a dirty accepted contract over a renewable source", () => {
+    // An accepted-but-dirty contract on the current draft is "stale". A stale
+    // renewable source from a prior terminal run must not mask that to
+    // "accepted" — the dirty current draft owns the badge.
+    mockUseSession.mockReturnValue({ data: ok(sessionRow({ mode: "mission" })) });
+    mockUseMissionDraft.mockReturnValue({ data: ok(READY_DRAFT) });
+    mockUseMissionDiff.mockReturnValue({
+      data: ok(diff({ isAccepted: true, isDirty: true })),
+    });
+    mockUseRuntimeState.mockReturnValue({ data: runtime(false) });
+    mockUseRenewableMissionSource.mockReturnValue({ data: renewable(MISSION) });
+    rail();
+    const missionBtn = screen.getByRole("button", { name: /Mission/i });
+    expect(missionBtn.getAttribute("data-vex-state")).toBe("stale");
+    expect(missionBtn.getAttribute("data-vex-state")).not.toBe("accepted");
+  });
+
+  it("Mission badge is Accepted (not a shimmering Ready) for a paused plan-acceptance run", () => {
+    mockUseSession.mockReturnValue({
+      data: ok(
+        sessionRow({ mode: "mission", missionStatus: "paused_plan_acceptance" }),
+      ),
+    });
+    mockUseMissionDraft.mockReturnValue({ data: ok(null) });
+    mockUseRuntimeState.mockReturnValue({ data: runtime(true) });
+    rail();
+    const missionBtn = screen.getByRole("button", { name: /Mission/i });
+    expect(missionBtn.getAttribute("data-vex-state")).toBe("accepted");
+    expect(missionBtn.classList.contains("vex-badge--shimmer")).toBe(false);
   });
 
   it("Plan badge is Ready (shimmer) when a plan is pending acceptance", () => {
