@@ -42,5 +42,7 @@ describe("polymarket-credentials façade surface", () => {
     // Keep the type-only imports referenced so they are not elided as unused.
     const _typeProbe: ReadonlyArray<_Derive | _Acquired | _AcquireResult> = [];
     void _typeProbe;
-  });
+    // Import-bound: cold-transforming the heavy viem/solana module graph under
+    // vitest exceeds the 10s default. Bundled at runtime, so this is test-only.
+  }, 30_000);
 });

@@ -25,7 +25,14 @@ vi.mock("../../../../vex-agent/tools/internal/wallet/resolve.js", async () => {
   const actual = await vi.importActual<typeof import("../../../../vex-agent/tools/internal/wallet/resolve.js")>(
     "../../../../vex-agent/tools/internal/wallet/resolve.js",
   );
-  return { ...actual, resolveSelectedAddressSet: (...a: unknown[]) => mockResolveSet(...a) };
+  // portfolio-inspect resolves the READ-scoped wallet set (setup exception) via
+  // resolveSelectedAddressSetForRead; mock BOTH names so the set the handler
+  // actually calls is the one under test (and stays robust to either path).
+  return {
+    ...actual,
+    resolveSelectedAddressSet: (...a: unknown[]) => mockResolveSet(...a),
+    resolveSelectedAddressSetForRead: (...a: unknown[]) => mockResolveSet(...a),
+  };
 });
 
 const { handlePortfolio } = await import("../../../../vex-agent/tools/internal/portfolio-inspect.js");

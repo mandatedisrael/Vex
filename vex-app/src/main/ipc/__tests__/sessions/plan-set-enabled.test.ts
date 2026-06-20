@@ -52,7 +52,16 @@ const electronMock = (await import("electron")) as unknown as {
 };
 
 const SESSION = "00000000-0000-4000-8000-00000000aaaa";
-const PLAN = { enabled: true, planMd: "# plan", accepted: false, acceptedAt: null, updatedAt: "t" };
+// updatedAt MUST be an ISO datetime with offset — planStateSchema validates it
+// via z.string().datetime({ offset: true }) and the handler output is schema-
+// checked, so a placeholder like "t" makes the happy-path output fail validation.
+const PLAN = {
+  enabled: true,
+  planMd: "# plan",
+  accepted: false,
+  acceptedAt: null,
+  updatedAt: "2026-06-20T07:00:00.000Z",
+};
 const trustedSender = createTrustedSender({ sender: createTestWebContents() });
 
 async function callSetEnabled(enabled: boolean) {

@@ -80,5 +80,7 @@ describe("backup façade surface", () => {
       _Role | _V1 | _V2 | _M | _Wallet | _Entry | _Available
     > = [];
     void _typeProbe;
-  });
+    // Import-bound: cold-transforming the heavy viem/solana module graph under
+    // vitest exceeds the 10s default. Bundled at runtime, so this is test-only.
+  }, 30_000);
 });
