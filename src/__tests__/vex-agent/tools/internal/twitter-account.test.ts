@@ -106,6 +106,75 @@ describe("twitter_account", () => {
     });
   });
 
+  // ── response_format (P0-5 concise default) ────────────────────
+  const noisyUserResult = {
+    action: "user_details",
+    data: {
+      user: {
+        id: "u1",
+        userName: "openai",
+        fullName: "OpenAI",
+        followersCount: 10,
+        followingsCount: 1,
+        isVerified: true,
+        profileImage: "https://img/avatar.png",
+        profileBanner: "https://img/banner.png",
+        pinnedTweets: ["t1"],
+      },
+    },
+  };
+
+  it("defaults to concise projection (strips profileImage) when response_format is absent", async () => {
+    mockExecuteTwitterAccountRequest.mockResolvedValueOnce(noisyUserResult);
+
+    const result = await handleTwitterAccount(
+      { action: "user_details", username: "openai" },
+      baseContext,
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).not.toContain("profileImage");
+    expect(result.output).not.toContain("profileBanner");
+    expect(result.output).toContain("\"userName\": \"openai\"");
+  });
+
+  it("response_format='concise' returns the projection", async () => {
+    mockExecuteTwitterAccountRequest.mockResolvedValueOnce(noisyUserResult);
+
+    const result = await handleTwitterAccount(
+      { action: "user_details", username: "openai", response_format: "concise" },
+      baseContext,
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).not.toContain("profileImage");
+  });
+
+  it("response_format='detailed' returns the verbatim client output", async () => {
+    mockExecuteTwitterAccountRequest.mockResolvedValueOnce(noisyUserResult);
+
+    const result = await handleTwitterAccount(
+      { action: "user_details", username: "openai", response_format: "detailed" },
+      baseContext,
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("profileImage");
+    expect(result.output).toContain("profileBanner");
+  });
+
+  it("an invalid response_format falls back to concise", async () => {
+    mockExecuteTwitterAccountRequest.mockResolvedValueOnce(noisyUserResult);
+
+    const result = await handleTwitterAccount(
+      { action: "user_details", username: "openai", response_format: "verbose" },
+      baseContext,
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).not.toContain("profileImage");
+  });
+
   it("redacts cookie names, bearer tokens, and the configured API key from errors", async () => {
     process.env.RETTIWT_API_KEY = "secret-do-not-leak";
     mockExecuteTwitterAccountRequest.mockRejectedValueOnce(

@@ -18,6 +18,7 @@ export const TWITTER_ACCOUNT_TOOLS: readonly ToolDef[] = [
       "Use the configured secondary Twitter/X account via Rettiwt for read-only research.",
       "Supports account_status, user_details, user_search, user_timeline, user_replies, user_followers, user_following, tweet_details, tweet_search, tweet_replies, tweet_likers, tweet_retweeters, and space_details.",
       "This v1 tool never posts, likes, retweets, follows, bookmarks, reads DMs, uploads media, or changes profile/account state.",
+      "response_format: 'concise' (default) strips image/banner/bio/entities noise and keeps the signal fields; 'detailed' returns the verbatim client payload.",
       "RETTIWT_API_KEY is a base64 cookie-session secret; never ask to reveal it or include it in output.",
     ].join(" "),
     parameters: {
@@ -43,6 +44,12 @@ export const TWITTER_ACCOUNT_TOOLS: readonly ToolDef[] = [
             "user_following",
           ],
           description: "Read-only Twitter/X operation to perform.",
+        },
+        response_format: {
+          type: "string",
+          enum: ["concise", "detailed"],
+          description:
+            "concise (default) strips image/banner/bio/entities noise; detailed returns the verbatim client payload.",
         },
         username: { type: "string", description: "Twitter/X username, with or without @." },
         userId: { type: "string", description: "Numeric Twitter/X user id." },

@@ -5,12 +5,21 @@ import {
 } from "@tools/twitter-account/client.js";
 import type { ToolResult } from "../types.js";
 import type { InternalToolContext } from "./types.js";
-import { fail, ok } from "./types.js";
+import { enumField, fail, ok } from "./types.js";
+import { projectTwitterResult } from "./twitter-projection.js";
+
+const RESPONSE_FORMATS = ["concise", "detailed"] as const;
+type ResponseFormat = (typeof RESPONSE_FORMATS)[number];
 
 export async function handleTwitterAccount(
   params: Record<string, unknown>,
   _context: InternalToolContext,
 ): Promise<ToolResult> {
+  // Read response_format off RAW params: the Zod discriminated-union strips
+  // unknown keys, so it would not survive into parsed.data. concise is default.
+  const responseFormat: ResponseFormat =
+    enumField<ResponseFormat>(params, "response_format", RESPONSE_FORMATS) ?? "concise";
+
   const parsed = TwitterAccountParamsSchema.safeParse(params);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -18,7 +27,12 @@ export async function handleTwitterAccount(
   }
 
   try {
-    return ok(await executeTwitterAccountRequest(parsed.data));
+    const result = await executeTwitterAccountRequest(parsed.data);
+    return ok(
+      responseFormat === "detailed"
+        ? result
+        : projectTwitterResult(result, responseFormat),
+    );
   } catch (error) {
     return fail(`twitter_account: ${sanitizeTwitterAccountError(error)}`);
   }
