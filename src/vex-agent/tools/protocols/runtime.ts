@@ -290,7 +290,10 @@ export async function executeProtocolTool(
     // Capture thrown mutations to audit trail only (no projections for failures)
     // Preview: skip capture even for thrown exceptions
     const failedResult: ToolResult = withActionKind(
-      { success: false, output: `${request.toolId} failed (${safe.category}): ${safe.message}` },
+      {
+        success: false,
+        output: `${request.toolId} failed (${safe.category}): ${safe.message}${safe.retryable ? " (retryable)" : ""}`,
+      },
       effectiveActionKind,
     );
     if (shouldCapture) {

@@ -10,6 +10,8 @@
 
 import { redact } from "@vex-agent/memory/redaction.js";
 
+import { VexError } from "../../../../errors.js";
+
 // ── Provider-safe error summarisation (B-003) ────────────────────
 //
 // A thrown handler error (or any provider/SDK error) can embed URLs, request /
@@ -31,6 +33,11 @@ export type ErrorCategory =
 export interface SafeErrorSummary {
   readonly category: ErrorCategory;
   readonly message: string;
+  /**
+   * Present and `true` only when a thrown `VexError` marked itself retryable.
+   * Surfaced to the agent as a "(retryable)" suffix so it knows a retry is sane.
+   */
+  readonly retryable?: boolean;
 }
 
 const MAX_SAFE_ERROR_MESSAGE = 200;
@@ -86,6 +93,15 @@ export function summarizeProtocolError(err: unknown): SafeErrorSummary {
   const raw = err instanceof Error ? err.message : String(err);
   const category = classifyError(raw, err);
 
+  // A VexError carries an authored, agent-actionable `hint` (e.g. "Pass the exact
+  // contract address the quote returned, then retry."). Fold it into the SAME
+  // redaction pipeline as the message, CONCATENATED BEFORE the cap — so the hint
+  // is secret-redacted, internals-stripped (URLs/bodies/auth), and length-bounded
+  // exactly like the message, never appended raw after the cap (B-003). Category
+  // is classified on the message alone. Non-VexError throws are byte-unchanged.
+  const hint = err instanceof VexError ? err.hint?.trim() : undefined;
+  const combined = hint ? `${raw} — ${hint}` : raw;
+
   // Defense-in-depth, applied in order:
   //  1. redact known SECRET shapes (keys, JWTs, mnemonics, addresses),
   //  2. strip structured provider INTERNALS (URLs, bodies, auth) the B-003 note
@@ -93,7 +109,7 @@ export function summarizeProtocolError(err: unknown): SafeErrorSummary {
   //  3. collapse whitespace and hard-cap the length.
   // We never trust the provider not to embed internals, so we keep only this
   // bounded summary regardless of what the raw text contained.
-  let cleaned = redact(raw).text;
+  let cleaned = redact(combined).text;
   for (const [pattern, replacement] of SENSITIVE_FRAGMENT_PATTERNS) {
     cleaned = cleaned.replace(pattern, replacement);
   }
@@ -102,5 +118,8 @@ export function summarizeProtocolError(err: unknown): SafeErrorSummary {
     ? `${cleaned.slice(0, MAX_SAFE_ERROR_MESSAGE)}…`
     : cleaned;
 
-  return { category, message: bounded || category };
+  const summary: SafeErrorSummary = { category, message: bounded || category };
+  return err instanceof VexError && err.retryable === true
+    ? { ...summary, retryable: true }
+    : summary;
 }
