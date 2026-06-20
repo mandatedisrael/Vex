@@ -98,7 +98,21 @@ export const PREDICT_HANDLERS: Record<string, ProtocolHandler> = {
     const order = result.raw.order;
     return {
       success: true,
-      output: JSON.stringify(result, null, 2),
+      // Lean view (P0-2): drop the base64 VersionedTransaction + build internals
+      // carried on `result.raw`; the full result + _tradeCapture stay in `data`.
+      output: JSON.stringify({
+        signature: result.signature,
+        explorerUrl: result.explorerUrl,
+        positionPubkey,
+        marketId,
+        side: normalizedSide,
+        sizeUsd: order.newSizeUsd,
+        payoutUsd: order.newPayoutUsd,
+        contracts: order.newContracts,
+        avgPriceUsd: order.newAvgPriceUsd,
+        costUsd: order.orderCostUsd,
+        feeUsd: order.estimatedTotalFeeUsd,
+      }, null, 2),
       data: {
         ...result,
         positionPubkey,
@@ -131,7 +145,20 @@ export const PREDICT_HANDLERS: Record<string, ProtocolHandler> = {
     const outcome = order.isYes ? "yes" : "no";
     return {
       success: true,
-      output: JSON.stringify(result, null, 2),
+      // Lean view (P0-2): drop the base64 tx; full result + _tradeCapture in data.
+      output: JSON.stringify({
+        signature: result.signature,
+        explorerUrl: result.explorerUrl,
+        positionPubkey: pk,
+        marketId: order.marketId,
+        side: outcome,
+        sizeUsd: order.newSizeUsd,
+        payoutUsd: order.newPayoutUsd,
+        contracts: order.contracts,
+        avgPriceUsd: order.newAvgPriceUsd,
+        costUsd: order.orderCostUsd,
+        feeUsd: order.estimatedTotalFeeUsd,
+      }, null, 2),
       data: {
         ...result,
         _tradeCapture: {
@@ -164,7 +191,15 @@ export const PREDICT_HANDLERS: Record<string, ProtocolHandler> = {
     const outcome = pos.isYes ? "yes" : "no";
     return {
       success: true,
-      output: JSON.stringify(result, null, 2),
+      // Lean view (P0-2): drop the base64 tx; full result + _tradeCapture in data.
+      output: JSON.stringify({
+        signature: result.signature,
+        explorerUrl: result.explorerUrl,
+        positionPubkey: pk,
+        side: outcome,
+        payoutAmountUsd: pos.payoutAmountUsd,
+        contracts: pos.contracts,
+      }, null, 2),
       data: {
         ...result,
         _tradeCapture: {
@@ -235,9 +270,19 @@ export const PREDICT_HANDLERS: Record<string, ProtocolHandler> = {
       };
     });
 
+    // Lean view (P0-2): closeAll otherwise DOUBLE-embeds every position's base64
+    // tx (result.raw + each results[].raw). Summarise from the captured items;
+    // the full result + _tradeCapture(+Items) stay in the (dropped) `data`.
+    const closed = captureItems.map((c) => ({
+      kind: c.meta.kind,
+      signature: c.signature,
+      positionPubkey: c.meta.positionPubkey,
+      outcome: c.meta.outcome,
+      contracts: c.meta.contracts,
+    }));
     return {
       success: true,
-      output: JSON.stringify(result, null, 2),
+      output: JSON.stringify({ count: result.results.length, closed }, null, 2),
       data: {
         ...result,
         _tradeCapture: {
