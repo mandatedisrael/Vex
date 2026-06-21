@@ -53,6 +53,7 @@ export const CORE_TOOLS: readonly ProtocolToolManifest[] = [
     params: [
       { key: "chainId", type: "string", required: true, description: "Chain identifier (e.g. solana, ethereum, bsc, base)." },
       { key: "tokenAddress", type: "string", required: true, description: "Token contract address." },
+      { key: "limit", type: "number", description: "Max pairs to return, after sorting by USD liquidity (highest first). Omit to return all pairs." },
     ],
     exampleParams: { chainId: "solana", tokenAddress: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" },
     discovery: DEXSCREENER_CORE_DISCOVERY["dexscreener.tokenPairs"],

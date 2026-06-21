@@ -104,6 +104,15 @@ describe("dexscreener manifest", () => {
     expect(required).toContain("tokenAddress");
   });
 
+  it("dexscreener.tokenPairs declares an optional numeric limit", () => {
+    const tool = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.tokenPairs")!;
+    const limit = tool.params.find(p => p.key === "limit");
+    expect(limit).toBeDefined();
+    expect(limit!.type).toBe("number");
+    // Optional: limit must NOT be required (no hardcoded default; omit ⇒ all pairs).
+    expect(limit!.required).toBeFalsy();
+  });
+
   it("dexscreener.orders requires chainId, tokenAddress", () => {
     const tool = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.orders")!;
     const required = tool.params.filter(p => p.required).map(p => p.key);

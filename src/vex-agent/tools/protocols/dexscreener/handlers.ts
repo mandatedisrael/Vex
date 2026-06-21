@@ -6,9 +6,10 @@
  */
 
 import { getDexScreenerClient } from "@tools/dexscreener/client.js";
-import type { DexBoost, DexTokenProfile, DexTrendingItem } from "@tools/dexscreener/types.js";
+import type { DexBoost, DexPair, DexTokenProfile, DexTrendingItem } from "@tools/dexscreener/types.js";
 import type { ProtocolHandler } from "../types.js";
 import { str, num, ok, fail } from "../handler-helpers.js";
+import { projectPairs } from "./projectors.js";
 
 // ── Handler map ──────────────────────────────────────────────────
 
@@ -42,9 +43,23 @@ export const DEXSCREENER_HANDLERS: Record<string, ProtocolHandler> = {
   "dexscreener.tokenPairs": async (p) => {
     const chainId = str(p, "chainId"), tokenAddress = str(p, "tokenAddress");
     if (!chainId || !tokenAddress) return fail("Missing required: chainId, tokenAddress");
+    const limit = num(p, "limit");
     const client = getDexScreenerClient();
     const result = await client.getTokenPairs(chainId, tokenAddress);
-    return ok({ chainId, tokenAddress, pairCount: result.length, pairs: result });
+
+    // Surface the deepest pools first: a token can have many pairs and the model
+    // almost always wants the best-liquidity venue. `liquidity.usd` is
+    // `number | null` — null-coalesce to -Infinity so missing-liquidity pairs
+    // sink to the bottom. Sort a copy to avoid mutating the client response.
+    const sorted = [...result].sort(
+      (a: DexPair, b: DexPair) => (b.liquidity?.usd ?? -Infinity) - (a.liquidity?.usd ?? -Infinity),
+    );
+
+    // Apply `limit` ONLY when the caller provides it — no hardcoded default, so
+    // an unqualified call still returns the full (sorted) pair set.
+    const limited = limit && limit > 0 ? sorted.slice(0, limit) : sorted;
+
+    return ok({ chainId, tokenAddress, pairCount: limited.length, pairs: projectPairs(limited) });
   },
 
   // ── Trending & signals ────────────────────────────────────────
@@ -74,7 +89,9 @@ export const DEXSCREENER_HANDLERS: Record<string, ProtocolHandler> = {
   },
 
   "dexscreener.trending": async (p) => {
-    const limit = num(p, "limit");
+    // Default to 20 when the caller omits `limit` — the merged feed is unbounded
+    // and a bare "show me trending" call should return a manageable ranked set.
+    const limit = num(p, "limit") ?? 20;
     const client = getDexScreenerClient();
 
     // Fetch profiles and boosts in parallel
