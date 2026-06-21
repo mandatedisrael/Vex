@@ -33,7 +33,10 @@ function devCspRelaxer(isDev: boolean): Plugin {
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data:",
+    // img-src intentionally widened to https: for agent-surfaced token logos
+    // (Option A2). script-src/connect-src stay strict — kept in sync with the
+    // prod CSP in src/renderer/index.html.
+    "img-src 'self' data: https:",
     "font-src 'self'",
     "connect-src 'self' ws://127.0.0.1:5173 http://127.0.0.1:5173",
     "object-src 'none'",

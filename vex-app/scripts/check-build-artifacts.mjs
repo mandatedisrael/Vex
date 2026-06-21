@@ -5,7 +5,9 @@
  * Run after `pnpm build` (or in CI release workflow). Asserts:
  *   1. dist/main/index.js exists and matches package.json `main` field.
  *   2. dist/preload/index.cjs exists, is CJS, exposes contextBridge, NEVER raw ipcRenderer.
- *   3. dist/renderer/index.html has strict CSP — no `'unsafe-inline'`, no `'unsafe-eval'`.
+ *   3. dist/renderer/index.html has strict CSP — no `'unsafe-inline'`, no `'unsafe-eval'`,
+ *      and `script-src`/`connect-src` parse to EXACTLY `'self'` (img-src may widen
+ *      to `https:` for token logos — Option A2).
  *   4. dist/renderer/assets/*.js bundle has no `localStorage`/`sessionStorage`/`dangerouslySetInnerHTML`.
  *   5. Built CSP includes mandatory directives: default-src 'self', object-src 'none',
  *      base-uri 'none', frame-ancestors 'none', form-action 'none'.
@@ -137,6 +139,29 @@ check("renderer index.html CSP — no unsafe-inline / unsafe-eval", () => {
   for (const directive of required) {
     if (!csp.includes(directive)) {
       throw new Error(`CSP missing required directive: ${directive}`);
+    }
+  }
+
+  // Parse directives so the script/connect strictness check is exact — a
+  // substring scan would let `connect-src 'self' https://evil` slip past.
+  // Split on `;`, then split each directive into name + source tokens.
+  const directives = new Map();
+  for (const part of csp.split(";")) {
+    const tokens = part.trim().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) continue;
+    directives.set(tokens[0], tokens.slice(1));
+  }
+  // script-src and connect-src must remain EXACTLY ['self']. img-src is
+  // allowed to widen (token logos: `'self' data: https:`) — not asserted here.
+  for (const name of ["script-src", "connect-src"]) {
+    const sources = directives.get(name);
+    if (!sources) {
+      throw new Error(`CSP missing required directive: ${name} 'self'`);
+    }
+    if (sources.length !== 1 || sources[0] !== "'self'") {
+      throw new Error(
+        `CSP ${name} must be exactly 'self' (found: ${name} ${sources.join(" ")})`
+      );
     }
   }
 });

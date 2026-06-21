@@ -10,7 +10,11 @@
  *   - links: absolute `https:` only (`safeHref`); anything else renders as
  *     plain text. Allowed links get `target="_blank" rel="noopener noreferrer"`
  *     and main's `shell.openExternal` allowlist stays the final gate;
- *   - images render as ALT TEXT only — never an `<img>` (no remote fetch);
+ *   - images: a `safeImgSrc`-validated https source renders as a hardened
+ *     raw-remote `<img>` (no-referrer, lazy, CSS-bounded, alt-text fallback on
+ *     error) — the deliberate Option-A2 token-logo decision; anything else
+ *     (non-https, credentialed, localhost/private host, control chars) falls
+ *     back to ALT TEXT only;
  *   - GFM tables + task lists render as semantic elements (cells/items go
  *     through the same escaped-React-text path — no HTML sink);
  *   - raw-HTML and any still-unsupported tokens render as escaped text;
@@ -43,6 +47,70 @@ export function safeHref(href: string): string | null {
   try {
     const url = new URL(trimmed); // throws on relative (no base)
     return url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when a hostname targets the local machine or a private/link-local
+ * network — an SSRF-style surface even for a bare <img> fetch. Blocks
+ * `localhost`, any `*.local`, IPv4 loopback/private/link-local ranges, and the
+ * IPv6 loopback / unique-local (fc00::/7) / link-local (fe80::/10) ranges.
+ *
+ * URL normalizes IPv6 hosts to bracketed lowercase (`[::1]`), so we strip the
+ * brackets before range-testing.
+ */
+function isLocalOrPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".local")) return true;
+
+  // IPv4 dotted-quad ranges: 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16.
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (ipv4 !== null) {
+    const a = Number(ipv4[1]);
+    const b = Number(ipv4[2]);
+    if (a === 127) return true; // loopback 127.0.0.0/8
+    if (a === 10) return true; // private 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true; // private 172.16.0.0/12
+    if (a === 192 && b === 168) return true; // private 192.168.0.0/16
+    if (a === 169 && b === 254) return true; // link-local 169.254.0.0/16
+    return false;
+  }
+
+  // IPv6 (URL keeps brackets: `[::1]`). Strip them, then range-test.
+  if (host.startsWith("[") && host.endsWith("]")) {
+    const v6 = host.slice(1, -1);
+    if (v6 === "::1") return true; // loopback ::1
+    // IPv4-mapped IPv6 (`::ffff:7f00:1` = 127.0.0.1). URL normalizes mapped
+    // forms to this compressed prefix, so a single startsWith closes the
+    // mapped-loopback/private bypass without re-parsing the embedded IPv4.
+    if (v6.startsWith("::ffff:")) return true;
+    if (/^f[cd][0-9a-f]{0,2}:/.test(v6)) return true; // unique-local fc00::/7
+    if (/^fe[89ab][0-9a-f]?:/.test(v6)) return true; // link-local fe80::/10
+    return false;
+  }
+
+  return false;
+}
+
+/**
+ * Allow only an absolute `https:` image URL with NO embedded credentials and a
+ * host that is not localhost/loopback/private/link-local. Otherwise null (the
+ * caller falls back to alt text). This is the Option-A2 gate: token logos are
+ * fetched raw from arbitrary https hosts.
+ */
+export function safeImgSrc(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+  if (hasControlChars(trimmed)) return null;
+  if (trimmed.startsWith("//")) return null; // protocol-relative
+  try {
+    const url = new URL(trimmed); // throws on relative (no base)
+    if (url.protocol !== "https:") return null;
+    if (url.username !== "" || url.password !== "") return null; // no creds
+    if (isLocalOrPrivateHost(url.hostname)) return null;
+    return url.href;
   } catch {
     return null;
   }
@@ -107,9 +175,23 @@ function renderInline(tokens: readonly Token[] | undefined): ReactNode[] {
           <span key={i}>{children}</span>
         );
       }
-      case "image":
-        // Alt text only — never an <img> (no remote fetch / tracking pixel).
-        return <span key={i}>{token.text}</span>;
+      case "image": {
+        // Option A2: render a hardened raw-remote <img> when the source passes
+        // `safeImgSrc` (https-only, no creds, no localhost/private host).
+        // Residual risk: an arbitrary https host serving the image learns the
+        // client IP and a load timestamp (tracking-pixel surface); mitigated
+        // by `referrerPolicy="no-referrer"` (no URL/path leakage) but not
+        // eliminated. DNS-rebinding is an accepted residual under Option A.
+        // This is the deliberate product decision — see the C2 plan.
+        const safe = safeImgSrc(token.href);
+        const alt = token.text ?? "";
+        return safe !== null ? (
+          <MarkdownImage key={i} src={safe} alt={alt} />
+        ) : (
+          // Source rejected → keep the original alt-text-only behavior.
+          <span key={i}>{token.text}</span>
+        );
+      }
       default:
         // Raw HTML + anything unsupported → escaped text node.
         return <span key={i}>{tokenText(token)}</span>;
@@ -260,6 +342,35 @@ function renderBlocks(tokens: readonly Token[]): ReactNode[] {
 function codeLang(raw: string | undefined): string {
   const first = raw?.trim().split(/\s+/)[0];
   return first !== undefined && first.length > 0 ? first : "code";
+}
+
+/**
+ * Hardened token-logo image (Option A2). The src is pre-validated by
+ * `safeImgSrc`. `referrerPolicy="no-referrer"` keeps the URL/path off the
+ * wire; size is CSS-bounded so a hostile dimension can't blow out the layout.
+ * On a load error we drop back to the alt text rather than showing a broken
+ * image glyph.
+ */
+function MarkdownImage({
+  src,
+  alt,
+}: {
+  readonly src: string;
+  readonly alt: string;
+}): JSX.Element {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <span>{alt}</span>;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      referrerPolicy="no-referrer"
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
+      className="inline-block max-h-[5rem] max-w-[5rem] rounded-[4px] align-text-bottom"
+    />
+  );
 }
 
 const COPY_RESET_MS = 1_500;

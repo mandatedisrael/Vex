@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
 import { createElement } from "react";
-import { MarkdownContent, safeHref } from "../MarkdownContent.js";
+import { MarkdownContent, safeHref, safeImgSrc } from "../MarkdownContent.js";
 
 function renderMd(text: string) {
   return render(createElement(MarkdownContent, { text }));
@@ -31,6 +31,40 @@ describe("safeHref", () => {
     expect(safeHref("//protocol-relative.example")).toBeNull();
     expect(safeHref("   ")).toBeNull();
     expect(safeHref(`https://e${NUL}.com`)).toBeNull();
+  });
+});
+
+describe("safeImgSrc", () => {
+  it("allows an absolute https URL", () => {
+    expect(safeImgSrc("https://cdn.example/logo.png")).toBe(
+      "https://cdn.example/logo.png",
+    );
+  });
+
+  it("rejects every non-https / unsafe form", () => {
+    expect(safeImgSrc("http://cdn.example/a.png")).toBeNull();
+    expect(safeImgSrc("javascript:alert(1)")).toBeNull();
+    expect(safeImgSrc("data:image/png;base64,AAAA")).toBeNull();
+    expect(safeImgSrc("//cdn.example/a.png")).toBeNull(); // protocol-relative
+    expect(safeImgSrc("https://user:pass@cdn.example/a.png")).toBeNull(); // creds
+    expect(safeImgSrc("   ")).toBeNull();
+    expect(safeImgSrc(`https://e${NUL}.com/a.png`)).toBeNull(); // control char
+  });
+
+  it("rejects localhost / loopback / private / link-local hosts", () => {
+    expect(safeImgSrc("https://localhost/a.png")).toBeNull();
+    expect(safeImgSrc("https://printer.local/a.png")).toBeNull();
+    expect(safeImgSrc("https://127.0.0.1/a.png")).toBeNull();
+    expect(safeImgSrc("https://10.1.2.3/a.png")).toBeNull();
+    expect(safeImgSrc("https://172.16.0.1/a.png")).toBeNull();
+    expect(safeImgSrc("https://192.168.1.1/a.png")).toBeNull();
+    expect(safeImgSrc("https://169.254.1.1/a.png")).toBeNull();
+    expect(safeImgSrc("https://[::1]/a.png")).toBeNull();
+    expect(safeImgSrc("https://[fc00::1]/a.png")).toBeNull();
+    expect(safeImgSrc("https://[fe80::1]/a.png")).toBeNull();
+    expect(safeImgSrc("https://[::ffff:127.0.0.1]/a.png")).toBeNull(); // IPv4-mapped IPv6
+    // A public IP / host is still allowed.
+    expect(safeImgSrc("https://8.8.8.8/a.png")).toBe("https://8.8.8.8/a.png");
   });
 });
 
@@ -74,10 +108,33 @@ describe("MarkdownContent", () => {
     expect(container.textContent).toContain('onerror="alert(1)"');
   });
 
-  it("renders image markdown as alt text only (no img element)", () => {
+  it("renders an https image as a hardened no-referrer <img>", () => {
     const { container } = renderMd("![the alt](https://a.b/c.png)");
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute("src")).toBe("https://a.b/c.png");
+    expect(img?.getAttribute("referrerpolicy")).toBe("no-referrer");
+    expect(img?.getAttribute("loading")).toBe("lazy");
+    expect(img?.getAttribute("decoding")).toBe("async");
+    expect(img?.getAttribute("alt")).toBe("the alt");
+  });
+
+  it("falls back to alt text (no <img>) for every unsafe image source", () => {
+    const cases = [
+      "![a](http://a.b/c.png)", // wrong scheme
+      "![b](javascript:alert(1))",
+      "![c](//a.b/c.png)", // protocol-relative
+      "![d](https://u:p@a.b/c.png)", // embedded credentials
+      "![e](https://localhost/c.png)", // localhost
+    ];
+    for (const md of cases) {
+      const { container } = renderMd(md);
+      expect(container.querySelector("img")).toBeNull();
+    }
+    // A control-char source: build the markdown with an embedded NUL.
+    const { container } = renderMd(`![f](https://a${NUL}.b/c.png)`);
     expect(container.querySelector("img")).toBeNull();
-    expect(container.textContent).toContain("the alt");
+    expect(container.textContent).toContain("f");
   });
 
   it("renders a GFM table as a semantic <table> with header + body cells", () => {
