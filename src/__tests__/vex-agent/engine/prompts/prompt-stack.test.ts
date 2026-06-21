@@ -62,6 +62,12 @@ describe("prompt-stack", () => {
           // Global output-format directive (batch 3) — present in every mode.
           expect(joined).toContain("# Response formatting");
           expect(joined).toContain("GitHub-Flavored Markdown");
+          // Bounded markdown-affordances steering: token logos only from a
+          // tool-provided logoUrl/imageUrl (never invented), explorer/dexscreener
+          // links allowed. Replaces the old blanket "do not embed images" line.
+          expect(joined).toContain("token logo as a Markdown image");
+          expect(joined).toContain("never invent or guess an image URL");
+          expect(joined).not.toContain("do not embed images");
 
           // Tool usage markers
           expect(joined).toContain("discover_tools");

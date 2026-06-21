@@ -69,7 +69,8 @@ export function buildBasePrompt(context: EngineContext): string {
   lines.push("- Use headings, bullet/numbered lists, **bold**, *italic*, and `inline code`.");
   lines.push("- Put code, addresses, hashes, and JSON in fenced code blocks.");
   lines.push("- Use Markdown tables for structured/tabular data (balances, comparisons).");
-  lines.push("- Use plain `https://` links; do not embed images or raw HTML.");
+  lines.push("- Use plain `https://` links — never raw HTML. You may link to explorer.solana.com and dexscreener.com.");
+  lines.push("- You may embed a token logo as a Markdown image, but ONLY using a `logoUrl`/`imageUrl` returned by a tool — never invent or guess an image URL.");
   lines.push("Lead with the answer, then detail. Keep it concise.");
   lines.push("");
 
