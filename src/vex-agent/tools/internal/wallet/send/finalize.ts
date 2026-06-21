@@ -17,6 +17,51 @@ import type { ToolResult } from "../../../types.js";
 import { summarizeWalletError, type ExecuteOutcome } from "../send-types.js";
 import { fail } from "./results.js";
 
+/**
+ * Operator-facing projection of a confirmed transfer's `outcome.data`.
+ *
+ * `txHash` / `chain` / `status` are always present (both the EVM and Solana
+ * executors emit them post-normalisation). `blockNumber` is EVM-specific and
+ * `explorerUrl` is Solana-specific — included only when the executor supplied
+ * a value of the right type. Everything else the executors carry (signature,
+ * in/out token + amount, walletAddress) is deliberately dropped here; it stays
+ * intact under `data._tradeCapture` for the sync/activity pipeline.
+ */
+interface WalletSendOutput {
+  readonly txHash: string;
+  readonly chain: string;
+  readonly status: string;
+  readonly blockNumber?: number;
+  readonly explorerUrl?: string;
+}
+
+/**
+ * `txHash` is taken from the strongly-typed `outcome.txHash` (guaranteed on the
+ * confirmed path) — NOT from the loose `data` boundary, which would fall back to
+ * `""` and silently coerce a missing hash. `chain`/`status` still come from
+ * `data` (the executors emit them post-normalisation; no guaranteed typed field
+ * exists on the outcome for them).
+ */
+function formatWalletSendOutput(
+  txHash: string,
+  data: Record<string, unknown>,
+): WalletSendOutput {
+  const projected: WalletSendOutput = {
+    txHash,
+    chain: typeof data.chain === "string" ? data.chain : "",
+    status: typeof data.status === "string" ? data.status : "confirmed",
+  };
+  return {
+    ...projected,
+    ...(typeof data.blockNumber === "number"
+      ? { blockNumber: data.blockNumber }
+      : {}),
+    ...(typeof data.explorerUrl === "string"
+      ? { explorerUrl: data.explorerUrl }
+      : {}),
+  };
+}
+
 export async function finalizeOutcome(
   intentId: string,
   sessionId: string,
@@ -132,9 +177,13 @@ async function finalizeConfirmed(
     );
   }
 
+  // Curate the operator-facing output: project to {txHash, chain, status,
+  // blockNumber?, explorerUrl?} instead of dumping the full capture (which
+  // would leak signature / token amounts / walletAddress into the transcript).
+  // `data` keeps the full payload — `_tradeCapture` stays intact for sync.
   return {
     success: true,
-    output: JSON.stringify(outcome.data, null, 2),
+    output: JSON.stringify(formatWalletSendOutput(outcome.txHash, outcome.data), null, 2),
     data: outcome.data,
   };
 }

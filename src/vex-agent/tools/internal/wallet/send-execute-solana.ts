@@ -193,8 +193,16 @@ export async function executeSolanaTransfer(
     kind: "confirmed",
     txHash: submission.signature,
     data: {
-      signature: submission.signature,
+      // Curated, cross-network-normalised projection (see
+      // formatWalletSendOutput in send/finalize.ts): emit `txHash` (not the
+      // Solana-only `signature`), `chain`, `status`, and `explorerUrl`.
+      txHash: submission.signature,
+      chain: "solana",
+      status: "confirmed",
       explorerUrl: solanaExplorerUrl(submission.signature),
+      // Full capture stays intact for the sync/activity pipeline — it keeps
+      // the dropped-from-output fields (signature, in/out token+amount,
+      // walletAddress) under _tradeCapture.
       _tradeCapture: {
         type: "transfer",
         chain: "solana",

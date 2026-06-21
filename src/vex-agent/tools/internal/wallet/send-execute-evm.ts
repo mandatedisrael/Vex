@@ -155,10 +155,18 @@ export async function executeEvmTransfer(
       kind: "confirmed",
       txHash: hash,
       data: {
+        // Curated, cross-network-normalised projection (see
+        // formatWalletSendOutput in send/finalize.ts): `txHash` + `chain` +
+        // `status` mirror the Solana executor; `blockNumber` is EVM-specific
+        // and always present on a confirmed receipt. `chain` is the
+        // human-readable network name, consistent with _tradeCapture.chain.
         txHash: hash,
         chain: chainName,
         status: "confirmed",
         blockNumber: Number(receipt.blockNumber),
+        // Full capture stays intact for the sync/activity pipeline — it keeps
+        // the dropped-from-output fields (signature, in/out token+amount,
+        // walletAddress) under _tradeCapture.
         _tradeCapture: {
           type: isNftTransfer ? "send" : "transfer",
           chain: chainName,
