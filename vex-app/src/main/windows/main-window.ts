@@ -64,9 +64,13 @@ const ALLOWED_EXTERNAL: ReadonlyArray<ExternalAllowEntry> = [
   // GitHub: restrict to Vex Foundation org + Electron releases (specific repos only)
   { host: "github.com", pathPrefix: "/Vex-Foundation/" },
   { host: "github.com", pathPrefix: "/electron/electron/releases" },
-  // Rettiwt extension stores — exact extension URLs only. Path-boundary
-  // in `pathStartsWithBoundary` keeps `-malicious`/`-clone` suffixes out.
-  // Chrome ext ID from Rettiwt-API-dev/README.md (X Auth Helper).
+  // Rettiwt = the privacy-respecting Twitter/X API client the agent uses for
+  // authenticated timeline/tweet reads (src/tools/twitter-account). Its
+  // "X Auth Helper" browser extensions let a user mint a Rettiwt API key from
+  // their own logged-in X session — no cookie/password is handed to Vex — so
+  // these two store URLs are allow-listed to open externally. Exact extension
+  // URLs only: path-boundary matching in `pathStartsWithBoundary` blocks
+  // `-malicious`/`-clone` lookalike suffixes on the same store host.
   {
     host: "chromewebstore.google.com",
     pathPrefix:
