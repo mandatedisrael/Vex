@@ -16,6 +16,7 @@ import {
 } from "@tools/kyberswap/evm-utils.js";
 import { META_AGGREGATION_ROUTER_V2, NATIVE_TOKEN_ADDRESS } from "@tools/kyberswap/constants.js";
 import { resolveTokenMetadataStrict, requireFeature, resolveChainWithId } from "@tools/kyberswap/helpers.js";
+import { formatRouteSummary } from "../helpers.js";
 import logger from "@utils/logger.js";
 import { isRecord } from "@utils/validation-helpers.js";
 import { VexError, ErrorCodes } from "../../../../../errors.js";
@@ -165,7 +166,7 @@ async function executeKyberSwap(p: Record<string, unknown>, side: "buy" | "sell"
   verifyRouterAddress(routerAddress, META_AGGREGATION_ROUTER_V2);
 
   if (p.dryRun === true) {
-    return ok({ dryRun: true, side, chain: slug, routeSummary, routerAddress });
+    return ok({ dryRun: true, side, chain: slug, routeSummary: formatRouteSummary(routeSummary), routerAddress });
   }
 
   // Per-session signing wallet (puzzle 5 phase 5D-protocols) — resolved AFTER the
@@ -276,7 +277,7 @@ export const SWAP_HANDLERS: Record<string, ProtocolHandler> = {
       chain: slug, chainId,
       tokenIn: { address: tokenIn.address, symbol: tokenIn.symbol, decimals: tokenIn.decimals },
       tokenOut: { address: tokenOut.address, symbol: tokenOut.symbol, decimals: tokenOut.decimals },
-      routeSummary: response.data.routeSummary,
+      routeSummary: formatRouteSummary(response.data.routeSummary),
       routerAddress: response.data.routerAddress,
       safety,
     });

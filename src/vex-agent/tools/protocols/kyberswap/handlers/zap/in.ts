@@ -20,7 +20,7 @@ import { resolveSigningWallet, walletScopeErrorToResult } from "@vex-agent/tools
 import { isAddress, getAddress, type Hex } from "viem";
 import type { ProtocolHandler } from "../../../types.js";
 import { str, num, ok, fail } from "../../../handler-helpers.js";
-import { buildPositionKey } from "./helpers.js";
+import { buildPositionKey, formatZapPreview } from "./helpers.js";
 
 export const zapIn: ProtocolHandler = async (p, ctx) => {
   const chain = str(p, "chain"), dex = str(p, "dex"), pool = str(p, "pool");
@@ -55,7 +55,7 @@ export const zapIn: ProtocolHandler = async (p, ctx) => {
   });
 
   if (p.dryRun === true) {
-    return ok({ dryRun: true, chain: slug, zapDetails: routeResp.data.zapDetails, routerAddress: routeResp.data.routerAddress });
+    return ok({ dryRun: true, chain: slug, routerAddress: routeResp.data.routerAddress, ...formatZapPreview(routeResp.data.zapDetails) });
   }
 
   if (!routeResp.data.route || !routeResp.data.routerAddress) return fail("No zap route returned");
@@ -98,7 +98,7 @@ export const zapIn: ProtocolHandler = async (p, ctx) => {
   const vaultAddr = routeResp.data.poolDetails?.address;
   const positionKey = buildPositionKey(zapDexEntry, slug, pool, signer.address, positionRef, vaultAddr);
 
-  return { success: true, output: JSON.stringify({ txHash, chain: slug, dex, pool, positionRef, positionKey }, null, 2), data: { txHash, _tradeCapture: {
+  return { success: true, output: JSON.stringify({ txHash, chain: slug, dex, pool, positionRef, ...formatZapPreview(zapDetails) }, null, 2), data: { txHash, _tradeCapture: {
     type: "lp", chain: slug, status: "executed", walletAddress: signer.address,
     positionKey, instrumentKey: `${slug}:lp:${pool}`,
     inputValueUsd: zapDetails?.initialAmountUsd,

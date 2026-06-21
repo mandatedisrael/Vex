@@ -20,7 +20,7 @@ import { resolveSigningWallet, walletScopeErrorToResult } from "@vex-agent/tools
 import { isAddress, getAddress, maxUint256, type Hex } from "viem";
 import type { ProtocolHandler } from "../../../types.js";
 import { str, num, ok, fail } from "../../../handler-helpers.js";
-import { resolveZapApprovalTarget, buildPositionKey } from "./helpers.js";
+import { resolveZapApprovalTarget, buildPositionKey, formatZapPreview } from "./helpers.js";
 
 export const zapOut: ProtocolHandler = async (p, ctx) => {
   const chain = str(p, "chain"), dex = str(p, "dex"), pool = str(p, "pool");
@@ -94,7 +94,7 @@ export const zapOut: ProtocolHandler = async (p, ctx) => {
   const zapDetails = routeResp.data.zapDetails;
   const outVaultAddr = routeResp.data.poolDetails?.address;
   const positionKey = buildPositionKey(dexEntry, slug, pool, signer.address, positionRef, outVaultAddr);
-  return { success: true, output: JSON.stringify({ txHash, chain: slug, positionRef, positionKey, collectFee }, null, 2), data: { txHash, _tradeCapture: {
+  return { success: true, output: JSON.stringify({ txHash, chain: slug, positionRef, collectFee, ...formatZapPreview(zapDetails) }, null, 2), data: { txHash, _tradeCapture: {
     type: "lp", chain: slug, status: "executed", walletAddress: signer.address,
     positionKey, instrumentKey: `${slug}:lp:${pool}`,
     outputValueUsd: zapDetails?.finalAmountUsd,

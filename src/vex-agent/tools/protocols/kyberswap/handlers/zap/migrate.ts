@@ -22,7 +22,7 @@ import { resolveSigningWallet, walletScopeErrorToResult } from "@vex-agent/tools
 import { getAddress, maxUint256, type Hex } from "viem";
 import type { ProtocolHandler } from "../../../types.js";
 import { str, num, ok, fail } from "../../../handler-helpers.js";
-import { resolveZapApprovalTarget, buildPositionKey } from "./helpers.js";
+import { resolveZapApprovalTarget, buildPositionKey, formatZapPreview } from "./helpers.js";
 
 export const zapMigrate: ProtocolHandler = async (p, ctx) => {
   const chain = str(p, "chain"), dexFrom = str(p, "dexFrom"), dexTo = str(p, "dexTo");
@@ -124,5 +124,5 @@ export const zapMigrate: ProtocolHandler = async (p, ctx) => {
     meta: { dex: dexTo, pool: poolTo, action: "zap-in", positionRef: newPositionRef, zapDetails },
   };
 
-  return { success: true, output: JSON.stringify({ txHash, chain: slug, sourcePositionRef, newPositionRef, sourcePositionKey, newPositionKey, from: poolFrom, to: poolTo, collectFee }, null, 2), data: { txHash, _tradeCapture: closeCapture, _tradeCaptureItems: [closeCapture, openCapture] } };
+  return { success: true, output: JSON.stringify({ txHash, chain: slug, sourcePositionRef, newPositionRef, from: poolFrom, to: poolTo, collectFee, ...formatZapPreview(zapDetails) }, null, 2), data: { txHash, _tradeCapture: closeCapture, _tradeCaptureItems: [closeCapture, openCapture] } };
 };

@@ -7,7 +7,7 @@
 
 import { getAddress, type Address } from "viem";
 import type { ZapDexEntry } from "@tools/kyberswap/zaas/zap-dexes/types.js";
-import type { ZapRouteResponse } from "@tools/kyberswap/zaas/types.js";
+import type { ZapDetails, ZapRouteResponse } from "@tools/kyberswap/zaas/types.js";
 import { VexError, ErrorCodes } from "../../../../../../errors.js";
 import logger from "@utils/logger.js";
 
@@ -69,4 +69,43 @@ export function buildPositionKey(
     case "erc1155TokenId": return ref;
     case "none": return undefined;
   }
+}
+
+// ── Zap preview projection (single source of truth for zap output shape) ──
+
+/** Compact, agent-facing projection of a ZaaS zap route's details. */
+export interface FormattedZapPreview {
+  /** Native ZaaS fractional price impact (0.0015 = 0.15%); absent when unknown. */
+  readonly priceImpact?: number;
+  readonly initialAmountUsd?: string;
+  readonly finalAmountUsd?: string;
+  /** Distinct-order action `type` labels, only when the route exposes actions. */
+  readonly actionTypes?: string[];
+}
+
+/**
+ * Project a ZaaS zap route's `zapDetails` into the compact preview surfaced by
+ * zap.in / zap.out / zap.migrate (and their dryRun previews). Spreadable: every
+ * field is optional, and `zapDetails` itself may be undefined (no route / route
+ * without details) — in which case an empty object is returned and the spread
+ * is inert. Pure: no IO, no throws.
+ */
+export function formatZapPreview(zapDetails?: ZapDetails): FormattedZapPreview {
+  if (!zapDetails) return {};
+  const preview: {
+    priceImpact?: number;
+    initialAmountUsd?: string;
+    finalAmountUsd?: string;
+    actionTypes?: string[];
+  } = {};
+  if (typeof zapDetails.priceImpact === "number") preview.priceImpact = zapDetails.priceImpact;
+  if (zapDetails.initialAmountUsd !== undefined) preview.initialAmountUsd = zapDetails.initialAmountUsd;
+  if (zapDetails.finalAmountUsd !== undefined) preview.finalAmountUsd = zapDetails.finalAmountUsd;
+  if (Array.isArray(zapDetails.actions) && zapDetails.actions.length > 0) {
+    const types = zapDetails.actions
+      .map(a => a.type)
+      .filter((t): t is string => typeof t === "string" && t.length > 0);
+    if (types.length > 0) preview.actionTypes = types;
+  }
+  return preview;
 }

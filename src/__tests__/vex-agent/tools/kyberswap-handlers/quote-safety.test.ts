@@ -136,7 +136,15 @@ describe("kyberswap.swap.quote token safety (Stage 6b)", () => {
     mockGetRoute.mockReset();
     mockGetRoute.mockResolvedValue({
       data: {
-        routeSummary: { amountIn: "1000000", amountOut: "999000", gasUsd: "0.5" },
+        routeSummary: {
+          amountIn: "1000000",
+          amountInUsd: "1.00",
+          amountOut: "999000",
+          amountOutUsd: "0.99",
+          gasUsd: "0.5",
+          // Two non-null hops across one path — drives routeHops projection.
+          route: [[{ pool: "0xpool1" }, { pool: "0xpool2" }]],
+        },
         routerAddress: "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5",
       },
     });
@@ -165,8 +173,22 @@ describe("kyberswap.swap.quote token safety (Stage 6b)", () => {
     });
     // Both non-native legs were checked, in parallel.
     expect(mockGetHoneypotFotInfo).toHaveBeenCalledTimes(2);
-    // Routing/amounts untouched by the additive field.
-    expect(out.routeSummary).toEqual({ amountIn: "1000000", amountOut: "999000", gasUsd: "0.5" });
+    // routeSummary is the compact formatRouteSummary projection: amounts +
+    // USD legs + gasUsd + derived priceImpact + routeHops; route/poolExtra/
+    // extra/routeID/checksum/tokenIn/tokenOut/l1FeeUsd/extraFee/gas/gasPrice
+    // are dropped. priceImpact is a derived float, asserted approximately.
+    expect(out.routeSummary).toMatchObject({
+      amountIn: "1000000",
+      amountInUsd: "1.00",
+      amountOut: "999000",
+      amountOutUsd: "0.99",
+      gasUsd: "0.5",
+      routeHops: 2,
+    });
+    expect(out.routeSummary.priceImpact).toBeCloseTo(0.01, 10);
+    expect(Object.keys(out.routeSummary).sort()).toEqual(
+      ["amountIn", "amountInUsd", "amountOut", "amountOutUsd", "gasUsd", "priceImpact", "routeHops"].sort(),
+    );
     expect(out.routerAddress).toBe("0x6131B5fae19EA4f9D964eAc0408E4408b66337b5");
   });
 
