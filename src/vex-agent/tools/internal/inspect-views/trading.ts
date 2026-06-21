@@ -6,7 +6,7 @@
 import type { ToolResult } from "../../types.js";
 import { ok } from "../types.js";
 
-export async function inspectLots(addresses: string[], instrumentKey?: string, namespace?: string, status?: string): Promise<ToolResult> {
+export async function inspectLots(addresses: string[], instrumentKey?: string, namespace?: string, status?: string, limit = 20): Promise<ToolResult> {
   const { query } = await import("@vex-agent/db/client.js");
   // Always wallet-scoped (ANY('{}') → no rows for an empty selection).
   const conditions: string[] = ["wallet_address = ANY($1::text[])"];
@@ -18,7 +18,7 @@ export async function inspectLots(addresses: string[], instrumentKey?: string, n
   if (status) { conditions.push(`status = $${idx++}`); params.push(status); }
 
   const where = `WHERE ${conditions.join(" AND ")}`;
-  params.push(50);
+  params.push(limit);
   const rows = await query<Record<string, unknown>>(
     `SELECT * FROM proj_pnl_lots ${where} ORDER BY opened_at DESC LIMIT $${idx}`,
     params,

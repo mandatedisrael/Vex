@@ -94,6 +94,45 @@ describe("portfolio tool", () => {
       await handlePortfolio({ view: "open_positions", namespace: "solana" }, ctx);
       expect(mockGetOpen).toHaveBeenCalledWith(["0xEVM", "SOL"], "solana");
     });
+
+    it("reports unrealizedPnl as null (not a string) when MTM is missing", async () => {
+      mockGetOpen.mockResolvedValueOnce([{
+        namespace: "solana", positionType: "perps", chain: "solana",
+        walletAddress: "0x1", instrumentKey: "SOL-PERP", positionKey: "pk1",
+        entryPriceUsd: 150, currentValueUsd: null, unrealizedPnlUsd: null,
+        status: "open", openedAt: "2026-03-29",
+      }]);
+      const r = await handlePortfolio({ view: "open_positions" }, ctx);
+      const pos = (r.data!.positions as any[])[0];
+      expect(pos.unrealizedPnl).toBeNull();
+      // explicitly guard against the legacy "not_available_yet" string sentinel
+      expect(pos.unrealizedPnl).not.toBe("not_available_yet");
+    });
+
+    it("caps the returned rows to the limit (list-limit, no keyset)", async () => {
+      const rows = Array.from({ length: 25 }, (_, i) => ({
+        namespace: "solana", positionType: "perps", chain: "solana",
+        walletAddress: "0x1", instrumentKey: `SOL-PERP-${i}`, positionKey: `pk${i}`,
+        entryPriceUsd: 150, currentValueUsd: 160, unrealizedPnlUsd: 10,
+        status: "open", openedAt: "2026-03-29",
+      }));
+      mockGetOpen.mockResolvedValueOnce(rows);
+      const r = await handlePortfolio({ view: "open_positions", limit: 5 }, ctx);
+      expect(r.data!.count).toBe(5);
+      expect((r.data!.positions as any[]).length).toBe(5);
+    });
+
+    it("defaults the cap to 20 when no limit is given", async () => {
+      const rows = Array.from({ length: 25 }, (_, i) => ({
+        namespace: "solana", positionType: "perps", chain: "solana",
+        walletAddress: "0x1", instrumentKey: `SOL-PERP-${i}`, positionKey: `pk${i}`,
+        entryPriceUsd: 150, currentValueUsd: 160, unrealizedPnlUsd: 10,
+        status: "open", openedAt: "2026-03-29",
+      }));
+      mockGetOpen.mockResolvedValueOnce(rows);
+      const r = await handlePortfolio({ view: "open_positions" }, ctx);
+      expect(r.data!.count).toBe(20);
+    });
   });
 
   describe("activity", () => {
@@ -192,6 +231,20 @@ describe("portfolio tool", () => {
       expect(lot.priceUsd).toBe(0.00000525);
       expect(lot.status).toBe("partial");
     });
+
+    it("binds the limit as the trailing LIMIT param", async () => {
+      const { query } = await import("@vex-agent/db/client.js");
+      await handlePortfolio({ view: "lots", limit: 7 }, ctx);
+      const params = (query as any).mock.calls[0][1] as unknown[];
+      expect(params[params.length - 1]).toBe(7);
+    });
+
+    it("defaults the LIMIT param to 20", async () => {
+      const { query } = await import("@vex-agent/db/client.js");
+      await handlePortfolio({ view: "lots" }, ctx);
+      const params = (query as any).mock.calls[0][1] as unknown[];
+      expect(params[params.length - 1]).toBe(20);
+    });
   });
 
   describe("profits", () => {
@@ -241,6 +294,18 @@ describe("portfolio tool", () => {
       expect(pos.entryPrice).toBe(0.65);
       expect(pos.notionalUsd).toBe(2.00);
       expect(pos.status).toBe("closed");
+    });
+
+    it("binds the limit as the trailing LIMIT param (default 20)", async () => {
+      const { query } = await import("@vex-agent/db/client.js");
+      await handlePortfolio({ view: "closed_positions" }, ctx);
+      const def = (query as any).mock.calls[0][1] as unknown[];
+      expect(def[def.length - 1]).toBe(20);
+
+      (query as any).mockClear();
+      await handlePortfolio({ view: "closed_positions", limit: 3 }, ctx);
+      const custom = (query as any).mock.calls[0][1] as unknown[];
+      expect(custom[custom.length - 1]).toBe(3);
     });
   });
 
@@ -307,6 +372,18 @@ describe("portfolio tool", () => {
       expect(r.success).toBe(true);
       expect(r.data!.view).toBe("orders");
       expect(r.data!.count).toBe(1);
+    });
+
+    it("binds the limit as the trailing LIMIT param (default 20)", async () => {
+      const { query } = await import("@vex-agent/db/client.js");
+      await handlePortfolio({ view: "orders" }, ctx);
+      const def = (query as any).mock.calls[0][1] as unknown[];
+      expect(def[def.length - 1]).toBe(20);
+
+      (query as any).mockClear();
+      await handlePortfolio({ view: "orders", limit: 4 }, ctx);
+      const custom = (query as any).mock.calls[0][1] as unknown[];
+      expect(custom[custom.length - 1]).toBe(4);
     });
   });
 

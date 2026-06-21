@@ -72,10 +72,10 @@ export async function handlePortfolio(
       case "summary": return inspectSummary(addresses);
       case "balances": return inspectBalances(addresses);
       case "snapshots": return inspectSnapshots(addresses);
-      case "open_positions": return inspectOpenPositions(addresses, namespace);
-      case "closed_positions": return inspectClosedPositions(addresses, namespace);
-      case "orders": return inspectOrders(addresses, namespace, str(params, "status") || undefined);
-      case "lots": return inspectLots(addresses, str(params, "instrumentKey") || undefined, namespace, str(params, "status") || undefined);
+      case "open_positions": return inspectOpenPositions(addresses, namespace, limit);
+      case "closed_positions": return inspectClosedPositions(addresses, namespace, limit);
+      case "orders": return inspectOrders(addresses, namespace, str(params, "status") || undefined, limit);
+      case "lots": return inspectLots(addresses, str(params, "instrumentKey") || undefined, namespace, str(params, "status") || undefined, limit);
       case "profits": return inspectProfits(addresses, namespace, str(params, "instrumentKey") || undefined, str(params, "groupBy") || undefined);
       case "unrealized": return inspectUnrealized(addresses, namespace);
       case "activity": return inspectActivity(addresses, namespace, productType, limit);
