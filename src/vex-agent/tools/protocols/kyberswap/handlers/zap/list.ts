@@ -32,12 +32,6 @@ export const zapList: ProtocolHandler = async (p) => {
       supports: d.supports,
       verification: d.verification,
       positionRefKind: d.positionRefKind,
-      approvalStandard: d.approvalStandard,
-      approvalTargetKind: d.approvalTargetKind,
-      captureKind: d.captureKind,
-      positionKeyStrategy: d.positionKeyStrategy,
-      dexscreenerIds: d.dexscreenerIds,
-      dexscreenerLabels: d.dexscreenerLabels,
     })),
   });
 };
