@@ -142,6 +142,84 @@ describe("mission_draft_update tool", () => {
       allowedWallets: expect.anything(),
     }));
   });
+
+  it("omits currentDraft from the output string in concise mode (default)", async () => {
+    mockApplyMissionPatch.mockResolvedValueOnce({
+      missionId: "mission-1",
+      status: "ready",
+      currentDraft: { title: "SOL Flip" },
+      missingFields: [],
+      ready: true,
+    });
+
+    const result = await handleMissionDraftUpdate(
+      { title: "SOL Flip" },
+      { ...baseContext, missionRunId: null },
+    );
+
+    expect(result.success).toBe(true);
+    // response_format is tool-only — it must not leak into the setup patch.
+    expect(mockApplyMissionPatch).toHaveBeenCalledWith("mission-1", { title: "SOL Flip" });
+
+    // Output string (model-facing) drops the bulky currentDraft but keeps nextAction.
+    const output = JSON.parse(result.output) as Record<string, unknown>;
+    expect(output).not.toHaveProperty("currentDraft");
+    expect(output.missionId).toBe("mission-1");
+    expect(output.status).toBe("ready");
+    expect(output.ready).toBe(true);
+    expect(output.missingFields).toEqual([]);
+    expect(output.nextAction).toBe(
+      "The draft is ready — tell the user they can start the mission with the Start mission button in the host UI.",
+    );
+
+    // result.data (host-facing) is untouched — currentDraft still present.
+    expect(result.data).toEqual({
+      missionId: "mission-1",
+      status: "ready",
+      ready: true,
+      missingFields: [],
+      currentDraft: { title: "SOL Flip" },
+      nextAction:
+        "The draft is ready — tell the user they can start the mission with the Start mission button in the host UI.",
+    });
+  });
+
+  it("includes currentDraft in the output string when response_format='detailed'", async () => {
+    mockApplyMissionPatch.mockResolvedValueOnce({
+      missionId: "mission-1",
+      status: "ready",
+      currentDraft: { title: "SOL Flip" },
+      missingFields: [],
+      ready: true,
+    });
+
+    const result = await handleMissionDraftUpdate(
+      { title: "SOL Flip", response_format: "detailed" },
+      { ...baseContext, missionRunId: null },
+    );
+
+    expect(result.success).toBe(true);
+    // response_format is stripped before the setup patch — only draft fields pass through.
+    expect(mockApplyMissionPatch).toHaveBeenCalledWith("mission-1", { title: "SOL Flip" });
+
+    // Output string carries currentDraft in detailed mode, still with nextAction.
+    const output = JSON.parse(result.output) as Record<string, unknown>;
+    expect(output.currentDraft).toEqual({ title: "SOL Flip" });
+    expect(output.nextAction).toBe(
+      "The draft is ready — tell the user they can start the mission with the Start mission button in the host UI.",
+    );
+
+    // result.data (host-facing) is identical regardless of response_format.
+    expect(result.data).toEqual({
+      missionId: "mission-1",
+      status: "ready",
+      ready: true,
+      missingFields: [],
+      currentDraft: { title: "SOL Flip" },
+      nextAction:
+        "The draft is ready — tell the user they can start the mission with the Start mission button in the host UI.",
+    });
+  });
 });
 
 describe("mission_stop tool", () => {

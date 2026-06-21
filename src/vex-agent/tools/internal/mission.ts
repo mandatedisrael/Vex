@@ -10,7 +10,7 @@ import { z } from "zod";
 
 import type { ToolResult } from "../types.js";
 import type { InternalToolContext } from "./types.js";
-import { str, fail } from "./types.js";
+import { str, enumField, fail } from "./types.js";
 import type { BusinessStopReason } from "@vex-agent/engine/types.js";
 import { applyMissionPatch } from "@vex-agent/engine/mission/setup.js";
 import {
@@ -24,6 +24,9 @@ import * as missionsRepo from "@vex-agent/db/repos/missions.js";
 const MAX_STRING_LENGTH = 2_000;
 const MAX_ARRAY_ITEMS = 50;
 const MAX_ARRAY_ITEM_LENGTH = 500;
+
+const RESPONSE_FORMATS = ["concise", "detailed"] as const;
+type ResponseFormat = (typeof RESPONSE_FORMATS)[number];
 
 const MissionDraftUpdateArgs = z
   .object({
@@ -56,7 +59,14 @@ export async function handleMissionDraftUpdate(
     return fail("mission_draft_update requires an existing mission draft");
   }
 
-  const parsed = MissionDraftUpdateArgs.safeParse(params);
+  // response_format is a tool-only param read off RAW params — MissionDraftUpdateArgs
+  // is .strict() and must not see it. Default to 'concise' server-side because LLMs
+  // frequently omit the knob even when the schema declares a default.
+  const responseFormat: ResponseFormat =
+    enumField<ResponseFormat>(params, "response_format", RESPONSE_FORMATS) ?? "concise";
+  const { response_format: _ignored, ...patchParams } = params;
+
+  const parsed = MissionDraftUpdateArgs.safeParse(patchParams);
   if (!parsed.success) {
     const firstIssue = parsed.error.issues[0];
     return fail(`mission_draft_update: ${firstIssue?.message ?? "invalid arguments"}`);
@@ -72,16 +82,22 @@ export async function handleMissionDraftUpdate(
       : "The draft is ready — tell the user they can start the mission with the Start mission button in the host UI."
     : null;
 
+  // Output string is the model-facing surface — gate the bulky currentDraft
+  // behind response_format='detailed'. nextAction stays in BOTH modes.
+  // result.data is the host-facing structured block and stays complete and
+  // unchanged (the renderer / tests read every field, incl. currentDraft).
+  const outputPayload = {
+    missionId: result.missionId,
+    status: result.status,
+    ready: result.ready,
+    missingFields: result.missingFields,
+    ...(responseFormat === "detailed" ? { currentDraft: result.currentDraft } : {}),
+    nextAction,
+  };
+
   return {
     success: true,
-    output: JSON.stringify({
-      missionId: result.missionId,
-      status: result.status,
-      ready: result.ready,
-      missingFields: result.missingFields,
-      currentDraft: result.currentDraft,
-      nextAction,
-    }, null, 2),
+    output: JSON.stringify(outputPayload, null, 2),
     data: {
       missionId: result.missionId,
       status: result.status,

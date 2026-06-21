@@ -7,8 +7,9 @@ export const MISSION_TOOLS: readonly ToolDef[] = [
     name: "mission_draft_update", kind: "internal", mutating: false, pressureSafety: "mutating", actionKind: "local_write",
     excludeRoles: ["subagent"],
     visibility: { requiresMissionSetup: true },
-    description: "Save or update the mission draft during mission setup/edit. Call this before telling the user the mission draft is ready.",
+    description: "Save or update the mission draft during mission setup/edit. Call this before telling the user the mission draft is ready. response_format: 'concise' (default) returns missionId/status/ready/missingFields/nextAction; 'detailed' also echoes the full currentDraft.",
     parameters: { type: "object", properties: {
+      response_format: { type: "string", enum: ["concise", "detailed"], description: "concise (default) → status + missingFields + nextAction; detailed → also echoes the full currentDraft." },
       title: { type: "string", description: "Short mission title" },
       goal: { type: "string", description: "Mission goal or objective" },
       capitalSource: { type: "string", description: "Where starting capital comes from" },
