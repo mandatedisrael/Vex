@@ -67,6 +67,8 @@ describe("isAllowedExternalUrl", () => {
     "releases.electronjs.org",
     "desktop.docker.com",
     "docs.docker.com",
+    "explorer.solana.com",
+    "dexscreener.com",
     { host: "github.com", pathPrefix: "/Vex-Foundation/" },
     { host: "github.com", pathPrefix: "/electron/electron/releases" },
     {
@@ -95,6 +97,8 @@ describe("isAllowedExternalUrl", () => {
     "https://github.com/Vex-Foundation/Vex/releases",
     "https://github.com/electron/electron/releases",
     "https://github.com/electron/electron/releases/tag/v42.0.0",
+    "https://dexscreener.com/solana/8sLbNZoA1cfnvMJLPfp98ZLAnFSYCFApfJKMbiXNLwxj",
+    "https://explorer.solana.com/tx/3xY2",
     "https://chromewebstore.google.com/detail/x-auth-helper/igpkhkjmpdecacocghpgkghdcmcmpfhp",
     "https://chromewebstore.google.com/detail/x-auth-helper/igpkhkjmpdecacocghpgkghdcmcmpfhp/reviews",
     "https://addons.mozilla.org/en-US/firefox/addon/rettiwt-auth-helper",
@@ -129,6 +133,11 @@ describe("isAllowedExternalUrl", () => {
     "https://docs.tavily.com/",
     "https://api.tavily.com/",
     "https://app.tavily.com.evil.com/",
+    // Solana explorer / DexScreener — exact-host pollution / near-miss deny
+    "https://dexscreener.com.evil.com/",
+    "https://notdexscreener.com/",
+    "https://explorer.solana.com.evil.com/",
+    "http://dexscreener.com/", // wrong scheme
     // Chrome Web Store — exact-extension path-boundary regression
     "https://chromewebstore.google.com/detail/x-auth-helper/igpkhkjmpdecacocghpgkghdcmcmpfhp-malicious",
     "https://chromewebstore.google.com/detail/x-auth-helper-clone/igpkhkjmpdecacocghpgkghdcmcmpfhp",
