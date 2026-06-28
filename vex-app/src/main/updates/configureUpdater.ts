@@ -2,7 +2,8 @@
  * Main-process `electron-updater` configuration (M13).
  *
  * Policy (skill vex-user-triggered-updates §"Non-negotiable rules"):
- *   - check may be MANUAL only (no auto-download, no auto-install);
+ *   - check runs on app start + window focus and on manual request — never
+ *     auto-downloads or auto-installs;
  *   - download starts only via `updates.startUpdateNow()`;
  *   - restart/install happens only via `updates.restartAndInstallNow()`.
  *
@@ -21,6 +22,7 @@ import {
   errorStatus,
   filteredUpdaterLogger,
 } from "./sanitize.js";
+import { isSilentCheckActive } from "./auto-check-state.js";
 import {
   clearUpdateRestartInProgress,
   isUpdateRestartInProgress,
@@ -77,6 +79,9 @@ export function configureUpdater(): void {
     setStatus({ kind: "downloaded", currentVersion: currentVersion(), latestVersion });
   };
   const onError = (error: Error): void => {
+    // Ambient auto-check failures (e.g. no feed configured yet) must not nag
+    // with an error banner; only manual check / download / install errors do.
+    if (isSilentCheckActive()) return;
     setStatus(errorStatus(error, currentVersion()));
     // A failed quitAndInstall()/install() emits `error` while a restart is in
     // progress (the app stays open). Release the restart flag so

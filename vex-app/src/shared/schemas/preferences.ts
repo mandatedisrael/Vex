@@ -32,7 +32,11 @@ export const preferencesSchema = z
       })
       .strict(),
 
-    /** Updater preferences. Manual check only — no startup auto, no periodic poll. */
+    /**
+     * Updater preferences. Ambient auto-CHECK runs on app start + window focus,
+     * throttled by `lastCheckedAt` (no periodic poll). Auto-DOWNLOAD is never
+     * enabled — download + restart stay explicit user actions.
+     */
     updater: z
       .object({
         lastCheckedAt: z.string().datetime().nullable(),

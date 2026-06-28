@@ -19,6 +19,7 @@ import type {
 } from "@shared/schemas/updater.js";
 import { log } from "../logger/index.js";
 import { preferencesStore } from "../preferences/store.js";
+import { setSilentCheckActive } from "./auto-check-state.js";
 import { errorStatus, publicUpdateError } from "./sanitize.js";
 import {
   canRestartForUpdate,
@@ -56,6 +57,41 @@ export async function checkNow(
     log.warn(`[updates] checkForUpdates failed correlationId=${correlationId}`);
     setStatus(errorStatus(error, currentVersion()));
     return err(publicUpdateError("update.check_failed", correlationId));
+  }
+}
+
+/**
+ * Ambient (auto) check used by the start/focus scheduler. Unlike `checkNow` it
+ * NEVER surfaces an error: a failure (e.g. no feed configured yet) is swallowed
+ * (logged), and the updater `error` event is suppressed for its duration via
+ * the silent-check flag. The update-available / not-available events still
+ * drive the status cache, so a REAL update still raises the banner. Returns
+ * true when a check completed, false on failure.
+ */
+export async function silentCheck(): Promise<boolean> {
+  const priorStatus = getCurrentStatus();
+  setSilentCheckActive(true);
+  try {
+    await autoUpdater.checkForUpdates();
+    void preferencesStore
+      .update({ updater: { lastCheckedAt: new Date().toISOString() } })
+      .catch((cause) =>
+        log.warn("[updates] failed to persist updater.lastCheckedAt", cause),
+      );
+    return true;
+  } catch {
+    log.info("[updates] ambient auto-check failed (swallowed)");
+    // The `checking-for-update` event already flipped status to `checking`,
+    // and the suppressed `error` left it there. Restore the prior quiet status
+    // so future ambient checks aren't disabled (checking is non-quiet) — but
+    // only if still `checking`, to avoid clobbering a real available/current
+    // event that may have arrived first.
+    if (getCurrentStatus().kind === "checking") {
+      setStatus(priorStatus);
+    }
+    return false;
+  } finally {
+    setSilentCheckActive(false);
   }
 }
 

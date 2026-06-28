@@ -32,6 +32,7 @@ import {
   configureUpdater,
   removeUpdaterEventListeners,
 } from "./updates/configureUpdater.js";
+import { installUpdaterAutoCheck } from "./updates/autoCheck.js";
 import { cleanupOnBoot, cleanupOnQuit } from "./lifecycle/secret-cleanup.js";
 import { globalCleanup } from "./lifecycle/cleanup-registry.js";
 import { makeOrderedQuitCleanup } from "./lifecycle/ordered-quit-cleanup.js";
@@ -151,13 +152,18 @@ app.whenReady().then(async () => {
   registerAllIpcHandlers();
 
   // 6-updater. User-triggered updater (M13): own the electron-updater event
-  // stream so the renderer's update card reflects live status. MANUAL check
-  // only — NO startup auto-check (preferences contract: "manual check only,
-  // no startup auto, no periodic poll"); download + restart are explicit user
-  // actions. Teardown removes our listeners on quit.
+  // stream so the renderer's update card reflects live status. Download +
+  // restart are always explicit user actions (autoDownload=false). Teardown
+  // removes our listeners on quit.
   configureUpdater();
   globalCleanup.add(() => {
     removeUpdaterEventListeners();
+  });
+  // Ambient auto-CHECK only (start + window focus, throttled). Surfaces a new
+  // version; never downloads. Skill-allowed (start/focus check, no download).
+  const stopUpdaterAutoCheck = installUpdaterAutoCheck();
+  globalCleanup.add(() => {
+    stopUpdaterAutoCheck();
   });
 
   // 6a. Agent integration stage 7-1: own the Track-2 compaction worker so

@@ -51,6 +51,11 @@ vi.mock("../safeRestart.js", () => ({
   clearUpdateRestartInProgress: () => clearUpdateRestartInProgress(),
 }));
 
+let silentActive = false;
+vi.mock("../auto-check-state.js", () => ({
+  isSilentCheckActive: () => silentActive,
+}));
+
 const { configureUpdater, removeUpdaterEventListeners } = await import(
   "../configureUpdater.js"
 );
@@ -58,6 +63,7 @@ const { configureUpdater, removeUpdaterEventListeners } = await import(
 beforeEach(() => {
   vi.clearAllMocks();
   restartInProgress = false;
+  silentActive = false;
   for (const key of Object.keys(listeners)) delete listeners[key];
   // Reset the module-level `configured` guard so each test re-registers.
   removeUpdaterEventListeners();
@@ -86,6 +92,15 @@ describe("configureUpdater event wiring", () => {
     configureUpdater();
     restartInProgress = false;
     listeners["error"]?.(new Error("check failed"));
+    expect(clearUpdateRestartInProgress).not.toHaveBeenCalled();
+  });
+
+  it("suppresses the error banner while an ambient (silent) check is active", () => {
+    configureUpdater();
+    silentActive = true;
+    listeners["error"]?.(new Error("no feed configured"));
+    // onError returns early: no status set, restart flag untouched.
+    expect(setStatus).not.toHaveBeenCalled();
     expect(clearUpdateRestartInProgress).not.toHaveBeenCalled();
   });
 });

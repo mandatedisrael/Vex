@@ -259,3 +259,37 @@ describe("cancelDownload / checkNow / openReleaseNotes", () => {
     expect(openExternal).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("silentCheck (ambient auto-check)", () => {
+  it("persists lastCheckedAt and returns true on success", async () => {
+    autoUpdater.checkForUpdates.mockResolvedValue(null);
+    await expect(actions.silentCheck()).resolves.toBe(true);
+    expect(prefUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        updater: expect.objectContaining({ lastCheckedAt: expect.any(String) }),
+      }),
+    );
+  });
+
+  it("swallows a failure (no error status set) and returns false", async () => {
+    autoUpdater.checkForUpdates.mockRejectedValue(new Error("no feed"));
+    await expect(actions.silentCheck()).resolves.toBe(false);
+    expect(setStatus).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "error" }),
+    );
+  });
+
+  it("restores the prior status when a failure leaves status stuck at 'checking'", async () => {
+    currentStatus = { kind: "idle", currentVersion: "1.0.0" };
+    autoUpdater.checkForUpdates.mockImplementation(async () => {
+      // Simulate the checking-for-update event flipping status, then the
+      // (suppressed) error leaving it there.
+      currentStatus = { kind: "checking", currentVersion: "1.0.0" };
+      throw new Error("no feed");
+    });
+    await expect(actions.silentCheck()).resolves.toBe(false);
+    expect(setStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "idle" }),
+    );
+  });
+});
