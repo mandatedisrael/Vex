@@ -18,6 +18,7 @@ import type { VexShellBridge } from "../../shared/types/bridge/shell/index.js";
 import { capabilities } from "./capabilities.js";
 import { database } from "./database.js";
 import { docker } from "./docker.js";
+import { market } from "./market.js";
 import { onboarding } from "./onboarding.js";
 import { secrets } from "./secrets.js";
 import { settings } from "./settings.js";
@@ -39,4 +40,5 @@ export const shellBridge = {
   telemetry,
   support,
   updater,
+  market,
 } satisfies VexShellBridge;

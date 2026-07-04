@@ -187,10 +187,11 @@ export function MovesBlock({ sessionId }: { readonly sessionId: string }): JSX.E
       title="Moves"
       trailing={
         allMoves.length > 0 ? (
-          // Landing .ws-badge: accent fill, white mono figure, rounded-[5px].
+          // Landing .ws-badge: accent fill, accent-contrast mono figure
+          // (white on cobalt, ink on the Robinhood lime fill), rounded-[5px].
           // Counts the FETCHED total (server-capped at MOVES_MAX), not the
           // 10-row display window below it.
-          <span className="inline-flex min-w-[18px] items-center justify-center rounded-[5px] bg-[var(--vex-accent)] px-1.5 py-px font-mono text-[9px] font-medium tabular-nums text-white">
+          <span className="inline-flex min-w-[18px] items-center justify-center rounded-[5px] bg-[var(--vex-accent)] px-1.5 py-px font-mono text-[9px] font-medium tabular-nums text-[var(--vex-accent-contrast)]">
             {allMoves.length}
           </span>
         ) : undefined

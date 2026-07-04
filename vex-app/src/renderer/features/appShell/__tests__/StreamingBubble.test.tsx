@@ -1,9 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 
 import { StreamingBubble } from "../StreamingBubble.js";
 import type { StreamPreview } from "../../../stores/streamStore.js";
+import { useUiStore } from "../../../stores/uiStore.js";
+
+// The gutter mark reads uiStore.theme; keep the global store back at the
+// cobalt default after any test that flips it to Robinhood mode.
+afterEach(() => {
+  useUiStore.setState({ theme: "vex" });
+});
 
 function preview(overrides: Partial<StreamPreview> = {}): StreamPreview {
   return {
@@ -156,6 +163,37 @@ describe("StreamingBubble", () => {
     expect(screen.queryByText("Working")).toBeNull();
     // Announced to screen readers as well (sr-only status).
     expect(screen.getAllByText("Awaiting signature").length).toBeGreaterThan(1);
+  });
+
+  it("renders the pulsing Robinhood feather indicator in robinhood theme (no DotMatrix)", () => {
+    useUiStore.setState({ theme: "robinhood" });
+    const { container } = render(
+      createElement(StreamingBubble, {
+        preview: preview({ status: "working" }),
+      }),
+    );
+    // The feather quill replaces the DotMatrix mark and breathes while streaming.
+    const feather = container.querySelector(".vex-feather-pulse");
+    expect(feather).not.toBeNull();
+    expect(feather?.tagName.toLowerCase()).toBe("svg");
+    expect(container.querySelector(".dmx-root")).toBeNull();
+    // Still photo-free — the feather is inline SVG, not an <img>.
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("freezes the feather (no pulse) while an approval is pending in robinhood theme", () => {
+    useUiStore.setState({ theme: "robinhood" });
+    const { container } = render(
+      createElement(StreamingBubble, {
+        preview: preview({ status: "working" }),
+        awaitingApproval: true,
+      }),
+    );
+    // The mark stays but the pulse class drops (trust = stillness while waiting).
+    expect(container.querySelector(".vex-feather-pulse")).toBeNull();
+    expect(
+      container.querySelector('svg[viewBox="0 0 115.87 149.53"]'),
+    ).not.toBeNull();
   });
 
   it("drops the indicator once the stream is done", () => {

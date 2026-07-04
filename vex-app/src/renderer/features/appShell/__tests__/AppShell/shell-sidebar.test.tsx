@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, act } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -157,6 +157,7 @@ beforeEach(() => {
   missionGetDraftMock.mockResolvedValue({ ok: true, data: null });
   runtimeGetStateMock.mockResolvedValue({ ok: true, data: { status: null } });
   useUiStore.setState({
+    theme: "vex",
     sidebarOpen: true,
     currentView: "appShell",
     wizardEntryMode: "setup",
@@ -258,6 +259,13 @@ beforeEach(() => {
         onStreamDelta: () => () => {},
         onControlState: () => () => {},
       },
+      // T1: the sidebar mounts VexTokenCardCompact → useVexMarket reads
+      // getVexSnapshot + subscribes onVexUpdate. Stubs keep the widget in its
+      // loading state without a live market feed.
+      market: {
+        getVexSnapshot: () => Promise.resolve({ ok: true, data: null }),
+        onVexUpdate: () => () => {},
+      },
     },
   });
 });
@@ -314,6 +322,18 @@ describe("AppShell", () => {
     ).not.toBeNull();
   });
 
+  it("applies the persisted theme to the shell root as data-vex-theme", () => {
+    const view = renderShell();
+    const root = view.container.querySelector('[data-vex-screen="appShell"]');
+    expect(root?.getAttribute("data-vex-theme")).toBe("vex");
+
+    // Flipping the store re-tints the whole shell via the root attribute.
+    act(() => {
+      useUiStore.setState({ theme: "robinhood" });
+    });
+    expect(root?.getAttribute("data-vex-theme")).toBe("robinhood");
+  });
+
   it("collapses and expands the glass sidebar", async () => {
     const view = renderShell();
     const sidebar = view.container.querySelector("[data-vex-area='sessions-sidebar']");
@@ -327,6 +347,37 @@ describe("AppShell", () => {
       screen.getByRole("button", { name: /Expand sessions sidebar/i }),
     );
     expect(sidebar?.getAttribute("data-vex-sidebar-open")).toBe("true");
+  });
+
+  it("crowns the sidebar rail with the particle sigil, not a VEX wordmark", () => {
+    const view = renderShell();
+    const sidebar = view.container.querySelector(
+      "[data-vex-area='sessions-sidebar']",
+    );
+    // jsdom has no canvas 2D, so the sigil renders its <img> fallback inside
+    // [data-vex-sigil] — the enlarged mark that replaced the logo + wordmark.
+    expect(sidebar?.querySelector("[data-vex-sigil]")).not.toBeNull();
+  });
+
+  it("mounts the compact $VEX widget in the sidebar rail, not on the welcome stage", async () => {
+    const view = renderShell();
+    const sidebar = view.container.querySelector(
+      "[data-vex-area='sessions-sidebar']",
+    );
+    // The market bridge mock returns null → the widget shows its loading
+    // skeleton, proving it lives in the rail.
+    await waitFor(() => {
+      expect(
+        sidebar?.querySelector("[data-vex-area='vex-token-compact']"),
+      ).not.toBeNull();
+    });
+    // The welcome panel no longer carries any market card — the stage is clean.
+    const panel = view.container.querySelector(
+      "[data-vex-area='session-panel']",
+    );
+    expect(
+      panel?.querySelector("[data-vex-area='vex-token-compact']"),
+    ).toBeNull();
   });
 
 });

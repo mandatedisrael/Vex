@@ -42,6 +42,8 @@ import { setupWakeWorker } from "./agent/wake-worker.js";
 import { setupSyncWorker } from "./agent/sync-worker.js";
 import { setupMemoryManagerWorker } from "./agent/memory-manager-worker.js";
 import { setupRegimeWorker } from "./agent/regime-worker.js";
+import { setupToolEmbeddingReconcileWorker } from "./agent/tool-embedding-reconcile-worker.js";
+import { setupVexMarketService } from "./market/vex-market-service.js";
 import { lockSecretSession } from "./secrets/session.js";
 import { createMainWindow } from "./windows/main-window.js";
 import { installMinimalMenu } from "./menu.js";
@@ -208,6 +210,27 @@ app.whenReady().then(async () => {
   // sizing/approval/execution.
   const stopRegimeWorker = setupRegimeWorker();
 
+  // 6a-tool-embeddings. Own the boot-time reconcile of `tool_embeddings` so
+  // packaged installs refresh dense tool-discovery vectors whenever an app
+  // update changes tool manifests, and orphaned rows (removed/renamed tool ids,
+  // prior embedding generations) get purged. Unlike the other workers this runs
+  // a finite reconcile then goes dormant; it stays idle until the
+  // tool_embeddings schema is ready (supervisor probe) and retries with backoff
+  // (capped per boot) on infra failure or per-tool errors. No vault/provider
+  // gate here — the reconcile probes the embeddings sidecar itself and a failed
+  // probe is just a retryable pass.
+  const stopToolEmbeddingReconcileWorker = setupToolEmbeddingReconcileWorker();
+
+  // 6a-market. Own the VEX market poller (T1) so the welcome-screen price
+  // widget has a live snapshot to read + subscribe to. Broadcast-only (no DB,
+  // no provider gate, no vault): it polls public DexScreener / GeckoTerminal /
+  // Virtuals endpoints and pushes sanitized snapshots on EV.market.vex. Its
+  // idempotent async stop clears every timer + drains in-flight polls on quit.
+  const stopMarketService = setupVexMarketService();
+  globalCleanup.add(async () => {
+    await stopMarketService();
+  });
+
   // 6b. Register lifecycle-driven cleanup. ALL workers must drain in-flight
   // work BEFORE cleanupOnQuit stops Compose/Postgres — and globalCleanup runs
   // tasks concurrently, so makeOrderedQuitCleanup sequences (drain workers) ->
@@ -222,6 +245,7 @@ app.whenReady().then(async () => {
         stopSyncWorker(),
         stopMemoryManagerWorker(),
         stopRegimeWorker(),
+        stopToolEmbeddingReconcileWorker(),
       ]);
       for (const r of results) {
         if (r.status === "rejected") {

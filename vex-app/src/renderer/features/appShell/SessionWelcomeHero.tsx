@@ -37,10 +37,20 @@
  */
 
 import { useEffect, useState, type JSX } from "react";
-import { VexSigil } from "./VexSigil.js";
+import { useUiStore } from "../../stores/uiStore.js";
+import {
+  ROBINHOOD_SIGIL_PALETTE,
+  ROBINHOOD_SIGIL_SRC,
+  VexSigil,
+} from "./VexSigil.js";
+import { ThemeToggle } from "./ThemeToggle.js";
 
 /** ~4.2s per quip — long enough to read, short enough to feel alive. */
 const TAGLINE_ROTATE_MS = 4200;
+
+/** Shared sigil sizing — kept stable across the theme branches so the crown
+ * occupies the same box whether it samples the monogram or the feather. */
+const SIGIL_CLASS = "vex-rise mx-auto mb-5 h-28 md:h-32";
 
 /**
  * Standalone brand quips for the status line — mono-uppercase text ONLY
@@ -139,6 +149,11 @@ function TaglineRotator(): JSX.Element {
 }
 
 export function SessionWelcomeHero(): JSX.Element {
+  // Robinhood mode swaps the sigil's sampled source + spark palette; the
+  // `key={theme}` REMOUNTS VexSigil on a flip so its one-shot particle
+  // assembly replays into the new mark (the component reads src/palette only
+  // at mount — see VexSigil).
+  const theme = useUiStore((s) => s.theme);
   return (
     <>
       {/* VIGNETTE — the single gradient layer on the stage: melts the sky
@@ -153,11 +168,20 @@ export function SessionWelcomeHero(): JSX.Element {
        * above the docked composer; the parent's trailing spacer balances
        * the column so hero + instrument center vertically as one group. */}
       <div className="relative z-10 mt-auto flex w-full flex-col items-center px-8 pb-4 text-center">
-        {/* THE SIGIL — the particle-constellation monogram, the hero's
-         * crown. Takes the base .vex-rise slot; the status line and H1
-         * shift one stagger step so the choreography reads sigil →
-         * tagline → H1. */}
-        <VexSigil className="vex-rise mx-auto mb-5 h-28 md:h-32" />
+        {/* THE SIGIL — the particle-constellation mark, the hero's crown.
+         * Takes the base .vex-rise slot; the status line and H1 shift one
+         * stagger step so the choreography reads sigil → tagline → H1. In
+         * Robinhood mode it samples the feather with a neon-lime palette. */}
+        {theme === "robinhood" ? (
+          <VexSigil
+            key={theme}
+            className={SIGIL_CLASS}
+            src={ROBINHOOD_SIGIL_SRC}
+            palette={ROBINHOOD_SIGIL_PALETTE}
+          />
+        ) : (
+          <VexSigil key={theme} className={SIGIL_CLASS} />
+        )}
         <span className="vex-eyebrow vex-rise vex-rise-d1">
           {/* Live dot — STATIC accent ink: no runtime state reaches this
            * component and .vex-pulse-dot stays reserved for verifiable
@@ -175,9 +199,12 @@ export function SessionWelcomeHero(): JSX.Element {
         </h1>
       </div>
 
-      {/* BOTTOM ROW — the landing .hero-bottom at the stage's bottom edge.
-       * Copy-only (pointer-events-none keeps the band click-transparent). */}
-      <div className="vex-rise vex-rise-d4 pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-between gap-6 px-8 pb-5 sm:px-12">
+      {/* BOTTOM ROW — the landing .hero-bottom at the stage's bottom edge, now
+       * a three-zone grid: the two runtime lines flank a centered BACKED BY
+       * cluster (Virtuals + Robinhood marks) with the Robinhood-mode toggle.
+       * The band stays click-transparent (pointer-events-none); ONLY the
+       * toggle restores pointer-events (it re-enables them on itself). */}
+      <div className="vex-rise vex-rise-d4 pointer-events-none absolute inset-x-0 bottom-0 z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-8 pb-5 sm:px-12">
         <span className="flex min-w-0 items-center gap-3 font-mono text-[9px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]">
           <span
             aria-hidden
@@ -185,7 +212,30 @@ export function SessionWelcomeHero(): JSX.Element {
           />
           <span className="truncate">LOCAL-FIRST CAPITAL RUNTIME</span>
         </span>
-        <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]">
+
+        {/* BACKED BY — the partner hallmark, enlarged (~1.75x) but still quiet:
+         * monochrome marks at opacity-70, comfortable spacing, then the mode
+         * switch. A hallmark, not a billboard. */}
+        <div className="flex items-center justify-center gap-4">
+          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]">
+            Backed by
+          </span>
+          <span className="flex items-center gap-4">
+            <img
+              src="/logo/virtuals.svg"
+              alt="Virtuals"
+              className="h-7 w-7 opacity-70"
+            />
+            <img
+              src="/logo/robinhood.svg"
+              alt="Robinhood"
+              className="h-7 w-7 opacity-70"
+            />
+          </span>
+          <ThemeToggle />
+        </div>
+
+        <span className="justify-self-end shrink-0 font-mono text-[9px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]">
           YOU SIGN EVERY ACTION
         </span>
       </div>

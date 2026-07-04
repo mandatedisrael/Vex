@@ -56,6 +56,7 @@ const SKY_DIM_INTENSITY = 0.35;
 export function AppShell(): JSX.Element {
   const appShellView = useUiStore((s) => s.appShellView);
   const activeSessionId = useUiStore((s) => s.activeSessionId);
+  const theme = useUiStore((s) => s.theme);
   const bookOpen = useUiStore((s) => s.bookOpen);
   const toggleBook = useUiStore((s) => s.toggleBook);
   const createSessionOpen = useUiStore((s) => s.createSessionOpen);
@@ -83,9 +84,10 @@ export function AppShell(): JSX.Element {
     <main
       className="relative isolate flex h-screen w-screen overflow-hidden bg-[var(--vex-surface-0)] text-foreground"
       data-vex-shell="true"
+      data-vex-theme={theme}
       data-vex-screen="appShell"
     >
-      <SignalSky intensity={skyIntensity} />
+      <SignalSky intensity={skyIntensity} theme={theme} />
       <SessionsList onCreate={() => openCreateSession()} />
 
       <section className="relative z-10 flex min-w-0 flex-1 flex-col">

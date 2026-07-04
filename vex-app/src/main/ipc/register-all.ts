@@ -14,6 +14,7 @@ import { registerChatSubmitHandler } from "./chat.js";
 import { registerCompactionHandlers } from "./compaction.js";
 import { registerDatabaseHandlers } from "./database.js";
 import { registerLongMemoryHandlers } from "./long-memory.js";
+import { registerMarketHandlers } from "./market.js";
 import { registerMemoryHandlers } from "./memory.js";
 import { registerMemoryInspectorHandlers } from "./memory-inspector.js";
 import { registerDockerHandlers } from "./docker.js";
@@ -85,6 +86,10 @@ export function registerAllIpcHandlers(): void {
   // aggregates proj_balances + proj_portfolio_snapshots into a renderer-safe
   // DTO. Renderer supplies only scope (+ sessionId); addresses never cross.
   teardowns.push(...registerPortfolioHandlers());
+  // T1: read-only VEX market snapshot for the welcome-screen price widget. The
+  // handler serves main's in-memory cache; the external poll + EV.market.vex
+  // broadcast are owned by the market service, started in index.ts.
+  teardowns.push(...registerMarketHandlers());
   // Agent integration stage 7-1: read-only Track-2 compaction status for the
   // runtime bar. The Track-2 executor itself is owned by main and started in
   // `index.ts` (see `setupCompactWorker`), not here. Stage 7-2a extends this

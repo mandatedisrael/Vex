@@ -70,6 +70,14 @@ export type VexDomain =
    */
   | "portfolio"
   /**
+   * T1 — read-only VEX market snapshot for the welcome-screen price widget
+   * (`market.getVexSnapshot`). Main owns the external poll (DexScreener /
+   * GeckoTerminal / Virtuals) and broadcasts sanitized snapshots on
+   * `EV.market.vex`; the renderer never fetches. The handler only reads the
+   * in-memory cache, so failures map to `internal.unexpected`.
+   */
+  | "market"
+  /**
    * Used by the read-only `sessions.getModel` handler (global runtime
    * model resolution). Existing sessions handlers
    * (`vex:sessions:create|list|get|setPinned|delete`) deliberately keep

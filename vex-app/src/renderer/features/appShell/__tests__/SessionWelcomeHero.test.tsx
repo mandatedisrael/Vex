@@ -29,8 +29,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { SessionWelcomeHero } from "../SessionWelcomeHero.js";
+import { useUiStore } from "../../../stores/uiStore.js";
 
 const ROTATE_MS = 4200;
 
@@ -84,6 +85,12 @@ function restoreDocumentHidden(): void {
 }
 
 describe("SessionWelcomeHero", () => {
+  // The sigil crown + Robinhood-mode toggle read uiStore.theme; return the
+  // global store to the cobalt default after every test.
+  afterEach(() => {
+    useUiStore.setState({ theme: "vex" });
+  });
+
   it("keeps the pinned H1 as a real heading wearing the landing barcode flicker", () => {
     render(<SessionWelcomeHero />);
     const h1 = screen.getByRole("heading", {
@@ -118,23 +125,63 @@ describe("SessionWelcomeHero", () => {
     expect(screen.queryByAltText("Vex")).toBeNull();
   });
 
-  it("carries its only imagery inside the sigil — the tagline line has NO inline img", () => {
+  it("carries the sigil crown plus the two backed-by partner marks; the tagline line has NO inline img", () => {
     const { container } = render(<SessionWelcomeHero />);
     const sigil = container.querySelector("[data-vex-sigil]");
     expect(sigil).not.toBeNull();
     // Decorative contract on the mark.
     expect(sigil?.getAttribute("aria-hidden")).toBe("true");
     expect(sigil?.className).toContain("pointer-events-none");
-    // jsdom: the sigil's canvas 2D is unavailable → its <img> fallback is
-    // the hero's ONLY imagery, and it lives INSIDE the sigil box.
-    const images = Array.from(container.querySelectorAll("img"));
-    for (const img of images) {
-      expect(sigil?.contains(img)).toBe(true);
-    }
-    // The status line is standalone text now — no img-in-text.
+    // jsdom: the sigil's canvas 2D is unavailable → its <img> fallback lives
+    // INSIDE the sigil box (default theme = the VEX monogram).
+    const sigilImg = sigil?.querySelector("[data-vex-sigil-fallback]");
+    expect(sigilImg?.getAttribute("src")).toBe("/logo_clean.png");
+    // The ONLY imagery OUTSIDE the sigil is the backed-by partner strip.
+    const backing = Array.from(container.querySelectorAll("img")).filter(
+      (img) => sigil?.contains(img) === false,
+    );
+    expect(backing.map((img) => img.getAttribute("alt")).sort()).toEqual([
+      "Robinhood",
+      "Virtuals",
+    ]);
+    // The status line is standalone text — no img-in-text.
     const eyebrow = container.querySelector(".vex-eyebrow");
     expect(eyebrow).not.toBeNull();
     expect(eyebrow?.querySelector("img")).toBeNull();
+  });
+
+  it("renders the BACKED BY strip with both partner marks and the Robinhood-mode switch", () => {
+    render(<SessionWelcomeHero />);
+    expect(screen.getByText("Backed by")).not.toBeNull();
+    expect(screen.getByAltText("Virtuals")).not.toBeNull();
+    expect(screen.getByAltText("Robinhood")).not.toBeNull();
+    // The toggle is a real, keyboard-focusable switch, OFF in the cobalt default.
+    const toggle = screen.getByRole("switch", { name: /Robinhood mode/i });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    // The bottom band is click-transparent EXCEPT the toggle, which restores
+    // pointer-events on itself.
+    expect(toggle.className).toContain("pointer-events-auto");
+  });
+
+  it("the toggle flips the persisted theme and the switch reflects it", () => {
+    render(<SessionWelcomeHero />);
+    const toggle = screen.getByRole("switch", { name: /Robinhood mode/i });
+    fireEvent.click(toggle);
+    expect(useUiStore.getState().theme).toBe("robinhood");
+    expect(
+      screen.getByRole("switch", { name: /Robinhood mode/i }).getAttribute(
+        "aria-checked",
+      ),
+    ).toBe("true");
+  });
+
+  it("robinhood mode swaps the sigil crown to the feather source", () => {
+    useUiStore.setState({ theme: "robinhood" });
+    const { container } = render(<SessionWelcomeHero />);
+    const sigil = container.querySelector("[data-vex-sigil]");
+    // jsdom fallback → the sigil <img> now samples the feather, not the monogram.
+    const sigilImg = sigil?.querySelector("[data-vex-sigil-fallback]");
+    expect(sigilImg?.getAttribute("src")).toBe("/logo/robinhood-feather.png");
   });
 
   it("staggers the one-shot rise choreography: sigil → status (d1) → H1 (d2) → bottom row (d4)", () => {

@@ -127,6 +127,7 @@ describe("result barrel surface", () => {
       "compaction",
       "memory",
       "portfolio",
+      "market",
       "sessions",
       "preload",
       "internal",

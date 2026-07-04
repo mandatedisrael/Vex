@@ -35,25 +35,53 @@
 import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 import {
+  SKY_ACCENTS,
   SKY_FRAGMENT_SHADER,
   SKY_VERTEX_SHADER,
+  type RgbTriplet,
+  type SkyTheme,
 } from "./signalSkyShaders.js";
 
 /** Landing engine caps devicePixelRatio at 1.5 (perf over retina crispness). */
 const DPR_CAP = 1.5;
-/** Duration of a full 0→1 intensity sweep; smaller prop deltas finish
- * proportionally sooner (linear approach — allocation-free in the loop). */
+/** Duration of a full 0→1 intensity sweep (and a full accent-channel swing);
+ * smaller deltas finish proportionally sooner (linear approach — allocation-
+ * free in the loop). Shared so an intensity dim and a theme flip breathe at
+ * the same cadence. */
 const INTENSITY_TRANSITION_MS = 600;
 
 export interface SignalSkyProps {
   /** Cloud/spark strength 0..1 — 1 (default) on the welcome stage, ~0.35
    * dimmed behind an active session. Out-of-range values are clamped. */
   readonly intensity?: number;
+  /** Accent theme for the sky's signal flecks (u_deep / u_bright). `vex`
+   * (default) = cobalt; `robinhood` = neon lime. The color eases toward the
+   * prop in the loop, so a theme flip crossfades rather than snaps. */
+  readonly theme?: SkyTheme;
 }
 
 function clampIntensity(value: number): number {
   if (!Number.isFinite(value)) return 1;
   return Math.min(1, Math.max(0, value));
+}
+
+/** Linear one-channel approach toward `target`, clamped so it lands exactly. */
+function approach(current: number, target: number, step: number): number {
+  if (current === target) return current;
+  return current < target
+    ? Math.min(target, current + step)
+    : Math.max(target, current - step);
+}
+
+/** Ease an RGB triplet in place toward `target` by one `step` (per channel). */
+function easeTriplet(
+  cur: [number, number, number],
+  target: RgbTriplet,
+  step: number,
+): void {
+  cur[0] = approach(cur[0], target[0], step);
+  cur[1] = approach(cur[1], target[1], step);
+  cur[2] = approach(cur[2], target[2], step);
 }
 
 function compileShader(
@@ -79,6 +107,8 @@ interface SkyScene {
   readonly uRes: WebGLUniformLocation | null;
   readonly uTime: WebGLUniformLocation | null;
   readonly uIntensity: WebGLUniformLocation | null;
+  readonly uDeep: WebGLUniformLocation | null;
+  readonly uBright: WebGLUniformLocation | null;
 }
 
 /** Compile + link the sky program and leave it fully bound (program in use,
@@ -136,25 +166,37 @@ function buildSkyScene(gl: WebGLRenderingContext): SkyScene | null {
     uRes: gl.getUniformLocation(program, "u_res"),
     uTime: gl.getUniformLocation(program, "u_time"),
     uIntensity: gl.getUniformLocation(program, "u_intensity"),
+    uDeep: gl.getUniformLocation(program, "u_deep"),
+    uBright: gl.getUniformLocation(program, "u_bright"),
   };
 }
 
-export function SignalSky({ intensity = 1 }: SignalSkyProps): JSX.Element {
+export function SignalSky({
+  intensity = 1,
+  theme = "vex",
+}: SignalSkyProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [failed, setFailed] = useState(false);
   /** Ease target — the clamped prop; read by the rAF loop every frame. */
   const targetRef = useRef(clampIntensity(intensity));
+  /** Accent ease target — the theme's { deep, bright } pair; read every frame. */
+  const accentRef = useRef(SKY_ACCENTS[theme]);
   /** Static repaint hook — non-null ONLY in reduced-motion mode, where there
-   * is no loop to pick a new intensity target up. */
+   * is no loop to pick a new intensity/accent target up. */
   const staticRedrawRef = useRef<(() => void) | null>(null);
 
-  // Declared BEFORE the GL setup effect so the mount-order is: target synced
+  // Declared BEFORE the GL setup effect so the mount-order is: targets synced
   // first, then exactly ONE first frame from the setup effect (the redraw
   // hook is still null on mount).
   useEffect(() => {
     targetRef.current = clampIntensity(intensity);
     staticRedrawRef.current?.();
   }, [intensity]);
+
+  useEffect(() => {
+    accentRef.current = SKY_ACCENTS[theme];
+    staticRedrawRef.current?.();
+  }, [theme]);
 
   useEffect(() => {
     const canvasEl = canvasRef.current;
@@ -195,6 +237,18 @@ export function SignalSky({ intensity = 1 }: SignalSkyProps): JSX.Element {
     let lastNow = 0;
     /** Eased intensity actually written to the uniform each frame. */
     let current = targetRef.current;
+    /** Eased accent channels chased toward accentRef each frame (theme flip). */
+    const startAccent = accentRef.current;
+    const curDeep: [number, number, number] = [
+      startAccent.deep[0],
+      startAccent.deep[1],
+      startAccent.deep[2],
+    ];
+    const curBright: [number, number, number] = [
+      startAccent.bright[0],
+      startAccent.bright[1],
+      startAccent.bright[2],
+    ];
     const started = performance.now();
     const dpr = Math.min(window.devicePixelRatio || 1, DPR_CAP);
 
@@ -214,21 +268,22 @@ export function SignalSky({ intensity = 1 }: SignalSkyProps): JSX.Element {
       ctx.uniform2f(scene.uRes, canvas.width, canvas.height);
       ctx.uniform1f(scene.uTime, timeSec);
       ctx.uniform1f(scene.uIntensity, current);
+      ctx.uniform3f(scene.uDeep, curDeep[0], curDeep[1], curDeep[2]);
+      ctx.uniform3f(scene.uBright, curBright[0], curBright[1], curBright[2]);
       ctx.drawArrays(ctx.TRIANGLES, 0, 3);
     }
 
     function tick(now: number): void {
       if (disposed) return;
+      // Linear approach toward the props: a full swing takes
+      // INTENSITY_TRANSITION_MS; clamped so intensity and each accent channel
+      // land exactly on target.
+      const step = (now - lastNow) / INTENSITY_TRANSITION_MS;
       const target = targetRef.current;
-      if (current !== target) {
-        // Linear approach toward the prop: a full 0→1 sweep takes
-        // INTENSITY_TRANSITION_MS; clamped so it lands exactly on target.
-        const step = (now - lastNow) / INTENSITY_TRANSITION_MS;
-        current =
-          current < target
-            ? Math.min(target, current + step)
-            : Math.max(target, current - step);
-      }
+      if (current !== target) current = approach(current, target, step);
+      const accent = accentRef.current;
+      easeTriplet(curDeep, accent.deep, step);
+      easeTriplet(curBright, accent.bright, step);
       lastNow = now;
       drawFrame((now - started) / 1000);
       rafId = requestAnimationFrame(tick);
@@ -254,16 +309,30 @@ export function SignalSky({ intensity = 1 }: SignalSkyProps): JSX.Element {
       else stopLoop();
     };
 
+    /** Snap the eased accent to the current target (reduced-motion has no loop
+     * to chase a new theme). */
+    const snapAccent = (): void => {
+      const accent = accentRef.current;
+      curDeep[0] = accent.deep[0];
+      curDeep[1] = accent.deep[1];
+      curDeep[2] = accent.deep[2];
+      curBright[0] = accent.bright[0];
+      curBright[1] = accent.bright[1];
+      curBright[2] = accent.bright[2];
+    };
+
     resize();
     if (prefersReducedMotion) {
       // FULL STOP under reduced motion: exactly one static frame at the
-      // target intensity — no rAF, no visibility listener. Intensity and
-      // resize changes re-draw the still frame via the hooks below.
+      // target intensity + accent — no rAF, no visibility listener. Intensity,
+      // theme and resize changes re-draw the still frame via the hooks below.
       current = targetRef.current;
+      snapAccent();
       drawFrame(0);
       staticRedrawRef.current = () => {
         if (disposed) return;
         current = targetRef.current;
+        snapAccent();
         drawFrame(0);
       };
     } else {
@@ -311,11 +380,13 @@ export function SignalSky({ intensity = 1 }: SignalSkyProps): JSX.Element {
       className="pointer-events-none absolute inset-0 z-0 h-full w-full overflow-hidden"
     >
       {failed ? (
-        // Static fallback: the sky's memory as a CSS gradient — accent-deep
-        // at 12% over the ink canvas behind this layer, fading to nothing.
+        // Static fallback: the sky's memory as a CSS gradient — the active
+        // accent at 12% over the ink canvas behind this layer, fading to
+        // nothing. `--vex-accent` re-tints per theme, so the fallback stays
+        // theme-aware (cobalt in vex, neon lime in Robinhood mode).
         <div
           data-vex-sky-fallback
-          className="absolute inset-0 h-full w-full bg-[radial-gradient(120%_80%_at_50%_0%,color-mix(in_oklab,var(--color-accent-deep)_12%,transparent),transparent_70%)]"
+          className="absolute inset-0 h-full w-full bg-[radial-gradient(120%_80%_at_50%_0%,color-mix(in_oklab,var(--vex-accent)_12%,transparent),transparent_70%)]"
         />
       ) : (
         <canvas

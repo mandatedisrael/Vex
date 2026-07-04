@@ -21,6 +21,8 @@ import type { StreamPreview, StreamWorkingStatus } from "../../stores/streamStor
 import { MarkdownContent } from "../../lib/markdown/MarkdownContent.js";
 import { DotmCircular8 } from "../../components/ui/dotm-circular-8.js";
 import { DotmHex3 } from "../../components/ui/dotm-hex-3.js";
+import { useUiStore } from "../../stores/uiStore.js";
+import { RobinhoodFeather } from "./RobinhoodFeather.js";
 import { cn } from "../../lib/utils.js";
 
 /** m:ss from elapsed ms — clamped at 0 so clock skew never prints "-1:-7". */
@@ -153,6 +155,9 @@ export function StreamingBubble({
 }): JSX.Element {
   const streaming = preview.phase === "streaming";
   const answering = preview.text.length > 0;
+  // Robinhood mode swaps the DotMatrix working mark for a pulsing feather
+  // quill; both are decorative and freeze identically on a pending approval.
+  const theme = useUiStore((s) => s.theme);
 
   // Memoized on the answer text: an 80ms reasoning flush must not re-parse
   // the markdown answer body.
@@ -208,7 +213,18 @@ export function StreamingBubble({
               answering && !awaitingApproval && "vex-signal-resolve",
             )}
           >
-            {preview.status === "thinking" ? (
+            {theme === "robinhood" ? (
+              // Robinhood-mode indicator — the feather quill breathes while
+              // streaming, and freezes (no pulse) the instant an approval is
+              // pending (trust = stillness), same as the DotMatrix `animated`
+              // gate below.
+              <RobinhoodFeather
+                className={cn(
+                  "block h-[14px] w-[14px] text-[var(--vex-accent)]",
+                  !awaitingApproval && "vex-feather-pulse",
+                )}
+              />
+            ) : preview.status === "thinking" ? (
               <DotmCircular8
                 size={14}
                 dotSize={2}

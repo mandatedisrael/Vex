@@ -201,3 +201,13 @@ export const updaterKeys = {
   all: ["updater"] as const,
   status: () => ["updater", "status"] as const,
 };
+
+/**
+ * VEX market snapshot (T1) — a single global entry for the welcome-screen price
+ * widget. Kept live by `useVexMarket`'s effect (main-pushed `EV.market.vex`
+ * events → cache).
+ */
+export const marketKeys = {
+  all: ["market"] as const,
+  snapshot: () => ["market", "vex", "snapshot"] as const,
+};

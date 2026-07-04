@@ -16,7 +16,9 @@ const STORAGE_KEY = "vex-ui";
 
 function resetStoreToDefaults(): void {
   useUiStore.setState({
+    theme: "vex",
     sidebarOpen: true,
+    bookOpen: true,
     currentView: "splash",
     wizardEntryMode: "setup",
     unlockReturnView: "appShell",
@@ -43,6 +45,7 @@ describe("uiStore", () => {
 
   it("starts with the expected defaults", () => {
     const state = useUiStore.getState();
+    expect(state.theme).toBe("vex");
     expect(state.sidebarOpen).toBe(true);
     expect(state.currentView).toBe("splash");
     expect(state.wizardEntryMode).toBe("setup");
@@ -54,6 +57,52 @@ describe("uiStore", () => {
     expect(state.createSessionOpen).toBe(false);
     expect(state.createSessionInitialMessage).toBeNull();
     expect(state.pendingFirstMessage).toBeNull();
+  });
+
+  it("setTheme + toggleTheme flip the persisted Robinhood-mode theme", () => {
+    expect(useUiStore.getState().theme).toBe("vex");
+    useUiStore.getState().toggleTheme();
+    expect(useUiStore.getState().theme).toBe("robinhood");
+    useUiStore.getState().toggleTheme();
+    expect(useUiStore.getState().theme).toBe("vex");
+    useUiStore.getState().setTheme("robinhood");
+    expect(useUiStore.getState().theme).toBe("robinhood");
+    // Theme is in the persist whitelist so the choice survives relaunch.
+    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY)!);
+    expect(parsed.state.theme).toBe("robinhood");
+  });
+
+  it("migrate v2→v3 seeds the cobalt theme without disturbing v2 fields", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: { sidebarOpen: false, bookOpen: false },
+        version: 2,
+      }),
+    );
+    await useUiStore.persist.rehydrate();
+    expect(useUiStore.getState().theme).toBe("vex");
+    // v2 fields are preserved (bookOpen is only forced open on the v1→v2 hop).
+    expect(useUiStore.getState().sidebarOpen).toBe(false);
+    expect(useUiStore.getState().bookOpen).toBe(false);
+  });
+
+  it("coerces an off-union persisted theme to 'vex' on rehydrate (tampered localStorage must not crash the shell)", async () => {
+    // Current version + invalid theme: `migrate` is skipped (no version hop),
+    // so only the rehydrate-time `merge` coercion stands between a hand-edited
+    // payload and SignalSky's `SKY_ACCENTS[theme]` lookup.
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: { theme: "neon-hack", sidebarOpen: false, bookOpen: true },
+        version: 3,
+      }),
+    );
+    await useUiStore.persist.rehydrate();
+    expect(useUiStore.getState().theme).toBe("vex");
+    // Other persisted prefs still hydrate normally.
+    expect(useUiStore.getState().sidebarOpen).toBe(false);
+    expect(useUiStore.getState().bookOpen).toBe(true);
   });
 
   it("openCreateSession seeds + trims the first message; the sidebar path clears it", () => {
@@ -103,7 +152,11 @@ describe("uiStore", () => {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     expect(raw).not.toBeNull();
     const parsed = JSON.parse(raw!);
-    expect(parsed.state).toEqual({ sidebarOpen: true, bookOpen: true });
+    expect(parsed.state).toEqual({
+      theme: "vex",
+      sidebarOpen: true,
+      bookOpen: true,
+    });
     expect(parsed.state.createSessionOpen).toBeUndefined();
     expect(parsed.state.createSessionInitialMessage).toBeUndefined();
     expect(parsed.state.pendingFirstMessage).toBeUndefined();
@@ -184,7 +237,11 @@ describe("uiStore", () => {
     expect(raw).not.toBeNull();
     const parsed = JSON.parse(raw!);
 
-    expect(parsed.state).toEqual({ sidebarOpen: false, bookOpen: true });
+    expect(parsed.state).toEqual({
+      theme: "vex",
+      sidebarOpen: false,
+      bookOpen: true,
+    });
     expect(parsed.state.logBuffer).toBeUndefined();
     expect(parsed.state.currentView).toBeUndefined();
     expect(parsed.state.wizardEntryMode).toBeUndefined();

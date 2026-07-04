@@ -76,9 +76,13 @@ export function SessionRow({
       <div
         className={cn(
           "group relative flex w-full transition-colors",
-          // Selection = the landing beam (cobalt gradient + white left bar,
+          // Selection = the landing beam (accent gradient + ledger bar,
           // globals.css `.vex-select-beam`); hover stays a quiet surface lift.
-          selected ? "vex-select-beam text-white" : "hover:bg-white/[0.035]",
+          // Text on the beam reads `--vex-accent-contrast` (white on cobalt,
+          // ink on the Robinhood lime beam), never a raw white.
+          selected
+            ? "vex-select-beam text-[var(--vex-accent-contrast)]"
+            : "hover:bg-white/[0.035]",
           // Fixed height drives the fit-to-height packer; see
           // SIDEBAR_ROW_HEIGHT_PX in sessionListLayout.ts.
           sidebarOpen ? "h-12" : "h-11",
@@ -102,7 +106,9 @@ export function SessionRow({
           <span
             className={cn(
               "relative flex h-7 w-7 shrink-0 items-center justify-center",
-              selected ? "text-white" : "text-[var(--vex-text-3)]",
+              selected
+                ? "text-[var(--vex-accent-contrast)]"
+                : "text-[var(--vex-text-3)]",
             )}
           >
             <HugeiconsIcon icon={Icon} size={15} aria-hidden />
@@ -111,9 +117,10 @@ export function SessionRow({
                 aria-hidden
                 className={cn(
                   "absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-black/60",
-                  // On the selected beam the tone dot flips to white — an
-                  // accent dot would vanish into the cobalt gradient.
-                  selected ? "bg-white" : activity.dotClass,
+                  // On the selected beam the tone dot flips to the beam's
+                  // contrast ink (white on cobalt, ink on lime) — an accent dot
+                  // would vanish into the gradient.
+                  selected ? "bg-[var(--vex-accent-contrast)]" : activity.dotClass,
                 )}
               />
             ) : null}
@@ -125,7 +132,7 @@ export function SessionRow({
                 <span
                   className={cn(
                     "min-w-0 flex-1 truncate text-[13px] font-medium",
-                    selected ? "text-white" : "text-foreground",
+                    selected ? "text-[var(--vex-accent-contrast)]" : "text-foreground",
                   )}
                 >
                   {title}
@@ -141,7 +148,7 @@ export function SessionRow({
                     className={cn(
                       "vex-pulse-dot h-2 w-2 shrink-0 rounded-full",
                       selected
-                        ? "bg-white [--vex-pulse-color:rgba(255,255,255,0.45)]"
+                        ? "bg-[var(--vex-accent-contrast)] [--vex-pulse-color:color-mix(in_oklab,var(--vex-accent-contrast)_45%,transparent)]"
                         : activity?.dotClass,
                     )}
                   />
@@ -149,7 +156,9 @@ export function SessionRow({
                   <span
                     className={cn(
                       "shrink-0 font-mono text-[10px] tabular-nums",
-                      selected ? "text-white/80" : "text-[var(--vex-text-2)]",
+                      selected
+                        ? "text-[color-mix(in_oklab,var(--vex-accent-contrast)_80%,transparent)]"
+                        : "text-[var(--vex-text-2)]",
                     )}
                   >
                     {startedLabel}
@@ -160,9 +169,12 @@ export function SessionRow({
                 <span
                   className={cn(
                     "min-w-0 flex-1 truncate text-[11px]",
-                    // Metadata line: text-3 at rest (quiet ledger), lifted
-                    // to white/85 on the beam so it stays legible on cobalt.
-                    selected ? "text-white/85" : "text-[var(--vex-text-3)]",
+                    // Metadata line: text-3 at rest (quiet ledger), lifted to
+                    // the beam's contrast ink at 85% so it stays legible on the
+                    // gradient in both themes.
+                    selected
+                      ? "text-[color-mix(in_oklab,var(--vex-accent-contrast)_85%,transparent)]"
+                      : "text-[var(--vex-text-3)]",
                   )}
                 >
                   {subtitle}

@@ -202,8 +202,13 @@ export function AutoRetrySection({
         >
           <span
             className={cn(
-              "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
-              enabled ? "translate-x-[18px]" : "translate-x-[3px]",
+              "inline-block h-3.5 w-3.5 transform rounded-full transition-transform",
+              // Enabled: the knob sits on the solid accent track, so it takes
+              // the accent-contrast ink (white on cobalt, ink on lime). Off:
+              // white knob on the dark track reads in both themes.
+              enabled
+                ? "translate-x-[18px] bg-[var(--vex-accent-contrast)]"
+                : "translate-x-[3px] bg-white",
             )}
           />
         </button>

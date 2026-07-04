@@ -301,6 +301,12 @@
   --vex-accent-border-strong: color-mix(in oklab, #1f44ff 85%, transparent);
   --vex-accent-fill-8: color-mix(in oklab, #1f44ff 8%, transparent);
   --vex-accent-fill-12: color-mix(in oklab, #1f44ff 12%, transparent);
+  /* Foreground on a SOLID accent fill (text, icon, knob, dot painted directly
+   * on `--vex-accent`). White reads on the dark cobalt fill; the Robinhood
+   * scope flips this to ink because white-on-lime is unreadable. Every shell
+   * element that sits on a solid accent surface reads this token instead of a
+   * raw `white`, so the theme flip carries the contrast automatically. */
+  --vex-accent-contrast: #ffffff;
   /* pin flag — tokenized warm semantic; the landing's alert amber
    * (#ffce5a, .ws-alert-t). A sanctioned NON-blue status (like
    * success/warning/danger), deliberately outside the single accent family. */
@@ -325,6 +331,52 @@
   --color-border: var(--vex-line-strong);
   --color-input: var(--vex-line-strong);
   --color-muted-foreground: var(--vex-text-3);
+}
+
+/* ROBINHOOD MODE — the app-wide theme flip (T2). The `data-vex-theme`
+ * attribute rides on the SAME shell root as `data-vex-shell` (AppShell's
+ * <main>), so this two-attribute selector out-specifies the base shell block
+ * above and re-tints the ONE accent family from the landing cobalt (#1f44ff)
+ * to the Robinhood neon lime (#CCFF00) on the unchanged ink canvas.
+ *
+ * Ink surfaces and status colors (success/warning/danger, --vex-pin) are
+ * DELIBERATELY untouched — both brands live on near-black, and the status
+ * palette is a product contract, not a theme. Every shell consumer reads
+ * `var(--vex-accent*)`, so this block alone recolors the whole app.
+ *
+ * Raw lime literals appear ONLY here (CSS is out of the design-guard's scan
+ * scope); components stay token-only. The derivative mix percentages mirror
+ * the cobalt family EXCEPT `--vex-accent-text`: cobalt is dark and must be
+ * LIGHTENED to read on ink, but lime is already high-luminance, so lightening
+ * it toward white just washes the neon out — the readable accent-text tone is
+ * the full-strength lime itself. `--color-primary-foreground` flips to ink so
+ * dark text (not white) sits on the light lime fill of stock primary buttons. */
+[data-vex-shell="true"][data-vex-theme="robinhood"] {
+  --vex-accent: #ccff00;
+  --vex-accent-hover: color-mix(in oklab, #ccff00 82%, white);
+  --vex-accent-active: color-mix(in oklab, #ccff00 85%, black);
+  /* Full-strength lime — legible accent text on ink WITHOUT the wash the
+   * cobalt "lighten toward white" recipe would cause on a light hue. */
+  --vex-accent-text: #ccff00;
+  --vex-accent-border: color-mix(in oklab, #ccff00 55%, transparent);
+  --vex-accent-border-strong: color-mix(in oklab, #ccff00 85%, transparent);
+  --vex-accent-fill-8: color-mix(in oklab, #ccff00 8%, transparent);
+  --vex-accent-fill-12: color-mix(in oklab, #ccff00 12%, transparent);
+  /* Foreground on the solid lime fill flips to ink (white-on-lime is
+   * unreadable). One source of truth for every accent-filled surface: stock
+   * primary buttons read `--color-primary-foreground`, bespoke shell controls
+   * read `--vex-accent-contrast`, and both resolve to the same ink here. */
+  --vex-accent-contrast: var(--vex-surface-0);
+  --color-primary-foreground: var(--vex-accent-contrast);
+  --color-primary: var(--vex-accent);
+  --color-ring: var(--vex-accent);
+}
+
+/* Text selection speaks the active accent in Robinhood mode (the global
+ * ::selection is cobalt); ink text keeps contrast on the light lime beam. */
+[data-vex-shell="true"][data-vex-theme="robinhood"] ::selection {
+  background: var(--vex-accent);
+  color: var(--vex-surface-0);
 }
 
 /* Shell scrollbar — the onboarding recipe (38%/60% accent thumb) under the
@@ -470,7 +522,11 @@
   bottom: 16%;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: #ffffff;
+  /* The ledger bar is the beam's foreground mark: white on the cobalt beam,
+   * ink on the Robinhood lime beam (same law as text on an accent fill). The
+   * fallback keeps it white if the beam is ever used outside the shell scope
+   * where the token is undefined. */
+  background: var(--vex-accent-contrast, #ffffff);
   opacity: 0.9;
 }
 
@@ -633,6 +689,30 @@ dialog[open]::backdrop {
 
 .vex-answer-resolve {
   animation: vex-answer-resolve 260ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+/* Robinhood-mode typing indicator — the feather quill "breathes" while Vex
+ * streams (T2). This REPLACES the DotMatrix working mark in Robinhood mode, so
+ * it inherits the same law: an infinite loop bound ONLY to verifiable in-flight
+ * work (StreamingBubble drops the class the instant a pending approval freezes
+ * the strip — trust = stillness). Opacity + a hair of scale, so the global
+ * reduced-motion rule below collapses it to a still, fully-inked feather.
+ * Cadence (~1.85s) matches the DotMatrix cycle it stands in for. */
+@keyframes vex-feather-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.vex-feather-pulse {
+  animation: vex-feather-pulse 1.85s ease-in-out infinite;
+  transform-origin: center;
 }
 
 /* BOOK panel slide-in — one-shot on mount (the panel is mounted/unmounted by
@@ -839,4 +919,148 @@ body,
 html {
   scrollbar-color: color-mix(in oklab, #1f44ff 34%, transparent) transparent;
   scrollbar-width: thin;
+}
+
+/* ============================================================ *
+ *  ORDER TICKET — composer instrument (see SessionComposer)     *
+ * ------------------------------------------------------------ *
+ *  Turns the chat composer into a landing-style instrument (the *
+ *  projectvex.ai .frame + .ws-* grammar): a gradient surface,   *
+ *  resting accent ring, a focus glow + light-sweep + 1px lift,  *
+ *  the empty-field prompt breathe, and the amber approval echo. *
+ *  These live HERE — not in component classNames — because the  *
+ *  shell design guard bans resting-glow / sweep box-shadows     *
+ *  from the .ts/.tsx scan. Token-only; the accent flows from    *
+ *  --vex-accent so both themes (cobalt / Robinhood lime)        *
+ *  recolor automatically. Text on the EXECUTE fill uses the     *
+ *  existing shared --vex-accent-contrast token (white on        *
+ *  cobalt, ink on lime) — no new contrast token was needed.     *
+ *  Reduced motion collapses the sweep, breathe, and lift to a   *
+ *  plain state swap.                                            *
+ * ============================================================ */
+
+/* 1 · INSTRUMENT FRAME — gradient surface (surface-2 -> surface-1),
+ * inset white top-highlight hairline, resting low-opacity accent ring
+ * (the frame's own border). Transition on the brand "Out" curve. */
+.vex-ticket {
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    var(--vex-surface-2),
+    var(--vex-surface-1)
+  );
+  border: 1px solid color-mix(in oklab, var(--vex-accent) 16%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition:
+    border-color 320ms cubic-bezier(0.25, 1, 0.5, 1),
+    box-shadow 320ms cubic-bezier(0.25, 1, 0.5, 1),
+    transform 320ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Stage: 8% Signal-Sky bleed (no blur — banned) so the ticket sits IN the
+ * scene while staying near-opaque and legible over the WebGL canvas. */
+.vex-ticket--stage {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--vex-surface-2) 92%, transparent),
+    color-mix(in oklab, var(--vex-surface-1) 92%, transparent)
+  );
+}
+
+/* Focus: the ring brightens toward full accent, a soft accent under-glow
+ * blooms, and the whole instrument lifts 1px. */
+.vex-ticket:focus-within {
+  border-color: var(--vex-accent-border-strong);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 1px color-mix(in oklab, var(--vex-accent) 45%, transparent),
+    0 20px 52px -22px color-mix(in oklab, var(--vex-accent) 45%, transparent);
+  transform: translateY(-1px);
+}
+
+/* 7 · APPROVAL ECHO — a mission run parked for approval reaches the composer
+ * as runStatus === "paused_approval"; the chrome flips amber (--vex-pin, the
+ * landing .ws-alert motif) to echo "awaiting your signature". */
+.vex-ticket[data-vex-ticket-state="approval"] {
+  border-color: var(--vex-pin-border);
+}
+.vex-ticket[data-vex-ticket-state="approval"]:focus-within {
+  border-color: var(--vex-pin);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 0 1px color-mix(in oklab, var(--vex-pin) 45%, transparent),
+    0 20px 52px -22px color-mix(in oklab, var(--vex-pin) 38%, transparent);
+}
+
+/* 3 · PROMPT GLYPH breathe — the leading accent mark pulses slowly ONLY while
+ * the field is empty; solid the moment the operator types. */
+@keyframes vex-ticket-breathe {
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.34;
+  }
+}
+.vex-ticket-glyph--idle {
+  animation: vex-ticket-breathe 2.8s ease-in-out infinite;
+}
+
+/* 4 · FOCUS SWEEP — one accent light band travels under the field on focus.
+ * The band rests off-screen (translateX) so nothing shows until focus, and
+ * re-plays on each new focus-within (the pseudo re-enters the running state,
+ * the same mechanism as the hover-drawn sign strokes). */
+.vex-ticket-beam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.vex-ticket-beam::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 42%;
+  transform: translateX(-130%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--vex-accent) 90%, transparent),
+    transparent
+  );
+}
+.vex-ticket:focus-within .vex-ticket-beam {
+  opacity: 1;
+}
+.vex-ticket:focus-within .vex-ticket-beam::before {
+  animation: vex-ticket-sweep 640ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+@keyframes vex-ticket-sweep {
+  from {
+    transform: translateX(-130%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+
+/* Reduced motion: instant state swap — no 1px lift, no breathe, no sweep.
+ * (The global 0.01ms rule already defangs durations; these also drop the
+ * lift and keep the beam hidden so focus is a pure state change.) */
+@media (prefers-reduced-motion: reduce) {
+  .vex-ticket:focus-within {
+    transform: none;
+  }
+  .vex-ticket-glyph--idle {
+    animation: none;
+    opacity: 0.9;
+  }
+  .vex-ticket:focus-within .vex-ticket-beam {
+    opacity: 0;
+  }
 }

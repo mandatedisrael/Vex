@@ -248,6 +248,14 @@ export const CH = {
     listMoves: "vex:portfolio:listMoves",
   },
 
+  // Market — read-only live VEX token metrics for the welcome-screen price
+  // widget (T1). `getVexSnapshot` returns main's in-memory cache (no network
+  // call from the handler); the live poll + `EV.market.vex` broadcast are owned
+  // by the main-process market service. Renderer never fetches external APIs.
+  market: {
+    getVexSnapshot: "vex:market:getVexSnapshot",
+  },
+
   // Settings — read-only Phase 1 (Phase 2 dodaje setters)
   settings: {
     getPreferences: "vex:settings:getPreferences",
@@ -298,6 +306,16 @@ export const EV = {
   },
   database: {
     migrateProgress: "vex:event:database:migrateProgress",
+  },
+  /**
+   * Live VEX market snapshot (T1). Main's market service broadcasts a
+   * fully-composed, sanitized `VexMarketSnapshot` after each successful poll
+   * (and re-broadcasts last-good data with `stale: true` when the newest price
+   * poll fails). Payload is validated with `vexMarketSnapshotSchema` at the
+   * preload boundary; the DB is not involved (the cache is in-memory).
+   */
+  market: {
+    vex: "vex:event:market:vex",
   },
   updater: {
     // Full `UpdateStatus` discriminated union pushed on every updater state

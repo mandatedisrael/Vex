@@ -165,6 +165,8 @@ describe("preload bridge surface", () => {
       "CH.updater.cancelDownload",
       "CH.updater.restartAndInstallNow",
       "CH.updater.openReleaseNotes",
+      // T1 — read-only live VEX market snapshot bridge.
+      "CH.market.getVexSnapshot",
     ];
     const corpus = PRELOAD_FILES.map((f) => readFileSync(f, "utf8")).join("\n");
     for (const channel of expected) {
@@ -203,5 +205,16 @@ describe("preload bridge surface", () => {
       corpus,
       "onControlState not exposed by the preload composer",
     ).toContain("onControlState");
+  });
+
+  it("exposes EV.market.vex and the market-update bridge method (T1)", () => {
+    const corpus = PRELOAD_FILES.map((f) => readFileSync(f, "utf8")).join("\n");
+    expect(corpus, "EV.market.vex not referenced in preload").toContain(
+      "EV.market.vex",
+    );
+    expect(
+      corpus,
+      "onVexUpdate not exposed by the preload composer",
+    ).toContain("onVexUpdate");
   });
 });

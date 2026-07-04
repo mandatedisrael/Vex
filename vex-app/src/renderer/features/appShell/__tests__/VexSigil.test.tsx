@@ -13,7 +13,11 @@
 import { StrictMode } from "react";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { VexSigil } from "../VexSigil.js";
+import {
+  ROBINHOOD_SIGIL_PALETTE,
+  ROBINHOOD_SIGIL_SRC,
+  VexSigil,
+} from "../VexSigil.js";
 
 afterEach(() => {
   cleanup();
@@ -213,5 +217,41 @@ describe("VexSigil", () => {
     expect(() => {
       view.unmount();
     }).not.toThrow();
+  });
+
+  it("robinhood: the fallback <img> uses the feather source (not the monogram)", () => {
+    // jsdom has no canvas 2D → the <img> fallback renders the passed src.
+    const view = render(
+      <VexSigil src={ROBINHOOD_SIGIL_SRC} palette={ROBINHOOD_SIGIL_PALETTE} />,
+    );
+    const img = view.container.querySelector("[data-vex-sigil-fallback]");
+    expect(img?.getAttribute("src")).toBe(ROBINHOOD_SIGIL_SRC);
+    expect(ROBINHOOD_SIGIL_SRC).toBe("/logo/robinhood-feather.png");
+  });
+
+  it("robinhood: samples the feather src and paints the neon-lime spark palette", async () => {
+    mockReducedMotion(true);
+    const ctx = installFake2d();
+    installFakeImage("load");
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
+
+    const view = render(
+      <VexSigil src={ROBINHOOD_SIGIL_SRC} palette={ROBINHOOD_SIGIL_PALETTE} />,
+    );
+    await flushImageLoad();
+
+    // Canvas path (no fallback) and a painted static frame.
+    expect(view.container.querySelector("canvas")).not.toBeNull();
+    expect(ctx.fill).toHaveBeenCalled();
+
+    // Palette = paper body + the two lime sparks (#ccff00 / #b6e600).
+    expect(ctx.fillStyles.some((s) => s.includes("243,244,247"))).toBe(true);
+    expect(ctx.fillStyles.some((s) => s.includes("204,255,0"))).toBe(true);
+    expect(ctx.fillStyles.some((s) => s.includes("182,230,0"))).toBe(true);
+    // The cobalt sparks of the default palette are absent.
+    expect(ctx.fillStyles.some((s) => s.includes("139,162,255"))).toBe(false);
   });
 });

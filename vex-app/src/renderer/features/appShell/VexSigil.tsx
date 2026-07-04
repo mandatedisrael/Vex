@@ -45,6 +45,7 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import { cn } from "../../lib/utils.js";
 
+/** Default source: the VEX script monogram (square PNG). */
 const SIGIL_SRC = "/logo_clean.png";
 
 /** Fixed offscreen sampling width — particle count is DPR-independent. */
@@ -70,19 +71,41 @@ const SHIMMER_FRACTION = 0.015;
 /** Seed for the one-time particle PRNG ("VEXS"). */
 const SIGIL_SEED = 0x56455853;
 
-/* Canvas paint values (JS constants, not Tailwind classes):
- * paper #f3f4f7, periwinkle sparks #8ba2ff / #7d92ff. */
+/**
+ * A sigil palette is exactly three "r,g,b" canvas-paint channels (JS values,
+ * never Tailwind classes): the body tone plus two accent sparks. The
+ * constellation paints ~85% body, ~15% sparks (see the colorIdx roll below).
+ */
+export type SigilPalette = readonly [string, string, string];
+
+/** Default (VEX) palette — paper #f3f4f7 body with periwinkle cobalt sparks
+ * #8ba2ff / #7d92ff (the white signature with cobalt life). */
 const PAPER_RGB = "243,244,247";
-const SPARK_A_RGB = "139,162,255";
-const SPARK_B_RGB = "125,146,255";
-const COLOR_CHANNELS = [PAPER_RGB, SPARK_A_RGB, SPARK_B_RGB] as const;
+export const DEFAULT_SIGIL_PALETTE: SigilPalette = [
+  PAPER_RGB,
+  "139,162,255",
+  "125,146,255",
+];
+
+/** Robinhood mode — the SAME paper body sparked with neon lime #ccff00 /
+ * #b6e600 instead of cobalt, sampled from the feather source so the theme
+ * flip re-forms the constellation into the Robinhood quill. */
+export const ROBINHOOD_SIGIL_SRC = "/logo/robinhood-feather.png";
+export const ROBINHOOD_SIGIL_PALETTE: SigilPalette = [
+  PAPER_RGB,
+  "204,255,0",
+  "182,230,0",
+];
+
 /** dim / base / bright — the shimmer flips between the outer two. */
 const ALPHA_LEVELS = [0.75, 0.9, 1] as const;
 const BASE_ALPHA_IDX = 1;
-/** Pre-built fill styles — styleIdx = colorIdx * ALPHA_LEVELS.length + alphaIdx. */
-const STYLES: readonly string[] = COLOR_CHANNELS.flatMap((rgb) =>
-  ALPHA_LEVELS.map((alpha) => `rgba(${rgb},${alpha})`),
-);
+/** Build the 9 fill styles for a palette (styleIdx = colorIdx * 3 + alphaIdx). */
+function buildStyles(palette: SigilPalette): readonly string[] {
+  return palette.flatMap((rgb) =>
+    ALPHA_LEVELS.map((alpha) => `rgba(${rgb},${alpha})`),
+  );
+}
 
 /** Tiny deterministic PRNG (mulberry32) — seeded once at sample time. */
 function mulberry32(seed: number): () => number {
@@ -252,13 +275,35 @@ export interface VexSigilProps {
    * monogram's square aspect so canvas and <img> fallback occupy the same
    * fixed frame (no layout shift). */
   readonly className?: string;
+  /** Image sampled for the constellation SHAPE (alpha mask only — colors come
+   * from `palette`). Defaults to the VEX monogram; Robinhood mode passes the
+   * feather. */
+  readonly src?: string;
+  /** Body + two spark channels. Defaults to the VEX cobalt palette. */
+  readonly palette?: SigilPalette;
 }
 
-export function VexSigil({ className }: VexSigilProps): JSX.Element {
+export function VexSigil({
+  className,
+  src = SIGIL_SRC,
+  palette = DEFAULT_SIGIL_PALETTE,
+}: VexSigilProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [failed, setFailed] = useState(false);
 
+  // `src`/`palette` are read ONCE at mount (inside the effect). A theme flip
+  // REMOUNTS this component via a `key` on the parent, so these refs always
+  // hold the current mount's values — they are DELIBERATELY not effect deps:
+  // the assembly is a static-source, empty-dep one-shot (VexSigil.test.tsx
+  // pins the single mount-time rAF kickoff), and prop mutation without a
+  // remount is not a supported reset path.
+  const srcRef = useRef(src);
+  srcRef.current = src;
+  const paletteRef = useRef(palette);
+  paletteRef.current = palette;
+
   useEffect(() => {
+    const styles = buildStyles(paletteRef.current);
     const canvasEl = canvasRef.current;
     if (canvasEl === null) return undefined;
     // Re-declared with the narrowed type so the hoisted closures below see a
@@ -326,7 +371,7 @@ export function VexSigil({ className }: VexSigilProps): JSX.Element {
       if (particles === null) return;
       const p = particles;
       ctx.clearRect(0, 0, boxW, boxH);
-      for (const [s, style] of STYLES.entries()) {
+      for (const [s, style] of styles.entries()) {
         ctx.fillStyle = style;
         ctx.beginPath();
         let bucketHasRects = false;
@@ -455,7 +500,7 @@ export function VexSigil({ className }: VexSigilProps): JSX.Element {
     };
     image.onload = handleLoad;
     image.onerror = handleError;
-    image.src = SIGIL_SRC;
+    image.src = srcRef.current;
 
     if (!reducedMotion) {
       document.addEventListener("visibilitychange", onVisibilityChange);
@@ -501,7 +546,7 @@ export function VexSigil({ className }: VexSigilProps): JSX.Element {
     >
       {failed ? (
         <img
-          src={SIGIL_SRC}
+          src={src}
           alt=""
           aria-hidden
           data-vex-sigil-fallback

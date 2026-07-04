@@ -8,9 +8,11 @@
  *  - logBuffer is bounded to MAX_RENDER_LOGS to honor skill §11 (no
  *    unbounded buffers).
  *
- * Theme is intentionally NOT in M1 — applying it requires DOM root sync
- * + prefers-color-scheme listener + Settings UI to mutate it. Phase 2
- * adds it properly. Storing dead state today only invites drift.
+ * Shell theme (`theme`) IS persisted (partialize whitelist below): the
+ * "Robinhood mode" flip (T2) is a deliberate user choice that must survive
+ * relaunch. It drives the `data-vex-theme` attribute on the shell root, which
+ * re-tints the whole app through the `--vex-accent*` tokens. Everything else
+ * here stays UI-only per skill §5 (domain/IPC data belongs in TanStack Query).
  */
 
 import { create } from "zustand";
@@ -18,6 +20,13 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import type { ReasoningEffort } from "@shared/schemas/chat.js";
 
 export const MAX_RENDER_LOGS = 500;
+
+/**
+ * Shell colour theme. `vex` = the landing cobalt Signal Desk (default);
+ * `robinhood` = the neon-lime "Robinhood mode". App-wide by construction —
+ * the value rides on the shell root's `data-vex-theme` attribute.
+ */
+export type VexTheme = "vex" | "robinhood";
 
 export type View =
   | "splash"
@@ -63,6 +72,11 @@ export interface PendingFirstMessage {
 }
 
 interface UiState {
+  /**
+   * Shell colour theme, persisted so "Robinhood mode" survives relaunch.
+   * Defaults to `vex` (the cobalt Signal Desk).
+   */
+  readonly theme: VexTheme;
   readonly sidebarOpen: boolean;
   /**
    * The on-demand right-side BOOK panel (per-session instrument: MOVES /
@@ -104,6 +118,8 @@ interface UiState {
    * every session back at the default; the engine owns the real default.
    */
   readonly reasoningEffortBySession: Readonly<Record<string, ReasoningEffort>>;
+  readonly setTheme: (value: VexTheme) => void;
+  readonly toggleTheme: () => void;
   readonly setSidebarOpen: (value: boolean) => void;
   readonly setBookOpen: (value: boolean) => void;
   readonly toggleBook: () => void;
@@ -131,6 +147,7 @@ interface UiState {
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
+      theme: "vex",
       sidebarOpen: true,
       bookOpen: true,
       currentView: "splash",
@@ -145,6 +162,9 @@ export const useUiStore = create<UiState>()(
       pendingFirstMessage: null,
       signingState: "idle",
       reasoningEffortBySession: {},
+      setTheme: (theme) => set({ theme }),
+      toggleTheme: () =>
+        set((state) => ({ theme: state.theme === "vex" ? "robinhood" : "vex" })),
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
       setBookOpen: (bookOpen) => set({ bookOpen }),
       toggleBook: () => set((state) => ({ bookOpen: !state.bookOpen })),
@@ -185,19 +205,41 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "vex-ui",
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
+        theme: state.theme,
         sidebarOpen: state.sidebarOpen,
         bookOpen: state.bookOpen,
       }),
-      // v2: BOOK now opens by default. Force it open once on upgrade from v1 so
-      // existing installs pick up the new default; subsequent toggles persist.
+      // Expand-only migrations, oldest first:
+      //   v2: BOOK now opens by default — force it open once on upgrade from v1
+      //       so existing installs pick up the new default (later toggles
+      //       persist normally).
+      //   v3: `theme` added — seed the cobalt default so a pre-theme install
+      //       hydrates into `vex`, not `undefined`.
       migrate: (persisted, version) => {
-        if (version < 2 && persisted !== null && typeof persisted === "object") {
-          return { ...(persisted as Record<string, unknown>), bookOpen: true };
+        if (persisted === null || typeof persisted !== "object") {
+          return persisted;
         }
-        return persisted;
+        let next = persisted as Record<string, unknown>;
+        if (version < 2) next = { ...next, bookOpen: true };
+        if (version < 3 && !("theme" in next)) next = { ...next, theme: "vex" };
+        return next;
+      },
+      // localStorage is user-writable (untrusted input), and `migrate` only
+      // runs on version hops — a hand-edited current-version payload skips it.
+      // Coerce on EVERY rehydrate: an off-union `theme` degrades to the cobalt
+      // default instead of reaching `data-vex-theme` / `SKY_ACCENTS[theme]`
+      // (SignalSky indexes accents by theme and would crash on `undefined`).
+      merge: (persisted, current) => {
+        const incoming =
+          persisted !== null && typeof persisted === "object"
+            ? (persisted as Partial<UiState>)
+            : undefined;
+        const theme: VexTheme =
+          incoming?.theme === "robinhood" ? "robinhood" : "vex";
+        return { ...current, ...incoming, theme };
       },
     }
   )

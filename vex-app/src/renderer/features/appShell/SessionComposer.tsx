@@ -31,7 +31,7 @@ import {
 } from "react";
 import type { FormEvent, JSX } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowUp01Icon, StopCircleIcon } from "@hugeicons/core-free-icons";
+import { StopCircleIcon } from "@hugeicons/core-free-icons";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import { useSubmitChat } from "../../lib/api/chat.js";
 import {
@@ -56,16 +56,27 @@ import {
 import { ComposerQuickActions } from "./ComposerQuickActions.js";
 import { PlanSwitch } from "./PlanSwitch.js";
 import { nextReasoningEffort, ReasoningSwitch } from "./ReasoningSwitch.js";
+import { ticketEyebrowLabel } from "./composer/composer-ticket.js";
+import {
+  PromptGlyph,
+  TicketFlowStrip,
+  TicketHeader,
+} from "./composer/TicketChrome.js";
+
+/** Welcome/agent default prompt — the plain-English order the operator
+ * types. Mission-mode placeholders still come from `placeholderFor`. */
+const AGENT_PLACEHOLDER =
+  "Short gold in this range, stop at 4170. Plain English.";
 
 /**
- * Shared slot geometry for the send key's three states (send / stop /
- * stopping) — hard-cut swaps must never shift the chrome row. A 36px
- * circle (the landing circle-cta in miniature); the enabled state fills
- * cobalt, stop keeps the accent rim, stopping goes inert while the
- * chrome-row hint carries the "Stopping…" label.
+ * Shared pill geometry for the send key's three states (EXECUTE / stop /
+ * stopping) — a fixed min-width keeps every hard-cut swap from shifting the
+ * bottom rail (the landing `.btn` mono pill). The enabled EXECUTE fills the
+ * accent with the accent-contrast ink; stop keeps the accent rim; stopping
+ * goes inert while the rail hint carries the "Stopping…" label.
  */
 const SEND_KEY_BASE =
-  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+  "inline-flex h-8 min-w-[104px] shrink-0 items-center justify-center gap-1.5 rounded-full border px-3.5 font-mono text-[11px] uppercase tracking-[0.16em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 type ComposerNotice =
   | {
@@ -344,10 +355,31 @@ export function SessionComposer({
     setNotice(null);
   }, []);
 
-  const submitDisabled = draft.trim().length === 0 || submitPending;
+  const draftEmpty = draft.trim().length === 0;
+  const submitDisabled = draftEmpty || submitPending;
   // Stop acknowledged and the turn still in flight — the send key goes
   // inert and the chrome-row hint swaps to the STOPPING… label.
   const stopping = submitPending && stopRequested;
+
+  // Approval echo — a mission run parked for approval reaches the composer as
+  // `runStatus === "paused_approval"` (already in FREE_TEXT_DISALLOWED, so the
+  // input is frozen). No new plumbing: this same signal flips the ticket
+  // chrome to the amber ws-alert motif.
+  const awaitingApproval = runStatus === "paused_approval";
+  const eyebrowLabel = ticketEyebrowLabel({
+    awaitingApproval,
+    planOn,
+    sessionId,
+    stage,
+    session: activeSession,
+  });
+  // Mission-mode placeholders stay owned by `placeholderFor`; the welcome /
+  // agent default is the plain-English order example. Plan mode overrides both.
+  const placeholder = planOn
+    ? "Describe the goal — Vex proposes a plan before anything executes."
+    : activeSession?.mode === "mission"
+      ? placeholderFor(activeSession)
+      : AGENT_PLACEHOLDER;
 
   return (
     <>
@@ -356,14 +388,16 @@ export function SessionComposer({
           ref={formRef}
           onSubmit={onSubmit}
           data-vex-area="chat-composer"
+          data-vex-ticket-state={awaitingApproval ? "approval" : "input"}
           className={cn(
-            "relative overflow-hidden rounded-[14px] border border-[var(--vex-line-strong)] transition-colors focus-within:border-[var(--vex-accent-border-strong)]",
-            // Stage: near-opaque ink (solid color-mix — glass/blur is banned
-            // by the design guard) so the frame reads over the Signal Sky
-            // while its edges still sit IN the scene.
-            stage
-              ? "bg-[color-mix(in_oklab,var(--vex-surface-1)_90%,transparent)]"
-              : "bg-[var(--vex-surface-1)]",
+            // THE ORDER TICKET — gradient instrument frame, resting accent
+            // ring, focus glow + sweep + 1px lift, and the amber approval
+            // echo all owned by `.vex-ticket` (globals.css) so no resting
+            // glow shadow ever lands in a className (design guard).
+            "vex-ticket relative overflow-hidden rounded-[14px]",
+            // Stage: 8% Signal-Sky bleed (no blur — banned) so the ticket
+            // sits IN the scene while staying near-opaque.
+            stage && "vex-ticket--stage",
           )}
         >
           {/* MODE LINE — 1px accent ink along the top edge, drawn (scaleX
@@ -372,42 +406,55 @@ export function SessionComposer({
           <span
             aria-hidden
             className={cn(
-              "vex-sign-stroke pointer-events-none absolute inset-x-0 top-0 h-px rounded-none bg-[var(--vex-accent)]",
+              "vex-sign-stroke pointer-events-none absolute inset-x-0 top-0 z-10 h-px rounded-none bg-[var(--vex-accent)]",
               planOn && "vex-mode-line--on",
             )}
           />
-          <textarea
-            ref={textareaRef}
-            value={draft}
-            onChange={(event) => {
-              setDraft(event.target.value);
-              setNotice(null);
-            }}
-            onKeyDown={(event) => {
-              // Enter sends; Shift+Enter and IME composition insert a newline.
-              if (
-                event.key === "Enter" &&
-                !event.shiftKey &&
-                !event.nativeEvent.isComposing
-              ) {
-                event.preventDefault();
-                formRef.current?.requestSubmit();
-              }
-            }}
-            rows={1}
-            placeholder={
-              planOn
-                ? "Describe the goal — Vex proposes a plan before anything executes."
-                : placeholderFor(activeSession)
-            }
-            aria-label="Session draft"
-            className={cn(
-              "block w-full resize-none overflow-y-auto bg-transparent px-4 pt-3.5 pb-2 leading-[1.7] text-foreground caret-[var(--vex-accent)] outline-none",
-              "max-h-[200px] placeholder:text-[var(--vex-text-3)]",
-              // Stage: taller idle presence + larger type (the instrument).
-              stage ? "min-h-[64px] text-[16px]" : "min-h-[52px] text-[15px]",
-            )}
-          />
+
+          {/* HEADER MICROBAR — the landing .ws-bar: a context eyebrow and a
+           * live status dot along the instrument's top edge. */}
+          <TicketHeader label={eyebrowLabel} awaiting={awaitingApproval} />
+
+          {/* FIELD ZONE — the prompt glyph leads the textarea; the focus
+           * sweep beam rides the bottom edge of this zone (under the field). */}
+          <div className="relative flex items-start gap-2.5 px-4 pb-2 pt-1.5">
+            <PromptGlyph empty={draftEmpty} />
+            <textarea
+              ref={textareaRef}
+              value={draft}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setNotice(null);
+              }}
+              onKeyDown={(event) => {
+                // Enter sends; Shift+Enter and IME composition insert a newline.
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  formRef.current?.requestSubmit();
+                }
+              }}
+              rows={1}
+              placeholder={placeholder}
+              aria-label="Session draft"
+              className={cn(
+                "block w-full flex-1 resize-none overflow-y-auto bg-transparent leading-[1.7] text-foreground caret-[var(--vex-accent)] outline-none",
+                "max-h-[200px] placeholder:text-[var(--vex-text-3)]",
+                // Stage: taller idle presence + larger type (the instrument).
+                stage ? "min-h-[60px] text-[16px]" : "min-h-[48px] text-[15px]",
+              )}
+            />
+            {/* FOCUS SWEEP — one accent light band travels under the field on
+             * focus (globals.css `.vex-ticket-beam`); rests off-screen. */}
+            <span aria-hidden className="vex-ticket-beam" />
+          </div>
+
+          {/* FLOW STRIP — welcome-stage-only provenance line
+           * (PROPOSE → ENFORCE → PROVE), gated by the existing `stage` prop. */}
+          {stage ? <TicketFlowStrip /> : null}
 
           <div className="flex h-12 items-center gap-3 border-t border-[var(--vex-line)] px-3">
             <PlanSwitch
@@ -444,7 +491,7 @@ export function SessionComposer({
                   : "Enter ↵ send · Shift+Enter newline"}
             </span>
 
-            {/* THE SEND KEY — three hard-cut states in one slot geometry. */}
+            {/* THE EXECUTE KEY — three hard-cut states in one pill slot. */}
             {submitPending ? (
               stopRequested ? (
                 <button
@@ -456,7 +503,7 @@ export function SessionComposer({
                     "border-[var(--vex-line-strong)] bg-[var(--vex-surface-0)] text-[var(--vex-text-3)]",
                   )}
                 >
-                  <HugeiconsIcon icon={StopCircleIcon} size={16} aria-hidden />
+                  <HugeiconsIcon icon={StopCircleIcon} size={14} aria-hidden />
                 </button>
               ) : (
                 <button
@@ -471,7 +518,8 @@ export function SessionComposer({
                     "border-[var(--vex-accent-border-strong)] bg-[var(--vex-accent-fill-12)] text-[var(--vex-accent-text)]",
                   )}
                 >
-                  <HugeiconsIcon icon={StopCircleIcon} size={16} aria-hidden />
+                  <HugeiconsIcon icon={StopCircleIcon} size={14} aria-hidden />
+                  Stop
                 </button>
               )
             ) : (
@@ -481,12 +529,17 @@ export function SessionComposer({
                 aria-label="Send message"
                 className={cn(
                   SEND_KEY_BASE,
+                  // Ghost/disabled while the field is empty; solid accent fill
+                  // with the accent-contrast ink once there is an order to send.
                   submitDisabled
-                    ? "border-[var(--vex-line-strong)] bg-[var(--vex-surface-0)] text-[var(--vex-text-3)]"
-                    : "border-transparent bg-[var(--vex-accent)] text-white hover:bg-[var(--vex-accent-hover)] active:scale-[0.98]",
+                    ? "border-[var(--vex-line-strong)] bg-transparent text-[var(--vex-text-3)]"
+                    : "border-transparent bg-[var(--vex-accent)] text-[var(--vex-accent-contrast)] hover:bg-[var(--vex-accent-hover)] active:scale-[0.98]",
                 )}
               >
-                <HugeiconsIcon icon={ArrowUp01Icon} size={16} aria-hidden />
+                Execute
+                <span aria-hidden className="text-[0.9em] opacity-80">
+                  ⏎
+                </span>
               </button>
             )}
           </div>

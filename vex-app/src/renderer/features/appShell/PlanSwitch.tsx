@@ -52,11 +52,13 @@ export function PlanSwitch({
       title={title}
       onClick={onToggle}
       className={cn(
-        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors duration-[160ms]",
+        // ws-chip grammar (the landing .ws-chip): hairline mono chip, hover
+        // lifts the border toward the accent. Behavior/ARIA unchanged.
+        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] border px-2.5 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors duration-[160ms]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]",
         planOn
           ? "border-[var(--vex-accent-border)] bg-[var(--vex-accent-fill-8)] text-[var(--vex-accent-text)]"
-          : "border-[var(--vex-line-strong)] text-[var(--vex-text-3)]",
+          : "border-[var(--vex-line-strong)] text-[var(--vex-text-3)] hover:border-[var(--vex-accent-border)] hover:text-[var(--vex-text-2)]",
       )}
     >
       <HugeiconsIcon icon={MapPinIcon} size={13} aria-hidden />

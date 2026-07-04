@@ -258,6 +258,13 @@ beforeEach(() => {
         onStreamDelta: () => () => {},
         onControlState: () => () => {},
       },
+      // T1: the sidebar mounts VexTokenCardCompact → useVexMarket reads
+      // getVexSnapshot + subscribes onVexUpdate. Stubs keep the widget in its
+      // loading state without a live market feed.
+      market: {
+        getVexSnapshot: () => Promise.resolve({ ok: true, data: null }),
+        onVexUpdate: () => () => {},
+      },
     },
   });
 });

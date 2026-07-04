@@ -21,13 +21,32 @@
  * 100% generated in-shader — no source imagery, no network fetch (CSP-safe).
  */
 
-/* Ink palette — JS hex constants converted to GLSL vec3 at module load.
- * #1f44ff / #0a23b8 are the sanctioned accent roots (see globals.css);
- * #0a0d18 / #11162a are the landing ink scale (--vex-surface-0/-2). */
+/* Ink palette — the two SURFACE bands stay baked into the shader as consts
+ * (#0a0d18 / #11162a are the landing ink scale, --vex-surface-0/-2; both
+ * themes share the ink canvas). The two ACCENT bands (deep + bright) are now
+ * u_deep / u_bright uniforms fed per-theme by SignalSky, so the theme flip
+ * crossfades the sky's signal flecks (cobalt → neon lime) without a recompile.
+ * SKY_DEEP_HEX / SKY_BRIGHT_HEX are the VEX (cobalt) accent pair; the
+ * Robinhood pair sits alongside. */
 export const SKY_INK_HEX = "#0a0d18";
 export const SKY_SOFT_HEX = "#11162a";
 export const SKY_DEEP_HEX = "#0a23b8";
 export const SKY_BRIGHT_HEX = "#1f44ff";
+/** Robinhood accent pair — a dim olive-lime rising to the neon #ccff00. */
+export const SKY_ROBINHOOD_DEEP_HEX = "#4d6300";
+export const SKY_ROBINHOOD_BRIGHT_HEX = "#ccff00";
+
+export type SkyTheme = "vex" | "robinhood";
+
+/** RGB channels normalized to 0..1 — the form uniform3f wants. */
+export type RgbTriplet = readonly [number, number, number];
+
+export interface SkyAccentPalette {
+  /** The lower accent band (dv 0.72..0.92). */
+  readonly deep: RgbTriplet;
+  /** The brightest signal fleck (dv > 0.92). */
+  readonly bright: RgbTriplet;
+}
 
 /** Convert `#rrggbb` to a normalized `vec3(r,g,b)` GLSL literal. Throws on
  * malformed input — the inputs are module constants, so a typo fails loudly
@@ -41,6 +60,29 @@ export function hexToGlslVec3(hex: string): string {
   return `vec3(${channel(1)},${channel(3)},${channel(5)})`;
 }
 
+/** Convert `#rrggbb` to a normalized `[r,g,b]` (0..1) triplet for uniform3f.
+ * Throws on malformed input (module-constant inputs → loud failure). */
+export function hexToRgbTriplet(hex: string): RgbTriplet {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    throw new Error(`hexToRgbTriplet: expected #rrggbb, got "${hex}"`);
+  }
+  const channel = (offset: number): number =>
+    Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
+  return [channel(1), channel(3), channel(5)];
+}
+
+/** Per-theme accent pair fed to u_deep / u_bright. */
+export const SKY_ACCENTS: Record<SkyTheme, SkyAccentPalette> = {
+  vex: {
+    deep: hexToRgbTriplet(SKY_DEEP_HEX),
+    bright: hexToRgbTriplet(SKY_BRIGHT_HEX),
+  },
+  robinhood: {
+    deep: hexToRgbTriplet(SKY_ROBINHOOD_DEEP_HEX),
+    bright: hexToRgbTriplet(SKY_ROBINHOOD_BRIGHT_HEX),
+  },
+};
+
 /** Fullscreen pass-through vertex shader (one oversized triangle). */
 export const SKY_VERTEX_SHADER =
   "attribute vec2 p;void main(){gl_Position=vec4(p,0.0,1.0);}";
@@ -50,10 +92,9 @@ export const SKY_VERTEX_SHADER =
 export const SKY_FRAGMENT_SHADER = [
   "precision highp float;",
   "uniform vec2 u_res; uniform float u_time; uniform float u_intensity;",
+  "uniform vec3 u_deep; uniform vec3 u_bright;",
   `const vec3 INK=${hexToGlslVec3(SKY_INK_HEX)};`,
   `const vec3 SOFT=${hexToGlslVec3(SKY_SOFT_HEX)};`,
-  `const vec3 DEEP=${hexToGlslVec3(SKY_DEEP_HEX)};`,
-  `const vec3 BRIGHT=${hexToGlslVec3(SKY_BRIGHT_HEX)};`,
   "float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}",
   "float vnoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);",
   "  float a=hash(i),b=hash(i+vec2(1.0,0.0)),c=hash(i+vec2(0.0,1.0)),d=hash(i+vec2(1.0,1.0));",
@@ -81,7 +122,7 @@ export const SKY_FRAGMENT_SHADER = [
   "  float thr=bayer4(gl_FragCoord.xy);",
   "  float dv=clamp(v,0.0,1.0)+(thr-0.5)*0.20;",
   "  vec3 col;",
-  "  if(dv<0.46)col=INK; else if(dv<0.72)col=SOFT; else if(dv<0.92)col=DEEP; else col=BRIGHT;",
+  "  if(dv<0.46)col=INK; else if(dv<0.72)col=SOFT; else if(dv<0.92)col=u_deep; else col=u_bright;",
   "  gl_FragColor=vec4(col,1.0);",
   "}",
 ].join("\n");

@@ -48,3 +48,41 @@ export function formatUsdDelta(value: number | null | undefined): string {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${sign}${formatUsd(Math.abs(value))}`;
 }
+
+/**
+ * Adaptive USD for a token SPOT price, where `formatUsd`'s 2-decimal rounding
+ * would collapse a sub-cent token (e.g. VEX at ~$0.00054) to `$0.00`.
+ * `>=1` → 2 decimals; `>=0.01` → 4 decimals; below that → enough decimals to
+ * keep ~4 significant figures (`$0.0005430`). `null`/non-finite → em dash.
+ */
+export function formatTokenPriceUsd(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "—";
+  }
+  if (value === 0) return "$0.00";
+  const abs = Math.abs(value);
+  if (abs >= 1) return `$${value.toFixed(2)}`;
+  if (abs >= 0.01) return `$${value.toFixed(4)}`;
+  const decimals = Math.min(12, Math.ceil(-Math.log10(abs)) + 3);
+  return `$${value.toFixed(decimals)}`;
+}
+
+/** Signed percent for a price-change readout: `+113.00%` / `-1.73%` / `—`. */
+export function formatPercentDelta(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "—";
+  }
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${sign}${Math.abs(value).toFixed(2)}%`;
+}
+
+/** Compact integer for counts: `354`, `1.2K`, `3.4M`. `null`/non-finite → em dash. */
+export function formatCompactCount(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "—";
+  }
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return `${Math.trunc(value)}`;
+}

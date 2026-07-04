@@ -113,7 +113,9 @@ export function SessionPanel(): JSX.Element {
         <div className="flex min-h-0 flex-1 flex-col">
           <SessionWelcomeHero />
         </div>
-        {/* THE INSTRUMENT — centered with the hero as one rising group. */}
+        {/* THE INSTRUMENT — centered with the hero as one rising group. The
+            live $VEX widget used to sit below the composer here; it moved to
+            the sessions rail (SessionsList) to keep the welcome stage clean. */}
         <div className="vex-rise vex-rise-d2 relative z-10 mx-auto w-[min(680px,92%)] shrink-0">
           <SessionComposer activeSession={null} activeSessionId={null} stage />
         </div>

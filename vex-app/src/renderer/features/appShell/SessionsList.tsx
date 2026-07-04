@@ -22,6 +22,8 @@ import { SessionDeleteDialog } from "./SessionDeleteDialog.js";
 import { MemoryButton } from "./MemoryButton.js";
 import { RuntimeLedger } from "./RuntimeLedger.js";
 import { SettingsButton } from "./SettingsButton.js";
+import { SidebarHomeSigil } from "./SidebarHomeSigil.js";
+import { VexTokenCardCompact } from "./market/VexTokenCardCompact.js";
 import {
   SessionGroups,
   SessionsEmptyPlaceholder,
@@ -167,33 +169,29 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
     >
       <header
         className={cn(
-          // glass-strong anchors the brand strip: extra ink keeps the VEX
-          // wordmark solid where the sky is brightest (top of the canvas).
-          "flex h-12 shrink-0 items-center border-b border-[var(--vex-line)] bg-[var(--vex-glass-strong)]",
-          sidebarOpen ? "justify-between px-4" : "justify-center px-2",
+          // glass-strong anchors the brand strip: extra ink keeps the sigil
+          // crown solid where the sky is brightest (top of the canvas). The
+          // enlarged particle sigil is the sole mark (no wordmark) and doubles
+          // as the "Back to welcome" control (SidebarHomeSigil).
+          "relative flex h-20 shrink-0 border-b border-[var(--vex-line)] bg-[var(--vex-glass-strong)]",
+          sidebarOpen
+            ? "items-center justify-center px-4"
+            : "flex-col items-center justify-center gap-1.5 px-2",
         )}
       >
-        <div className={cn("flex min-w-0 items-center gap-2.5", !sidebarOpen && "hidden")}>
-          <img
-            src="/logo_clean.png"
-            alt=""
-            draggable={false}
-            className="h-[18px] w-auto opacity-90"
-          />
-          <span className="font-mono text-[11px] uppercase tracking-[0.3em] text-foreground">
-            VEX
-          </span>
+        <SidebarHomeSigil sidebarOpen={sidebarOpen} />
+        <div className={cn(sidebarOpen && "absolute right-3 top-1/2 -translate-y-1/2")}>
+          <SidebarIconButton
+            label={sidebarOpen ? "Collapse sessions sidebar" : "Expand sessions sidebar"}
+            onClick={toggleSidebar}
+          >
+            <HugeiconsIcon
+              icon={sidebarOpen ? PanelLeftCloseIcon : PanelLeftOpenIcon}
+              size={17}
+              aria-hidden
+            />
+          </SidebarIconButton>
         </div>
-        <SidebarIconButton
-          label={sidebarOpen ? "Collapse sessions sidebar" : "Expand sessions sidebar"}
-          onClick={toggleSidebar}
-        >
-          <HugeiconsIcon
-            icon={sidebarOpen ? PanelLeftCloseIcon : PanelLeftOpenIcon}
-            size={17}
-            aria-hidden
-          />
-        </SidebarIconButton>
       </header>
 
       <div className={cn("p-3", !sidebarOpen && "px-2")}>
@@ -203,7 +201,8 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
          * signing mechanics are unchanged: the ink stroke draws on
          * hover/focus (globals.css owns the draw) and loops while
          * SessionCreator's mutation is in flight; the glint is the one-shot
-         * success light. Both flip to white ink on the cobalt fill. */}
+         * success light. Both paint the accent-contrast ink (white on the
+         * cobalt fill, ink on the Robinhood lime fill). */}
         <div className="relative">
           <span
             aria-hidden
@@ -226,7 +225,7 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
             onClick={onCreate}
             aria-label="New session"
             className={cn(
-              "vex-sign-key relative flex h-10 items-center justify-center gap-2 rounded-full bg-[var(--vex-accent)] font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-white transition-colors duration-150",
+              "vex-sign-key relative flex h-10 items-center justify-center gap-2 rounded-full bg-[var(--vex-accent)] font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--vex-accent-contrast)] transition-colors duration-150",
               "hover:bg-[var(--vex-accent-hover)]",
               "active:scale-[0.99] active:bg-[var(--vex-accent-active)]",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--vex-surface-1)]",
@@ -238,7 +237,7 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
             <span
               aria-hidden
               className={cn(
-                "vex-sign-stroke absolute bottom-[6px] h-[1.5px] rounded-full bg-white/90",
+                "vex-sign-stroke absolute bottom-[6px] h-[1.5px] rounded-full bg-[color-mix(in_oklab,var(--vex-accent-contrast)_90%,transparent)]",
                 sidebarOpen ? "inset-x-4" : "inset-x-3",
                 signingState === "signing" && "vex-sign-stroke--signing",
               )}
@@ -247,7 +246,7 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
               <span
                 aria-hidden
                 onAnimationEnd={() => setSigningState("idle")}
-                className="vex-intro-glint absolute bottom-[3px] right-4 h-1.5 w-1.5 rounded-full bg-white"
+                className="vex-intro-glint absolute bottom-[3px] right-4 h-1.5 w-1.5 rounded-full bg-[var(--vex-accent-contrast)]"
               />
             ) : null}
           </button>
@@ -348,6 +347,16 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
             ) : null}
             <HugeiconsIcon icon={ArrowRight01Icon} size={12} aria-hidden />
           </button>
+        </div>
+      ) : null}
+
+      {/* LIVE $VEX — the compact market widget rides the rail between BROWSE
+       * ALL and the footer registry (moved off the welcome stage to keep it
+       * clean). Hidden when the rail is collapsed: the icon-only rail has no
+       * room for the price + stats grid. */}
+      {sidebarOpen ? (
+        <div className="border-t border-[var(--vex-line)] px-3 py-3">
+          <VexTokenCardCompact />
         </div>
       ) : null}
 

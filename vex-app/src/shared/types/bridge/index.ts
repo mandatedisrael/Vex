@@ -26,6 +26,7 @@ export type {
   CapabilitiesBridge,
   DatabaseBridge,
   DockerBridge,
+  MarketBridge,
   OnboardingBridge,
   SecretsBridge,
   SettingsBridge,

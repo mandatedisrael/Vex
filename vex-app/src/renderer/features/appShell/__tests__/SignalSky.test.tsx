@@ -16,13 +16,15 @@ import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SignalSky } from "../SignalSky.js";
 import {
+  SKY_ACCENTS,
   SKY_BRIGHT_HEX,
-  SKY_DEEP_HEX,
   SKY_FRAGMENT_SHADER,
   SKY_INK_HEX,
+  SKY_ROBINHOOD_BRIGHT_HEX,
   SKY_SOFT_HEX,
   SKY_VERTEX_SHADER,
   hexToGlslVec3,
+  hexToRgbTriplet,
 } from "../signalSkyShaders.js";
 
 afterEach(() => {
@@ -75,6 +77,7 @@ function makeFakeGl(options: FakeGlOptions) {
     getUniformLocation: vi.fn((_program: unknown, name: string) => name),
     uniform1f: vi.fn(),
     uniform2f: vi.fn(),
+    uniform3f: vi.fn(),
     viewport: vi.fn(),
     drawArrays: vi.fn(),
   };
@@ -151,10 +154,19 @@ describe("SignalSky", () => {
     expect(view.container.querySelector("[data-vex-sky]")).not.toBeNull();
     expect(view.container.querySelector("[data-vex-sky-fallback]")).toBeNull();
 
-    // FULL STOP: one frame, at the default (full) intensity, time 0.
+    // FULL STOP: one frame, at the default (full) intensity, time 0, and the
+    // default (vex/cobalt) accent pair fed to the u_deep/u_bright uniforms.
     expect(gl.drawArrays).toHaveBeenCalledTimes(1);
     expect(gl.uniform1f.mock.calls).toContainEqual(["u_intensity", 1]);
     expect(gl.uniform1f.mock.calls).toContainEqual(["u_time", 0]);
+    expect(gl.uniform3f.mock.calls).toContainEqual([
+      "u_deep",
+      ...SKY_ACCENTS.vex.deep,
+    ]);
+    expect(gl.uniform3f.mock.calls).toContainEqual([
+      "u_bright",
+      ...SKY_ACCENTS.vex.bright,
+    ]);
 
     // Intensity prop change → one more static frame at the new value
     // (no loop exists to ease it).
@@ -175,6 +187,38 @@ describe("SignalSky", () => {
     render(<SignalSky intensity={7} />);
 
     expect(gl.uniform1f.mock.calls).toContainEqual(["u_intensity", 1]);
+  });
+
+  it("feeds the Robinhood accent pair to the u_deep/u_bright uniforms in robinhood theme", () => {
+    mockReducedMotion(true);
+    const gl = installFakeWebGl();
+
+    render(<SignalSky theme="robinhood" />);
+
+    expect(gl.uniform3f.mock.calls).toContainEqual([
+      "u_deep",
+      ...SKY_ACCENTS.robinhood.deep,
+    ]);
+    expect(gl.uniform3f.mock.calls).toContainEqual([
+      "u_bright",
+      ...SKY_ACCENTS.robinhood.bright,
+    ]);
+  });
+
+  it("repaints a static frame at the new accent when the theme flips (reduced motion)", () => {
+    mockReducedMotion(true);
+    const gl = installFakeWebGl();
+
+    const view = render(<SignalSky theme="vex" />);
+    expect(gl.drawArrays).toHaveBeenCalledTimes(1);
+
+    view.rerender(<SignalSky theme="robinhood" />);
+    // No loop under reduced motion → one more static frame at the lime accent.
+    expect(gl.drawArrays).toHaveBeenCalledTimes(2);
+    expect(gl.uniform3f.mock.calls).toContainEqual([
+      "u_bright",
+      ...SKY_ACCENTS.robinhood.bright,
+    ]);
   });
 
   it("falls back to the gradient when shader compilation fails", () => {
@@ -200,24 +244,26 @@ describe("signalSkyShaders", () => {
     expect(SKY_FRAGMENT_SHADER).toContain("uniform float u_intensity");
     expect(SKY_FRAGMENT_SHADER).not.toContain("u_scroll");
 
-    // The four ink palette bands, converted from the JS hex constants.
+    // The two SURFACE bands stay baked consts (both themes share the ink
+    // canvas), converted from the JS hex constants.
     expect(SKY_FRAGMENT_SHADER).toContain(
       `const vec3 INK=${hexToGlslVec3(SKY_INK_HEX)};`,
     );
     expect(SKY_FRAGMENT_SHADER).toContain(
       `const vec3 SOFT=${hexToGlslVec3(SKY_SOFT_HEX)};`,
     );
+    // The two ACCENT bands are now theme-driven uniforms, not baked consts.
     expect(SKY_FRAGMENT_SHADER).toContain(
-      `const vec3 DEEP=${hexToGlslVec3(SKY_DEEP_HEX)};`,
+      "uniform vec3 u_deep; uniform vec3 u_bright;",
     );
-    expect(SKY_FRAGMENT_SHADER).toContain(
-      `const vec3 BRIGHT=${hexToGlslVec3(SKY_BRIGHT_HEX)};`,
-    );
+    expect(SKY_FRAGMENT_SHADER).not.toContain("const vec3 DEEP");
+    expect(SKY_FRAGMENT_SHADER).not.toContain("const vec3 BRIGHT");
 
     // Threshold mapping mirrored from the landing: base <0.46, soft <0.72,
-    // deep-blue <0.92, else the bright sparks.
+    // deep-accent <0.92, else the bright signal fleck (both accent bands now
+    // resolve from the uniforms).
     expect(SKY_FRAGMENT_SHADER).toContain(
-      "if(dv<0.46)col=INK; else if(dv<0.72)col=SOFT; else if(dv<0.92)col=DEEP; else col=BRIGHT;",
+      "if(dv<0.46)col=INK; else if(dv<0.72)col=SOFT; else if(dv<0.92)col=u_deep; else col=u_bright;",
     );
 
     expect(SKY_VERTEX_SHADER).toContain("gl_Position");
@@ -228,5 +274,16 @@ describe("signalSkyShaders", () => {
     expect(hexToGlslVec3("#0a0d18")).toBe("vec3(0.0392,0.0510,0.0941)");
     expect(() => hexToGlslVec3("1f44ff")).toThrow(/expected #rrggbb/);
     expect(() => hexToGlslVec3("#fff")).toThrow(/expected #rrggbb/);
+  });
+
+  it("exposes per-theme accent triplets for the u_deep/u_bright uniforms", () => {
+    // 0..1 RGB triplet form (what uniform3f wants), not the GLSL string form.
+    expect(hexToRgbTriplet("#ccff00")).toEqual([204 / 255, 1, 0]);
+    expect(() => hexToRgbTriplet("ccff00")).toThrow(/expected #rrggbb/);
+    // The neon-lime bright band is the Robinhood signal fleck; vex stays cobalt.
+    expect(SKY_ACCENTS.robinhood.bright).toEqual(
+      hexToRgbTriplet(SKY_ROBINHOOD_BRIGHT_HEX),
+    );
+    expect(SKY_ACCENTS.vex.bright).toEqual(hexToRgbTriplet(SKY_BRIGHT_HEX));
   });
 });
