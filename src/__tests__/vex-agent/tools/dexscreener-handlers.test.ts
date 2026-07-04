@@ -21,8 +21,8 @@ describe("dexscreener handlers", () => {
     expect(extra).toEqual([]);
   });
 
-  it("handler count matches manifest count (11)", () => {
-    expect(Object.keys(DEXSCREENER_HANDLERS)).toHaveLength(11);
+  it("handler count matches manifest count (14)", () => {
+    expect(Object.keys(DEXSCREENER_HANDLERS)).toHaveLength(14);
   });
 
   it("every handler is a function", () => {
@@ -150,8 +150,8 @@ describe("dexscreener handlers", () => {
     expect(Array.isArray(data.boosts)).toBe(true);
   });
 
-  it("dexscreener.trending returns merged items", async () => {
-    const result = await DEXSCREENER_HANDLERS["dexscreener.trending"]!(
+  it("dexscreener.attention returns merged items", async () => {
+    const result = await DEXSCREENER_HANDLERS["dexscreener.attention"]!(
       { limit: 5 },
       { sessionPermission: "restricted", approved: false },
     );
@@ -288,16 +288,20 @@ describe("dexscreener.tokenPairs sort / limit / projection", () => {
     expect(data.pairCount).toBe(30);
   });
 
-  it("projects pairs concisely — drops info/url/boosts/txns/volume/priceChange, keeps pairAddress", async () => {
+  it("projects pairs to the concise flat shape — keeps trading fields, drops raw noise", async () => {
     const client = getDexScreenerClient();
     vi.spyOn(client, "getTokenPairs").mockResolvedValue([
       makePair({
         chainId: "ethereum",
         dexId: "uniswap",
         labels: ["v3"],
+        priceNative: "0.002",
         liquidity: { usd: 42, base: 1, quote: 2 },
         fdv: 100,
         marketCap: 90,
+        volume: { h24: 5000, h6: 1000, h1: 200, m5: 10 },
+        priceChange: { h1: 5, h6: 3, h24: -2, m5: 0.5 },
+        txns: { h24: { buys: 7, sells: 3 }, h1: { buys: 1, sells: 0 } },
         pairCreatedAt: 1700000000,
         priceUsd: "3.14",
       }),
@@ -310,30 +314,36 @@ describe("dexscreener.tokenPairs sort / limit / projection", () => {
     const data = JSON.parse(result.output);
     const pair = data.pairs[0];
 
-    // KEEP
+    // KEEP — identity + flat trading facts
     expect(pair.chainId).toBe("ethereum");
     expect(pair.dexId).toBe("uniswap");
     expect(pair.pairAddress).toBe("PAIRabc"); // load-bearing for the zap pool-address workflow
     expect(pair.baseToken).toEqual({ address: "BASE", name: "Base", symbol: "BASE" });
     expect(pair.quoteToken).toEqual({ address: "QUOTE", name: "Quote", symbol: "QUOTE" });
     expect(pair.priceUsd).toBe("3.14");
-    expect(pair.liquidity).toEqual({ usd: 42, base: 1, quote: 2 });
+    expect(pair.priceNative).toBe("0.002");
+    expect(pair.liquidityUsd).toBe(42);
     expect(pair.fdv).toBe(100);
     expect(pair.marketCap).toBe(90);
+    expect(pair.volumeH24).toBe(5000);
+    expect(pair.priceChangeH1).toBe(5);
+    expect(pair.priceChangeH24).toBe(-2);
+    expect(pair.txnsH24).toEqual({ buys: 7, sells: 3 });
     expect(pair.pairCreatedAt).toBe(1700000000);
     expect(pair.labels).toEqual(["v3"]);
 
-    // DROP
+    // DROP — raw noise and non-h24 windows
     expect(pair.info).toBeUndefined();
     expect(pair.url).toBeUndefined();
     expect(pair.boosts).toBeUndefined();
     expect(pair.txns).toBeUndefined();
     expect(pair.volume).toBeUndefined();
     expect(pair.priceChange).toBeUndefined();
+    expect(pair.liquidity).toBeUndefined(); // flattened to liquidityUsd
   });
 });
 
-describe("dexscreener.trending default limit", () => {
+describe("dexscreener.attention default limit", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -356,7 +366,7 @@ describe("dexscreener.trending default limit", () => {
     vi.spyOn(client, "getBoosts").mockResolvedValue(boosts);
     vi.spyOn(client, "getProfiles").mockResolvedValue(profiles);
 
-    const result = await DEXSCREENER_HANDLERS["dexscreener.trending"]!({}, PERM);
+    const result = await DEXSCREENER_HANDLERS["dexscreener.attention"]!({}, PERM);
     expect(result.success).toBe(true);
     const data = JSON.parse(result.output);
     expect(data.count).toBe(20);
@@ -379,8 +389,178 @@ describe("dexscreener.trending default limit", () => {
     vi.spyOn(client, "getBoosts").mockResolvedValue(boosts);
     vi.spyOn(client, "getProfiles").mockResolvedValue([]);
 
-    const result = await DEXSCREENER_HANDLERS["dexscreener.trending"]!({ limit: 5 }, PERM);
+    const result = await DEXSCREENER_HANDLERS["dexscreener.attention"]!({ limit: 5 }, PERM);
     const data = JSON.parse(result.output);
     expect(data.count).toBe(5);
+  });
+});
+
+// ── Search client-side filters (chainId / minLiquidityUsd / limit) ─
+
+describe("dexscreener.search filters", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function searchPairs(): DexPair[] {
+    return [
+      makePair({ chainId: "base", dexId: "a", liquidity: { usd: 100000, base: 1, quote: 1 } }),
+      makePair({ chainId: "ethereum", dexId: "b", liquidity: { usd: 5000, base: 1, quote: 1 } }),
+      makePair({ chainId: "base", dexId: "c", liquidity: { usd: 200, base: 1, quote: 1 } }),
+      makePair({ chainId: "solana", dexId: "d", liquidity: { usd: 900000, base: 1, quote: 1 } }),
+    ];
+  }
+
+  it("filters by chainId (case-insensitive) and sorts by liquidity desc", async () => {
+    const client = getDexScreenerClient();
+    vi.spyOn(client, "search").mockResolvedValue({ schemaVersion: "1", pairs: searchPairs() });
+
+    const result = await DEXSCREENER_HANDLERS["dexscreener.search"]!(
+      { query: "x", chainId: "BASE" },
+      PERM,
+    );
+    const data = JSON.parse(result.output);
+    expect(data.chainId).toBe("BASE");
+    expect(data.pairs.every((pr: { chainId: string }) => pr.chainId === "base")).toBe(true);
+    expect(data.pairs.map((pr: { dexId: string }) => pr.dexId)).toEqual(["a", "c"]);
+  });
+
+  it("filters by minLiquidityUsd", async () => {
+    const client = getDexScreenerClient();
+    vi.spyOn(client, "search").mockResolvedValue({ schemaVersion: "1", pairs: searchPairs() });
+
+    const result = await DEXSCREENER_HANDLERS["dexscreener.search"]!(
+      { query: "x", minLiquidityUsd: 10000 },
+      PERM,
+    );
+    const data = JSON.parse(result.output);
+    // Only base@100k and solana@900k clear the 10k floor; sorted desc.
+    expect(data.pairs.map((pr: { dexId: string }) => pr.dexId)).toEqual(["d", "a"]);
+    expect(data.matched).toBe(2);
+  });
+
+  it("caps results at the default limit (20) and honors an explicit limit", async () => {
+    const client = getDexScreenerClient();
+    const many: DexPair[] = Array.from({ length: 30 }, (_, i) =>
+      makePair({ chainId: "base", dexId: `d${i}`, liquidity: { usd: 30 - i, base: 1, quote: 1 } }),
+    );
+    vi.spyOn(client, "search").mockResolvedValue({ schemaVersion: "1", pairs: many });
+
+    const def = JSON.parse(
+      (await DEXSCREENER_HANDLERS["dexscreener.search"]!({ query: "x" }, PERM)).output,
+    );
+    expect(def.pairCount).toBe(20);
+
+    const capped = JSON.parse(
+      (await DEXSCREENER_HANDLERS["dexscreener.search"]!({ query: "x", limit: 3 }, PERM)).output,
+    );
+    expect(capped.pairCount).toBe(3);
+  });
+});
+
+// ── Metas / recent-updates handlers (mocked client) ────────────────
+
+describe("dexscreener metas + recent handlers", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("dexscreener.trending returns narratives and honors limit", async () => {
+    const client = getDexScreenerClient();
+    const metas = Array.from({ length: 5 }, (_, i) => ({
+      slug: `m${i}`,
+      name: `Meta ${i}`,
+      description: null,
+      icon: null,
+      marketCap: i,
+      liquidity: i,
+      volume: i,
+      tokenCount: i,
+      marketCapChange: null,
+      marketCapDelta: null,
+    }));
+    vi.spyOn(client, "getMetasTrending").mockResolvedValue(metas);
+
+    const result = await DEXSCREENER_HANDLERS["dexscreener.trending"]!({ limit: 3 }, PERM);
+    expect(result.success).toBe(true);
+    const data = JSON.parse(result.output);
+    expect(data.available).toBe(true);
+    expect(data.count).toBe(3);
+    expect(data.metas[0].slug).toBe("m0");
+  });
+
+  it("dexscreener.trending degrades to feed-unavailable on error", async () => {
+    const client = getDexScreenerClient();
+    vi.spyOn(client, "getMetasTrending").mockRejectedValue(new Error("boom"));
+
+    const result = await DEXSCREENER_HANDLERS["dexscreener.trending"]!({}, PERM);
+    expect(result.success).toBe(true); // never throws through the namespace
+    const data = JSON.parse(result.output);
+    expect(data.available).toBe(false);
+    expect(data.reason).toContain("undocumented");
+  });
+
+  it("dexscreener.meta requires slug", async () => {
+    const result = await DEXSCREENER_HANDLERS["dexscreener.meta"]!({}, PERM);
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("slug");
+  });
+
+  it("dexscreener.meta projects narrative pairs and keeps aggregate stats", async () => {
+    const client = getDexScreenerClient();
+    vi.spyOn(client, "getMeta").mockResolvedValue({
+      slug: "knockoff-legends",
+      name: "Knockoff Legends",
+      description: "x",
+      icon: null,
+      marketCap: 123,
+      liquidity: 456,
+      volume: 789,
+      tokenCount: 2,
+      marketCapChange: null,
+      marketCapDelta: null,
+      pairs: [makePair({ dexId: "raydium", liquidity: { usd: 10, base: 1, quote: 1 } })],
+    });
+
+    const result = await DEXSCREENER_HANDLERS["dexscreener.meta"]!({ slug: "knockoff-legends" }, PERM);
+    const data = JSON.parse(result.output);
+    expect(data.available).toBe(true);
+    expect(data.slug).toBe("knockoff-legends");
+    expect(data.tokenCount).toBe(2);
+    expect(data.pairCount).toBe(1);
+    // Pairs are projected to the concise flat shape.
+    expect(data.pairs[0].liquidityUsd).toBe(10);
+    expect(data.pairs[0].url).toBeUndefined();
+  });
+
+  it("dexscreener.meta degrades when the feed returns null", async () => {
+    const client = getDexScreenerClient();
+    vi.spyOn(client, "getMeta").mockResolvedValue(null);
+
+    const result = await DEXSCREENER_HANDLERS["dexscreener.meta"]!({ slug: "gone" }, PERM);
+    const data = JSON.parse(result.output);
+    expect(data.available).toBe(false);
+  });
+
+  it("dexscreener.profiles.recent returns profiles, degrades on error", async () => {
+    const client = getDexScreenerClient();
+    vi.spyOn(client, "getProfilesRecentUpdates").mockResolvedValue([
+      {
+        url: "u", chainId: "bsc", tokenAddress: "0xabc", icon: "i",
+        header: null, description: null, links: null,
+        updatedAt: "2026-07-04T00:00:00.000Z", cto: false,
+      },
+    ]);
+    const okResult = JSON.parse(
+      (await DEXSCREENER_HANDLERS["dexscreener.profiles.recent"]!({}, PERM)).output,
+    );
+    expect(okResult.available).toBe(true);
+    expect(okResult.count).toBe(1);
+
+    vi.spyOn(client, "getProfilesRecentUpdates").mockRejectedValue(new Error("boom"));
+    const degraded = JSON.parse(
+      (await DEXSCREENER_HANDLERS["dexscreener.profiles.recent"]!({}, PERM)).output,
+    );
+    expect(degraded.available).toBe(false);
   });
 });

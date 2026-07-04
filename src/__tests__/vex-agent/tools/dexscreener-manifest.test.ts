@@ -4,8 +4,8 @@ import { DEXSCREENER_TOOLS } from "../../../vex-agent/tools/protocols/dexscreene
 describe("dexscreener manifest", () => {
   // ── Completeness ─────────────────────────────────────────────────
 
-  it("has 11 tools total", () => {
-    expect(DEXSCREENER_TOOLS).toHaveLength(11);
+  it("has 14 tools total", () => {
+    expect(DEXSCREENER_TOOLS).toHaveLength(14);
   });
 
   const EXPECTED_TOOL_IDS = [
@@ -14,19 +14,22 @@ describe("dexscreener manifest", () => {
     "dexscreener.pairs",
     "dexscreener.tokens",
     "dexscreener.tokenPairs",
-    // Trending (5)
+    // Trending / attention / narratives (8)
     "dexscreener.profiles",
+    "dexscreener.profiles.recent",
     "dexscreener.boosts",
     "dexscreener.boosts.top",
     "dexscreener.communityTakeovers",
+    "dexscreener.attention",
     "dexscreener.trending",
+    "dexscreener.meta",
     // Orders & Ads (2)
     "dexscreener.orders",
     "dexscreener.ads",
   ];
 
   it("expected toolId count matches manifest count", () => {
-    expect(EXPECTED_TOOL_IDS).toHaveLength(11);
+    expect(EXPECTED_TOOL_IDS).toHaveLength(14);
   });
 
   for (const toolId of EXPECTED_TOOL_IDS) {
@@ -144,10 +147,28 @@ describe("dexscreener manifest", () => {
     expect(required).toHaveLength(0);
   });
 
-  it("dexscreener.trending has no required params", () => {
+  it("dexscreener.attention has no required params", () => {
+    const tool = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.attention")!;
+    const required = tool.params.filter(p => p.required);
+    expect(required).toHaveLength(0);
+  });
+
+  it("dexscreener.trending (narratives) has no required params", () => {
     const tool = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.trending")!;
     const required = tool.params.filter(p => p.required);
     expect(required).toHaveLength(0);
+  });
+
+  it("dexscreener.profiles.recent has no required params", () => {
+    const tool = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.profiles.recent")!;
+    const required = tool.params.filter(p => p.required);
+    expect(required).toHaveLength(0);
+  });
+
+  it("dexscreener.meta requires slug", () => {
+    const tool = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.meta")!;
+    const required = tool.params.filter(p => p.required).map(p => p.key);
+    expect(required).toEqual(["slug"]);
   });
 
   it("dexscreener.ads has no required params", () => {
@@ -213,22 +234,33 @@ describe("dexscreener manifest", () => {
     expect(tokenPairs.discovery?.embeddingText).toContain("most liquidity");
   });
 
-  it("trend embeddings capture boosted, profile, community takeover, and unified trending intent", () => {
+  it("trend embeddings capture boosted, profile, community takeover, attention, and narrative intent", () => {
     const profiles = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.profiles")!;
+    const profilesRecent = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.profiles.recent")!;
     const boosts = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.boosts")!;
     const topBoosts = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.boosts.top")!;
     const communityTakeovers = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.communityTakeovers")!;
+    const attention = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.attention")!;
     const trending = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.trending")!;
+    const meta = DEXSCREENER_TOOLS.find(t => t.toolId === "dexscreener.meta")!;
     expect(profiles.discovery?.embeddingText).toContain("latest token profiles");
     expect(profiles.discovery?.embeddingText?.toLowerCase()).toContain("newly listed");
+    expect(profilesRecent.discovery?.embeddingText?.toLowerCase()).toContain("recently updated");
     expect(boosts.discovery?.embeddingText).toContain("latest tokens that received paid boosts");
     expect(boosts.discovery?.embeddingText?.toLowerCase()).toContain("promoted");
     expect(topBoosts.discovery?.embeddingText).toContain("most active boosts");
     expect(topBoosts.discovery?.embeddingText?.toLowerCase()).toContain("ranked by total boost amount");
     expect(communityTakeovers.discovery?.embeddingText).toContain("community takeover");
     expect(communityTakeovers.discovery?.embeddingText).toContain("CTO");
-    expect(trending.discovery?.embeddingText?.toLowerCase()).toContain("unified ranked feed");
-    expect(trending.discovery?.embeddingText?.toLowerCase()).toContain("trending");
+    // Synthetic attention merge (renamed from the old synthetic "trending").
+    expect(attention.discovery?.embeddingText?.toLowerCase()).toContain("attention");
+    expect(attention.discovery?.embeddingText?.toLowerCase()).toContain("boost");
+    // Official trending feed now = NARRATIVES/themes, not individual tokens.
+    expect(trending.discovery?.embeddingText?.toLowerCase()).toContain("trending narratives");
+    expect(trending.discovery?.embeddingText?.toLowerCase()).toContain("narratives, not individual tokens");
+    // Narrative detail drill-down.
+    expect(meta.discovery?.embeddingText?.toLowerCase()).toContain("narrative");
+    expect(meta.discovery?.embeddingText?.toLowerCase()).toContain("slug");
   });
 
   it("orders and ads embeddings capture paid promotion verification intent", () => {

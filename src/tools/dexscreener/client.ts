@@ -9,12 +9,21 @@ import { loadConfig } from "../../config/store.js";
 import { VexError } from "../../errors.js";
 import { fetchWithTimeout, readJson } from "../../utils/http.js";
 import { mapDexScreenerError, mapTransportError } from "./errors.js";
+import {
+  DexScreenerThrottle,
+  cacheTtlForClass,
+  classifyRateClass,
+  parseRetryAfterMs,
+} from "./throttle.js";
 import type {
   DexAd,
   DexBoost,
   DexCommunityTakeover,
+  DexMeta,
+  DexMetaDetail,
   DexOrder,
   DexPair,
+  DexProfileUpdate,
   DexTokenProfile,
   PairsResponse,
   SearchResponse,
@@ -32,9 +41,16 @@ import {
   validateTokensPairsResponse,
   validateTokensResponse,
 } from "./validation.js";
+import { validateMetaDetailResponse, validateMetasTrendingResponse } from "./validation/metas.js";
+import { validateProfilesRecentResponse } from "./validation/profiles.js";
 
 export class DexScreenerClient {
-  constructor(private readonly baseUrl: string) {}
+  private readonly throttle: DexScreenerThrottle;
+
+  constructor(private readonly baseUrl: string) {
+    // Per-process throttle + cache shared by every consumer of this client.
+    this.throttle = new DexScreenerThrottle();
+  }
 
   private buildUrl(path: string, query?: Record<string, string | undefined>): string {
     const url = new URL(path, this.baseUrl.endsWith("/") ? this.baseUrl : `${this.baseUrl}/`);
@@ -53,19 +69,30 @@ export class DexScreenerClient {
     validator: (raw: unknown) => T,
     query?: Record<string, string | undefined>,
   ): Promise<T> {
+    const url = this.buildUrl(path, query);
+    const rateClass = classifyRateClass(path);
+    const ttlMs = cacheTtlForClass(rateClass);
+    // The normalized request URL (path + ordered query) is the cache/dedupe key.
     try {
-      const response = await fetchWithTimeout(this.buildUrl(path, query));
+      return await this.throttle.run(url, rateClass, ttlMs, async () => {
+        const response = await fetchWithTimeout(url);
 
-      if (!response.ok) {
+        if (!response.ok) {
+          if (response.status === 429) {
+            // Optional chaining guards test doubles that omit `headers`.
+            const retryMs = parseRetryAfterMs(response.headers?.get?.("retry-after"));
+            this.throttle.penalize(rateClass, retryMs);
+          }
+          const raw = await readJson(response);
+          const message = typeof raw === "object" && raw !== null && "error" in raw
+            ? String((raw as Record<string, unknown>).error)
+            : undefined;
+          throw mapDexScreenerError(response.status, message);
+        }
+
         const raw = await readJson(response);
-        const message = typeof raw === "object" && raw !== null && "error" in raw
-          ? String((raw as Record<string, unknown>).error)
-          : undefined;
-        throw mapDexScreenerError(response.status, message);
-      }
-
-      const raw = await readJson(response);
-      return validator(raw);
+        return validator(raw);
+      });
     } catch (err) {
       mapTransportError(err);
     }
@@ -131,6 +158,33 @@ export class DexScreenerClient {
   /** Get latest ads. */
   getAds(): Promise<DexAd[]> {
     return this.request("/ads/latest/v1", validateAdsResponse);
+  }
+
+  /** Get recently updated token profiles (live, undocumented feed). */
+  getProfilesRecentUpdates(): Promise<DexProfileUpdate[]> {
+    return this.request("/token-profiles/recent-updates/v1", validateProfilesRecentResponse);
+  }
+
+  // ── Metas / narratives (live, undocumented) ──────────────────
+
+  /**
+   * Get the trending NARRATIVES/themes feed (live, undocumented endpoint).
+   * Returns categories (e.g. "ai", "dog", "knockoff-legends"), NOT tokens.
+   */
+  getMetasTrending(): Promise<DexMeta[]> {
+    return this.request("/metas/trending/v1", validateMetasTrendingResponse);
+  }
+
+  /**
+   * Get one narrative plus its DEX pairs by `slug` (live, undocumented). The
+   * `slug` is a NARRATIVE slug from `getMetasTrending()` (e.g. "knockoff-legends"),
+   * NOT a chain slug. Returns `null` when the feed is unavailable or drifted.
+   */
+  getMeta(slug: string): Promise<DexMetaDetail | null> {
+    return this.request(
+      `/metas/meta/v1/${encodeURIComponent(slug)}`,
+      validateMetaDetailResponse,
+    );
   }
 
   // ── Orders ────────────────────────────────────────────────────

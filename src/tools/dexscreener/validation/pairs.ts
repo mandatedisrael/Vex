@@ -195,7 +195,13 @@ const pairObjectSchema: z.ZodType<DexPair> = z
     boosts: p.boosts,
   }));
 
-function parsePair(raw: unknown): DexPair {
+/**
+ * Strict single-pair parser. Exported so the TOLERANT metas-detail validator
+ * (`validation/metas.ts`) can reuse the canonical pair shape element-wise
+ * (wrapping each call in try/catch to skip a malformed pair instead of
+ * throwing the whole feed) rather than duplicating the lenient sub-parsers.
+ */
+export function parsePair(raw: unknown): DexPair {
   if (!isRecord(raw)) {
     throw new VexError(ErrorCodes.DEXSCREENER_INVALID_RESPONSE, "Invalid DexScreener response: pair must be an object");
   }

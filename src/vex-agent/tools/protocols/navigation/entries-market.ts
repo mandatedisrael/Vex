@@ -183,21 +183,22 @@ export const MARKET_PROTOCOL_NAVIGATION: readonly ProtocolNamespaceNavigation[] 
     advertised: true,
     groupId: "market-research",
     groupLabel: "Market Research",
-    summary: "Read-only multi-chain DEX research for search, pair analytics, trending, boosts, CTO signals, ads, and order verification.",
+    summary: "Read-only multi-chain DEX research for search, pair analytics, trending narratives, attention/boost signals, CTO signals, ads, and order verification.",
     whenToUse:
-      "Use when the user needs research/discovery rather than execution: search tokens, inspect pairs/liquidity, see trending projects, boosts, community takeovers, ads, or paid-order verification.",
+      "Use when the user needs research/discovery rather than execution: search tokens (optionally by chain/liquidity), inspect pairs/liquidity, browse trending narratives/themes and their tokens, see attention/boost signals, profiles, community takeovers, ads, or paid-order verification.",
     preferInstead:
       "Use `kyberswap`, `solana`, or `khalani` for execution after the research step.",
     exampleQueries: [
-      'discover_tools(query="trending meme tokens", namespace="dexscreener")',
+      'discover_tools(query="trending narratives", namespace="dexscreener")',
       'discover_tools(query="community takeover", namespace="dexscreener")',
       'discover_tools(query="pair liquidity research", namespace="dexscreener")',
     ],
-    aliases: ["dex screener", "market research", "trending tokens", "cto"],
+    aliases: ["dex screener", "market research", "trending narratives", "attention signal", "cto"],
     discoveryHints: [
       "token search",
       "pair analytics",
-      "trending tokens",
+      "trending narratives",
+      "attention signal",
       "boosts",
       "community takeover",
       "order verification",
@@ -206,15 +207,23 @@ export const MARKET_PROTOCOL_NAVIGATION: readonly ProtocolNamespaceNavigation[] 
     facets: [
       {
         label: "Search and pair analytics",
-        summary: "Search tokens/pairs and inspect pair detail or all pools for a token.",
+        summary: "Search tokens/pairs (by chain/liquidity) and inspect pair detail or all pools for a token.",
         toolPrefixes: ["dexscreener.search", "dexscreener.pairs", "dexscreener.tokens", "dexscreener.tokenPairs"],
         hints: ["token search", "pair analytics", "price research", "all pools", "liquidity"],
       },
       {
-        label: "Profiles, boosts, and trending",
-        summary: "Read token profiles, boost feeds, and merged trending signals.",
-        toolPrefixes: ["dexscreener.profiles", "dexscreener.boosts", "dexscreener.trending"],
-        hints: ["token profiles", "boosts", "top boosts", "trending projects"],
+        label: "Trending narratives, attention, and profiles",
+        summary: "Browse official trending narratives/themes and their tokens, synthetic attention/boost signals, and token profiles.",
+        toolPrefixes: [
+          "dexscreener.trending",
+          "dexscreener.meta",
+          "dexscreener.attention",
+          "dexscreener.profiles",
+          "dexscreener.profiles.recent",
+          "dexscreener.boosts",
+          "dexscreener.boosts.top",
+        ],
+        hints: ["trending narratives", "trending metas", "attention signal", "token profiles", "boosts", "top boosts"],
       },
       {
         label: "Community takeovers and promotion checks",

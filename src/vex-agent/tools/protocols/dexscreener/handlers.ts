@@ -3,13 +3,44 @@
  *
  * All handlers import from @tools/dexscreener/client.
  * All read-only — no wallet, no signing, no mutations.
+ *
+ * Market-data handlers (search/pairs/tokens/tokenPairs) return the unified
+ * concise pair projection (see `projectors.ts`) — never the raw fat DexPair.
+ * The metas / recent-updates handlers hit LIVE but UNDOCUMENTED endpoints and
+ * degrade to a clear "feed unavailable" result on any error rather than
+ * throwing through the namespace.
  */
 
 import { getDexScreenerClient } from "@tools/dexscreener/client.js";
 import type { DexBoost, DexPair, DexTokenProfile, DexTrendingItem } from "@tools/dexscreener/types.js";
 import type { ProtocolHandler } from "../types.js";
+import type { ToolResult } from "../../types.js";
 import { str, num, ok, fail } from "../handler-helpers.js";
 import { projectPairs } from "./projectors.js";
+
+// ── Search tuning ────────────────────────────────────────────────
+
+/** Default result cap for `dexscreener.search` when the caller omits `limit`. */
+const SEARCH_DEFAULT_LIMIT = 20;
+/** Hard ceiling for `dexscreener.search` (DexScreener search returns ≤30 pairs). */
+const SEARCH_MAX_LIMIT = 30;
+
+function clampSearchLimit(requested: number | undefined): number {
+  if (requested !== undefined && requested > 0) {
+    return Math.min(Math.floor(requested), SEARCH_MAX_LIMIT);
+  }
+  return SEARCH_DEFAULT_LIMIT;
+}
+
+// ── Undocumented-feed degradation ────────────────────────────────
+
+const UNDOCUMENTED_FEED_UNAVAILABLE =
+  "Feed unavailable — this is a live but undocumented DexScreener endpoint that may have changed.";
+
+/** Clean, never-throw fallback for the live/undocumented metas + recent tools. */
+function feedUnavailable(source: string): ToolResult {
+  return ok({ available: false, source, reason: UNDOCUMENTED_FEED_UNAVAILABLE });
+}
 
 // ── Handler map ──────────────────────────────────────────────────
 
@@ -19,9 +50,38 @@ export const DEXSCREENER_HANDLERS: Record<string, ProtocolHandler> = {
   "dexscreener.search": async (p) => {
     const query = str(p, "query");
     if (!query) return fail("Missing required: query");
+    // Optional client-side filters — the search API has no server-side chain
+    // or liquidity parameter, so we filter the returned pairs here.
+    const chainId = str(p, "chainId");
+    const minLiquidityUsd = num(p, "minLiquidityUsd");
+    const requestedLimit = num(p, "limit");
+
     const client = getDexScreenerClient();
     const result = await client.search(query);
-    return ok({ query, pairCount: result.pairs.length, pairs: result.pairs });
+
+    let pairs = result.pairs;
+    if (chainId) {
+      const want = chainId.toLowerCase();
+      pairs = pairs.filter((pr) => pr.chainId.toLowerCase() === want);
+    }
+    if (minLiquidityUsd !== undefined) {
+      pairs = pairs.filter((pr) => (pr.liquidity?.usd ?? -Infinity) >= minLiquidityUsd);
+    }
+
+    // Deepest liquidity first, then cap for context economy.
+    const sorted = [...pairs].sort(
+      (a: DexPair, b: DexPair) => (b.liquidity?.usd ?? -Infinity) - (a.liquidity?.usd ?? -Infinity),
+    );
+    const limit = clampSearchLimit(requestedLimit);
+    const projected = projectPairs(sorted).slice(0, limit);
+
+    return ok({
+      query,
+      chainId: chainId || null,
+      matched: sorted.length,
+      pairCount: projected.length,
+      pairs: projected,
+    });
   },
 
   "dexscreener.pairs": async (p) => {
@@ -29,7 +89,7 @@ export const DEXSCREENER_HANDLERS: Record<string, ProtocolHandler> = {
     if (!chainId || !pairAddress) return fail("Missing required: chainId, pairAddress");
     const client = getDexScreenerClient();
     const result = await client.getPairs(chainId, pairAddress);
-    return ok({ chainId, pairAddress, pairs: result.pairs });
+    return ok({ chainId, pairAddress, pairs: projectPairs(result.pairs) });
   },
 
   "dexscreener.tokens": async (p) => {
@@ -37,7 +97,7 @@ export const DEXSCREENER_HANDLERS: Record<string, ProtocolHandler> = {
     if (!chainId || !tokenAddresses) return fail("Missing required: chainId, tokenAddresses");
     const client = getDexScreenerClient();
     const result = await client.getTokens(chainId, tokenAddresses);
-    return ok({ chainId, pairCount: result.length, pairs: result });
+    return ok({ chainId, pairCount: result.length, pairs: projectPairs(result) });
   },
 
   "dexscreener.tokenPairs": async (p) => {
@@ -62,12 +122,23 @@ export const DEXSCREENER_HANDLERS: Record<string, ProtocolHandler> = {
     return ok({ chainId, tokenAddress, pairCount: limited.length, pairs: projectPairs(limited) });
   },
 
-  // ── Trending & signals ────────────────────────────────────────
+  // ── Profiles & attention signals ──────────────────────────────
 
   "dexscreener.profiles": async () => {
     const client = getDexScreenerClient();
     const profiles = await client.getProfiles();
     return ok({ count: profiles.length, profiles });
+  },
+
+  "dexscreener.profiles.recent": async () => {
+    // Live but undocumented — degrade cleanly instead of crashing the namespace.
+    try {
+      const client = getDexScreenerClient();
+      const profiles = await client.getProfilesRecentUpdates();
+      return ok({ available: true, count: profiles.length, profiles });
+    } catch {
+      return feedUnavailable("profiles.recent");
+    }
   },
 
   "dexscreener.boosts": async () => {
@@ -88,9 +159,11 @@ export const DEXSCREENER_HANDLERS: Record<string, ProtocolHandler> = {
     return ok({ count: takeovers.length, takeovers });
   },
 
-  "dexscreener.trending": async (p) => {
-    // Default to 20 when the caller omits `limit` — the merged feed is unbounded
-    // and a bare "show me trending" call should return a manageable ranked set.
+  "dexscreener.attention": async (p) => {
+    // Synthetic attention signal: merge of token-profiles + boosts, ranked by
+    // paid boost then profile presence. This is NOT the official trending feed
+    // (that is `dexscreener.trending`) — it surfaces who is spending on
+    // visibility. Default to 20 when the caller omits `limit`.
     const limit = num(p, "limit") ?? 20;
     const client = getDexScreenerClient();
 
@@ -155,6 +228,48 @@ export const DEXSCREENER_HANDLERS: Record<string, ProtocolHandler> = {
     }
 
     return ok({ count: items.length, items });
+  },
+
+  // ── Metas / narratives (live, undocumented) ───────────────────
+
+  "dexscreener.trending": async (p) => {
+    // Official trending NARRATIVES/themes feed (live, undocumented endpoint).
+    // Returns categories (ai, dog, "knockoff-legends"), NOT individual tokens.
+    try {
+      const limit = num(p, "limit");
+      const client = getDexScreenerClient();
+      const metas = await client.getMetasTrending();
+      const limited = limit && limit > 0 ? metas.slice(0, limit) : metas;
+      return ok({ available: true, count: limited.length, metas: limited });
+    } catch {
+      return feedUnavailable("metas.trending");
+    }
+  },
+
+  "dexscreener.meta": async (p) => {
+    const slug = str(p, "slug");
+    if (!slug) return fail("Missing required: slug");
+    // `slug` is a NARRATIVE slug from dexscreener.trending, not a chain slug.
+    try {
+      const client = getDexScreenerClient();
+      const detail = await client.getMeta(slug);
+      if (!detail) return feedUnavailable("metas.meta");
+      return ok({
+        available: true,
+        slug: detail.slug,
+        name: detail.name,
+        description: detail.description,
+        marketCap: detail.marketCap,
+        liquidity: detail.liquidity,
+        volume: detail.volume,
+        tokenCount: detail.tokenCount,
+        marketCapChange: detail.marketCapChange,
+        pairCount: detail.pairs.length,
+        pairs: projectPairs(detail.pairs),
+      });
+    } catch {
+      return feedUnavailable("metas.meta");
+    }
   },
 
   // ── Orders & ads ──────────────────────────────────────────────

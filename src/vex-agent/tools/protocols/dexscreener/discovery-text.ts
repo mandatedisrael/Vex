@@ -9,4 +9,5 @@
 export const DEXSCREENER_CHAINS: readonly string[] = [
   "Ethereum", "Solana", "BNB Chain", "BSC", "Base", "Arbitrum",
   "Polygon", "Avalanche", "Optimism", "Linea", "Sonic", "Berachain",
+  "Robinhood",
 ];

@@ -160,6 +160,55 @@ export interface DexTrendingItem {
   hasProfile: boolean;
 }
 
+// ── Metas / narratives (live, undocumented API surface) ─────────────
+//
+// `GET /metas/trending/v1` returns trending NARRATIVES (themes/categories such
+// as "knockoff-legends", "ai", "dog"), NOT individual tokens. `GET
+// /metas/meta/v1/{slug}` returns one narrative plus the DEX pairs inside it.
+// These endpoints are live-verified but absent from the official reference, so
+// every field is nullable and parsers are tolerant (see `validation/metas.ts`).
+
+export interface DexMetaIcon {
+  type: string | null;
+  value: string | null;
+}
+
+/** Change/delta windows keyed by timeframe (percent for change, absolute USD for delta). */
+export interface DexMetaWindows {
+  m5: number | null;
+  h1: number | null;
+  h6: number | null;
+  h24: number | null;
+}
+
+export interface DexMeta {
+  slug: string | null;
+  name: string | null;
+  description: string | null;
+  icon: DexMetaIcon | null;
+  marketCap: number | null;
+  liquidity: number | null;
+  volume: number | null;
+  tokenCount: number | null;
+  marketCapChange: DexMetaWindows | null;
+  marketCapDelta: DexMetaWindows | null;
+}
+
+/** One narrative plus the DEX pairs indexed under it. */
+export interface DexMetaDetail extends DexMeta {
+  pairs: DexPair[];
+}
+
+// ── Token profile updates (recent-updates feed, live/undocumented) ──
+//
+// `GET /token-profiles/recent-updates/v1` — profile-shaped rows enriched with
+// `updatedAt` (ISO 8601) and a `cto` flag. Superset of `DexTokenProfile`.
+
+export interface DexProfileUpdate extends DexTokenProfile {
+  updatedAt: string | null;
+  cto: boolean | null;
+}
+
 // ── WebSocket handshake ─────────────────────────────────────────────
 
 export interface WsHandshake<T> {

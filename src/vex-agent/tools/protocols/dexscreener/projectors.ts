@@ -1,59 +1,49 @@
 /**
- * DexScreener concise pair projectors (P1-12).
+ * DexScreener concise pair projector — ONE shape for search / pairs / tokens /
+ * tokenPairs.
  *
  * The DexScreener REST schema (`DexPair`) ships a heavy per-pair payload the
- * model never acts on when it is shopping for liquidity/price: an `info` block
- * (`imageUrl`/`websites`/`socials`), a per-window `txns` map, a per-window
- * `volume` map, a `priceChange` map, the human `url`, and a `boosts` block. On
- * the hot `tokenPairs` path (the canonical "find the deepest
- * pool for this token" resolver) this is the biggest byte sink in the
- * DexScreener bundle and dilutes the chain/dex/price/liquidity signal.
+ * model never acts on: an `info` block (`imageUrl`/`websites`/`socials`), the
+ * human `url`, a `boosts` block, and per-window `txns` / `volume` / `priceChange`
+ * maps carrying every timeframe (m5/h1/h6/h24). Dumped raw across every read
+ * tool this is the biggest byte sink in the DexScreener bundle and dilutes the
+ * decision-relevant signal.
  *
- * These pure projectors strip that noise at the handler seam — BEFORE the result
- * is serialized — so the model sees a lean, decision-relevant row: pair identity
- * (`chainId`/`dexId`), both token identities, and the price/liquidity/valuation
- * facts (`priceUsd`/`liquidity`/`fdv`/`marketCap`/`pairCreatedAt`/`labels`).
- * Every DexScreener read tool is `mutating:false` / `actionKind:"read"` with no
- * `_tradeCapture`, so trimming both the output string and the unused `data` is
- * safe.
+ * This pure projector produces a lean, flat, decision-relevant row used by ALL
+ * four market-data handlers (context economy — no more raw fat payloads):
+ *
+ *   KEEP: chainId, dexId, pairAddress, base/quote token (address, name, symbol),
+ *     priceUsd, priceNative, liquidityUsd, fdv, marketCap, volumeH24,
+ *     priceChangeH1, priceChangeH24, txnsH24{buys,sells}, pairCreatedAt, labels.
+ *   DROP: info{imageUrl,websites,socials}, url, boosts, and every non-h24
+ *     timeframe of txns/volume/priceChange (h24 is the window the model trades
+ *     on; h1 priceChange is kept as the short-term momentum read).
+ *
+ * `pairAddress` is load-bearing: the `kyberswap.zap.*` manifest hint steers the
+ * agent to resolve a pool address via `dexscreener.tokenPairs`, then pass it as
+ * the zap `poolFrom`/`poolTo` arg.
  *
  * NOTE: the dropped `url`/`info.imageUrl` fields are still consumed ELSEWHERE
  * (the renderer's clickable-links + token-image features read them straight off
  * the upstream client responses, not off this projected tool output). This
- * projection only shapes the TOOL output the model sees; it does not change the
- * raw client shape those renderer features depend on.
+ * projection only shapes the TOOL output the model sees.
  *
- * `pairAddress` IS kept: the `kyberswap.zap.*` manifest hint steers the agent to
- * resolve a pool address via `dexscreener.tokenPairs`, then pass it as the zap
- * `poolFrom`/`poolTo` arg — so the pool address is decision-relevant model
- * output here, not byte noise.
- *
- * Default-concise with NO verbosity knob: there is no agent use case for the
- * dropped `info`/`url`/`txns`/`volume`/`priceChange`/`boosts`.
- *
- * Every field read is defensive: the shapes come from an external API, so
- * missing / null / wrong-typed nested fields are normalised rather than assumed
- * present.
+ * Every field read is defensive: shapes come from an external API, so missing /
+ * null / wrong-typed nested fields are normalised rather than assumed present.
  */
 
-import type { DexLiquidity, DexPair } from "@tools/dexscreener/types.js";
+import type { DexPair, DexTxnCounts } from "@tools/dexscreener/types.js";
 
 // ── Concise output shapes ────────────────────────────────────────
 
-/** Concise base-token identity (DROPS nothing — `DexToken` is already minimal). */
+/** Concise token identity (address + symbol + name). */
 export interface ConcisePairToken {
   address: string | null;
   name: string | null;
   symbol: string | null;
 }
 
-/**
- * Concise DexScreener pair row. KEEPS pair identity (`chainId`/`dexId`/
- * `pairAddress`), both token identities, the price/liquidity/valuation facts,
- * the pair-creation timestamp, and `labels`. DROPS the `info` block
- * (`imageUrl`/`websites`/`socials`), the human `url`, the `boosts` block, and
- * the per-window `txns`, `volume`, and `priceChange` maps.
- */
+/** Flat, decision-relevant pair row. See module docstring for KEEP/DROP. */
 export interface ConciseDexPair {
   chainId: string;
   dexId: string;
@@ -61,9 +51,14 @@ export interface ConciseDexPair {
   baseToken: ConcisePairToken;
   quoteToken: ConcisePairToken;
   priceUsd: string | null;
-  liquidity: DexLiquidity | null;
+  priceNative: string | null;
+  liquidityUsd: number | null;
   fdv: number | null;
   marketCap: number | null;
+  volumeH24: number | null;
+  priceChangeH1: number | null;
+  priceChangeH24: number | null;
+  txnsH24: DexTxnCounts | null;
   pairCreatedAt: number | null;
   labels: string[] | null;
 }
@@ -85,12 +80,16 @@ function numOrNull(value: unknown): number | null {
   return typeof value === "number" ? value : null;
 }
 
+/** Pull one timeframe out of a `Record<string, number>`-shaped map. */
+function windowNumber(map: unknown, key: string): number | null {
+  if (!isRecord(map)) return null;
+  return numOrNull(map[key]);
+}
+
 /**
  * Project a raw token sub-object (base or quote) to a concise identity row.
- *
  * `DexToken` (base) is non-null on all three fields and `DexQuoteToken` (quote)
- * is nullable on all three; both narrow to the same `string | null` shape here
- * so a malformed/absent token block stays explicit rather than throwing.
+ * is nullable; both narrow to the same `string | null` shape here.
  */
 function projectPairToken(token: unknown): ConcisePairToken {
   if (!isRecord(token)) {
@@ -103,32 +102,20 @@ function projectPairToken(token: unknown): ConcisePairToken {
   };
 }
 
-/**
- * Project the raw `liquidity` block defensively. KEEPS the full
- * `{usd, base, quote}` shape (the agent reasons over all three) but tolerates a
- * missing/malformed block by returning `null`, matching `DexPair.liquidity`'s
- * `DexLiquidity | null` contract.
- */
-function projectLiquidity(liquidity: unknown): DexLiquidity | null {
-  if (!isRecord(liquidity)) return null;
+/** Project the `txns.h24` sub-object defensively to `{buys, sells}` (missing → null). */
+function projectTxnsH24(txns: unknown): DexTxnCounts | null {
+  if (!isRecord(txns)) return null;
+  const h24 = txns.h24;
+  if (!isRecord(h24)) return null;
   return {
-    usd: numOrNull(liquidity.usd),
-    base: typeof liquidity.base === "number" ? liquidity.base : 0,
-    quote: typeof liquidity.quote === "number" ? liquidity.quote : 0,
+    buys: typeof h24.buys === "number" ? h24.buys : 0,
+    sells: typeof h24.sells === "number" ? h24.sells : 0,
   };
 }
 
 // ── Projectors ───────────────────────────────────────────────────
 
-/**
- * Project a raw `DexPair` to a concise, decision-relevant row.
- *
- * KEEP: chainId, dexId, pairAddress, baseToken{address,name,symbol},
- *   quoteToken{address,name,symbol}, priceUsd, liquidity{usd,base,quote}, fdv,
- *   marketCap, pairCreatedAt, labels.
- * DROP: info{imageUrl,websites,socials}, url, boosts, txns, volume,
- *   priceChange.
- */
+/** Project a raw `DexPair` to the concise, flat, decision-relevant row. */
 export function projectPair(pair: DexPair): ConciseDexPair {
   return {
     chainId: typeof pair.chainId === "string" ? pair.chainId : "",
@@ -137,9 +124,14 @@ export function projectPair(pair: DexPair): ConciseDexPair {
     baseToken: projectPairToken(pair.baseToken),
     quoteToken: projectPairToken(pair.quoteToken),
     priceUsd: strOrNull(pair.priceUsd),
-    liquidity: projectLiquidity(pair.liquidity),
+    priceNative: strOrNull(pair.priceNative),
+    liquidityUsd: isRecord(pair.liquidity) ? numOrNull(pair.liquidity.usd) : null,
     fdv: numOrNull(pair.fdv),
     marketCap: numOrNull(pair.marketCap),
+    volumeH24: windowNumber(pair.volume, "h24"),
+    priceChangeH1: windowNumber(pair.priceChange, "h1"),
+    priceChangeH24: windowNumber(pair.priceChange, "h24"),
+    txnsH24: projectTxnsH24(pair.txns),
     pairCreatedAt: numOrNull(pair.pairCreatedAt),
     labels: Array.isArray(pair.labels) ? pair.labels : null,
   };

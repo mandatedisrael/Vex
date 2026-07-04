@@ -1,25 +1,33 @@
-# DexScreener Module Map — Multi-Chain DEX Analytics, Trending & Real-Time Streams
+# DexScreener Module Map — Multi-Chain DEX Analytics, Narratives & Real-Time Streams
 
-This document maps every `.ts` file in `src/tools/dexscreener/` and `src/commands/dexscreener/` to the data it provides for token research, pair analytics, trending signals, community takeovers, and real-time WebSocket streaming.
+This document maps every `.ts` file in `src/tools/dexscreener/` to the data it
+provides for token research, pair analytics, trending narratives, attention
+signals, community takeovers, and real-time WebSocket streaming, plus how the
+agent reaches it.
 
-**Last updated: 2026-03-30**
+**Last updated: 2026-07-04**
 
-**LLM maintainers:** If you modify any file in this folder, update this document to reflect the change — add/remove endpoints, update types, fix stale references.
+**LLM maintainers:** If you modify any file in this folder, update this document
+to reflect the change — add/remove endpoints, update types, fix stale references.
 
 **Docs:** https://docs.dexscreener.com/api/reference
 **Base URL**: `https://api.dexscreener.com`
 **Auth**: None required (open API)
-**Rate limits**: 60 req/min (profiles, boosts, CTO, ads, orders), 300 req/min (search, pairs, tokens, token-pairs)
+**Rate limits**: 60 req/min (profiles, boosts, CTO, ads, orders, metas), 300
+req/min (search, pairs, tokens, token-pairs). Enforced client-side per process by
+`throttle.ts` (see below).
 
 ---
 
 ## What DexScreener Does
 
-DexScreener is a multi-chain DEX analytics platform. It automatically tracks every token listed on any DEX with at least one transaction. The API provides:
+DexScreener is a multi-chain DEX analytics platform. It automatically tracks
+every token listed on any DEX with at least one transaction. The API provides:
 
 - **Pair/token data**: price, volume, liquidity, transactions, FDV, market cap across all chains
-- **Token profiles**: trending projects with descriptions, icons, social links
+- **Token profiles**: projects with descriptions, icons, social links; plus a recent-updates change feed
 - **Token boosts**: promoted tokens with boost amounts (paid visibility)
+- **Trending narratives (metas)**: trending themes/categories (AI, dogs, "knockoff legends") with aggregate stats, and a drill-down to the pairs inside one narrative
 - **Community takeovers (CTO)**: tokens where community has reclaimed control — strong trading signal
 - **Ads**: paid promotional placements with impressions and duration
 - **Orders**: verification of paid promotional orders per token
@@ -27,58 +35,60 @@ DexScreener is a multi-chain DEX analytics platform. It automatically tracks eve
 
 All read-only. No wallet, signing, or API key needed.
 
+### Documented vs live-but-undocumented surface
+
+The metas endpoints (`/metas/trending/v1`, `/metas/meta/v1/{slug}`) and the
+profile recent-updates feed (`/token-profiles/recent-updates/v1`) are
+**live-verified but absent from the official reference**. They are implemented
+behind TOLERANT validators (unknown fields pass, missing fields become null) and
+their agent tools degrade to a clear "feed unavailable" result on any error
+(HTTP 4xx/5xx, drift) rather than throwing through the namespace. Their tool
+descriptions are marked "live but undocumented API surface — may change".
+
+Note: a bad narrative slug on `/metas/meta/v1/{slug}` returns **HTTP 500** (not
+404); the tolerant handler surfaces "feed unavailable" for it.
+
 ---
 
-## File Map
-
-### Core (`src/tools/dexscreener/`)
+## File Map (`src/tools/dexscreener/`)
 
 | File | Role |
 |------|------|
-| `client.ts` | `DexScreenerClient` — 10 REST methods, singleton via `getDexScreenerClient()` |
-| `types.ts` | All TypeScript interfaces: `DexPair`, `DexTokenProfile`, `DexBoost`, `DexCommunityTakeover`, `DexAd`, `DexOrder`, `DexTrendingItem`, WS types |
-| `validation.ts` | Runtime validators for all API response shapes + WS handshake parsers |
+| `client.ts` | `DexScreenerClient` — 13 REST methods, singleton via `getDexScreenerClient()`. Every request runs through the throttle/cache. |
+| `throttle.ts` | `DexScreenerThrottle` — per-process token buckets (300/min + 60/min), TTL cache (fast ~8s / slow ~60s), in-flight dedupe, bounded cache, `Retry-After` honoring. |
+| `types.ts` | TypeScript interfaces: `DexPair`, `DexTokenProfile`, `DexBoost`, `DexCommunityTakeover`, `DexAd`, `DexOrder`, `DexTrendingItem`, `DexMeta`/`DexMetaDetail`, `DexProfileUpdate`, WS types |
+| `validation.ts` | Barrel re-exporting the 14 documented-surface validators (pairs/search/tokens, profiles, boosts, orders, community/ads, websocket) |
+| `validation/metas.ts` | Tolerant validators for `/metas/trending/v1` and `/metas/meta/v1/{slug}` |
+| `validation/profiles.ts` | `validateProfilesResponse` + tolerant `validateProfilesRecentResponse` |
+| `validation/pairs.ts` | Pair/search/token validators; exports `parsePair` (reused by metas detail) |
 | `errors.ts` | `mapDexScreenerError()` + `mapTransportError()` — HTTP status to typed `VexError` |
 | `ws-client.ts` | `DexScreenerStream` — EventEmitter WebSocket client with auto-reconnect (5 channels) |
 
-### Commands (`src/commands/dexscreener/`)
-
-| File | Role |
-|------|------|
-| `index.ts` | Commander registration: 11 subcommands |
-| `helpers.ts` | Shared formatters: `formatPairRow()`, `PAIR_COLUMNS`, compact number/price/change formatting |
-| `search.ts` | `dexscreener search <query>` — cross-chain pair search |
-| `pairs.ts` | `dexscreener pairs <chain> <pairId>` — pair details |
-| `token.ts` | `dexscreener token <chain> <addresses>` — token data (max 30) |
-| `token-pairs.ts` | `dexscreener token-pairs <chain> <address>` — all pools for token |
-| `profiles.ts` | `dexscreener profiles` — latest trending profiles |
-| `boosts.ts` | `dexscreener boosts [--top]` — latest or top boosted tokens |
-| `community-takeovers.ts` | `dexscreener cto` — latest community takeovers |
-| `ads.ts` | `dexscreener ads` — latest ads |
-| `orders.ts` | `dexscreener orders <chain> <address>` — paid order verification |
-| `trending.ts` | `dexscreener trending [--limit]` — unified profiles+boosts view |
-| `stream.ts` | `dexscreener stream <type>` — real-time WS (5 channels) |
+There is **no** `src/commands/dexscreener` CLI. The agent reaches DexScreener
+exclusively through the protocol tools in
+`src/vex-agent/tools/protocols/dexscreener/` (see "Agent Tools" below).
 
 ---
 
-## API Endpoints (10 REST + 5 WS)
+## REST Endpoints (13 methods)
 
-### REST
+| Method | Endpoint | Rate class | Surface |
+|--------|----------|-----------|---------|
+| `search(query)` | `GET /latest/dex/search?q={query}` | fast (300/min) | documented |
+| `getPairs(chainId, pairId)` | `GET /latest/dex/pairs/{chainId}/{pairId}` | fast | documented |
+| `getTokens(chainId, addresses)` | `GET /tokens/v1/{chainId}/{addresses}` | fast | documented |
+| `getTokenPairs(chainId, address)` | `GET /token-pairs/v1/{chainId}/{address}` | fast | documented |
+| `getProfiles()` | `GET /token-profiles/latest/v1` | slow (60/min) | documented |
+| `getProfilesRecentUpdates()` | `GET /token-profiles/recent-updates/v1` | slow | **undocumented** |
+| `getBoosts()` | `GET /token-boosts/latest/v1` | slow | documented |
+| `getTopBoosts()` | `GET /token-boosts/top/v1` | slow | documented |
+| `getCommunityTakeovers()` | `GET /community-takeovers/latest/v1` | slow | documented |
+| `getMetasTrending()` | `GET /metas/trending/v1` | slow | **undocumented** |
+| `getMeta(slug)` | `GET /metas/meta/v1/{slug}` | slow | **undocumented** |
+| `getAds()` | `GET /ads/latest/v1` | slow | documented |
+| `getOrders(chainId, address)` | `GET /orders/v1/{chainId}/{address}` | slow | documented |
 
-| Function | Endpoint | Rate Limit |
-|----------|----------|------------|
-| `client.search(query)` | `GET /latest/dex/search?q={query}` | 300/min |
-| `client.getPairs(chainId, pairId)` | `GET /latest/dex/pairs/{chainId}/{pairId}` | 300/min |
-| `client.getTokens(chainId, addresses)` | `GET /tokens/v1/{chainId}/{addresses}` | 300/min |
-| `client.getTokenPairs(chainId, address)` | `GET /token-pairs/v1/{chainId}/{address}` | 300/min |
-| `client.getProfiles()` | `GET /token-profiles/latest/v1` | 60/min |
-| `client.getBoosts()` | `GET /token-boosts/latest/v1` | 60/min |
-| `client.getTopBoosts()` | `GET /token-boosts/top/v1` | 60/min |
-| `client.getCommunityTakeovers()` | `GET /community-takeovers/latest/v1` | 60/min |
-| `client.getAds()` | `GET /ads/latest/v1` | 60/min |
-| `client.getOrders(chainId, address)` | `GET /orders/v1/{chainId}/{address}` | 60/min |
-
-### WebSocket (real-time streaming)
+### WebSocket (real-time streaming, `ws-client.ts`)
 
 | Channel | WS Path | Data Type |
 |---------|---------|-----------|
@@ -88,46 +98,62 @@ All read-only. No wallet, signing, or API key needed.
 | `community-takeovers` | `wss://api.dexscreener.com/community-takeovers/latest/v1` | `DexCommunityTakeover` |
 | `ads` | `wss://api.dexscreener.com/ads/latest/v1` | `DexAd` |
 
-**WS protocol**: First message is handshake `{ limit: number, data: T[] }` (initial snapshot). Subsequent messages are individual updates. Auto-reconnect with exponential backoff (1s→30s) + jitter.
+**WS protocol**: First message is handshake `{ limit, data: T[] }` (initial
+snapshot). Subsequent messages are individual updates. Auto-reconnect with
+exponential backoff (1s→30s) + jitter. (DexScreener has **no** price WebSocket —
+the WS surface is profiles/boosts/CTO/ads only.)
 
 ---
 
-## Portfolio & Trading Data Sources
+## Throttle & Cache (`throttle.ts`)
 
-### Token/Pair Research
+Every `DexScreenerClient.request()` runs through a per-instance
+`DexScreenerThrottle` (constructed once per process via the client singleton).
+**Per-process only — no cross-process coordination.**
 
-| Source | Function | Returns | Useful for |
-|--------|----------|---------|------------|
-| `client.ts` | `search(query)` | Pairs: price, volume, liquidity, txns, FDV, marketCap, priceChange | Token discovery, price lookup |
-| `client.ts` | `getTokens(chain, addresses)` | Full pair data for up to 30 tokens at once | Batch token info, portfolio pricing |
-| `client.ts` | `getTokenPairs(chain, address)` | All DEX pools for a single token | Find best liquidity, pool selection for Zap |
-| `client.ts` | `getPairs(chain, pairId)` | Single pair details | Specific pool monitoring |
+- **Token bucket per rate class**: `fast` (300/min) for search/pairs/tokens/token-pairs, `slow` (60/min) for everything else. `acquire()` waits for a token before a fetch fires.
+- **TTL cache** keyed by the normalized request URL: `fast` ~8s, `slow` ~60s. Bounded (256 entries, oldest-first eviction).
+- **In-flight dedupe**: concurrent identical requests share one promise (one fetch, one token).
+- **`Retry-After` honoring**: on a 429 the client calls `throttle.penalize(rateClass, ms)`, parking the whole rate class until the delay elapses.
 
-### Trending & Signals
+Errors are never cached and never left in the in-flight map.
 
-| Source | Function | Returns | Useful for |
-|--------|----------|---------|------------|
-| `client.ts` | `getProfiles()` | Token profiles: icon, description, social links | Project research, trending discovery |
-| `client.ts` | `getBoosts()` / `getTopBoosts()` | Boosted tokens: amounts, descriptions | Paid promotion detection, attention signals |
-| `client.ts` | `getCommunityTakeovers()` | CTO events: chainId, tokenAddress, claimDate, links | **Trading alpha** — community reclaiming abandoned tokens often precedes price action |
-| `client.ts` | `getAds()` | Ads: type, duration, impressions | Promotional activity monitoring |
-| `trending.ts` | `trending` command | Merged profiles+boosts, deduplicated, ranked by boost | Unified "what's hot" view |
+---
 
-### Verification
+## Agent Tools (`src/vex-agent/tools/protocols/dexscreener/`)
 
-| Source | Function | Returns | Useful for |
-|--------|----------|---------|------------|
-| `client.ts` | `getOrders(chain, address)` | Paid orders: type, status, paymentTimestamp | Check if token paid for promotion (legitimacy signal) |
+14 read-only tools. Typical research flow: **search → tokenPairs (pick deepest
+pool) → pairs (deep stats)**; discovery flow: **trending (narratives) → meta
+(drill into one)**.
 
-### Real-Time Feeds
+| Tool ID | Backing method | Notes |
+|---------|----------------|-------|
+| `dexscreener.search` | `search` | Optional `chainId` / `minLiquidityUsd` / `limit` client-side filters; sorted by liquidity |
+| `dexscreener.pairs` | `getPairs` | Concise pair for one pool |
+| `dexscreener.tokens` | `getTokens` | Batch (≤30) concise pairs |
+| `dexscreener.tokenPairs` | `getTokenPairs` | All pools for a token, deepest first; canonical pool resolver |
+| `dexscreener.profiles` | `getProfiles` | Latest profiles |
+| `dexscreener.profiles.recent` | `getProfilesRecentUpdates` | **undocumented** — recently updated profiles + `updatedAt`/`cto` |
+| `dexscreener.boosts` | `getBoosts` | Latest boosts |
+| `dexscreener.boosts.top` | `getTopBoosts` | Top boosts |
+| `dexscreener.communityTakeovers` | `getCommunityTakeovers` | CTO events |
+| `dexscreener.attention` | `getProfiles` + `getBoosts` | Synthetic merge (boost + profile), ranked. NOT the trending feed. |
+| `dexscreener.trending` | `getMetasTrending` | **undocumented** — official trending NARRATIVES/themes (not tokens) |
+| `dexscreener.meta` | `getMeta(slug)` | **undocumented** — one narrative + its pairs; `slug` is a NARRATIVE slug from `dexscreener.trending`, not a chain slug |
+| `dexscreener.orders` | `getOrders` | Paid-order verification |
+| `dexscreener.ads` | `getAds` | Latest ads |
 
-| Source | Channel | Returns | Useful for |
-|--------|---------|---------|------------|
-| `ws-client.ts` | `profiles` | Live profile updates | Track new trending tokens |
-| `ws-client.ts` | `boosts` | Live boost events | Detect new promotion activity |
-| `ws-client.ts` | `boosts-top` | Top boosts changes | Monitor highest-promoted tokens |
-| `ws-client.ts` | `community-takeovers` | Live CTO events | **Real-time CTO trading signals** |
-| `ws-client.ts` | `ads` | Live ad placements | Track promotional spend |
+The market-data tools (search/pairs/tokens/tokenPairs) and the metas-detail
+pairs return the **unified concise projection** (`projectors.ts`) — a flat row
+keeping chainId/dexId/pairAddress, base/quote token, priceUsd/priceNative,
+liquidityUsd, fdv/marketCap, volumeH24, priceChangeH1/H24, txnsH24, pairCreatedAt,
+labels — and dropping `info`/`url`/`boosts` and the non-h24 timeframe windows
+(context economy). The renderer's link/image features read those dropped fields
+off the raw client responses, not off this projected tool output.
+
+Chain slugs are DexScreener string ids: `ethereum`, `base`, `solana`, `bsc`,
+`arbitrum`, `polygon`, `avalanche`, `optimism`, `robinhood` (chainId 4663), and
+more.
 
 ---
 
@@ -137,7 +163,7 @@ All read-only. No wallet, signing, or API key needed.
 
 ```typescript
 {
-  chainId: string;           // "solana", "ethereum", "bsc", etc.
+  chainId: string;           // "solana", "ethereum", "bsc", "robinhood", etc.
   dexId: string;             // "raydium", "uniswap", etc.
   url: string;               // DexScreener URL
   pairAddress: string;       // Pool contract address
@@ -158,73 +184,70 @@ All read-only. No wallet, signing, or API key needed.
 }
 ```
 
+### DexMeta / DexMetaDetail (metas / narratives)
+
+```typescript
+// /metas/trending/v1 → DexMeta[]
+{
+  slug: string | null;       // narrative slug, e.g. "knockoff-legends"
+  name: string | null;
+  description: string | null;
+  icon: { type: string | null, value: string | null } | null; // e.g. {type:"emoji", value:"🎨"}
+  marketCap: number | null;  // aggregate across the narrative
+  liquidity: number | null;
+  volume: number | null;
+  tokenCount: number | null;
+  marketCapChange: { m5, h1, h6, h24 } | null; // percent
+  marketCapDelta:  { m5, h1, h6, h24 } | null; // absolute USD
+}
+// /metas/meta/v1/{slug} → DexMetaDetail = DexMeta & { pairs: DexPair[] }
+```
+
+### DexProfileUpdate (recent-updates feed)
+
+```typescript
+// /token-profiles/recent-updates/v1 → DexProfileUpdate[]
+// Superset of DexTokenProfile:
+{ url, chainId, tokenAddress, icon, header, description, links,
+  updatedAt: string | null,  // ISO 8601
+  cto: boolean | null }
+```
+
 ### DexTokenProfile
 
 ```typescript
-{
-  url: string;               // DexScreener profile URL
-  chainId: string;
-  tokenAddress: string;
-  icon: string;              // Token icon URL
-  header: string | null;     // Header image URL
-  description: string | null;
-  links: Array<{ type, label, url }> | null;
-}
+{ url, chainId, tokenAddress, icon, header: string | null,
+  description: string | null, links: Array<{ type, label, url }> | null }
 ```
 
 ### DexBoost
 
 ```typescript
-{
-  url: string;
-  chainId: string;
-  tokenAddress: string;
-  amount: number;            // Current boost amount
-  totalAmount: number;       // Total boost amount
-  icon: string | null;
-  header: string | null;
-  description: string | null;
-  links: Array<{ type, label, url }> | null;
-}
+{ url, chainId, tokenAddress, amount, totalAmount,
+  icon: string | null, header: string | null, description: string | null,
+  links: Array<{ type, label, url }> | null }
 ```
 
 ### DexCommunityTakeover
 
 ```typescript
-{
-  url: string;
-  chainId: string;
-  tokenAddress: string;
-  icon: string;
-  header: string | null;
-  description: string | null;
-  links: Array<{ type, label, url }> | null;
-  claimDate: string;         // ISO 8601 date-time
-}
+{ url, chainId, tokenAddress, icon, header, description, links,
+  claimDate: string /* ISO 8601 */ }
 ```
 
 ### DexAd
 
 ```typescript
-{
-  url: string;
-  chainId: string;
-  tokenAddress: string;
-  date: string;              // ISO 8601 date-time
-  type: string;              // "tokenAd", "trendingBarAd", etc.
-  durationHours: number | null;
-  impressions: number | null;
-}
+{ url, chainId, tokenAddress, date /* ISO 8601 */, type,
+  durationHours: number | null, impressions: number | null }
 ```
 
 ### DexOrder
 
 ```typescript
-{
-  type: "tokenProfile" | "communityTakeover" | "tokenAd" | "trendingBarAd";
+{ type: "tokenProfile" | "communityTakeover" | "tokenAd" | "trendingBarAd";
   status: "processing" | "cancelled" | "on-hold" | "approved" | "rejected";
-  paymentTimestamp: number;  // Unix timestamp seconds
-}
+  paymentTimestamp: number /* Unix seconds */ }
 ```
 
 ---
@@ -242,140 +265,53 @@ All read-only. No wallet, signing, or API key needed.
 | `txns.h24.buys` / `sells` | Integer | `1234` | Transaction count |
 | `pairCreatedAt` | Unix timestamp **ms** | `1672531200000` | `new Date(value)` |
 | `paymentTimestamp` | Unix timestamp **seconds** | `1700000000` | `new Date(value * 1000)` |
-| `boost.amount` / `totalAmount` | Number | `500` | Boost units |
-| `claimDate` | ISO 8601 string | `"2024-06-15T12:00:00Z"` | Date display |
+| `updatedAt` / `claimDate` / ad `date` | ISO 8601 string | `"2026-07-04T13:43:41.745Z"` | Date display |
+| `meta.marketCapChange.*` | **Already percentage** | `24.21` = 24.21% | Aggregate narrative change |
 
 ---
-
-## Chain Identifiers
-
-DexScreener uses string chain IDs. Common values:
-
-| Chain | ID | Chain | ID |
-|-------|-----|-------|-----|
-| Solana | `solana` | Ethereum | `ethereum` |
-| BSC | `bsc` | Arbitrum | `arbitrum` |
-| Base | `base` | Optimism | `optimism` |
-| Polygon | `polygon` | Avalanche | `avalanche` |
-| Linea | `linea` | Sonic | `sonic` |
-| Berachain | `berachain` | Ronin | `ronin` |
-| Scroll | `scroll` | zkSync | `zksync` |
 
 ## Error Handling
 
 | HTTP | Error Code | Retryable | Hint |
 |------|-----------|-----------|------|
-| 429 | `DEXSCREENER_RATE_LIMITED` | Yes | 60/min or 300/min depending on endpoint |
+| 429 | `DEXSCREENER_RATE_LIMITED` | Yes | 60/min or 300/min per class; `Retry-After` honored by the throttle |
 | 404 | `DEXSCREENER_NOT_FOUND` | No | Check chainId and address |
-| 5xx | `DEXSCREENER_API_ERROR` | Yes | Server error, retry later |
+| 5xx | `DEXSCREENER_API_ERROR` | Yes | Server error, retry later (also the bad-slug response on `/metas/meta`) |
 | Timeout | `DEXSCREENER_TIMEOUT` | Yes | Request timed out |
-| Parse fail | `DEXSCREENER_INVALID_RESPONSE` | No | Unexpected response shape |
+| Parse fail | `DEXSCREENER_INVALID_RESPONSE` | No | Unexpected response shape (documented endpoints only) |
 
----
-
-## WebSocket Client (`ws-client.ts`)
-
-### Architecture
-
-- `DexScreenerStream` extends `EventEmitter`
-- Uses native Node 22+ `WebSocket` (no external dependency)
-- Auto-reconnect with exponential backoff: 1s initial, 2x multiplier, 30s max, 20% jitter
-- Graceful shutdown via `disconnect()`
-
-### Events
-
-| Event | Payload | When |
-|-------|---------|------|
-| `connected` | — | WebSocket connection established |
-| `handshake` | `{ limit, data: T[] }` | First message: initial snapshot |
-| `update` | `T` | Every subsequent message: incremental update |
-| `disconnected` | `reason: string` | Connection lost (auto-reconnect follows) |
-| `error` | `Error` | WebSocket error |
-
-### Usage
-
-```typescript
-const stream = new DexScreenerStream({ channel: "community-takeovers" });
-stream.on("handshake", (data) => { /* initial snapshot */ });
-stream.on("update", (item) => { /* real-time CTO event */ });
-stream.connect();
-// ...later:
-stream.disconnect();
-```
-
----
-
-## CLI Commands (11 subcommands)
-
-```
-dexscreener search <query>
-dexscreener pairs <chainId> <pairId>
-dexscreener token <chainId> <tokenAddresses>
-dexscreener token-pairs <chainId> <tokenAddress>
-dexscreener profiles
-dexscreener boosts [--top]
-dexscreener cto
-dexscreener ads
-dexscreener orders <chainId> <tokenAddress>
-dexscreener trending [--limit <n>]
-dexscreener stream <type>
-```
-
-**Stream types**: `profiles`, `boosts`, `boosts-top`, `community-takeovers`, `ads`
-
-**Headless mode** (`VEX_HEADLESS=1`): All commands output structured JSON via `writeJsonSuccess()`.
-**`stream`**: Long-running foreground process. First line = handshake snapshot. Subsequent lines = incremental updates. Stop with SIGINT/SIGTERM.
-
----
-
-## Trending Command (composite)
-
-`dexscreener trending` merges data from two endpoints in parallel:
-1. `getProfiles()` — trending token profiles
-2. `getBoosts()` — boosted tokens
-
-Merge logic:
-- Key by `chainId:tokenAddress`
-- Boosts set `boostAmount`/`boostTotalAmount`
-- Profiles set `hasProfile=true` and fill missing icon/description/links
-- Sort by `boostTotalAmount` descending, then `hasProfile` presence
-- Deduplicated output
-
----
-
-## FDV and Market Cap Calculation
-
-DexScreener formula:
-```
-FDV = (total supply - burned supply) * price
-```
-
-Market cap = FDV in most cases. Exception: if token has self-reported circulating supply (via Enhanced Token Info or CoinGecko), market cap uses circulating supply instead.
+The undocumented metas / recent-updates tools do NOT surface these errors to the
+agent — they degrade to `{ available: false, reason: "…" }` instead.
 
 ---
 
 ## Trading Agent Integration
 
-For a trading agent, DexScreener provides the research layer:
+DexScreener is the research layer. The agent uses it read-only, then executes
+via other protocols:
 
 ```
 1. DISCOVERY
-   search <query> --json           → find tokens/pairs by name/symbol/address
-   trending --json                  → what's hot (profiles + boosts)
-   cto --json                       → community takeover signals (alpha)
+   dexscreener.search (name/symbol/address, optional chain + liquidity filters)
+   dexscreener.trending (trending narratives) → dexscreener.meta (tokens in a narrative)
+   dexscreener.attention / boosts / profiles / communityTakeovers (attention signals)
 
 2. ANALYSIS
-   token <chain> <address> --json  → price, volume, liquidity, FDV, txns
-   token-pairs <chain> <addr> --json → all pools, find best liquidity
-   orders <chain> <addr> --json    → check if token paid for promotion
+   dexscreener.tokens / dexscreener.pairs (price, volume, liquidity, FDV, txns)
+   dexscreener.tokenPairs (all pools, find deepest liquidity → pool address)
+   dexscreener.orders (paid-promotion legitimacy signal)
 
-3. REAL-TIME MONITORING
-   stream community-takeovers --json → live CTO feed (strongest signal)
-   stream boosts --json              → live boost activity
-   stream profiles --json            → new trending projects
+3. REAL-TIME MONITORING (ws-client.ts)
+   community-takeovers / boosts / profiles streams
 
-4. EXECUTE (via other modules)
-   → Solana tokens: vex solana swap ...
-   → EVM tokens: vex kyberswap swap sell ...
-   → Cross-chain: vex khalani bridge ...
+4. EXECUTE (via other protocol namespaces)
+   → Solana tokens: solana.swap.*
+   → EVM tokens:    kyberswap.swap.* (and uniswap.* on Robinhood chain)
+   → Cross-chain:   khalani.* / relay.*
 ```
+
+## FDV and Market Cap
+
+DexScreener formula: `FDV = (total supply - burned supply) * price`. Market cap
+equals FDV unless the token reports a circulating supply (Enhanced Token Info or
+CoinGecko), in which case market cap uses circulating supply.
