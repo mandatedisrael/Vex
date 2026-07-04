@@ -203,6 +203,41 @@ export async function countByModelDim(model: string, dim: number): Promise<numbe
   return row ? Number(row.count) : 0;
 }
 
+/**
+ * Purge rows that are NOT part of the current active generation. Called by
+ * reconcile AFTER the upsert loop has written the current generation, so there
+ * is never an empty-table window. A row is orphaned when either:
+ *
+ * - its `tool_id` is not in the active reembeddable surface (removed/renamed
+ *   tool, or a namespace that went deprecated/reserved), OR
+ * - its `(embedding_model, embedding_dim)` differs from the current generation
+ *   (a prior model swap / dim change left stale vectors that recall would never
+ *   match anyway — same audit filter as `searchByVector`).
+ *
+ * `providerModel`/`dim` MUST be the values probed from the provider this pass
+ * (what upsert stamped), not the requested `config.model` — otherwise an
+ * aliasing provider would purge the very rows we just wrote. Returns the number
+ * of rows deleted.
+ */
+export async function deleteOrphanedToolEmbeddings(
+  activeToolIds: readonly string[],
+  providerModel: string,
+  dim: number,
+): Promise<number> {
+  const row = await queryOne<{ count: string }>(
+    `WITH deleted AS (
+       DELETE FROM tool_embeddings
+       WHERE tool_id <> ALL($1::text[])
+          OR embedding_model <> $2
+          OR embedding_dim   <> $3
+       RETURNING tool_id
+     )
+     SELECT COUNT(*)::text AS count FROM deleted`,
+    [activeToolIds, providerModel, dim],
+  );
+  return row ? Number(row.count) : 0;
+}
+
 /** Delete every row — only used by tests. */
 export async function deleteAllToolEmbeddings(): Promise<number> {
   const row = await queryOne<{ count: string }>(
