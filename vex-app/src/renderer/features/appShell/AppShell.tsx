@@ -91,13 +91,15 @@ export function AppShell(): JSX.Element {
       <SessionsList onCreate={() => openCreateSession()} />
 
       <section className="relative z-10 flex min-w-0 flex-1 flex-col">
-        {/* DESK RULE — the working header datum and the head of the tape: its
-         * accent tick sits over the left-anchored spine. Three zones on a
-         * 1fr/auto/1fr grid (equal flanks keep the center truly centered):
-         * live tape state (left), MISSION/PLAN badge cluster (center), BOOK
-         * toggle (right). The rule itself never moves; only the tape-state
-         * word and the cluster's badge states change. */}
-        <header className="relative grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-[var(--vex-line)] px-6">
+        {/* DESK RULE — the working header datum and the head of the tape. The
+         * full-width bottom hairline was removed so the header and main content
+         * read as one seamless surface (owner review); only the short accent
+         * tick that heads the left-anchored transcript spine remains. Three
+         * zones on a 1fr/auto/1fr grid (equal flanks keep the center truly
+         * centered): live tape state (left), MISSION/PLAN badge cluster
+         * (center), BOOK toggle (right). The rule itself never moves; only the
+         * tape-state word and the cluster's badge states change. */}
+        <header className="relative grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 px-6">
           <span
             aria-hidden
             className="absolute -bottom-px left-6 h-px w-6 bg-[var(--vex-accent)]"

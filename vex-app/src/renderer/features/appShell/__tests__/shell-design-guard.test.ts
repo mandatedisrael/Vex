@@ -120,6 +120,20 @@ const WHITELIST: readonly WhitelistEntry[] = [
       "(--vex-glass) with backdrop-blur over the Signal Sky WebGL canvas. " +
       "Glass is allowed ONLY on the two side rails.",
   },
+  {
+    // Owner-decreed THIRD sanctioned glass surface (Signal Console redesign):
+    // the composer floats over the Signal Sky exactly like the two rails, so
+    // it wears the same translucent ink (--vex-glass / --vex-glass-strong on
+    // focus) + backdrop-blur. This is the ONLY expansion of the glass law —
+    // the guard still reddens on backdrop-blur ANYWHERE else in the shell.
+    file: "features/appShell/SessionComposer.tsx",
+    pattern: "backdrop-blur (glass)",
+    reason:
+      "Owner-sanctioned glass instrument: the Signal Console composer floats " +
+      "as translucent ink (--vex-glass / --vex-glass-strong) with " +
+      "backdrop-blur over the Signal Sky WebGL canvas, like the two rails. " +
+      "Glass is allowed on the two side rails AND this composer — nowhere else.",
+  },
 ];
 
 interface Violation {

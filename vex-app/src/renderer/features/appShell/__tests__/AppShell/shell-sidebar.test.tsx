@@ -46,6 +46,7 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   DatabaseLightningIcon: "DatabaseLightningIcon",
   Delete02Icon: "Delete02Icon",
   Exchange01Icon: "Exchange01Icon",
+  Fuel01Icon: "Fuel01Icon",
   FilterHorizontalIcon: "FilterHorizontalIcon",
   Brain01Icon: "Brain01Icon",
   MapPinIcon: "MapPinIcon",
@@ -349,14 +350,20 @@ describe("AppShell", () => {
     expect(sidebar?.getAttribute("data-vex-sidebar-open")).toBe("true");
   });
 
-  it("crowns the sidebar rail with the particle sigil, not a VEX wordmark", () => {
+  it("crowns the sidebar rail with the static logo mark, not a VEX wordmark", () => {
     const view = renderShell();
     const sidebar = view.container.querySelector(
       "[data-vex-area='sessions-sidebar']",
     );
-    // jsdom has no canvas 2D, so the sigil renders its <img> fallback inside
-    // [data-vex-sigil] — the enlarged mark that replaced the logo + wordmark.
-    expect(sidebar?.querySelector("[data-vex-sigil]")).not.toBeNull();
+    // The rail brand is now a plain <img> logo mark (the particle canvas was
+    // retired) — [data-vex-home-mark], the clean monogram. The mark carries no
+    // text wordmark (the "no VEX wordmark" contract is pinned in full by
+    // SidebarHomeSigil.test.tsx; the rail's $VEX widget legitimately says VEX).
+    const mark = sidebar?.querySelector("[data-vex-home-mark]");
+    expect(mark).not.toBeNull();
+    expect(mark?.tagName).toBe("IMG");
+    expect(mark?.getAttribute("src")).toBe("/logo_clean.png");
+    expect(mark?.textContent).toBe("");
   });
 
   it("mounts the compact $VEX widget in the sidebar rail, not on the welcome stage", async () => {

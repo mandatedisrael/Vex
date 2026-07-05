@@ -2,8 +2,8 @@
  * Composer PLAN switch (S2) — the plan-mode toggle behavior that moved out of
  * `SessionPlanCard` into the composer chrome. Mounts the real SessionComposer
  * with the lib/api hooks mocked so the suite pins:
- *   - role="switch" + aria-checked reflecting engine-owned plan state,
- *   - toggling calls useSetPlanMode with { sessionId, enabled: !current },
+ *   - role="combobox" exposing the current composer mode,
+ *   - selecting Plan Mode / Chat calls useSetPlanMode with the requested state,
  *   - real `disabled` on welcome (no session) and on a mission parked for
  *     plan acceptance (the state where the engine refuses toggles),
  *   - the plan-on placeholder. (The welcome trust letterpress moved onto the
@@ -20,6 +20,11 @@ vi.mock("@hugeicons/react", () => ({
 }));
 
 vi.mock("@hugeicons/core-free-icons", () => ({
+  Add01Icon: "Add01Icon",
+  ArrowDown01Icon: "ArrowDown01Icon",
+  Wallet01Icon: "Wallet01Icon",
+  Exchange01Icon: "Exchange01Icon",
+  Fuel01Icon: "Fuel01Icon",
   ArrowRight01Icon: "ArrowRight01Icon",
   ArrowUp01Icon: "ArrowUp01Icon",
   MapPinIcon: "MapPinIcon",
@@ -91,29 +96,43 @@ beforeEach(() => {
 });
 
 describe("SessionComposer plan switch", () => {
-  it("toggles plan mode ON via useSetPlanMode for the active session", () => {
+  it("renders a Mode picker pill at the shared h-9 height", () => {
     render(<SessionComposer activeSession={agentRow()} activeSessionId={SESSION} />);
-    const sw = screen.getByRole("switch", { name: "Plan mode" });
-    expect(sw.getAttribute("aria-checked")).toBe("false");
-    expect(sw.getAttribute("data-vex-plan-mode")).toBe("off");
-    fireEvent.click(sw);
+    const picker = screen.getByRole("combobox", { name: "Mode" });
+    // Shared control-bank height (matches the round send + REASON chip).
+    expect(picker.className).toContain("h-9");
+    expect(picker.getAttribute("aria-expanded")).toBe("false");
+    expect(picker.getAttribute("data-vex-plan-mode")).toBe("off");
+    expect(picker.textContent).toContain("Mode");
+    expect(picker.textContent).toContain("Chat");
+    expect(picker.textContent).not.toContain("vex-text-shimmer");
+  });
+
+  it("selects Plan Mode via useSetPlanMode for the active session", () => {
+    render(<SessionComposer activeSession={agentRow()} activeSessionId={SESSION} />);
+    const picker = screen.getByRole("combobox", { name: "Mode" });
+    expect(picker.getAttribute("data-vex-plan-mode")).toBe("off");
+    fireEvent.click(picker);
+    expect(screen.getByRole("option", { name: "Chat" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("option", { name: "Plan Mode" }));
     expect(mockSetPlanMode.mutate).toHaveBeenCalledWith({
       sessionId: SESSION,
       enabled: true,
     });
   });
 
-  it("reflects the ON state, swaps the placeholder, and toggles OFF", () => {
+  it("reflects the ON state, swaps the placeholder, and selects Chat to turn OFF", () => {
     mockUseSessionPlan.mockReturnValue(planState(true));
     render(<SessionComposer activeSession={agentRow()} activeSessionId={SESSION} />);
-    const sw = screen.getByRole("switch", { name: "Plan mode" });
-    expect(sw.getAttribute("aria-checked")).toBe("true");
-    expect(sw.getAttribute("data-vex-plan-mode")).toBe("on");
+    const picker = screen.getByRole("combobox", { name: "Mode" });
+    expect(picker.getAttribute("data-vex-plan-mode")).toBe("on");
+    expect(picker.textContent).toContain("Plan Mode");
     const draft = screen.getByLabelText("Session draft") as HTMLTextAreaElement;
     expect(draft.placeholder).toBe(
       "Describe the goal — Vex proposes a plan before anything executes.",
     );
-    fireEvent.click(sw);
+    fireEvent.click(picker);
+    fireEvent.click(screen.getByRole("option", { name: "Chat" }));
     expect(mockSetPlanMode.mutate).toHaveBeenCalledWith({
       sessionId: SESSION,
       enabled: false,
@@ -122,9 +141,9 @@ describe("SessionComposer plan switch", () => {
 
   it("is truly disabled on welcome (no session)", () => {
     render(<SessionComposer activeSession={null} activeSessionId={null} />);
-    const sw = screen.getByRole("switch", { name: "Plan mode" }) as HTMLButtonElement;
-    expect(sw.disabled).toBe(true);
-    expect(sw.title).toBe("Available once a session is open");
+    const picker = screen.getByRole("combobox", { name: "Mode" }) as HTMLButtonElement;
+    expect(picker.disabled).toBe(true);
+    expect(picker.title).toBe("Available once a session is open");
     // Phase 4: the trust letterpress no longer renders under the composer —
     // the stage caption (SessionWelcomeHero) carries the trust copy.
     expect(
@@ -142,8 +161,8 @@ describe("SessionComposer plan switch", () => {
         activeSessionId={SESSION}
       />,
     );
-    const sw = screen.getByRole("switch", { name: "Plan mode" }) as HTMLButtonElement;
-    expect(sw.disabled).toBe(true);
-    expect(sw.title).toBe("Unavailable while a mission is running");
+    const picker = screen.getByRole("combobox", { name: "Mode" }) as HTMLButtonElement;
+    expect(picker.disabled).toBe(true);
+    expect(picker.title).toBe("Unavailable while a mission is running");
   });
 });

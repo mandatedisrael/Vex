@@ -1,21 +1,34 @@
 /**
- * Session composer — THE COMMAND DECK (S2 rebrand of the puzzle 04 extract).
+ * Session composer — THE SIGNAL CONSOLE, a single floating pill bar.
  *
- * Owns:
- *   - textarea + auto-grow + the send/stop/stopping key,
- *   - the PLAN switch (chrome row, left) — the single control point for
- *     session-scoped plan mode; `SessionPlanCard` only displays the plan,
- *   - mission-run-status gating on free-text submit,
- *   - composer notice (success / error / inline Retry on a retryable error),
- *   - starter chips (hidden in mission mode — replaced by the mission
- *     contract card the parent renders),
- *   - the stage presence (phase 4, kept in phase 5): on the welcome/idle
- *     stage the parent passes `stage` and the instrument grows — taller
- *     textarea, larger type, near-opaque ink frame so it reads over the
- *     Signal Sky. The old trust letterpress moved onto the stage's bottom
- *     row (`SessionWelcomeHero`).
+ * ONE translucent glass pill (rounded-full at rest, corners relaxing as the
+ * field grows) floating over the Signal Sky — the two-layer card + context
+ * strip were retired. Left→right inside the pill:
+ *   - the transparent-bg textarea (auto-grow) opens the pill with a clean
+ *     left inset — no "+" toggle, no attach, no mic. Its DEFAULT welcome/agent
+ *     placeholder rotates through crypto orders (`usePlaceholderRotator`);
+ *     starter chips render detached below whenever an empty conversation has
+ *     starters,
+ *   - the right cluster: PLAN chip + REASON chip (quiet rounded-full ghost
+ *     chips sharing the send control's height; PLAN is the single control
+ *     point for session-scoped plan mode, `SessionPlanCard` displays) then the
+ *     round accent send/stop/stopping control. The row is `items-center`, so
+ *     the resting single-line state reads perfectly level.
+ * Owns: mission-run-status gating on free-text submit; the composer notice
+ * (success / error / inline Retry on a retryable error); the stage presence
+ * (a taller idle field + larger type when the parent passes `stage`).
  *
- * Pure helpers (gating reasons, placeholders) live in `composer-helpers.ts`.
+ * The pill's glass surface + backdrop-blur are the owner-sanctioned third
+ * glass surface (see shell-design-guard whitelist). The 1px border, the
+ * TRAVELING accent shimmer that circles the ring, the focus step to
+ * `--vex-glass-strong`, the soft drop shadow and the amber approval recolor
+ * all live in `.vex-console` (globals.css) — token-only, so both themes
+ * recolor from `--vex-accent`. The context strip is gone, so the two
+ * transient states it carried survive as a tiny tag FLOATING above the pill:
+ * amber "AWAITING SIGNATURE" while a run is parked for approval, muted
+ * "Stopping…" while a stop settles (they cannot co-occur).
+ *
+ * Pure helpers: gating reasons + placeholders in `composer-helpers.ts`.
  * Mission controls (start/continue/recover/stop/edit/renew) are buttons in
  * `MissionControls.tsx`, mounted by the parent — this file owns only the
  * chat-turn submit + its notice, never command parsing.
@@ -31,7 +44,7 @@ import {
 } from "react";
 import type { FormEvent, JSX } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { StopCircleIcon } from "@hugeicons/core-free-icons";
+import { ArrowUp01Icon, StopCircleIcon } from "@hugeicons/core-free-icons";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import { useSubmitChat } from "../../lib/api/chat.js";
 import {
@@ -54,29 +67,20 @@ import {
   submitSuccessText,
 } from "./composer-helpers.js";
 import { ComposerQuickActions } from "./ComposerQuickActions.js";
+import { usePlaceholderRotator } from "./composer-placeholders.js";
 import { PlanSwitch } from "./PlanSwitch.js";
 import { nextReasoningEffort, ReasoningSwitch } from "./ReasoningSwitch.js";
-import { ticketEyebrowLabel } from "./composer/composer-ticket.js";
-import {
-  PromptGlyph,
-  TicketFlowStrip,
-  TicketHeader,
-} from "./composer/TicketChrome.js";
-
-/** Welcome/agent default prompt — the plain-English order the operator
- * types. Mission-mode placeholders still come from `placeholderFor`. */
-const AGENT_PLACEHOLDER =
-  "Short gold in this range, stop at 4170. Plain English.";
 
 /**
- * Shared pill geometry for the send key's three states (EXECUTE / stop /
- * stopping) — a fixed min-width keeps every hard-cut swap from shifting the
- * bottom rail (the landing `.btn` mono pill). The enabled EXECUTE fills the
- * accent with the accent-contrast ink; stop keeps the accent rim; stopping
- * goes inert while the rail hint carries the "Stopping…" label.
+ * Shared geometry for the round send control's three states (send / stop /
+ * stopping) — one fixed circle so every hard-cut swap holds its slot in the
+ * input row. Send fills the accent with the accent-contrast glyph; the
+ * disabled (empty) send is a ghost hairline circle; stop keeps the accent rim;
+ * stopping goes inert while the floating tag above the pill carries the
+ * "Stopping…" label.
  */
 const SEND_KEY_BASE =
-  "inline-flex h-8 min-w-[104px] shrink-0 items-center justify-center gap-1.5 rounded-full border px-3.5 font-mono text-[11px] uppercase tracking-[0.16em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 type ComposerNotice =
   | {
@@ -163,6 +167,10 @@ export function SessionComposer({
   // key to a disabled "Stopping" state so the user sees the request landed.
   // stopTurn stays idempotent — this state is purely the acknowledgment.
   const [stopRequested, setStopRequested] = useState<boolean>(false);
+  // Focus flag for the placeholder rotator: the rotating welcome placeholder
+  // freezes on its current phrase while the field is focused or holds a draft,
+  // so it never shuffles under an operator mid-thought.
+  const [focused, setFocused] = useState<boolean>(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   // Synchronous in-flight mutex (render `submitPending` lags a tick) + a mirror
@@ -363,65 +371,76 @@ export function SessionComposer({
 
   // Approval echo — a mission run parked for approval reaches the composer as
   // `runStatus === "paused_approval"` (already in FREE_TEXT_DISALLOWED, so the
-  // input is frozen). No new plumbing: this same signal flips the ticket
-  // chrome to the amber ws-alert motif.
+  // input is frozen). No new plumbing: this same signal recolors the pill's
+  // traveling shimmer + border amber (via `data-vex-console-state`) and floats
+  // the "AWAITING SIGNATURE" tag above the pill.
   const awaitingApproval = runStatus === "paused_approval";
-  const eyebrowLabel = ticketEyebrowLabel({
-    awaitingApproval,
-    planOn,
-    sessionId,
-    stage,
-    session: activeSession,
-  });
   // Mission-mode placeholders stay owned by `placeholderFor`; the welcome /
-  // agent default is the plain-English order example. Plan mode overrides both.
+  // agent default is the rotating crypto-utility set (`usePlaceholderRotator`).
+  // Pause the rotator whenever a non-rotating override is visible so returning
+  // from PLAN/mission copy does not immediately jump to a hidden background tick.
+  const rotatorPaused =
+    focused || draft.length > 0 || planOn || activeSession?.mode === "mission";
+  const welcomePlaceholder = usePlaceholderRotator(rotatorPaused);
   const placeholder = planOn
     ? "Describe the goal — Vex proposes a plan before anything executes."
     : activeSession?.mode === "mission"
       ? placeholderFor(activeSession)
-      : AGENT_PLACEHOLDER;
+      : welcomePlaceholder;
 
   return (
     <>
-      <div className="mt-6">
+      <div className="relative mt-6">
+        {/* TRANSIENT SIGNAL TAG — floats above the pill's right side, carrying
+         * the two states the retired context strip held (they cannot co-occur:
+         * an approval pause freezes free-text submit, so nothing is in flight).
+         * amber "AWAITING SIGNATURE" while parked for a signature; muted
+         * "Stopping…" while a stop settles. Sibling of the form so the pill's
+         * rounded surface never owns this floating status layer. */}
+        {awaitingApproval ? (
+          <span
+            data-vex-console-status="approval"
+            className="absolute -top-2.5 right-6 z-20 rounded-full border border-[var(--vex-pin-border)] bg-[var(--vex-surface-1)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--vex-pin)]"
+          >
+            AWAITING SIGNATURE
+          </span>
+        ) : stopping ? (
+          // Exact "Stopping…" text — the stop-acknowledgment contract pinned by
+          // the composer stop test (source casing stays).
+          <span
+            data-vex-console-status="stopping"
+            className="absolute -top-2.5 right-6 z-20 rounded-full border border-[var(--vex-line-strong)] bg-[var(--vex-surface-1)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--vex-text-2)]"
+          >
+            Stopping…
+          </span>
+        ) : null}
+
         <form
           ref={formRef}
           onSubmit={onSubmit}
           data-vex-area="chat-composer"
-          data-vex-ticket-state={awaitingApproval ? "approval" : "input"}
+          data-vex-console-state={awaitingApproval ? "approval" : "input"}
           className={cn(
-            // THE ORDER TICKET — gradient instrument frame, resting accent
-            // ring, focus glow + sweep + 1px lift, and the amber approval
-            // echo all owned by `.vex-ticket` (globals.css) so no resting
-            // glow shadow ever lands in a className (design guard).
-            "vex-ticket relative overflow-hidden rounded-[14px]",
-            // Stage: 8% Signal-Sky bleed (no blur — banned) so the ticket
-            // sits IN the scene while staying near-opaque.
-            stage && "vex-ticket--stage",
+            // THE SIGNAL CONSOLE PILL — one translucent glass row floating over
+            // the Signal Sky. The glass surface + backdrop-blur are the
+            // owner-sanctioned THIRD glass surface (shell-design-guard
+            // whitelist). The 1px border, the TRAVELING accent shimmer that
+            // circles the ring, the focus step to --vex-glass-strong, the soft
+            // drop shadow and the amber approval recolor are owned by
+            // `.vex-console` (globals.css) so no resting-glow shadow lands in a
+            // className. rounded-[24px] reads as a full pill at the resting
+            // single-line height and relaxes as the field grows multiline.
+            // `items-center`: the chips + round send share the field's height,
+            // so the resting single-line row reads perfectly level (a tall
+            // multiline field centers the cluster — the deliberate trade-off).
+            "vex-console relative flex items-center gap-1.5 overflow-visible rounded-[24px] bg-[var(--vex-glass)] p-1.5 backdrop-blur-xl",
           )}
         >
-          {/* MODE LINE — 1px accent ink along the top edge, drawn (scaleX
-           * 0→1) when plan mode turns on. Reuses the .vex-sign-stroke draw
-           * transition; .vex-mode-line--on holds it at full width. */}
-          <span
-            aria-hidden
-            className={cn(
-              "vex-sign-stroke pointer-events-none absolute inset-x-0 top-0 z-10 h-px rounded-none bg-[var(--vex-accent)]",
-              planOn && "vex-mode-line--on",
-            )}
-          />
-
-          {/* HEADER MICROBAR — the landing .ws-bar: a context eyebrow and a
-           * live status dot along the instrument's top edge. */}
-          <TicketHeader label={eyebrowLabel} awaiting={awaitingApproval} />
-
-          {/* FIELD ZONE — the prompt glyph leads the textarea; the focus
-           * sweep beam rides the bottom edge of this zone (under the field). */}
-          <div className="relative flex items-start gap-2.5 px-4 pb-2 pt-1.5">
-            <PromptGlyph empty={draftEmpty} />
-            <textarea
+          <textarea
               ref={textareaRef}
               value={draft}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
               onChange={(event) => {
                 setDraft(event.target.value);
                 setNotice(null);
@@ -441,111 +460,88 @@ export function SessionComposer({
               placeholder={placeholder}
               aria-label="Session draft"
               className={cn(
-                "block w-full flex-1 resize-none overflow-y-auto bg-transparent leading-[1.7] text-foreground caret-[var(--vex-accent)] outline-none",
-                "max-h-[200px] placeholder:text-[var(--vex-text-3)]",
+                "block w-full flex-1 resize-none overflow-y-auto bg-transparent leading-[1.6] text-foreground caret-[var(--vex-accent)] outline-none",
+                "max-h-[200px] py-1.5 pr-1 placeholder:text-[var(--vex-text-3)]",
+                // Left inset: the pill's own breathing room now the "+" is
+                // retired, so the order text is not jammed on the rounded edge.
+                "pl-5",
                 // Stage: taller idle presence + larger type (the instrument).
-                stage ? "min-h-[60px] text-[16px]" : "min-h-[48px] text-[15px]",
+                stage ? "min-h-[44px] text-[16px]" : "min-h-[36px] text-[15px]",
               )}
             />
-            {/* FOCUS SWEEP — one accent light band travels under the field on
-             * focus (globals.css `.vex-ticket-beam`); rests off-screen. */}
-            <span aria-hidden className="vex-ticket-beam" />
-          </div>
 
-          {/* FLOW STRIP — welcome-stage-only provenance line
-           * (PROPOSE → ENFORCE → PROVE), gated by the existing `stage` prop. */}
-          {stage ? <TicketFlowStrip /> : null}
-
-          <div className="flex h-12 items-center gap-3 border-t border-[var(--vex-line)] px-3">
-            <PlanSwitch
-              sessionId={sessionId}
-              planOn={planOn}
-              busy={setPlanMode.isPending}
-              missionBlocked={planMissionBlocked}
-              onToggle={togglePlanMode}
-            />
-
-            {/* REASON control (S6) — only when the active model supports
-             * reasoning; welcome (no session) hides it (capability unknown). */}
-            {sessionId !== null && supportsReasoning ? (
-              <ReasoningSwitch
-                effort={reasoningEffort}
-                busy={submitPending}
-                onCycle={cycleReasoningEffort}
+          {/* RIGHT CLUSTER — PLAN + REASON quiet rounded-full chips and the
+           * round send control, all sharing one height (h-9) and vertically
+           * centered against the field so the control bank reads level at rest. */}
+          <div className="flex shrink-0 items-center gap-1.5">
+              <PlanSwitch
+                sessionId={sessionId}
+                planOn={planOn}
+                busy={setPlanMode.isPending}
+                missionBlocked={planMissionBlocked}
+                onToggle={togglePlanMode}
               />
-            ) : null}
 
-            {/* Chrome-row hint — mono 10px, centered between the mode
-             * cluster and the send key; while a stop is acknowledged it
-             * carries the STOPPING… label (the key itself goes inert). */}
-            <span
-              className={cn(
-                "min-w-0 flex-1 truncate text-center font-mono text-[10px] uppercase tracking-[0.14em]",
-                stopping ? "text-[var(--vex-text-2)]" : "text-[var(--vex-text-3)]",
-              )}
-            >
-              {stopping
-                ? "Stopping…"
-                : sessionId === null
-                  ? "type a message to start a session"
-                  : "Enter ↵ send · Shift+Enter newline"}
-            </span>
+              {/* REASON control (S6) — only when the active model supports
+               * reasoning; welcome (no session) hides it (capability unknown). */}
+              {sessionId !== null && supportsReasoning ? (
+                <ReasoningSwitch
+                  effort={reasoningEffort}
+                  busy={submitPending}
+                  onCycle={cycleReasoningEffort}
+                />
+              ) : null}
 
-            {/* THE EXECUTE KEY — three hard-cut states in one pill slot. */}
-            {submitPending ? (
-              stopRequested ? (
-                <button
-                  type="button"
-                  disabled
-                  aria-label="Stopping"
-                  className={cn(
-                    SEND_KEY_BASE,
-                    "border-[var(--vex-line-strong)] bg-[var(--vex-surface-0)] text-[var(--vex-text-3)]",
-                  )}
-                >
-                  <HugeiconsIcon icon={StopCircleIcon} size={14} aria-hidden />
-                </button>
+              {/* THE SEND CONTROL — three hard-cut states in one round slot. */}
+              {submitPending ? (
+                stopRequested ? (
+                  <button
+                    type="button"
+                    disabled
+                    aria-label="Stopping"
+                    className={cn(
+                      SEND_KEY_BASE,
+                      "border-[var(--vex-line-strong)] bg-[var(--vex-surface-0)] text-[var(--vex-text-3)]",
+                    )}
+                  >
+                    <HugeiconsIcon icon={StopCircleIcon} size={16} aria-hidden />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStopRequested(true);
+                      stopTurn();
+                    }}
+                    aria-label="Stop generating"
+                    className={cn(
+                      SEND_KEY_BASE,
+                      "border-[var(--vex-accent-border-strong)] bg-[var(--vex-accent-fill-12)] text-[var(--vex-accent-text)]",
+                    )}
+                  >
+                    <HugeiconsIcon icon={StopCircleIcon} size={16} aria-hidden />
+                  </button>
+                )
               ) : (
                 <button
-                  type="button"
-                  onClick={() => {
-                    setStopRequested(true);
-                    stopTurn();
-                  }}
-                  aria-label="Stop generating"
+                  type="submit"
+                  disabled={submitDisabled}
+                  aria-label="Send message"
                   className={cn(
                     SEND_KEY_BASE,
-                    "border-[var(--vex-accent-border-strong)] bg-[var(--vex-accent-fill-12)] text-[var(--vex-accent-text)]",
+                    // Ghost hairline circle while the field is empty; solid
+                    // accent fill with the accent-contrast glyph once there is
+                    // an order to send.
+                    submitDisabled
+                      ? "border-[var(--vex-line-strong)] bg-transparent text-[var(--vex-text-3)]"
+                      : "border-transparent bg-[var(--vex-accent)] text-[var(--vex-accent-contrast)] hover:bg-[var(--vex-accent-hover)] active:scale-[0.96]",
                   )}
                 >
-                  <HugeiconsIcon icon={StopCircleIcon} size={14} aria-hidden />
-                  Stop
+                  <HugeiconsIcon icon={ArrowUp01Icon} size={16} aria-hidden />
                 </button>
-              )
-            ) : (
-              <button
-                type="submit"
-                disabled={submitDisabled}
-                aria-label="Send message"
-                className={cn(
-                  SEND_KEY_BASE,
-                  // Ghost/disabled while the field is empty; solid accent fill
-                  // with the accent-contrast ink once there is an order to send.
-                  submitDisabled
-                    ? "border-[var(--vex-line-strong)] bg-transparent text-[var(--vex-text-3)]"
-                    : "border-transparent bg-[var(--vex-accent)] text-[var(--vex-accent-contrast)] hover:bg-[var(--vex-accent-hover)] active:scale-[0.98]",
-                )}
-              >
-                Execute
-                <span aria-hidden className="text-[0.9em] opacity-80">
-                  ⏎
-                </span>
-              </button>
-            )}
+              )}
           </div>
         </form>
-        {/* The welcome trust letterpress that used to sit here moved onto the
-         * stage's bottom row (mono lines in `SessionWelcomeHero`). */}
       </div>
 
       {notice !== null ? (

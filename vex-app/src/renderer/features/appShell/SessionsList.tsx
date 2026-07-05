@@ -169,14 +169,19 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
     >
       <header
         className={cn(
-          // glass-strong anchors the brand strip: extra ink keeps the sigil
-          // crown solid where the sky is brightest (top of the canvas). The
-          // enlarged particle sigil is the sole mark (no wordmark) and doubles
-          // as the "Back to welcome" control (SidebarHomeSigil).
-          "relative flex h-20 shrink-0 border-b border-[var(--vex-line)] bg-[var(--vex-glass-strong)]",
+          // glass-strong anchors the brand strip: extra ink keeps the logo
+          // mark solid where the sky is brightest (top of the canvas). The
+          // static logo mark is the sole brand (no wordmark) and doubles as
+          // the "Back to welcome" control (SidebarHomeSigil). The header
+          // border-b was dropped so the top band reads as one seamless surface
+          // with the desk rule — the glass-strong luminance step separates the
+          // brand strip from the actions below. Open height aligns with the
+          // h-12 desk rule; collapsed stays taller to stack the mark above the
+          // collapse toggle.
+          "relative flex shrink-0 bg-[var(--vex-glass-strong)]",
           sidebarOpen
-            ? "items-center justify-center px-4"
-            : "flex-col items-center justify-center gap-1.5 px-2",
+            ? "h-12 items-center justify-center px-4"
+            : "h-14 flex-col items-center justify-center gap-1 px-2",
         )}
       >
         <SidebarHomeSigil sidebarOpen={sidebarOpen} />

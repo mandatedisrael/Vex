@@ -1,7 +1,7 @@
 /**
  * REASON control (S6) — per-session reasoning-effort selector, mounted in
  * the composer chrome row next to the PLAN switch and sharing its
- * instrument grammar (h-7 token chrome, mono 10px microtype).
+ * instrument grammar (h-9 token chrome, mono 10px microtype).
  *
  * The parent renders it ONLY when the active model supports reasoning
  * (`sessions.getModel → supportsReasoning === true`), so this component
@@ -59,9 +59,10 @@ export function ReasoningSwitch({
       disabled={busy}
       onClick={onCycle}
       className={cn(
-        // ws-chip grammar (the landing .ws-chip): hairline mono chip, hover
+        // Quiet rounded-full ghost chip that fits inside the composer pill,
+        // sharing the send control's h-9 so the control bank reads level; hover
         // lifts the border toward the accent. Behavior/ARIA unchanged.
-        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] border px-2.5 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors duration-[160ms]",
+        "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-2.5 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors duration-[160ms]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]",
         "disabled:cursor-not-allowed",
         nonDefault

@@ -19,6 +19,11 @@ vi.mock("@hugeicons/react", () => ({
 }));
 
 vi.mock("@hugeicons/core-free-icons", () => ({
+  Add01Icon: "Add01Icon",
+  ArrowDown01Icon: "ArrowDown01Icon",
+  Wallet01Icon: "Wallet01Icon",
+  Exchange01Icon: "Exchange01Icon",
+  Fuel01Icon: "Fuel01Icon",
   AiBrain05Icon: "AiBrain05Icon",
   ArrowRight01Icon: "ArrowRight01Icon",
   ArrowUp01Icon: "ArrowUp01Icon",
@@ -158,6 +163,11 @@ describe("SessionComposer reasoning switch", () => {
     expect(
       useUiStore.getState().reasoningEffortBySession[SESSION],
     ).toBe("medium");
+  });
+
+  it("shares the composer control-bank height (h-9)", () => {
+    render(<SessionComposer activeSession={agentRow()} activeSessionId={SESSION} />);
+    expect(reasonButton()!.className).toContain("h-9");
   });
 
   it("is truly disabled while a turn is in flight", () => {

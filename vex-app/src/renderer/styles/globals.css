@@ -815,13 +815,6 @@ dialog[open]::backdrop {
   transform: scaleX(1);
 }
 
-/* Composer mode line held at full width while plan mode is on — lives here
- * (not a Tailwind arbitrary utility) so source order beats .vex-sign-stroke's
- * scaleX(0) at equal specificity. */
-.vex-mode-line--on {
-  transform: scaleX(1);
-}
-
 html,
 body,
 #root {
@@ -922,145 +915,125 @@ html {
 }
 
 /* ============================================================ *
- *  ORDER TICKET — composer instrument (see SessionComposer)     *
+ *  SIGNAL CONSOLE — composer pill (see SessionComposer)         *
  * ------------------------------------------------------------ *
- *  Turns the chat composer into a landing-style instrument (the *
- *  projectvex.ai .frame + .ws-* grammar): a gradient surface,   *
- *  resting accent ring, a focus glow + light-sweep + 1px lift,  *
- *  the empty-field prompt breathe, and the amber approval echo. *
- *  These live HERE — not in component classNames — because the  *
- *  shell design guard bans resting-glow / sweep box-shadows     *
- *  from the .ts/.tsx scan. Token-only; the accent flows from    *
- *  --vex-accent so both themes (cobalt / Robinhood lime)        *
- *  recolor automatically. Text on the EXECUTE fill uses the     *
- *  existing shared --vex-accent-contrast token (white on        *
- *  cobalt, ink on lime) — no new contrast token was needed.     *
- *  Reduced motion collapses the sweep, breathe, and lift to a   *
- *  plain state swap.                                            *
+ *  ONE translucent glass pill floating over the Signal Sky.     *
+ *  The glass bg + backdrop-blur live in the className (the      *
+ *  owner-sanctioned THIRD glass surface after the two rails);   *
+ *  EVERYTHING ELSE lives here so no resting-glow / ring         *
+ *  box-shadow lands in a .tsx className the design guard scans: *
+ *  the 1px frame, the TRAVELING accent shimmer that circles     *
+ *  the ring, the focus step to --vex-glass-strong, the soft     *
+ *  directional drop shadow, and the amber approval recolor.     *
+ *  Token-only — the frame/shimmer read var(--vex-accent), so    *
+ *  both themes (cobalt / Robinhood lime) recolor automatically; *
+ *  the approval state swaps in var(--vex-pin) amber. Reduced    *
+ *  motion collapses the shimmer to a static accent hairline.    *
  * ============================================================ */
 
-/* 1 · INSTRUMENT FRAME — gradient surface (surface-2 -> surface-1),
- * inset white top-highlight hairline, resting low-opacity accent ring
- * (the frame's own border). Transition on the brand "Out" curve. */
-.vex-ticket {
+/* Registered so the conic ring's angle can be animated by @keyframes (a
+ * bare custom property does not interpolate). CSP-safe: the whole rule
+ * ships in this stylesheet (style-src 'self'). */
+@property --vex-console-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.vex-console {
   position: relative;
-  background: linear-gradient(
-    180deg,
-    var(--vex-surface-2),
-    var(--vex-surface-1)
-  );
-  border: 1px solid color-mix(in oklab, var(--vex-accent) 16%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  transition:
-    border-color 320ms cubic-bezier(0.25, 1, 0.5, 1),
-    box-shadow 320ms cubic-bezier(0.25, 1, 0.5, 1),
-    transform 320ms cubic-bezier(0.25, 1, 0.5, 1);
+  /* Soft DIRECTIONAL drop — depth without a 0 0 glow. */
+  box-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.55);
+  transition: background-color 220ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-/* Stage: 8% Signal-Sky bleed (no blur — banned) so the ticket sits IN the
- * scene while staying near-opaque and legible over the WebGL canvas. */
-.vex-ticket--stage {
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklab, var(--vex-surface-2) 92%, transparent),
-    color-mix(in oklab, var(--vex-surface-1) 92%, transparent)
-  );
-}
-
-/* Focus: the ring brightens toward full accent, a soft accent under-glow
- * blooms, and the whole instrument lifts 1px. */
-.vex-ticket:focus-within {
-  border-color: var(--vex-accent-border-strong);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 0 0 1px color-mix(in oklab, var(--vex-accent) 45%, transparent),
-    0 20px 52px -22px color-mix(in oklab, var(--vex-accent) 45%, transparent);
-  transform: translateY(-1px);
-}
-
-/* 7 · APPROVAL ECHO — a mission run parked for approval reaches the composer
- * as runStatus === "paused_approval"; the chrome flips amber (--vex-pin, the
- * landing .ws-alert motif) to echo "awaiting your signature". */
-.vex-ticket[data-vex-ticket-state="approval"] {
-  border-color: var(--vex-pin-border);
-}
-.vex-ticket[data-vex-ticket-state="approval"]:focus-within {
-  border-color: var(--vex-pin);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 0 0 1px color-mix(in oklab, var(--vex-pin) 45%, transparent),
-    0 20px 52px -22px color-mix(in oklab, var(--vex-pin) 38%, transparent);
-}
-
-/* 3 · PROMPT GLYPH breathe — the leading accent mark pulses slowly ONLY while
- * the field is empty; solid the moment the operator types. */
-@keyframes vex-ticket-breathe {
-  0%,
-  100% {
-    opacity: 0.9;
-  }
-  50% {
-    opacity: 0.34;
-  }
-}
-.vex-ticket-glyph--idle {
-  animation: vex-ticket-breathe 2.8s ease-in-out infinite;
-}
-
-/* 4 · FOCUS SWEEP — one accent light band travels under the field on focus.
- * The band rests off-screen (translateX) so nothing shows until focus, and
- * re-plays on each new focus-within (the pseudo re-enters the running state,
- * the same mechanism as the hover-drawn sign strokes). */
-.vex-ticket-beam {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 1px;
-  overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
-}
-.vex-ticket-beam::before {
+/* THE RING — a masked pseudo painting ONLY the 1px border band. Two stacked
+ * backgrounds: a flat hairline base (uniform frame) under a conic accent arc
+ * (the traveling segment). Animating the conic's --vex-console-angle sweeps
+ * the arc around the ring; the padding-box/border-box mask keeps every
+ * repaint confined to that 1px band, never the pill's content. Renders on the
+ * rounded-full/[24px] shape via border-radius: inherit. */
+.vex-console::before {
   content: "";
   position: absolute;
   inset: 0;
-  width: 42%;
-  transform: translateX(-130%);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in oklab, var(--vex-accent) 90%, transparent),
-    transparent
-  );
+  border-radius: inherit;
+  padding: 1px;
+  background:
+    conic-gradient(
+      from var(--vex-console-angle),
+      transparent 0deg,
+      transparent 205deg,
+      color-mix(in oklab, var(--vex-accent) 45%, transparent) 300deg,
+      var(--vex-accent) 342deg,
+      transparent 360deg
+    ),
+    linear-gradient(var(--vex-line), var(--vex-line));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: vex-console-travel 7s linear infinite;
+  pointer-events: none;
 }
-.vex-ticket:focus-within .vex-ticket-beam {
-  opacity: 1;
-}
-.vex-ticket:focus-within .vex-ticket-beam::before {
-  animation: vex-ticket-sweep 640ms cubic-bezier(0.25, 1, 0.5, 1);
-}
-@keyframes vex-ticket-sweep {
-  from {
-    transform: translateX(-130%);
-  }
+
+@keyframes vex-console-travel {
   to {
-    transform: translateX(320%);
+    --vex-console-angle: 360deg;
   }
 }
 
-/* Reduced motion: instant state swap — no 1px lift, no breathe, no sweep.
- * (The global 0.01ms rule already defangs durations; these also drop the
- * lift and keep the beam hidden so focus is a pure state change.) */
+/* Focus: the glass thickens to --vex-glass-strong and the hairline base
+ * brightens toward the accent (the traveling arc keeps circling). */
+.vex-console:focus-within {
+  background-color: var(--vex-glass-strong);
+}
+.vex-console:focus-within::before {
+  background:
+    conic-gradient(
+      from var(--vex-console-angle),
+      transparent 0deg,
+      transparent 205deg,
+      color-mix(in oklab, var(--vex-accent) 55%, transparent) 300deg,
+      var(--vex-accent) 342deg,
+      transparent 360deg
+    ),
+    linear-gradient(var(--vex-accent-border), var(--vex-accent-border));
+}
+
+/* APPROVAL ECHO — a run parked for approval (data-vex-console-state=
+ * "approval") recolors the whole ring amber (--vex-pin), matching the
+ * floating "AWAITING SIGNATURE" tag the composer renders above the pill. */
+.vex-console[data-vex-console-state="approval"]::before {
+  background:
+    conic-gradient(
+      from var(--vex-console-angle),
+      transparent 0deg,
+      transparent 205deg,
+      color-mix(in oklab, var(--vex-pin) 50%, transparent) 300deg,
+      var(--vex-pin) 342deg,
+      transparent 360deg
+    ),
+    linear-gradient(var(--vex-pin-border), var(--vex-pin-border));
+}
+
+/* Reduced motion: no rotation — the shimmer collapses to a static, faint
+ * accent hairline (the traveling arc layer is dropped). */
 @media (prefers-reduced-motion: reduce) {
-  .vex-ticket:focus-within {
-    transform: none;
-  }
-  .vex-ticket-glyph--idle {
+  .vex-console::before,
+  .vex-console:focus-within::before {
     animation: none;
-    opacity: 0.9;
+    background: linear-gradient(
+      color-mix(in oklab, var(--vex-accent) 26%, transparent),
+      color-mix(in oklab, var(--vex-accent) 26%, transparent)
+    );
   }
-  .vex-ticket:focus-within .vex-ticket-beam {
-    opacity: 0;
+  .vex-console[data-vex-console-state="approval"]::before {
+    animation: none;
+    background: linear-gradient(var(--vex-pin-border), var(--vex-pin-border));
   }
 }
