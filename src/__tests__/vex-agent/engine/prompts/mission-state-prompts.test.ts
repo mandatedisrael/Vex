@@ -5,7 +5,8 @@ import {
   buildPromptStack,
   buildMissionRunPrompt,
   buildMissionSetupPrompt,
-  buildToolUsagePrompt,
+  buildResearchPrompt,
+  buildToolModelPrompt,
 } from "../../../../vex-agent/engine/prompts/index.js";
 
 function makeMissionContext(overrides: Partial<EngineContext> = {}): EngineContext {
@@ -88,34 +89,36 @@ describe("mission state prompts", () => {
   });
 
   it("research workflow uses the Capability Orientation vs Operational Research vocabulary", () => {
-    // The per-mode §6 breakdown now speaks ONE vocabulary: Mission SETUP is
-    // Capability Orientation (not market operation), Mission RUN ends in an
-    // actionable decision, Chat answers and stops. The PLANNING_DISCIPLINE
-    // layer is interpolated into §6 carrying the canonical heading + the
+    // P3 decomposition: the per-mode research breakdown lives in `# Research`
+    // (research.ts) and speaks ONE vocabulary — Mission SETUP is Capability
+    // Orientation (not market operation), Mission RUN ends in an actionable
+    // decision, Chat answers and stops. The former `planning-discipline.ts`
+    // constant is merged into research.ts, carrying the canonical heading + the
     // negative `execute_tool`-on-market-data rule.
-    const prompt = buildToolUsagePrompt();
+    const prompt = buildResearchPrompt();
 
     expect(prompt).toMatch(/Research workflow varies by mode/i);
     expect(prompt).toMatch(/Mission SETUP.*Capability Orientation/i);
     expect(prompt).toMatch(/Mission RUN.*actionable decision/i);
     expect(prompt).toMatch(/Chat.*answer the current request/i);
 
-    // PLANNING_DISCIPLINE markers — interpolated into §6.
+    // Capability Orientation markers — merged into research.ts.
     expect(prompt).toContain("## Capability Orientation vs Operational Research");
     expect(prompt).toContain("Operational Research");
     expect(prompt).toContain("This is orientation, not market operation");
     expect(prompt).toContain("do NOT call `execute_tool` on market data");
 
-    // Negative: the old "research + planning phase" framing is gone from §6.
+    // Negative: the old "research + planning phase" framing is gone.
     expect(prompt).not.toContain("research + planning phase");
     expect(prompt).not.toContain("research and planning phase");
 
-    // §3 "discovery is a means to execution" must be SCOPED to mission RUN /
-    // agent execution, never presented as an unscoped global rule.
+    // "discovery is a means to execution" must be SCOPED to mission RUN / agent
+    // execution wherever it appears — in `# Tool Model` §3 (tool-model.ts) and
+    // in `# Research` (research.ts) — never an unscoped global rule.
+    const combined = `${buildToolModelPrompt()}\n\n${prompt}`;
     const discoveryPhrase = "discovery is a means to execution";
-    expect(prompt).toContain(discoveryPhrase);
-    // Every occurrence sits in a "During mission RUN / agent execution" clause.
-    const segments = prompt.split(discoveryPhrase);
+    expect(combined).toContain(discoveryPhrase);
+    const segments = combined.split(discoveryPhrase);
     for (let i = 0; i < segments.length - 1; i += 1) {
       const before = segments[i];
       const lastScope = before.lastIndexOf("During mission RUN / agent execution");

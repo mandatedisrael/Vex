@@ -130,7 +130,9 @@ function formatActiveKnowledgeBlock(
   }
 
   const lines: string[] = [];
-  lines.push("# Active Memory");
+  // H2 under the layer's `# Memory` H1 (P3 heading discipline — the section
+  // used to emit three sibling H1s inside one layer).
+  lines.push("## Active Memory");
   lines.push("");
 
   const cappedEntries = entries.slice(0, ACTIVE_KNOWLEDGE_ENTRY_LIMIT);
@@ -221,7 +223,7 @@ function humanizeRemaining(validUntilIso: string): string {
 
 function buildMemoryRoutingRule(): string {
   return [
-    "# Memory Routing",
+    "## Memory Routing",
     "",
     "- Current state (balances, prices, gas, positions, quotes) → live tools (`wallet_balances`, `khalani_tokens_balances`, `portfolio`).",
     "- Something earlier in THIS conversation/mission → `session_memory_search` (per-session narrative).",

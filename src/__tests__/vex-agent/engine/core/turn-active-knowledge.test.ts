@@ -148,9 +148,9 @@ describe("turn — Active Memory drift guard (façade + memory-section seam)", (
   it("turn state does NOT include '# Active Memory' when both repo lists are empty", async () => {
     const provider = makeProvider();
     const turnState = await runTurnAndGetTurnState(provider);
-    expect(turnState).not.toContain("# Active Memory");
+    expect(turnState).not.toContain("## Active Memory");
     // …and the section still anchors the routing rule.
-    expect(turnState).toContain("# Memory Routing");
+    expect(turnState).toContain("## Memory Routing");
   });
 
   it("turn state includes '# Active Memory' when repo returns hot-context entries", async () => {
@@ -167,7 +167,7 @@ describe("turn — Active Memory drift guard (façade + memory-section seam)", (
     ]);
     const provider = makeProvider();
     const turnState = await runTurnAndGetTurnState(provider);
-    expect(turnState).toContain("# Active Memory");
+    expect(turnState).toContain("## Active Memory");
     expect(turnState).toContain("pumpfun_entry_pattern");
     expect(turnState).toContain("low-holder pump entry");
   });
@@ -184,23 +184,27 @@ describe("turn — Active Memory drift guard (façade + memory-section seam)", (
     expect(turnState).toContain("risk_rule (3)");
   });
 
-  // ── Memory Layers drift guards (static prefix) ───────────────
+  // ── Memory & Learning drift guards (static prefix) ───────────
+  //
+  // P3 decomposition: the old `## 5. Memory Layers` sub-section of tool-usage.ts
+  // became the standalone `# Memory & Learning` static layer (memory-policy.ts).
+  // Allowed-delta B in the P3 rubric — same policy, single home.
 
-  it("static prefix always includes the Memory Layers section (PR3 reorg — was Knowledge Layer Rules)", async () => {
+  it("static prefix always includes the Memory & Learning section (P3 — was tool-usage §5 Memory Layers)", async () => {
     const provider = makeProvider();
     await runTurnAndGetTurnState(provider);
     const staticPrompt = getStaticPrompt(provider);
-    expect(staticPrompt).toContain("## 5. Memory Layers");
+    expect(staticPrompt).toContain("# Memory & Learning");
   });
 
-  it("Memory Layers section explicitly says knowledge is ENGLISH-ONLY (decision #23)", async () => {
+  it("Memory & Learning section explicitly says persisted memory is English-only (decision #23)", async () => {
     const provider = makeProvider();
     await runTurnAndGetTurnState(provider);
     const staticPrompt = getStaticPrompt(provider);
-    const memIdx = staticPrompt.indexOf("Memory Layers");
+    const memIdx = staticPrompt.indexOf("# Memory & Learning");
     expect(memIdx).toBeGreaterThan(0);
     const memSection = staticPrompt.slice(memIdx);
-    expect(memSection).toMatch(/ENGLISH-ONLY|English-only|english/i);
+    expect(memSection).toMatch(/English-by-contract|ENGLISH-ONLY|English-only/);
   });
 
   it("reuse-existing-kinds rule survived the cutover (decision #7 — on long_memory_suggest's kind param)", async () => {
@@ -234,6 +238,6 @@ describe("turn — Active Memory drift guard (façade + memory-section seam)", (
     expect(provider.chatCompletion).toHaveBeenCalled();
     expect(turnState).not.toContain("[Long-term memory:");
     expect(turnState).not.toContain("Skip long_memory_search");
-    expect(turnState).toContain("# Memory Routing");
+    expect(turnState).toContain("## Memory Routing");
   });
 });

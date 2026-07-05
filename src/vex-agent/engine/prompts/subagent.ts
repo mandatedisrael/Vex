@@ -4,11 +4,14 @@
  * Delegated scope from parent, reports results back.
  * Respects allowTrades and parent loopMode.
  *
- * TODO(subagent-disabled): cała warstwa instruuje wywołanie
- * `subagent_report_complete` / `subagent_request_parent`, które są wypięte
- * z registry. Dla nowych sesji nieosiągalna (brak `subagent_spawn`); legacy
- * sesja z is_subagent=true zhydratowana z DB przez hydrate.ts dostanie tu
- * wiszącą referencję do disabled tooli — patrz Residual Risk w docs planu.
+ * INTENTIONAL BEHAVIOR FIX (P3): this layer no longer instructs
+ * `subagent_report_complete` / `subagent_request_parent`. Those tools are
+ * unwired (`subagent_spawn` is out of the registry), so instructing them was a
+ * live contradiction with the Tool Map. New sessions cannot reach this layer
+ * (no `subagent_spawn`); a legacy `is_subagent=true` session hydrated from the
+ * DB now gets a clean "report back as your final reply" instruction instead of
+ * dangling references to disabled tools. Restore the tool wiring (and these
+ * instructions) together when subagents are re-enabled.
  */
 
 import type { EngineContext, Permission } from "../types.js";
@@ -50,7 +53,7 @@ export function buildSubagentPrompt(
   lines.push("- Focus exclusively on your assigned task — do not deviate");
   lines.push("- Report your findings/results clearly — the parent will consume your output");
   lines.push("- You have a limited iteration budget — work efficiently");
-  lines.push("- When your task is complete, call `subagent_report_complete`; do not finish with ordinary chat prose alone");
+  lines.push("- When your task is complete, end with a final text reply that summarizes your results — that reply is what the parent reads");
   lines.push("");
 
   if (subagentContext) {

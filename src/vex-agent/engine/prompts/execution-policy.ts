@@ -1,13 +1,19 @@
 /**
- * Permission prompt — variable layer, changes per mode + permission.
+ * Execution Policy — variable static layer, changes per mode + permission.
  *
- * Defines execution policy: what the agent can/cannot do, and whether
- * mutating actions require approval. Permission changes policy, never the
- * scope of protocol knowledge.
+ * Renamed from the old `mode.ts` (P3 decomposition) and moved to slot 2 of the
+ * static prefix (right after Identity) so the load-bearing "can I mutate without
+ * approval?" contract is read first, not buried behind the tool/protocol layers.
  *
- * Naming: post-M12 the old `buildModePrompt(LoopMode)` is renamed to
- * `buildPermissionPrompt({ mode, permission })` to reflect the two
- * orthogonal axes (codex review round 1).
+ * Authority ONLY: the approval gate (full vs restricted) and loop discipline.
+ * The DeFi safety bullets that used to be duplicated here (gas reserve, fresh
+ * balance, verify-before-large) now live in the single `# Safety Contract`
+ * layer, which renders in EVERY mode — so full-permission sessions still get
+ * them. Permission changes policy execution, never the scope of protocol
+ * knowledge or the safety contract.
+ *
+ * Naming: post-M12 the old `buildModePrompt(LoopMode)` is `buildPermissionPrompt`
+ * to reflect the two orthogonal axes (mode + permission) (codex review round 1).
  */
 
 import type { Permission, SessionKind } from "../types.js";
@@ -47,12 +53,9 @@ permission. Rules:
   turn to gather context or complete a task.
 - You have full authority to execute any tool — read-only and mutating —
   without an approval gate.
-- Prioritize safety: verify before large trades, use quotes before
-  executions, monitor positions.
-- Before native-token spends, always reserve gas for at least one
-  follow-up transaction.
-- After each successful mutation, refresh wallet balances before the
-  next action.
+- Full permission does NOT waive the \`# Safety Contract\` — every mutating
+  action still obeys gas reserve, fresh balances, quote/preview, and token
+  verification.
 - Do NOT loop indefinitely — agent mode is one-shot. When the user's
   request is satisfied, return a final text reply.`;
 
@@ -81,11 +84,8 @@ You are in mission mode (goal-driven loop) with full permission. Rules:
 - Log significant decisions and their rationale.
 - If you encounter an error, diagnose and adapt — don't stop unless the
   error is unrecoverable.
-- Prioritize safety: verify before large trades, use quotes before
-  executions, monitor positions.
-- Before native-token spends, always reserve gas for at least one
-  follow-up transaction.
-- After each successful mutation, refresh wallet balances before the
-  next action.
+- Full permission does NOT waive the \`# Safety Contract\` — every mutating
+  action still obeys gas reserve, fresh balances, quote/preview, and token
+  verification.
 - Use \`loop_defer\` to schedule the next wake-up when waiting for
   external conditions (price movement, on-chain state, time delays).`;

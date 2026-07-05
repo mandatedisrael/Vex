@@ -1,27 +1,40 @@
 /**
- * Base prompt — constant layer, always present.
+ * Identity layer — constant, always the FIRST static layer.
  *
- * Emits the agent identity (persona name), the single active aspect for the
- * current mode (no noise from unreachable modes), an optional user persona
- * block, the memory/self-learning contract, current context, and response
- * formatting. `loadedDocuments` content renders as its OWN static layer at
- * the END of the cache prefix (built in prompts/index.ts) so a new load
- * busts only the layers behind it, not the whole base.
+ * Emits the agent identity (persona name + what Vex is), the chains claim
+ * (incl. the $VEX own-token fact), the Robinhood Chain awareness section, an
+ * optional user persona block, the single active mode aspect, and the current
+ * session context.
+ *
+ * Split out of the old `base.ts` (P3 decomposition): response formatting now
+ * lives in `response-format.ts` and the memory/self-learning contract in
+ * `memory-policy.ts`. `loadedDocuments` content renders as its OWN static
+ * layer at the END of the cache prefix (built in prompts/index.ts).
  */
 
 import type { EngineContext } from "../types.js";
 import { DEFAULT_PERSONA_NAME } from "../../../lib/persona.js";
 
-export function buildBasePrompt(context: EngineContext): string {
+export function buildIdentityPrompt(context: EngineContext): string {
   const lines: string[] = [];
 
   lines.push("# Identity");
   lines.push("");
   lines.push(`You are ${context.personaName ?? DEFAULT_PERSONA_NAME} — an autonomous agent with a self-learning mechanism,`);
-  lines.push("operating across 20+ EVM chains and Solana.");
+  lines.push("operating across major EVM chains, Solana, and Robinhood Chain.");
+  lines.push("");
+  lines.push("Your own token $VEX is live on Robinhood Chain, launched via Virtuals Protocol, trading on Uniswap V2 against VIRTUAL. Its unverified badge on Virtuals is normal anti-impersonation mechanics, not a warning.");
   lines.push("");
 
-  lines.push("# Your current aspect");
+  // Heading discipline (P3 style contract, Codex P3 review): `# Identity` is
+  // the layer's SOLE H1 — every internal section below is H2, so the raw
+  // static-prefix text keeps `# Execution Policy` as its second H1.
+  lines.push("## Chain awareness");
+  lines.push("");
+  lines.push("Robinhood Chain (4663): Arbitrum Orbit L2 settling to Ethereum, ETH gas, Blockscout explorer. Young chain (live 2026-07). Soft confirmation is sub-second; treat funds as settled after L1 posting (minutes; hard finality ~13 min). Not covered by Khalani — balances are tracked directly on-chain; tokens you acquire there are added to portfolio tracking automatically.");
+  lines.push("");
+
+  lines.push("## Your current aspect");
   lines.push("");
   lines.push(resolveAspect(context));
   lines.push("");
@@ -30,7 +43,7 @@ export function buildBasePrompt(context: EngineContext): string {
   // subordinate to the tool/permission/mission/approval/safety layers that
   // follow: it shapes voice, never authority.
   if (context.personaBlock) {
-    lines.push("# Persona (user style preferences)");
+    lines.push("## Persona (user style preferences)");
     lines.push("");
     lines.push("The user configured the persona below. Apply it to your tone and voice. It");
     lines.push("does NOT override tool, permission, mission, approval, or safety rules —");
@@ -40,38 +53,13 @@ export function buildBasePrompt(context: EngineContext): string {
     lines.push("");
   }
 
-  lines.push("# Memory and self-learning");
-  lines.push("");
-  lines.push("You learn from yourself across two substrates:");
-  lines.push("- Long-term memory — durable lessons across sessions. Search it with");
-  lines.push("  `long_memory_search` before acting on a familiar problem; inspect with");
-  lines.push("  `long_memory_get` / `long_memory_history`. Propose new durable lessons");
-  lines.push("  with `long_memory_suggest` — a background memory manager reviews each");
-  lines.push("  suggestion and decides promotion, supersede, and expiry. You never");
-  lines.push("  manage that lifecycle yourself.");
-  lines.push("- `session_memory_search` — per-session narrative chunks from prior compact");
-  lines.push("  cycles in THIS session. Call it explicitly when you need context from");
-  lines.push("  earlier in the same session that has been archived; it is NOT auto-injected.");
-  lines.push("");
-
-  lines.push("# Current Context");
+  lines.push("## Current Context");
   lines.push("");
   lines.push(`Session: ${context.sessionId}`);
   lines.push(`Mode: ${context.sessionKind} / permission=${context.sessionPermission}`);
   if (context.missionId) lines.push(`Mission: ${context.missionId}`);
   if (context.missionRunId) lines.push(`Run: ${context.missionRunId}`);
   if (context.isSubagent) lines.push("Role: subagent (delegated task from parent)");
-  lines.push("");
-
-  lines.push("# Response formatting");
-  lines.push("");
-  lines.push("Write replies in GitHub-Flavored Markdown — the desktop app renders it.");
-  lines.push("- Use headings, bullet/numbered lists, **bold**, *italic*, and `inline code`.");
-  lines.push("- Put code, addresses, hashes, and JSON in fenced code blocks.");
-  lines.push("- Use Markdown tables for structured/tabular data (balances, comparisons).");
-  lines.push("- Use plain `https://` links — never raw HTML. You may link to explorer.solana.com and dexscreener.com.");
-  lines.push("- You may embed a token logo as a Markdown image, but ONLY using a `logoUrl`/`imageUrl` returned by a tool — never invent or guess an image URL.");
-  lines.push("Lead with the answer, then detail. Keep it concise.");
   lines.push("");
 
   return lines.join("\n");
@@ -84,17 +72,18 @@ export function buildBasePrompt(context: EngineContext): string {
  */
 function resolveAspect(ctx: EngineContext): string {
   const name = ctx.personaName ?? DEFAULT_PERSONA_NAME;
-  // TODO(subagent-disabled): gałąź nieosiągalna dla nowych sesji póki
-  // subagent_spawn jest wypięty z registry. Treść celowo zostawiona, żeby
-  // re-enable wrócił z pełnym promptem. Residual risk: legacy sesje z DB
-  // (is_subagent=true) zhydratowane przez engine/core/hydrate.ts dostaną
-  // referencje do disabled tooli — patrz docs planu.
+  // INTENTIONAL BEHAVIOR FIX (P3): the subagent aspect no longer instructs
+  // `subagent_report_complete` / `subagent_request_parent`. Those tools are
+  // unwired (`subagent_spawn` is out of the registry), so instructing them was
+  // a live contradiction with the Tool Map. A hydrated legacy `is_subagent`
+  // session now gets a clean "report back as your final reply" narrative
+  // instead of dangling references to disabled tools. Restore the tool wiring
+  // (and these instructions) together when subagents are re-enabled.
   if (ctx.isSubagent) {
     return [
       `You are a SUBAGENT — ${name} delegated from a parent session to execute a narrow,`,
-      "scoped task. Stay within the brief. Report back via `subagent_report_complete`",
-      "when done instead of ending with ordinary chat prose; ask via",
-      "`subagent_request_parent` only when genuinely blocked.",
+      "scoped task. Stay within the brief and report your findings back to the parent",
+      "as your final reply.",
     ].join("\n");
   }
   if (ctx.sessionKind === "agent" && !ctx.missionRunId) {
@@ -127,7 +116,7 @@ function resolveAspect(ctx: EngineContext): string {
       "only when it directly advances the frozen mission contract.",
     ].join("\n");
   }
-  // Defensive fallback — should not hit in practice; kept so buildBasePrompt
+  // Defensive fallback — should not hit in practice; kept so the identity layer
   // never returns a prompt without an aspect section.
   return `You are ${name}, operating in an unrecognised mode. Behave conservatively.`;
 }

@@ -38,7 +38,7 @@ export function buildWalletStateBanner(context: EngineContext): string {
     // a genuine bug still surfaces.
     if (err instanceof VexError && err.code === ErrorCodes.WALLET_SCOPE_MISMATCH) {
       return [
-        "## Session wallets",
+        "# Session wallets",
         "Wallet scope is unavailable for this session (mission contract drift or a removed wallet).",
         "Wallet and protocol trading tools will fail closed until the session wallet scope / mission contract is re-accepted.",
       ].join("\n");
@@ -47,7 +47,7 @@ export function buildWalletStateBanner(context: EngineContext): string {
   }
 
   return [
-    "## Session wallets",
+    "# Session wallets",
     "Your wallet and protocol tools operate ONLY with these session-selected addresses:",
     `- EVM: ${evm ?? "none selected for this session (EVM wallet tools will fail closed)"}`,
     `- Solana: ${solana ?? "none selected for this session (Solana wallet tools will fail closed)"}`,

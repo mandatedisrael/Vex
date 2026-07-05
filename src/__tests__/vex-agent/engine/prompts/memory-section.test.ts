@@ -63,7 +63,7 @@ describe("buildMemorySection — structure + routing", () => {
   it("always starts with '# Memory' and ends with the routing block", () => {
     const section = buildMemorySection(ctx());
     expect(section.startsWith("# Memory")).toBe(true);
-    const routingIdx = section.indexOf("# Memory Routing");
+    const routingIdx = section.indexOf("## Memory Routing");
     expect(routingIdx).toBeGreaterThan(0);
     // Routing is the LAST sub-block (order anchor before the Tool Map).
     for (const line of ROUTING_LINES) {
@@ -81,10 +81,10 @@ describe("buildMemorySection — structure + routing", () => {
   it("routing stays even when BOTH branches failed (section = header + routing)", () => {
     const section = buildMemorySection(ctx({ knowledge: null, sessionStats: null }));
     expect(section).toContain("# Memory");
-    expect(section).toContain("# Memory Routing");
+    expect(section).toContain("## Memory Routing");
     expect(section).not.toContain("[Session memories:");
     expect(section).not.toContain("[Long-term memory:");
-    expect(section).not.toContain("# Active Memory");
+    expect(section).not.toContain("## Active Memory");
   });
 });
 
@@ -115,10 +115,10 @@ describe("buildMemorySection — fail-state vs empty-state (fail ≠ empty)", ()
     const section = buildMemorySection(ctx({ knowledge: null }));
     expect(section).not.toContain("[Long-term memory:");
     expect(section).not.toContain("Skip long_memory_search");
-    expect(section).not.toContain("# Active Memory");
+    expect(section).not.toContain("## Active Memory");
     // Session-memory line + routing still render.
     expect(section).toContain("[Session memories:");
-    expect(section).toContain("# Memory Routing");
+    expect(section).toContain("## Memory Routing");
   });
 
   it("populated session stats render counts, outstanding and themes", () => {
@@ -174,12 +174,12 @@ describe("buildMemorySection — two knownKinds widths (banner top-5 vs block fu
 describe("buildMemorySection — Active Memory block (ported drift-pins)", () => {
   it("omits the '# Active Memory' block when both entries and known kinds are empty", () => {
     const section = buildMemorySection(knowledgeCtx([], [], 0));
-    expect(section).not.toContain("# Active Memory");
+    expect(section).not.toContain("## Active Memory");
   });
 
   it("renders Known kinds only when entries are empty", () => {
     const section = buildMemorySection(knowledgeCtx([], [{ kind: "memo", count: 3 }], 3));
-    expect(section).toContain("# Active Memory");
+    expect(section).toContain("## Active Memory");
     expect(section).toContain("Known kinds (reuse before creating new):");
     expect(section).toContain("memo (3)");
     expect(section).not.toContain("Pinned");
@@ -188,7 +188,7 @@ describe("buildMemorySection — Active Memory block (ported drift-pins)", () =>
 
   it("renders entries only when known kinds are empty", () => {
     const section = buildMemorySection(knowledgeCtx([entry({})], []));
-    expect(section).toContain("# Active Memory");
+    expect(section).toContain("## Active Memory");
     expect(section).toContain("Recent:");
     expect(section).toContain("test title");
     expect(section).not.toContain("Known kinds");
@@ -227,8 +227,8 @@ describe("buildMemorySection — Active Memory block (ported drift-pins)", () =>
       entry({ id: i + 1, summary: "x".repeat(180), title: `t${i}` }),
     );
     const section = buildMemorySection(knowledgeCtx(entries, []));
-    const blockIdx = section.indexOf("# Active Memory");
-    const routingIdx = section.indexOf("# Memory Routing");
+    const blockIdx = section.indexOf("## Active Memory");
+    const routingIdx = section.indexOf("## Memory Routing");
     const block = section.slice(blockIdx, routingIdx);
     expect(block.length).toBeLessThan(5000);
   });

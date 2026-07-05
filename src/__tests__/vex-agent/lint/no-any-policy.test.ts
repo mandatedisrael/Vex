@@ -22,7 +22,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 
@@ -51,7 +51,10 @@ function listRuntimeFiles(): string[] {
     .filter(Boolean)
     .filter((p) => !p.includes("/__tests__/"))
     .filter((p) => !EXCLUDED_SUBPATHS.some((ex) => p.includes(ex)))
-    .map((p) => resolve(process.cwd(), p));
+    .map((p) => resolve(process.cwd(), p))
+    // `git ls-files` reflects the index; skip paths deleted/renamed in the
+    // working tree that haven't been staged yet, so the lint scans real files.
+    .filter((p) => existsSync(p));
 }
 
 /**

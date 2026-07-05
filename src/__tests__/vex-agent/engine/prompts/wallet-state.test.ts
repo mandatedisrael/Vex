@@ -44,7 +44,7 @@ describe("buildWalletStateBanner", () => {
   it("shows both FULL addresses when both families are selected", () => {
     mockResolveSelectedAddressSet.mockReturnValue({ evm: EVM, solana: SOL, all: [EVM, SOL] });
     const banner = buildWalletStateBanner(ctx());
-    expect(banner).toContain("## Session wallets");
+    expect(banner).toContain("# Session wallets"); // P3 heading fix: H2 → H1 (layer-consistent)
     expect(banner).toContain(EVM);
     expect(banner).toContain(SOL);
     expect(banner).not.toContain("…"); // never truncated
@@ -62,7 +62,7 @@ describe("buildWalletStateBanner", () => {
       throw new VexError(ErrorCodes.WALLET_SCOPE_MISMATCH, "contract drift");
     });
     const banner = buildWalletStateBanner(ctx({ walletPolicy: { kind: "invalid", reason: "drift" } }));
-    expect(banner).toContain("## Session wallets");
+    expect(banner).toContain("# Session wallets"); // P3 heading fix: H2 → H1 (layer-consistent)
     expect(banner).toContain("fail closed");
     expect(banner).not.toContain(EVM);
   });

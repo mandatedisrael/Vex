@@ -3,9 +3,11 @@
  * split into two segments for KV-cache stability (D-LAYOUT):
  *
  * - STATIC layers — the stable cache prefix, joined into `messages[0]`
- *   (system, cacheHint "static_prefix"): base, tool-usage, protocols,
- *   permission, wallet-state, mode-core, subagent, Loaded Content (END of
- *   the prefix — a new load busts only from here).
+ *   (system, cacheHint "static_prefix"), in authority-first order (P3
+ *   decomposition): identity → execution policy → session wallets → safety
+ *   contract → tool model → protocol namespaces → memory & learning →
+ *   research → response formatting → mode-core → subagent → Loaded Content
+ *   (END of the prefix — a new load busts only from here).
  * - TURN layers — volatile per-call state, joined into the TRAILING system
  *   message (cacheHint "turn_state", placed AFTER history): runtime clock,
  *   context pressure, resume packet, `# Memory` (routing at its end),
@@ -16,14 +18,18 @@
  * the runtime clock and every other volatile marker live in the turn state.
  *
  * Rule: mode and permission change policy execution, never the scope of
- * protocol knowledge.
+ * protocol knowledge or the safety contract.
  */
 
 import type { EngineContext } from "../types.js";
-import { buildBasePrompt } from "./base.js";
-import { buildToolUsagePrompt } from "./tool-usage.js";
+import { buildIdentityPrompt } from "./identity.js";
+import { buildResponseFormatPrompt } from "./response-format.js";
+import { buildSafetyContractPrompt } from "./safety-contract.js";
+import { buildToolModelPrompt } from "./tool-model.js";
+import { buildMemoryPolicyPrompt } from "./memory-policy.js";
+import { buildResearchPrompt } from "./research.js";
 import { buildProtocolsPrompt } from "./protocols.js";
-import { buildPermissionPrompt } from "./mode.js";
+import { buildPermissionPrompt } from "./execution-policy.js";
 import { buildAgentPrompt } from "./agent.js";
 import { buildMissionSetupPrompt, type MissionSetupContext } from "./mission-setup.js";
 import {
@@ -118,19 +124,44 @@ export function buildPromptStack(
   context: EngineContext,
   options: PromptStackOptions = {},
 ): PromptStack {
-  // ── STATIC PREFIX ─────────────────────────────────────────
+  // ── STATIC PREFIX (authority-first order — P3 decomposition) ──
   const staticLayers: string[] = [];
 
-  staticLayers.push(buildBasePrompt(context));
-  staticLayers.push(buildToolUsagePrompt());
-  staticLayers.push(buildProtocolsPrompt());
+  // 1. Identity — who + what (chains, $VEX, Robinhood chain awareness, aspect).
+  staticLayers.push(buildIdentityPrompt(context));
 
-  // Per mode + permission — stable within a session slice.
+  // 2. Execution Policy — the permission/approval authority, read first
+  //    (moved up from mid-stack). Stable within a session slice.
   staticLayers.push(buildPermissionPrompt({ mode: context.sessionKind, permission: context.sessionPermission }));
 
-  // Active session wallet addresses — agent awareness. Mirrors the tool
-  // resolution path exactly (buildSessionWalletResolution + resolveSelectedAddressSet).
+  // 3. Session wallets — which addresses the tools sign with. Mirrors the tool
+  //    resolution path exactly (buildSessionWalletResolution + resolveSelectedAddressSet).
   staticLayers.push(buildWalletStateBanner(context));
+
+  // 4. Safety Contract — the single home for DeFi execution safety, rendered in
+  //    every mode (full permission does not waive it).
+  staticLayers.push(buildSafetyContractPrompt());
+
+  // 5. Tool Model — internal vs protocol tools, discover/execute, live state.
+  staticLayers.push(buildToolModelPrompt());
+
+  // 6. Protocol Namespaces — auto-generated from the manifests.
+  //    VENUE & BRIDGE ROUTING SLOT (Wave 2 batch 2c): the `## Venue & Bridge
+  //    Routing` static subsection (Robinhood/uniswap swap routing + relay
+  //    bridge routing) lands here, WITH the tools it describes. 2b ships
+  //    awareness only (see `## Chain awareness` in identity.ts); no execution
+  //    routing promises yet.
+  staticLayers.push(buildProtocolsPrompt());
+
+  // 7. Memory & Learning — substrates + learning protocol (single home).
+  staticLayers.push(buildMemoryPolicyPrompt());
+
+  // 8. Research — web_research shapes + Capability Orientation vs Operational
+  //    Research discipline.
+  staticLayers.push(buildResearchPrompt());
+
+  // 9. Response Formatting — GFM / image-embed output rules (explicit layer).
+  staticLayers.push(buildResponseFormatPrompt());
 
   // ── CONTEXTUAL mode-core — per sessionKind ────────────────
   if (context.sessionKind === "agent" && !context.missionRunId) {
@@ -231,10 +262,14 @@ function buildLoadedContentLayer(context: EngineContext): string {
 }
 
 // Re-exports for direct use
-export { buildBasePrompt } from "./base.js";
-export { buildToolUsagePrompt } from "./tool-usage.js";
+export { buildIdentityPrompt } from "./identity.js";
+export { buildResponseFormatPrompt } from "./response-format.js";
+export { buildSafetyContractPrompt } from "./safety-contract.js";
+export { buildToolModelPrompt } from "./tool-model.js";
+export { buildMemoryPolicyPrompt } from "./memory-policy.js";
+export { buildResearchPrompt } from "./research.js";
 export { buildProtocolsPrompt, resetProtocolsPromptCache } from "./protocols.js";
-export { buildPermissionPrompt } from "./mode.js";
+export { buildPermissionPrompt } from "./execution-policy.js";
 export { buildAgentPrompt } from "./agent.js";
 export { buildMissionSetupPrompt, type MissionSetupContext } from "./mission-setup.js";
 export {

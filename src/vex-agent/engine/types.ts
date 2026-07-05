@@ -275,7 +275,7 @@ export interface EngineContext {
   /**
    * Agent display/identity name from the user persona file. Set by hydration;
    * optional so non-hydrated/test contexts fall back to the default ("Vex") in
-   * `buildBasePrompt`. Local-first user config — never widens permissions
+   * `buildIdentityPrompt`. Local-first user config — never widens permissions
    * (style/name only).
    */
   personaName?: string;

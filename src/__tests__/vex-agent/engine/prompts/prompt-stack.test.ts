@@ -6,7 +6,6 @@ import {
   buildProtocolsPrompt,
   resetProtocolsPromptCache,
   buildPermissionPrompt,
-  buildToolUsagePrompt,
 } from "../../../../vex-agent/engine/prompts/index.js";
 import type { PromptStackOptions } from "../../../../vex-agent/engine/prompts/index.js";
 import { buildRuntimeClockSnapshot } from "../../../../vex-agent/engine/runtime-clock.js";
@@ -50,17 +49,20 @@ describe("prompt-stack", () => {
 
     for (const permission of permissions) {
       for (const kind of kinds) {
-        it(`includes base + tool-usage + protocols in ${kind}/${permission}`, () => {
+        it(`includes identity + tool model + protocols in ${kind}/${permission}`, () => {
           const joined = joinedStack(makeContext({ sessionPermission: permission, sessionKind: kind }));
 
-          // Base prompt markers
+          // Identity layer markers (P3 decomposition: split out of base.ts).
           expect(joined).toContain("# Identity");
           // Default persona name (no persona.md configured in tests).
           expect(joined).toContain("Vex");
-          expect(joined).toContain("# Your current aspect");
-          expect(joined).toContain("# Memory and self-learning");
-          // Global output-format directive (batch 3) — present in every mode.
-          expect(joined).toContain("# Response formatting");
+          expect(joined).toContain("## Your current aspect"); // P3 style contract: sole H1 per layer
+          // Memory & Learning layer (P3: `# Memory and self-learning` +
+          // tool-usage §5/§7 consolidated into one `# Memory & Learning` layer).
+          expect(joined).toContain("# Memory & Learning");
+          // Response Formatting is an EXPLICIT layer (P3: split out of base.ts,
+          // heading title-cased). Present in every mode — GFM/image rules pinned.
+          expect(joined).toContain("# Response Formatting");
           expect(joined).toContain("GitHub-Flavored Markdown");
           // Bounded markdown-affordances steering: token logos only from a
           // tool-provided logoUrl/imageUrl (never invented), explorer/dexscreener
@@ -87,7 +89,7 @@ describe("prompt-stack", () => {
     const FULL_OPTIONS: PromptStackOptions = {
       contextPressureBanner: "[Context pressure: elevated — 72% used]",
       resumePacket: "[Resume packet — generation 3, just compacted]",
-      memorySection: "# Memory\n\n[Session memories: 2 chunk(s) across 1 compact(s). Tool: session_memory_search(semantic_intent, k≤5).]\n\n# Memory Routing\n\n- routing line",
+      memorySection: "# Memory\n\n[Session memories: 2 chunk(s) across 1 compact(s). Tool: session_memory_search(semantic_intent, k≤5).]\n\n## Memory Routing\n\n- routing line",
       activePlanBlock: "# Active Plan\n\n1. do the thing",
       toolCatalogPrompt: "# Available Tool Map\n\n- wallet_balances",
       personaSetupHint: "# Personalize me (optional)\n\noffer text",
@@ -131,7 +133,7 @@ describe("prompt-stack", () => {
         "[Context pressure: elevated",
         "[Resume packet",
         "# Memory",
-        "# Memory Routing",
+        "## Memory Routing", // P3 heading fix: H2 under the # Memory layer H1
         "# Active Plan",
         "# Available Tool Map",
         "Iteration: 5",
@@ -188,12 +190,12 @@ describe("prompt-stack", () => {
     it("turn layers always start with the runtime clock; memorySection lands only when provided", () => {
       const without = buildPromptStack(makeContext());
       expect(without.turnLayers[0]).toContain("# Runtime Clock");
-      expect(without.turnLayers.join("\n")).not.toContain("# Memory Routing");
+      expect(without.turnLayers.join("\n")).not.toContain("## Memory Routing");
 
       const withSection = buildPromptStack(makeContext(), {
-        memorySection: "# Memory\n\n# Memory Routing\n\n- line",
+        memorySection: "# Memory\n\n## Memory Routing\n\n- line",
       });
-      expect(withSection.turnLayers.join("\n")).toContain("# Memory Routing");
+      expect(withSection.turnLayers.join("\n")).toContain("## Memory Routing");
     });
   });
 
@@ -221,13 +223,13 @@ describe("prompt-stack", () => {
       );
 
       for (const ns of advertisedNamespacesWithTools) {
-        expect(prompt).toContain(`## ${ns}`);
+        expect(prompt).toContain(`### ${ns}`); // P3 heading fix: namespace H3 under group H2
       }
     });
 
     it("renders explicit product groups instead of heuristic families", () => {
       const prompt = buildProtocolsPrompt();
-      expect(prompt).toContain("### Cross-chain");
+      expect(prompt).toContain("## Cross-chain"); // P3 heading fix: group H2 (was ###, inverted)
       expect(prompt).not.toContain("Families:");
     });
 
@@ -245,7 +247,7 @@ describe("prompt-stack", () => {
 
       for (const ns of namespacesWithMutating) {
         // The namespace section should mention mutating
-        const nsSection = prompt.split(`## ${ns}`)[1]?.split("##")[0] ?? "";
+        const nsSection = prompt.split(`### ${ns}`)[1]?.split("##")[0] ?? "";
         expect(nsSection).toContain("mutating");
       }
     });
@@ -277,10 +279,12 @@ describe("prompt-stack", () => {
       const fullProtocols = fullStack.staticLayers.find(s => s.includes("# Available Protocol Namespaces"));
       expect(setupProtocols).toBe(fullProtocols);
 
-      // Both should have the same tool-usage prompt
-      const setupToolUsage = setupStack.staticLayers.find(s => s.includes("# Tool Usage"));
-      const fullToolUsage = fullStack.staticLayers.find(s => s.includes("# Tool Usage"));
-      expect(setupToolUsage).toBe(fullToolUsage);
+      // Both should have the same tool-model prompt (P3: `# Tool Usage` §1–3
+      // became the `# Tool Model` layer).
+      const setupToolModel = setupStack.staticLayers.find(s => s.includes("# Tool Model"));
+      const fullToolModel = fullStack.staticLayers.find(s => s.includes("# Tool Model"));
+      expect(setupToolModel).toBe(fullToolModel);
+      expect(setupToolModel).toBeDefined();
     });
 
     it("differs only in policy and context", () => {
@@ -563,8 +567,8 @@ describe("prompt-stack", () => {
     });
 
     it("contains quote / preview before mutation rule (PR3 reorg)", () => {
-      // PR3-clarity moved the rule into the Protocol Execution section
-      // and rephrased it as "Quote / preview before mutation" — the
+      // PR3-clarity rephrased the rule as "Quote / preview before mutation";
+      // P3 decomposition moved it into the `# Safety Contract` layer. The
       // contract (read-only dryRun pass first) is preserved.
       const joined = joinedStack(makeContext());
       expect(joined).toMatch(/Quote\s*\/\s*preview before mutation/i);
@@ -579,19 +583,130 @@ describe("prompt-stack", () => {
     it("khalani is canonical resolver in protocols section, kyberswap is not primary", () => {
       const prompt = buildProtocolsPrompt();
       // kyberswap section should reference khalani as resolver, not itself
-      const kyberSection = prompt.split("## kyberswap")[1]?.split("##")[0] ?? "";
+      const kyberSection = prompt.split("### kyberswap")[1]?.split("##")[0] ?? "";
       expect(kyberSection).toContain("khalani");
       expect(kyberSection).not.toContain("kyberswap.tokens.search");
     });
 
     it("polymarket section exposes subarea guidance", () => {
       const prompt = buildProtocolsPrompt();
-      const polymarketSection = prompt.split("## polymarket")[1]?.split("##")[0] ?? "";
+      const polymarketSection = prompt.split("### polymarket")[1]?.split("##")[0] ?? "";
       expect(polymarketSection).toContain("Paths:");
       expect(polymarketSection).toContain("Gamma discovery");
       expect(polymarketSection).toContain("CLOB trading");
     });
 
+  });
+
+  // ── P3 decomposition invariants ─────────────────────────────
+  //
+  // The canonical `# Safety Contract` layer renders in EVERY mode — this is the
+  // precondition that lets the mode.ts (now execution-policy.ts) FULL variants
+  // drop their duplicated gas-reserve / fresh-balance bullets (Codex P2 add d).
+  describe("Safety Contract renders in EVERY mode", () => {
+    const variants: Array<{ name: string; ctx: EngineContext }> = [
+      { name: "agent/restricted", ctx: makeContext({ sessionKind: "agent", sessionPermission: "restricted" }) },
+      { name: "agent/full", ctx: makeContext({ sessionKind: "agent", sessionPermission: "full" }) },
+      { name: "mission-setup", ctx: makeContext({ sessionKind: "mission", sessionPermission: "restricted", missionId: "m-1" }) },
+      { name: "mission-run", ctx: makeContext({ sessionKind: "mission", sessionPermission: "full", missionId: "m-1", missionRunId: "run-1" }) },
+      { name: "subagent", ctx: makeContext({ isSubagent: true, sessionKind: "agent", sessionPermission: "restricted" }) },
+    ];
+
+    for (const { name, ctx } of variants) {
+      it(`${name} static prefix carries the canonical safety section + its rules`, () => {
+        const staticJoined = buildPromptStack(ctx).staticLayers.join("\n");
+        expect(staticJoined).toContain("# Safety Contract");
+        expect(staticJoined).toContain("Gas reserve on native tokens");
+        expect(staticJoined).toContain("Fresh balance before each mutation");
+        expect(staticJoined).toContain("Address-first for EVM mutations");
+        expect(staticJoined).toMatch(/Quote\s*\/\s*preview before mutation/i);
+      });
+    }
+  });
+
+  // Execution Policy is authority-first (slot 2, right after Identity) and no
+  // longer restates the safety bullets — those now live only in the Safety
+  // Contract layer above (P2 locked requirement 1 + mode.ts dup removal).
+  describe("Execution Policy layer (authority-only, moved to slot 2)", () => {
+    it("renders as the 2nd static layer, right after Identity", () => {
+      const { staticLayers } = buildPromptStack(makeContext());
+      expect(staticLayers[0]).toContain("# Identity");
+      expect(staticLayers[1]).toContain("# Execution Policy");
+    });
+
+    // Codex P3 review: the slot-2 claim must hold in the RAW prompt text, not
+    // just the layers array — each layer emits exactly one H1 (style contract),
+    // so `# Execution Policy` is the literal second top-level heading the model
+    // reads. Guards against a layer sneaking extra H1s back in (identity.ts
+    // internals are H2 for this reason).
+    for (const kind of ["agent", "mission"] as const) {
+      it(`raw static-prefix H1 order starts Identity → Execution Policy (${kind})`, () => {
+        const { staticLayers } = buildPromptStack(
+          makeContext({ sessionKind: kind, ...(kind === "mission" ? { missionId: "m-1" } : {}) }),
+          // Persona block ON so the optional identity section is exercised too.
+          undefined,
+        );
+        const h1s = staticLayers
+          .join("\n")
+          .split("\n")
+          .filter((line) => line.startsWith("# "));
+        expect(h1s[0]).toBe("# Identity");
+        expect(h1s[1]).toContain("# Execution Policy");
+      });
+    }
+
+    it("identity layer emits exactly ONE top-level heading even with a persona block", () => {
+      const { staticLayers } = buildPromptStack(
+        makeContext({ personaBlock: "Tone: concise, dry, no emoji." }),
+      );
+      const identityH1s = staticLayers[0]
+        .split("\n")
+        .filter((line) => line.startsWith("# "));
+      expect(identityH1s).toEqual(["# Identity"]);
+    });
+
+    it("FULL permission variants no longer duplicate the safety bullets", () => {
+      const agentFull = buildPermissionPrompt({ mode: "agent", permission: "full" });
+      const missionFull = buildPermissionPrompt({ mode: "mission", permission: "full" });
+      for (const policy of [agentFull, missionFull]) {
+        // Authority markers survive.
+        expect(policy).toContain("full authority");
+        // The duplicated safety bullets are gone (single home = Safety Contract).
+        expect(policy).not.toContain("verify before large trades");
+        expect(policy).not.toContain("reserve gas for at least one");
+        expect(policy).not.toContain("refresh wallet balances");
+        // Instead it points at the single safety home.
+        expect(policy).toContain("Safety Contract");
+      }
+    });
+  });
+
+  // The agent mode-core carries a UNIQUE anti-drift instruction that no other
+  // layer states — it must survive the decomposition (Codex P2 add e).
+  describe("agent mode-core anti-drift instruction preserved (P3 requirement e)", () => {
+    it("keeps the unique 'don't drift into autonomous monitoring/mission drafting' line", () => {
+      const joined = joinedStack(makeContext({ sessionKind: "agent" }));
+      expect(joined).toContain(
+        "Do not turn an agent answer into autonomous monitoring, mission drafting, or multi-step research unless the user asks for that workflow",
+      );
+    });
+  });
+
+  // The dead subagent tool-call instructions were removed as an intentional
+  // behavior fix (P2 locked requirement 2 + Codex add f): the layer must stop
+  // instructing calls to the unwired subagent handoff tools.
+  describe("dead subagent tool-call instructions removed (P3 requirement 2/f)", () => {
+    it("subagent prefix no longer references the unwired handoff tools", () => {
+      const staticJoined = buildPromptStack(
+        makeContext({ isSubagent: true, sessionKind: "agent" }),
+        { subagentContext: { task: "T", allowTrades: false, childPermission: "restricted" } },
+      ).staticLayers.join("\n");
+      expect(staticJoined).toContain("# Subagent Role");
+      expect(staticJoined).not.toContain("subagent_report_complete");
+      expect(staticJoined).not.toContain("subagent_request_parent");
+      // Still narrates the subagent role + a clean report-back instruction.
+      expect(staticJoined).toContain("SUBAGENT");
+    });
   });
 
   // ── Env-aware availability in protocols prompt ──────────────────
@@ -617,7 +732,7 @@ describe("prompt-stack", () => {
       delete process.env.JUPITER_API_KEY;
       resetProtocolsPromptCache();
       const prompt = buildProtocolsPrompt();
-      const solanaSection = prompt.split("## solana")[1]?.split("##")[0] ?? "";
+      const solanaSection = prompt.split("### solana")[1]?.split("##")[0] ?? "";
       expect(solanaSection).toContain("Tools: 0 active");
       expect(solanaSection).toContain("Requires env: JUPITER_API_KEY");
     });
@@ -626,7 +741,7 @@ describe("prompt-stack", () => {
       process.env.JUPITER_API_KEY = "test-jupiter-key";
       resetProtocolsPromptCache();
       const prompt = buildProtocolsPrompt();
-      const solanaSection = prompt.split("## solana")[1]?.split("##")[0] ?? "";
+      const solanaSection = prompt.split("### solana")[1]?.split("##")[0] ?? "";
       expect(solanaSection).not.toContain("Requires env:");
     });
   });
@@ -638,8 +753,10 @@ describe("prompt-stack", () => {
       const stack = buildPromptStack(makeContext());
       expect(Array.isArray(stack.staticLayers)).toBe(true);
       expect(Array.isArray(stack.turnLayers)).toBe(true);
-      // Static minimum: base + tool-usage + protocols + permission + wallet + mode = 6
-      expect(stack.staticLayers.length).toBeGreaterThanOrEqual(5);
+      // Static minimum (P3 authority-first order): identity + execution policy +
+      // wallet + safety contract + tool model + protocols + memory & learning +
+      // research + response formatting + mode-core = 10.
+      expect(stack.staticLayers.length).toBeGreaterThanOrEqual(10);
       // Turn minimum: runtime clock.
       expect(stack.turnLayers.length).toBeGreaterThanOrEqual(1);
     });
@@ -667,7 +784,7 @@ describe("prompt-stack", () => {
       const joined = joinedStack(
         makeContext({ personaBlock: "Tone: concise, dry, no emoji." }),
       );
-      expect(joined).toContain("# Persona (user style preferences)");
+      expect(joined).toContain("## Persona (user style preferences)"); // P3 style contract: H2 inside identity
       expect(joined).toContain("Tone: concise, dry, no emoji.");
       // Framed as subordinate to the authoritative rules.
       expect(joined).toContain("does NOT override tool, permission, mission, approval, or safety rules");
@@ -675,7 +792,7 @@ describe("prompt-stack", () => {
 
     it("omits the persona section when no block is configured", () => {
       const joined = joinedStack(makeContext());
-      expect(joined).not.toContain("# Persona (user style preferences)");
+      expect(joined).not.toContain("## Persona (user style preferences)");
     });
 
     it("renders the one-time persona-setup hint only when supplied via options (turn layers)", () => {
@@ -687,6 +804,42 @@ describe("prompt-stack", () => {
 
       const without = joinedStack(makeContext());
       expect(without).not.toContain("# Personalize me (optional)");
+    });
+  });
+
+  // ── Robinhood Chain awareness (Wave 2 batch 2b) ──────────────
+  // Every pin below maps to one intentional awareness-only change: the $VEX
+  // identity fact, the static Chain awareness section, and the repositioned
+  // DexScreener namespace. No execution promises (those land in 2c).
+  describe("Robinhood Chain awareness", () => {
+    it("identity carries the canonical $VEX fact and drops the stale chain count", () => {
+      const joined = joinedStack(makeContext());
+      expect(joined).toContain("Your own token $VEX is live on Robinhood Chain");
+      expect(joined).toContain("anti-impersonation mechanics, not a warning");
+      expect(joined).toContain("major EVM chains, Solana, and Robinhood Chain");
+      // Stale "20+ EVM chains and Solana" line is gone.
+      expect(joined).not.toContain("20+ EVM chains");
+    });
+
+    it("carries the static Chain awareness section for Robinhood Chain (4663)", () => {
+      const joined = joinedStack(makeContext());
+      expect(joined).toContain("## Chain awareness"); // P3 style contract: H2 inside identity
+      expect(joined).toContain("Robinhood Chain (4663): Arbitrum Orbit L2");
+      expect(joined).toContain("Not covered by Khalani");
+      expect(joined).toContain("added to portfolio tracking automatically");
+    });
+
+    it("keeps chain-awareness content in the STATIC prefix (cache-safe, no live numbers)", () => {
+      const { staticLayers } = buildPromptStack(makeContext());
+      expect(staticLayers.join("\n")).toContain("## Chain awareness");
+    });
+
+    it("repositions dexscreener as the market-discovery backbone in the protocols prompt", () => {
+      const prompt = buildProtocolsPrompt();
+      const dexSection = prompt.split("### dexscreener")[1]?.split("##")[0] ?? "";
+      expect(dexSection).toContain("market-discovery backbone");
+      expect(dexSection).toContain("discover → resolve address → verify liquidity → quote");
+      expect(dexSection).toContain("robinhood");
     });
   });
 });

@@ -17,7 +17,21 @@
 import { describe, it, expect } from "vitest";
 
 import { getAllTools, getToolDef } from "../../../vex-agent/tools/registry.js";
-import { buildToolUsagePrompt } from "../../../vex-agent/engine/prompts/tool-usage.js";
+// P3 decomposition: the old `tool-usage.ts` mega-file was split into these
+// static-prefix layers. The anti-pattern lint now scans every split builder
+// that carries the former tool-usage prose, so a confabulation-inducing framing
+// cannot sneak back into any of them.
+import { buildToolModelPrompt } from "../../../vex-agent/engine/prompts/tool-model.js";
+import { buildSafetyContractPrompt } from "../../../vex-agent/engine/prompts/safety-contract.js";
+import { buildMemoryPolicyPrompt } from "../../../vex-agent/engine/prompts/memory-policy.js";
+import { buildResearchPrompt } from "../../../vex-agent/engine/prompts/research.js";
+
+const TOOL_PROMPT_BUILDERS: ReadonlyArray<{ name: string; build: () => string }> = [
+  { name: "tool-model.ts", build: buildToolModelPrompt },
+  { name: "safety-contract.ts", build: buildSafetyContractPrompt },
+  { name: "memory-policy.ts", build: buildMemoryPolicyPrompt },
+  { name: "research.ts", build: buildResearchPrompt },
+];
 
 // ── Anti-pattern phrases (codex round-2 list) ──────────────────────
 //
@@ -48,13 +62,15 @@ describe("ToolDef anti-pattern lint", () => {
       ).toEqual([]);
     });
 
-    it(`buildToolUsagePrompt() does not contain "${pattern.name}"`, () => {
-      const prompt = buildToolUsagePrompt();
-      expect(
-        pattern.regex.test(prompt),
-        `anti-pattern "${pattern.name}" found in tool-usage.ts. Rephrase to operational language.`,
-      ).toBe(false);
-    });
+    for (const builder of TOOL_PROMPT_BUILDERS) {
+      it(`${builder.name} does not contain "${pattern.name}"`, () => {
+        const prompt = builder.build();
+        expect(
+          pattern.regex.test(prompt),
+          `anti-pattern "${pattern.name}" found in ${builder.name}. Rephrase to operational language.`,
+        ).toBe(false);
+      });
+    }
   }
 });
 

@@ -77,15 +77,17 @@ export function buildProtocolsPrompt(): string {
   lines.push("Use discover_tools(namespace=...) to explore any namespace.");
   lines.push("");
 
+  // Heading discipline (P3 style contract): layer H1 → group H2 → namespace H3.
+  // Fixes the former inversion where namespaces (##) outranked their group (###).
   for (const group of getGroupedAdvertisedProtocolNavigation()) {
-    lines.push(`### ${group.groupLabel}`);
+    lines.push(`## ${group.groupLabel}`);
     lines.push("");
 
     for (const metadata of group.namespaces) {
       const summary = summaries.get(metadata.namespace);
       if (!summary || summary.toolCount === 0) continue;
 
-      lines.push(`## ${metadata.namespace}`);
+      lines.push(`### ${metadata.namespace}`);
       lines.push(metadata.summary);
       lines.push(`Use when: ${metadata.whenToUse}`);
       if (metadata.preferInstead) {
