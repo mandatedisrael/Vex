@@ -148,6 +148,17 @@ export function buildProtocolsPrompt(): string {
   lines.push("- `isVerified` is an anti-impersonation badge, not a quality or safety signal — never present it as one.");
   lines.push("");
 
+  // ── Fixed Yield (Pendle) (Wave 5) — static doctrine for fixed-yield PT.
+  // Imperative rules; no live numbers (KV-cache safe). `pendle.*` is Ethereum-only.
+  lines.push("## Fixed Yield (Pendle)");
+  lines.push("");
+  lines.push("`pendle.*` is fixed-yield on Ethereum. A principal token (PT) is a TERM COMMITMENT: buying a PT locks a fixed rate until the market's expiry date.");
+  lines.push("- Buying a PT locks funds until maturity. Exiting EARLY (`pendle.pt.sell`) is market-priced and CAN lose money versus the locked rate — say so before recommending a buy.");
+  lines.push("- A MATURED PT redeems ~1:1 to its accounting asset via `pendle.pt.redeem`; value a matured PT at face, never at the underlying spot price.");
+  lines.push("- NEVER present points as yield. A `pointsWarning` on a market means it pays speculative points, not a guaranteed return.");
+  lines.push("- Check liquidity before sizing — thin markets mean high price impact on exit. Always preview with `pendle.pt.quote` first; buy/sell/redeem require a fresh matching quote and are approval-gated.");
+  lines.push("");
+
   cached = lines.join("\n");
   return cached;
 }

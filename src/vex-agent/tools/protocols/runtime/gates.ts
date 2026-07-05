@@ -31,6 +31,8 @@ export type PrequoteGateDecision =
       readonly kind: "allow";
       readonly verdict: SafetyVerdict | undefined;
       readonly fotTax: number | undefined;
+      /** Pendle term-lock maturity for the approval preview (typed, unspoofable). */
+      readonly termLock: { readonly maturityIso: string } | undefined;
     }
   | { readonly kind: "block"; readonly message: string };
 
@@ -65,11 +67,12 @@ export async function evaluatePrequoteGateDecision(
     return {
       kind: "allow",
       verdict: decision.verdict,
-      // Fee-on-transfer tax (if any) rides the same TYPED channel for the preview.
+      // Fee-on-transfer tax + Pendle term-lock ride the same TYPED channel.
       fotTax: decision.fotTax,
+      termLock: decision.termLock,
     };
   }
-  return { kind: "allow", verdict: undefined, fotTax: undefined };
+  return { kind: "allow", verdict: undefined, fotTax: undefined, termLock: undefined };
 }
 
 /**
@@ -89,24 +92,28 @@ export function evaluateApprovalGate(
   context: ProtocolExecutionContext,
   prequoteVerdict: SafetyVerdict | undefined,
   prequoteFotTax: number | undefined,
+  prequoteTermLock: { readonly maturityIso: string } | undefined,
 ): ToolResult | undefined {
   if (manifest.mutating && !context.approved && context.sessionPermission === "restricted" && !isPreviewExecution(request.toolId, params)) {
     logger.info("protocol.execute.approval_required", { toolId: request.toolId, permission: context.sessionPermission });
     // Carry the gate-matched prequote verdict to the restricted-mode approval
     // preview via the TYPED `prequote` field (NOT raw args) so the human sees
     // the safety verdict — especially `unknown` — before approving (R5). A
-    // fee-on-transfer tax (when the gate provided one) rides the same typed
-    // field so the human still sees a high tax even though FoT is now `pass`.
+    // fee-on-transfer tax and a Pendle term-lock (when the gate provided one)
+    // ride the same typed field so the human sees a high tax / lock date even
+    // though neither is a verdict `fail`.
     const pending: ToolResult = {
       success: false,
       output: `${request.toolId} requires approval — mutating tool in restricted permission mode.`,
       pendingApproval: true,
     };
     if (prequoteVerdict !== undefined) {
-      pending.prequote =
-        prequoteFotTax !== undefined
-          ? { verdict: prequoteVerdict, fotTax: prequoteFotTax }
-          : { verdict: prequoteVerdict };
+      const prequote: { verdict: SafetyVerdict; fotTax?: number; termLock?: { maturityIso: string } } = {
+        verdict: prequoteVerdict,
+      };
+      if (prequoteFotTax !== undefined) prequote.fotTax = prequoteFotTax;
+      if (prequoteTermLock !== undefined) prequote.termLock = prequoteTermLock;
+      pending.prequote = prequote;
     }
     return pending;
   }

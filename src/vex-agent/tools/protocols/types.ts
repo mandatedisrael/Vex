@@ -25,7 +25,8 @@ export type ProtocolNamespace =
   | "solana"
   | "polymarket"
   | "dexscreener"
-  | "virtuals";
+  | "virtuals"
+  | "pendle";
 
 /**
  * Lifecycle state of a protocol manifest.

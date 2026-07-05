@@ -36,9 +36,11 @@ import type {
 import { EXECUTE_GATE_TOOLS } from "./registry.js";
 import type { ExecuteGateRegistration } from "./registry.js";
 import { resolveUniswapChainId } from "@tools/uniswap/chains.js";
+import { resolvePendleChainId } from "@tools/pendle/chains.js";
 import { computePrequoteMatchHash } from "./identity/hash.js";
 import { assertBridgeParamsBindable, buildBridgeIdentity } from "./identity/bridge.js";
 import { buildRelayBridgeIdentity } from "./identity/relay-bridge.js";
+import { buildPendleRedeemIdentity } from "./identity/pendle-redeem.js";
 import { GateIdentityError } from "./gate-errors.js";
 import type { GateBlockReason } from "./gate-errors.js";
 import { canonSlippageBps, readParamSlippageBps } from "./slippage.js";
@@ -59,6 +61,13 @@ export type GateDecision =
       readonly verdict: SafetyVerdict;
       readonly prequoteId: string;
       readonly fotTax?: number;
+      /**
+       * Pendle term-lock (Wave 5). When a matched swap prequote's bounded
+       * `safetyDetail` carries a `termLock`, the maturity date rides this TYPED
+       * channel to the approval preview — it is sourced from the persisted
+       * prequote, NEVER from raw args, so the LLM cannot inject or override it.
+       */
+      readonly termLock?: { readonly maturityIso: string };
     }
   | { readonly kind: "block"; readonly reason: GateBlockReason; readonly message: string };
 
@@ -108,9 +117,49 @@ const BRIDGE_BLOCK_MESSAGES: Record<GateBlockReason, string> = {
     "Bridge blocked: routeId/depositMethod cannot be bound to a quote — omit them (the bridge selects the best route) or this execute can't be verified.",
 };
 
+const REDEEM_BLOCK_MESSAGES: Record<GateBlockReason, string> = {
+  gate_error:
+    "Redeem blocked: could not verify a fresh redeem quote. Re-run pendle.pt.quote for this PT and retry.",
+  no_session:
+    "Redeem blocked: could not verify a fresh redeem quote (no session). Re-run pendle.pt.quote and retry.",
+  unresolved_token:
+    "Redeem blocked: the PT could not be resolved to an active Pendle market. Re-check the PT address, then retry.",
+  no_quote:
+    "Redeem blocked: no fresh redeem quote for this exact PT/amount. Call pendle.pt.quote first, then retry.",
+  safety_fail:
+    "Redeem blocked: the quoted redemption was flagged unsafe. Aborting.",
+  wallet_setup:
+    "Redeem blocked: the mission is still in setup (no active run), so redeems cannot broadcast yet. Accept and start the mission run, then redeem — do NOT re-quote.",
+  wallet_scope:
+    "Redeem blocked: the selected wallet can't be used — it may have changed or been removed, or it isn't in the mission's allowed set. Re-select a valid wallet, then retry — do NOT re-quote.",
+  wallet_not_selected:
+    "Redeem blocked: no wallet is selected (or configured) for Ethereum in the current session. Select a wallet, then retry — do NOT re-quote.",
+  // Unreachable on the redeem path (redeem carries no unbindable params), but the
+  // reason map must be total over GateBlockReason.
+  unbindable_param:
+    "Redeem blocked: a parameter cannot be bound to a quote. Remove it and retry.",
+};
+
 function block(reason: GateBlockReason, kind: PrequoteKind): GateDecision {
-  const messages = kind === "bridge" ? BRIDGE_BLOCK_MESSAGES : SWAP_BLOCK_MESSAGES;
+  const messages =
+    kind === "bridge" ? BRIDGE_BLOCK_MESSAGES : kind === "redeem" ? REDEEM_BLOCK_MESSAGES : SWAP_BLOCK_MESSAGES;
   return { kind: "block", reason, message: messages[reason] };
+}
+
+/**
+ * Extract the Pendle term-lock maturity from a matched swap prequote's bounded
+ * `safetyDetail`, for the approval preview. The detail is `Record<string,
+ * unknown>` (round-trips through the DB as JSONB), so every field is treated as
+ * untrusted and narrowed; a non-Pendle detail naturally yields undefined.
+ */
+function termLockFromSafetyDetail(
+  safetyDetail: Record<string, unknown>,
+): { maturityIso: string } | undefined {
+  const tl = safetyDetail.termLock;
+  if (typeof tl !== "object" || tl === null) return undefined;
+  const iso = (tl as Record<string, unknown>).maturityIso;
+  if (typeof iso !== "string" || Number.isNaN(Date.parse(iso))) return undefined;
+  return { maturityIso: iso };
 }
 
 /**
@@ -248,6 +297,14 @@ function buildEvmIdentity(
       throw new VexError(ErrorCodes.KYBER_UNSUPPORTED_CHAIN, `Uniswap unsupported chain: ${chainParam}`);
     }
     chainId = resolved;
+  } else if (provider === "pendle") {
+    // Pendle is Ethereum-v1 only — resolve via its own network-free registry so
+    // the identity is not coupled to another venue's chain map.
+    const resolved = resolvePendleChainId(chainParam);
+    if (resolved === undefined) {
+      throw new VexError(ErrorCodes.PENDLE_API_ERROR, `Pendle unsupported chain: ${chainParam}`);
+    }
+    chainId = resolved;
   } else {
     chainId = slugToChainId(resolveChainSlug(chainParam));
   }
@@ -320,6 +377,14 @@ async function computeGateMatch(
     assertBridgeParamsBindable(params);
     const identity = await buildBridgeIdentity(sessionId, params, context);
     return { matchHash: computePrequoteMatchHash(identity), family: identity.sourceFamily };
+  }
+
+  if (gated.kind === "redeem") {
+    // Pendle PT redeem — its OWN identity path (G2#3). Resolves YT from the PT via
+    // the SAME market lookup the recorder uses, so the digests collide. A resolve/
+    // wallet-scope throw propagates → caught upstream → fail-closed block.
+    const identity = await buildPendleRedeemIdentity(sessionId, params, context);
+    return { matchHash: computePrequoteMatchHash(identity), family: gated.family };
   }
 
   // Resolve the SELECTED address (never decrypts). A wallet-scope throw
@@ -411,8 +476,13 @@ export async function evaluatePrequoteGate(
     // plain "pass". Sourced from the matched row's bounded `safetyDetail`, not
     // raw args. Bridge/Solana details have no FoT leg → undefined (omitted).
     const fotTax = maxFotTaxFromSafetyDetail(latest.safetyDetail);
-    const allow: GateDecision = { kind: "allow", verdict: latest.safetyVerdict, prequoteId: latest.prequoteId };
-    return fotTax !== undefined ? { ...allow, fotTax } : allow;
+    // Pendle term-lock (Wave 5) — rides the same TYPED channel as FoT for the
+    // approval preview; sourced from the persisted prequote, never raw args.
+    const termLock = termLockFromSafetyDetail(latest.safetyDetail);
+    let allow: GateDecision = { kind: "allow", verdict: latest.safetyVerdict, prequoteId: latest.prequoteId };
+    if (fotTax !== undefined) allow = { ...allow, fotTax };
+    if (termLock !== undefined) allow = { ...allow, termLock };
+    return allow;
   } catch (err) {
     const reason = classifyGateBlockReason(err, context.walletPolicy);
     // Bounded structural log only — never raw provider/DB/wallet text. `reason`

@@ -32,6 +32,13 @@ vi.mock("../../../vex-agent/sync/local-chain-balance-sync.js", () => ({
   syncLocalChainForWallet: (...args: unknown[]) => mockLocalSync(...args),
 }));
 
+// Pendle chain-1 enrichment is its own suite (balance-sync-pendle + merge). Here
+// it is a no-op passthrough so these Khalani-focused tests stay hermetic (the
+// real enrichment reads proj_activity + Pendle RPC/API, which needs no DB here).
+vi.mock("../../../vex-agent/sync/pendle-enrichment.js", () => ({
+  enrichChainOnePendleBalances: (_f: string, _a: string, rows: unknown) => rows,
+}));
+
 const mockReplaceBalances = vi.fn().mockResolvedValue(0);
 const mockGetBalances = vi.fn().mockResolvedValue([]);
 const mockGetBalancesByChain = vi.fn().mockResolvedValue([]);

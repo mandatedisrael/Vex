@@ -15,6 +15,8 @@ import * as balancesRepo from "@vex-agent/db/repos/balances.js";
 import type { BalanceRow } from "@vex-agent/db/repos/balances.js";
 import { resolveChainHint } from "./chains.js";
 import { syncLocalChainForWallet } from "./local-chain-balance-sync.js";
+import { enrichChainOnePendleBalances } from "./pendle-enrichment.js";
+import { PENDLE_CHAIN_ID } from "@tools/pendle/constants.js";
 import logger from "@utils/logger.js";
 
 /** ChainFamily ("eip155"|"solana") → inventory family ("evm"|"solana"). */
@@ -201,6 +203,19 @@ async function syncKhalaniWalletBalances(
     if (!refreshedChainIds.has(prev.chainId)) continue;
     if (!byChain.has(prev.chainId)) {
       byChain.set(prev.chainId, []); // empty = delete all tokens for this chain
+    }
+  }
+
+  // Pendle enrichment (Wave 5) — merge tracked PT balances into the chain-1 set
+  // BEFORE the per-chain replace. SCOPE LOCK (G2#2): run ONLY when the Khalani
+  // scan actually refreshed chain 1, so a sync scoped to another chain never
+  // synthesizes/replaces chain-1 rows. Fail-soft (keeps Khalani rows); the DB
+  // read inside PROPAGATES (2b doctrine).
+  if (refreshedChainIds.has(PENDLE_CHAIN_ID)) {
+    const existing = byChain.get(PENDLE_CHAIN_ID) ?? [];
+    const merged = await enrichChainOnePendleBalances(family, address, existing);
+    if (merged.length > 0 || byChain.has(PENDLE_CHAIN_ID)) {
+      byChain.set(PENDLE_CHAIN_ID, merged);
     }
   }
 

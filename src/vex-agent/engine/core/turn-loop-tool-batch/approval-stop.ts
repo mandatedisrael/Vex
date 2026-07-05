@@ -78,7 +78,13 @@ export async function enqueueApprovalIntent(args: {
     toolCall.name,
     toolCall.arguments,
     result.prequote
-      ? { prequoteVerdict: result.prequote.verdict, fotTax: result.prequote.fotTax }
+      ? {
+          prequoteVerdict: result.prequote.verdict,
+          fotTax: result.prequote.fotTax,
+          // Wave 5 (Pendle): the term-lock maturity rides the same typed channel;
+          // buildIntentPreview renders the fixed lock warning (never from args).
+          termLock: result.prequote.termLock,
+        }
       : undefined,
   );
   const intentPolicy = buildPolicySnapshot(toolContext);

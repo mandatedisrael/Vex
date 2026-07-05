@@ -886,6 +886,33 @@ describe("prompt-stack", () => {
       }
     });
 
+    it("carries the static Fixed Yield (Pendle) doctrine (imperative, cache-safe)", () => {
+      const prompt = buildProtocolsPrompt();
+      expect(prompt).toContain("## Fixed Yield (Pendle)");
+      // PT is a term commitment; buying locks a fixed rate until expiry.
+      expect(prompt).toContain("TERM COMMITMENT");
+      // Early exit is market-priced and can lose.
+      expect(prompt).toContain("market-priced");
+      // Matured PT redeems ~1:1 via pendle.pt.redeem; value at face.
+      expect(prompt).toContain("pendle.pt.redeem");
+      // Never present points as yield.
+      expect(prompt).toContain("NEVER present points as yield");
+      // Preview + gate before trading.
+      expect(prompt).toContain("pendle.pt.quote");
+    });
+
+    it("Pendle doctrine renders in the STATIC prefix in every mode", () => {
+      const variants: EngineContext[] = [
+        makeContext({ sessionKind: "agent", sessionPermission: "restricted" }),
+        makeContext({ sessionKind: "agent", sessionPermission: "full" }),
+        makeContext({ sessionKind: "mission", sessionPermission: "full", missionId: "m-1", missionRunId: "run-1" }),
+      ];
+      for (const ctx of variants) {
+        const staticJoined = buildPromptStack(ctx).staticLayers.join("\n");
+        expect(staticJoined).toContain("## Fixed Yield (Pendle)");
+      }
+    });
+
     it("ownTokenBanner is TURN-state only: right after the runtime clock, never static", () => {
       const banner = "# $VEX (own token)\n\n- Price: $0.0002918 (24h -54.21%)\n- Market cap: $291,811";
       const stack = buildPromptStack(makeContext(), { ownTokenBanner: banner });

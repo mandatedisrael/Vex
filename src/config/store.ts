@@ -77,6 +77,7 @@ export interface VexConfig {
     relayApiUrl: string;
     dexScreenerApiUrl: string;
     virtualsApiUrl: string;
+    pendleApiUrl: string;
     kyberswapAggregatorUrl: string;
     kyberswapTokenApiUrl: string;
     kyberswapLimitOrderUrl: string;
@@ -136,6 +137,7 @@ export function getDefaultConfig(): VexConfig {
       relayApiUrl: "https://api.relay.link",
       dexScreenerApiUrl: "https://api.dexscreener.com",
       virtualsApiUrl: "https://api.virtuals.io",
+      pendleApiUrl: "https://api-v2.pendle.finance/core",
       kyberswapAggregatorUrl: "https://aggregator-api.kyberswap.com",
       kyberswapTokenApiUrl: "https://token-api.kyberswap.com",
       kyberswapLimitOrderUrl: "https://limit-order.kyberswap.com",

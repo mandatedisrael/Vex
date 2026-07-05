@@ -37,6 +37,8 @@ import { DEXSCREENER_TOOLS } from "./dexscreener/manifest.js";
 import { DEXSCREENER_HANDLERS } from "./dexscreener/handlers.js";
 import { VIRTUALS_TOOLS } from "./virtuals/manifest.js";
 import { VIRTUALS_HANDLERS } from "./virtuals/handlers.js";
+import { PENDLE_TOOLS } from "./pendle/manifest.js";
+import { PENDLE_HANDLERS } from "./pendle/handlers.js";
 import { POLYMARKET_TOOLS } from "./polymarket/manifest.js";
 import { POLYMARKET_HANDLERS } from "./polymarket/handlers.js";
 
@@ -51,6 +53,7 @@ export const PROTOCOL_NAMESPACE_ALLOWLIST: readonly ProtocolNamespace[] = [
   "polymarket",
   "dexscreener",
   "virtuals",
+  "pendle",
 ] as const;
 
 export const PROTOCOL_ADVERTISED_NAMESPACE_ALLOWLIST: readonly ProtocolNamespace[] =
@@ -84,6 +87,7 @@ export const NAMESPACE_MODULES: readonly NamespaceModule[] = [
   { namespace: "dexscreener", manifests: DEXSCREENER_TOOLS, handlers: DEXSCREENER_HANDLERS },
   { namespace: "virtuals", manifests: VIRTUALS_TOOLS, handlers: VIRTUALS_HANDLERS },
   { namespace: "polymarket", manifests: POLYMARKET_TOOLS, handlers: POLYMARKET_HANDLERS },
+  { namespace: "pendle", manifests: PENDLE_TOOLS, handlers: PENDLE_HANDLERS },
 ];
 
 // ── Indices (built eagerly at module load) ───────────────────────
@@ -183,6 +187,7 @@ export const NAMESPACE_DEFAULTS: Record<ProtocolNamespace, NamespaceDefault> = {
   kyberswap: "mixed_trading",
   uniswap: "mixed_trading",
   polymarket: "mixed_trading",
+  pendle: "mixed_trading",
   khalani: "bridge",
   relay: "bridge",
   dexscreener: "non_portfolio",

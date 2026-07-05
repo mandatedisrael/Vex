@@ -139,8 +139,39 @@ export interface BridgeMatchInput {
   readonly filler: string;
 }
 
-/** Discriminated on `kind` — a swap identity can never collide with a bridge. */
-export type PrequoteMatchInput = SwapMatchInput | BridgeMatchInput;
+/**
+ * Pendle PT redeem trade identity (Wave 5). A matured-PT redemption is NEITHER a
+ * swap nor a bridge — it has no slippage/route surface and its risk leg is the
+ * PT+YT pair, not a token-in/token-out pair. Computed IDENTICALLY at the Pendle
+ * QUOTE record-time (`pendle.pt.quote`, when Convert returns action `redeem-py`)
+ * and the Pendle redeem EXECUTE gate-time (`pendle.pt.redeem`) — both resolve the
+ * YT from the PT through the SAME market lookup, so the digests collide. Never
+ * reuses the Khalani/Relay bridge identity (Codex G2#3).
+ *
+ * Material (FIXED order): ["redeem", sessionId, provider, chainId, wallet,
+ * ptAddress, ytAddress, amount, receiver]. Addresses are EVM (lowercase);
+ * `amount` is the human decimal via `canonAmount`.
+ */
+export interface RedeemMatchInput {
+  readonly kind: "redeem";
+  readonly sessionId: string;
+  /** VENUE binding — "pendle". A redeem quote can never authorize another venue. */
+  readonly provider: string;
+  readonly chainId: number;
+  /** Selected EVM wallet (signer). */
+  readonly walletAddress: string;
+  /** PT being redeemed. */
+  readonly ptAddress: string;
+  /** YT resolved from the PT's market (record + gate resolve it identically). */
+  readonly ytAddress: string;
+  /** Human decimal amount of PT to redeem. */
+  readonly amount: string;
+  /** Where the redeemed asset lands (defaults to the selected wallet). */
+  readonly receiver: string;
+}
+
+/** Discriminated on `kind` — swap / bridge / redeem identities never collide. */
+export type PrequoteMatchInput = SwapMatchInput | BridgeMatchInput | RedeemMatchInput;
 
 /** Canonical bridge trade direction; mirrors `parseTradeType` in khalani/request. */
 export type BridgeTradeType = "EXACT_INPUT" | "EXACT_OUTPUT";
@@ -218,8 +249,29 @@ export function computePrequoteMatchHash(input: PrequoteMatchInput): string {
   const material =
     input.kind === "swap"
       ? swapHashMaterial(input)
-      : bridgeHashMaterial(input);
+      : input.kind === "bridge"
+        ? bridgeHashMaterial(input)
+        : redeemHashMaterial(input);
   return createHash("sha256").update(material).digest("hex");
+}
+
+/**
+ * Pendle redeem material (Wave 5, FIXED order). Venue `provider` is bound so a
+ * redeem quote can never authorize a non-Pendle execute. PT/YT/receiver/wallet
+ * are EVM addresses (lowercased); `amount` via `canonAmount`.
+ */
+function redeemHashMaterial(input: RedeemMatchInput): string {
+  return [
+    input.kind,
+    input.sessionId,
+    input.provider.trim().toLowerCase(),
+    String(input.chainId),
+    canonAddress("eip155", input.walletAddress),
+    canonAddress("eip155", input.ptAddress),
+    canonAddress("eip155", input.ytAddress),
+    canonAmount(input.amount),
+    canonAddress("eip155", input.receiver),
+  ].join(" ");
 }
 
 function swapHashMaterial(input: SwapMatchInput): string {

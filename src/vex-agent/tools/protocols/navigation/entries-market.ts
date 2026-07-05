@@ -136,6 +136,45 @@ export const MARKET_PROTOCOL_NAVIGATION: readonly ProtocolNamespaceNavigation[] 
     ],
   },
   {
+    namespace: "pendle",
+    advertised: true,
+    groupId: "evm-trading",
+    groupLabel: "EVM Trading",
+    summary:
+      "Pendle fixed-yield on Ethereum — principal tokens (PT) that lock a fixed rate until an expiry date. Discover markets, value positions, and buy / sell / redeem PT through the pinned Pendle Router.",
+    whenToUse:
+      "Use when the user wants a FIXED yield on Ethereum: find PT markets by liquidity or implied APY, value their PT holdings, buy a PT to lock a rate, sell a PT early (market-priced), or redeem a matured PT (~1:1). Preview with pendle.pt.quote before any trade.",
+    preferInstead:
+      "Use `kyberswap`/`uniswap` for ordinary spot swaps; Pendle is specifically for term-locked fixed yield. Points programs are NOT a guaranteed yield.",
+    exampleQueries: [
+      'discover_tools(query="pendle fixed yield", namespace="pendle")',
+      'discover_tools(query="buy PT lock a rate", namespace="pendle")',
+      'discover_tools(query="redeem matured pendle", namespace="pendle")',
+    ],
+    aliases: ["pendle", "fixed yield", "principal token", "PT", "fixed rate"],
+    discoveryHints: ["pendle fixed yield", "buy PT", "sell PT early", "redeem matured PT", "implied apy"],
+    facets: [
+      {
+        label: "Fixed-yield markets",
+        summary: "Browse active Pendle PT markets ranked by liquidity or implied APY.",
+        toolPrefixes: ["pendle.yields"],
+        hints: ["fixed yield markets", "implied apy", "pendle liquidity", "PT maturities"],
+      },
+      {
+        label: "PT trading",
+        summary: "Quote, buy, early-exit sell, or redeem a Pendle principal token.",
+        toolPrefixes: ["pendle.pt"],
+        hints: ["quote PT", "buy PT", "sell PT early", "redeem matured PT", "lock fixed yield"],
+      },
+      {
+        label: "Positions",
+        summary: "Value open PT positions and see which are redeemable.",
+        toolPrefixes: ["pendle.position"],
+        hints: ["pendle positions", "PT holdings value", "redeemable PT"],
+      },
+    ],
+  },
+  {
     namespace: "solana",
     advertised: true,
     groupId: "solana",

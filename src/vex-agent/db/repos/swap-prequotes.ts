@@ -28,7 +28,7 @@ import { execute, queryOne } from "../client.js";
 import { jsonb } from "../params.js";
 
 export type PrequoteFamily = "eip155" | "solana";
-export type PrequoteKind = "swap" | "bridge";
+export type PrequoteKind = "swap" | "bridge" | "redeem";
 export type SafetyVerdict = "pass" | "fail" | "unknown";
 
 export interface SwapPrequote {

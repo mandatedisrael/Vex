@@ -74,6 +74,13 @@ const entries: [string, MutationContract][] = [
   ["uniswap.swap.sell",      { role: "pnl_spot", capture: "full", expectedType: "swap",       previewSupport: true,  fanOut: "single", requiredFields: PNL_SPOT_FIELDS, valuationExpected: "none" }],
   ["uniswap.swap.buy",       { role: "pnl_spot", capture: "full", expectedType: "swap",       previewSupport: true,  fanOut: "single", requiredFields: PNL_SPOT_FIELDS, valuationExpected: "none" }],
 
+  // Pendle fixed-yield PT (Ethereum v1). All three capture as spot swaps: buy
+  // opens a PT lot, sell (early exit) + redeem (matured, ~face) close it. The
+  // handler emits exact USD from Pendle prices (valuationSource "pendle").
+  ["pendle.pt.buy",          { role: "pnl_spot", capture: "full", expectedType: "swap",       previewSupport: true,  fanOut: "single", requiredFields: PNL_SPOT_FIELDS, valuationExpected: "exact" }],
+  ["pendle.pt.sell",         { role: "pnl_spot", capture: "full", expectedType: "swap",       previewSupport: true,  fanOut: "single", requiredFields: PNL_SPOT_FIELDS, valuationExpected: "exact" }],
+  ["pendle.pt.redeem",       { role: "pnl_spot", capture: "full", expectedType: "swap",       previewSupport: true,  fanOut: "single", requiredFields: PNL_SPOT_FIELDS, valuationExpected: "exact" }],
+
   // ── pnl_prediction ────────────────────────────────────────
   // Solana predictions — single positionPubkey per buy/sell/claim
   ["solana.predict.buy",     { role: "pnl_prediction", capture: "full", expectedType: "prediction", previewSupport: false, fanOut: "single", requiredFields: PNL_PREDICTION_FIELDS, valuationExpected: "exact", requiredMetaFields: ["contracts"] }],

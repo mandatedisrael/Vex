@@ -33,7 +33,8 @@ import { computePrequoteMatchHash } from "./identity/hash.js";
 import type { BridgeMatchInput } from "./identity/hash.js";
 import { buildBridgeIdentity } from "./identity/bridge.js";
 import { buildRelayBridgeIdentity, isValidRelayQuoteShape } from "./identity/relay-bridge.js";
-import { extractQuote } from "./safety/extract.js";
+import { buildPendleRedeemIdentity } from "./identity/pendle-redeem.js";
+import { extractQuote, extractPendleQuote } from "./safety/extract.js";
 import { canonSlippageBps, readParamSlippageBps } from "./slippage.js";
 
 // ── Recorder ──────────────────────────────────────────────────────────────
@@ -94,7 +95,119 @@ export async function recordPrequoteFromQuote(
     await recordBridgePrequote(toolId, sessionId, registered.provider, params, resultData, context);
     return;
   }
+  if (registered.kind === "pendle") {
+    await recordPendlePrequote(toolId, sessionId, registered, params, resultData, context);
+    return;
+  }
   await recordSwapPrequote(toolId, sessionId, registered, params, resultData, context);
+}
+
+/**
+ * Record a Pendle prequote (Wave 5). The single `pendle.pt.quote` tool records
+ * EITHER a `swap` prequote (buy / early-exit sell — Convert action `swap`) OR a
+ * `redeem` prequote (matured PT — Convert action `redeem-py`), decided from the
+ * echoed `action`. A redeem uses the dedicated redeem identity (never the swap or
+ * bridge one). Best-effort: a wallet-scope / identity throw is a bounded skip.
+ */
+async function recordPendlePrequote(
+  toolId: string,
+  sessionId: string,
+  registered: { readonly family: PrequoteFamily; readonly provider: string },
+  params: Record<string, unknown>,
+  resultData: Record<string, unknown>,
+  context: ProtocolExecutionContext,
+): Promise<void> {
+  let walletAddress: string;
+  try {
+    walletAddress = resolveSelectedAddress(
+      context.walletResolution,
+      context.walletPolicy,
+      familyToChainFamily(registered.family),
+    );
+  } catch (err) {
+    const reason = err instanceof VexError ? err.code : "wallet_unresolved";
+    logger.warn("protocol.prequote.skipped", { toolId, reason });
+    return;
+  }
+
+  const extracted = extractPendleQuote(params, resultData);
+  if (!extracted) {
+    logger.warn("protocol.prequote.skipped", { toolId, reason: "shape_invalid" });
+    return;
+  }
+  const expiresAt = new Date(Date.now() + PREQUOTE_MAX_AGE_MS).toISOString();
+
+  // Redeem path — dedicated identity (provider/wallet/chainId/pt/yt/amount/receiver).
+  if (extracted.action === "redeem") {
+    let identity;
+    try {
+      identity = await buildPendleRedeemIdentity(sessionId, params, context);
+    } catch (err) {
+      const reason = err instanceof VexError ? err.code : "pendle_redeem_identity_failed";
+      logger.warn("protocol.prequote.skipped", { toolId, reason });
+      return;
+    }
+    const input: CreatePrequoteInput = {
+      prequoteId: `prequote-${randomUUID()}`,
+      sessionId,
+      matchHash: computePrequoteMatchHash(identity),
+      kind: "redeem",
+      family: registered.family,
+      provider: registered.provider,
+      chainId: identity.chainId,
+      walletAddress: identity.walletAddress,
+      tokenIn: identity.ptAddress,
+      tokenOut: extracted.tokenOut,
+      amount: identity.amount,
+      slippageBps: extracted.slippageBps,
+      safetyVerdict: extracted.verdict,
+      safetyDetail: extracted.safetyDetail,
+      routeRef: null,
+      expiresAt,
+    };
+    if (await writePrequoteRow(toolId, input)) {
+      logger.info("protocol.prequote.recorded", { toolId, family: registered.family, verdict: extracted.verdict });
+    }
+    return;
+  }
+
+  // Swap path (buy / early-exit sell) — same money/safety leg as the other swaps:
+  // recipient defaults to self, approveExact false, slippage from the quote params.
+  const matchHash = computePrequoteMatchHash({
+    kind: "swap",
+    sessionId,
+    family: registered.family,
+    provider: registered.provider,
+    chainId: extracted.chainId,
+    walletAddress,
+    tokenIn: extracted.tokenIn,
+    tokenOut: extracted.tokenOut,
+    amount: extracted.amount,
+    recipient: walletAddress,
+    approveExact: false,
+    slippageBps: canonSlippageBps(readParamSlippageBps(params)),
+  });
+  const input: CreatePrequoteInput = {
+    prequoteId: `prequote-${randomUUID()}`,
+    sessionId,
+    matchHash,
+    kind: "swap",
+    family: registered.family,
+    provider: registered.provider,
+    chainId: extracted.chainId,
+    walletAddress,
+    tokenIn: extracted.tokenIn,
+    tokenOut: extracted.tokenOut,
+    amount: extracted.amount,
+    slippageBps: extracted.slippageBps,
+    safetyVerdict: extracted.verdict,
+    safetyDetail: extracted.safetyDetail,
+    routeRef: null,
+    expiresAt,
+  };
+  if (await writePrequoteRow(toolId, input)) {
+    logger.info("protocol.prequote.recorded", { toolId, family: registered.family, verdict: extracted.verdict });
+  }
 }
 
 async function recordSwapPrequote(

@@ -1,0 +1,76 @@
+/**
+ * Pendle PT redeem identity builder (Wave 5, LOCKED G2#3).
+ *
+ * Pendle redeem gets its OWN identity path — it does NOT reuse the Khalani/Relay
+ * bridge builder. The Pendle QUOTE recorder (`pendle.pt.quote`, when Convert
+ * returns action `redeem-py`) and the redeem EXECUTE gate (`pendle.pt.redeem`)
+ * both build an IDENTICAL redeem identity from the same PT/amount/receiver, with
+ * `provider: "pendle"` bound in, so their match-hashes collide. The YT is
+ * resolved from the PT through the SAME market lookup on both sides, so neither
+ * side reimplements the mapping.
+ *
+ * Material = { provider, wallet, chainId, ptAddress, ytAddress, amount, receiver }.
+ * Any throw (missing field, unresolved YT, wallet-scope) propagates: the recorder
+ * treats it as a skip, the gate as a fail-closed BLOCK.
+ */
+
+import { getAddress } from "viem";
+
+import { resolveSelectedAddress } from "@vex-agent/tools/internal/wallet/resolve.js";
+import { PENDLE_CHAIN_ID } from "@tools/pendle/constants.js";
+import { resolveYtForPt } from "../../pendle/market-lookup.js";
+
+import { VexError, ErrorCodes } from "../../../../../errors.js";
+import type { ProtocolExecutionContext } from "../../types.js";
+import type { RedeemMatchInput } from "./hash.js";
+
+function pStr(params: Record<string, unknown>, key: string): string {
+  const v = params[key];
+  return typeof v === "string" ? v.trim() : "";
+}
+
+/**
+ * Build the canonical Pendle redeem identity from (untrusted) params + context.
+ * The PT is read from `ptAddress` (recorder) or `tokenIn` (execute gate); the
+ * amount from `amount` or `amountIn`. The receiver is ALWAYS the selected EVM
+ * wallet — no `recipient` param exists on any Pendle manifest (Codex cleanup),
+ * and the calldata intent binding asserts receiver == wallet before signing.
+ * YT is resolved from the PT via the active-market lookup.
+ */
+export async function buildPendleRedeemIdentity(
+  sessionId: string,
+  params: Record<string, unknown>,
+  context: ProtocolExecutionContext,
+): Promise<RedeemMatchInput> {
+  const ptRaw = pStr(params, "ptAddress") || pStr(params, "tokenIn");
+  const amount = pStr(params, "amount") || pStr(params, "amountIn");
+  if (!ptRaw || !amount) {
+    throw new VexError(ErrorCodes.AGENT_VALIDATION_ERROR, "Pendle redeem identity missing PT/amount.");
+  }
+
+  let ptAddress: string;
+  try {
+    ptAddress = getAddress(ptRaw);
+  } catch {
+    throw new VexError(ErrorCodes.PENDLE_TOKEN_NOT_FOUND, "Pendle redeem PT is not a valid address.");
+  }
+
+  const yt = await resolveYtForPt(ptAddress);
+  if (!yt) {
+    throw new VexError(ErrorCodes.PENDLE_MARKET_NOT_FOUND, "No active Pendle market for this PT.");
+  }
+
+  const wallet = resolveSelectedAddress(context.walletResolution, context.walletPolicy, "eip155");
+
+  return {
+    kind: "redeem",
+    sessionId,
+    provider: "pendle",
+    chainId: PENDLE_CHAIN_ID,
+    walletAddress: wallet,
+    ptAddress,
+    ytAddress: yt,
+    amount,
+    receiver: wallet,
+  };
+}

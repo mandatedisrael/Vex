@@ -25,7 +25,12 @@ import type { PrequoteFamily } from "@vex-agent/db/repos/swap-prequotes.js";
  */
 type PrequoteQuoteRegistration =
   | { readonly kind: "swap"; readonly family: PrequoteFamily; readonly provider: string }
-  | { readonly kind: "bridge"; readonly provider: string };
+  | { readonly kind: "bridge"; readonly provider: string }
+  // Pendle's single quote tool records EITHER a `swap` prequote (buy / early-exit
+  // sell) OR a `redeem` prequote — decided at record-time from the Convert
+  // `action` (Wave 5). The recorder dispatches on this `pendle` label, then
+  // writes the appropriate DB kind. `family` is always eip155 (Ethereum v1).
+  | { readonly kind: "pendle"; readonly family: PrequoteFamily; readonly provider: string };
 
 export const PREQUOTE_QUOTE_TOOLS: Record<string, PrequoteQuoteRegistration> = {
   "kyberswap.swap.quote": { kind: "swap", family: "eip155", provider: "kyberswap" },
@@ -33,6 +38,7 @@ export const PREQUOTE_QUOTE_TOOLS: Record<string, PrequoteQuoteRegistration> = {
   "solana.swap.quote": { kind: "swap", family: "solana", provider: "jupiter" },
   "khalani.quote.get": { kind: "bridge", provider: "khalani" },
   "relay.quote.get": { kind: "bridge", provider: "relay" },
+  "pendle.pt.quote": { kind: "pendle", family: "eip155", provider: "pendle" },
 };
 
 /**
@@ -56,7 +62,10 @@ export const PREQUOTE_MAX_AGE_MS = 15 * 60_000;
  */
 export type ExecuteGateRegistration =
   | { readonly kind: "swap"; readonly family: PrequoteFamily; readonly provider: string }
-  | { readonly kind: "bridge"; readonly provider: string };
+  | { readonly kind: "bridge"; readonly provider: string }
+  // Pendle PT redeem — its OWN kind, matched against a `redeem` prequote via the
+  // dedicated redeem identity (Wave 5, G2#3). `family` is always eip155.
+  | { readonly kind: "redeem"; readonly family: PrequoteFamily; readonly provider: string };
 
 export const EXECUTE_GATE_TOOLS: Record<string, ExecuteGateRegistration> = {
   "kyberswap.swap.sell": { kind: "swap", family: "eip155", provider: "kyberswap" },
@@ -66,4 +75,9 @@ export const EXECUTE_GATE_TOOLS: Record<string, ExecuteGateRegistration> = {
   "solana.swap.execute": { kind: "swap", family: "solana", provider: "jupiter" },
   "khalani.bridge": { kind: "bridge", provider: "khalani" },
   "relay.bridge": { kind: "bridge", provider: "relay" },
+  // Pendle PT buy / early-exit sell match a fresh `swap` prequote (provider
+  // "pendle"); redeem matches a fresh `redeem` prequote (dedicated identity).
+  "pendle.pt.buy": { kind: "swap", family: "eip155", provider: "pendle" },
+  "pendle.pt.sell": { kind: "swap", family: "eip155", provider: "pendle" },
+  "pendle.pt.redeem": { kind: "redeem", family: "eip155", provider: "pendle" },
 };

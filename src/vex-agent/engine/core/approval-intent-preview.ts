@@ -121,6 +121,14 @@ export interface IntentPreviewExtras {
    * channel (NOT raw args), so it is unspoofable. Omitted when there is no FoT.
    */
   fotTax?: number;
+  /**
+   * Pendle term-lock (Wave 5) — the maturity of a PT being bought. Sourced ONLY
+   * from the matched prequote's persisted `safetyDetail` (NOT raw args), so the
+   * LLM cannot inject or override it (`termLock` is deliberately NOT in
+   * PREVIEW_KEY_ALLOWLIST). `buildIntentPreview` renders the FIXED lock warning
+   * from `maturityIso` into `criticalArgs.termLock`. Omitted when not a PT buy.
+   */
+  termLock?: { maturityIso: string };
 }
 
 /** Render a swap safety verdict for the approval preview's `criticalArgs.safety`. */
@@ -201,6 +209,18 @@ export function buildIntentPreview(
     // be present for an FoT to exist (it rides the same matched prequote).
     if (extras.fotTax !== undefined && Number.isFinite(extras.fotTax)) {
       criticalArgs.safety = `${criticalArgs.safety} — fee-on-transfer ${extras.fotTax}%`;
+    }
+  }
+
+  // Wave 5 (Pendle): render the FIXED term-lock warning from the typed
+  // `extras.termLock.maturityIso` (never from raw args — `termLock` is NOT in
+  // PREVIEW_KEY_ALLOWLIST). The date is taken from OUR parse of the maturity, so
+  // the message is unspoofable by construction.
+  if (extras?.termLock !== undefined) {
+    const ms = Date.parse(extras.termLock.maturityIso);
+    if (Number.isFinite(ms)) {
+      const date = new Date(ms).toISOString().slice(0, 10);
+      criticalArgs.termLock = `Funds locked until ${date}; early exit trades at market price and may realize a loss.`;
     }
   }
 

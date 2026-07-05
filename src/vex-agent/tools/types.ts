@@ -218,7 +218,18 @@ export interface ToolResult {
    * channel (never raw args) for the preview to disclose. Bounded number,
    * EVM-only, omitted when there is no fee-on-transfer leg.
    */
-  prequote?: { readonly verdict: SafetyVerdict; readonly fotTax?: number };
+  prequote?: {
+    readonly verdict: SafetyVerdict;
+    readonly fotTax?: number;
+    /**
+     * Pendle term-lock (Wave 5) — the maturity date of a PT being bought. Sourced
+     * from the matched prequote's persisted `safetyDetail` (NOT raw args), it
+     * rides this typed channel into `buildIntentPreview`, which renders the FIXED
+     * "funds locked until <date>" warning so a restricted human sees the lock
+     * before approving. Unspoofable by construction (never read from args).
+     */
+    readonly termLock?: { readonly maturityIso: string };
+  };
 }
 
 /**

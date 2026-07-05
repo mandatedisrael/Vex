@@ -201,19 +201,21 @@ export async function executeProtocolTool(
   // See `evaluatePrequoteGateDecision` (./runtime/gates.ts).
   let prequoteVerdict: SafetyVerdict | undefined;
   let prequoteFotTax: number | undefined;
+  let prequoteTermLock: { readonly maturityIso: string } | undefined;
   const prequoteDecision = await evaluatePrequoteGateDecision(request.toolId, params, scopedContext);
   if (prequoteDecision.kind === "block") {
     return withActionKind({ success: false, output: prequoteDecision.message }, effectiveActionKind);
   }
   prequoteVerdict = prequoteDecision.verdict;
   prequoteFotTax = prequoteDecision.fotTax;
+  prequoteTermLock = prequoteDecision.termLock;
 
   // Approval gate — mutating tools require approval under restricted permission.
   // Preview (dryRun) is read-only simulation — skip approval. The pending
   // result (with the typed `prequote` carry) is built in
   // `evaluateApprovalGate` (./runtime/gates.ts).
   const pendingApproval = evaluateApprovalGate(
-    manifest, request, params, context, prequoteVerdict, prequoteFotTax,
+    manifest, request, params, context, prequoteVerdict, prequoteFotTax, prequoteTermLock,
   );
   if (pendingApproval) {
     return withActionKind(pendingApproval, effectiveActionKind);
