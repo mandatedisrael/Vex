@@ -1,9 +1,12 @@
 import { createWalletClient, http } from "viem";
-import type { Hex } from "viem";
+import type { Account, Chain, Hex, Transport, WalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { loadConfig } from "../../config/store.js";
 
-export function getSigningClient(privateKey: Hex) {
+// Explicit return annotation (mirroring kyberswap/evm/config.ts): viem's
+// inferred client type references internal action modules and is not
+// portable across declaration emit (TS2742).
+export function getSigningClient(privateKey: Hex): WalletClient<Transport, Chain, Account> {
   const cfg = loadConfig();
   const account = privateKeyToAccount(privateKey);
   return createWalletClient({
@@ -15,5 +18,5 @@ export function getSigningClient(privateKey: Hex) {
       rpcUrls: { default: { http: [cfg.chain.rpcUrl] } },
     },
     transport: http(cfg.chain.rpcUrl, { timeout: 30_000, retryCount: 2 }),
-  });
+  }) as WalletClient<Transport, Chain, Account>;
 }

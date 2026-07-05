@@ -3,8 +3,8 @@
  * tool-embeddings:health — quick sanity check for the tool_embeddings table.
  *
  * Loads env, checks that tool_embeddings is populated and consistent with the
- * current embedding config (model + dim + active tool count). Exits 0 on pass,
- * non-zero on failure.
+ * current embedding generation (provider-reported model + returned dim + active
+ * tool count). Exits 0 on pass, non-zero on failure.
  *
  * Usage: pnpm tool-embeddings:health
  */
