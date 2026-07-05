@@ -20,6 +20,8 @@ import type { WalletResolution } from "@tools/wallet/multi-auth.js";
 export type ProtocolNamespace =
   | "khalani"
   | "kyberswap"
+  | "uniswap"
+  | "relay"
   | "solana"
   | "polymarket"
   | "dexscreener";

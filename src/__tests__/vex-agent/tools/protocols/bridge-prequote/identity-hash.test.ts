@@ -180,6 +180,7 @@ describe("computePrequoteMatchHash — bridge identity", () => {
   const bridgeBase = {
     kind: "bridge" as const,
     sessionId: SESSION_ID,
+    provider: "khalani",
     sourceFamily: "eip155" as const,
     destFamily: "solana" as const,
     fromChainId: 8453,
@@ -210,6 +211,7 @@ describe("computePrequoteMatchHash — bridge identity", () => {
       kind: "swap",
       sessionId: SESSION_ID,
       family: "eip155",
+      provider: "kyberswap",
       chainId: 8453,
       walletAddress: "0xEVMWALLET",
       tokenIn: EVM_TOKEN,

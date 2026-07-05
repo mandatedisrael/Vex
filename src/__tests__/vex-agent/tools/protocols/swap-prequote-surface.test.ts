@@ -81,7 +81,7 @@ describe("swap-prequote façade surface", () => {
       family: "eip155",
       provider: "kyberswap",
     });
-    expect(facade.EXECUTE_GATE_TOOLS["khalani.bridge"]).toEqual({ kind: "bridge" });
+    expect(facade.EXECUTE_GATE_TOOLS["khalani.bridge"]).toEqual({ kind: "bridge", provider: "khalani" });
     expect(facade.PREQUOTE_MAX_AGE_MS).toBe(15 * 60_000);
   });
 

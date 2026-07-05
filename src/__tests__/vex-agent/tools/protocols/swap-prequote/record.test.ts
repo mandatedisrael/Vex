@@ -200,6 +200,7 @@ describe("recordPrequoteFromQuote", () => {
         kind: "swap",
         sessionId: SESSION_ID,
         family: "eip155",
+        provider: "kyberswap",
         chainId: 8453,
         walletAddress: evmWallet,
         tokenIn: EVM_TOKEN_IN,

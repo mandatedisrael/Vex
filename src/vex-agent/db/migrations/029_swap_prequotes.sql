@@ -42,7 +42,7 @@
 --   sha256_hex(join(' ', [
 --     'swap', session_id, family, chainIdOrEmpty, wallet_address_canon,
 --     token_in_canon, token_out_canon, amount_canon,
---     recipient_canon, approveExact, slippage_bps
+--     recipient_canon, approveExact, slippage_bps, provider
 --   ]))
 --   - EVM addresses + EVM wallet address are lowercased; Solana mints + wallet
 --     address are preserved as-is (base58 is case-sensitive).
@@ -52,10 +52,15 @@
 --     omitted, matching the executor) — a redirected output diverges → block.
 --   - approveExact: stable "1"/"0" allowance token — flipping it diverges → block.
 --   - slippage_bps: integer string (or "" when omitted). Slippage IS now bound:
---     a 50bps quote then a 10000bps execute diverges → block. `provider` is the
---     ONLY field deliberately EXCLUDED from the hash (it derives from `family`).
+--     a 50bps quote then a 10000bps execute diverges → block.
+--   - provider: the quoting VENUE ("kyberswap" | "uniswap" | "jupiter"), bound as
+--     the LAST hash field (LOCKED Wave-2 #4). On EVM it does NOT derive from
+--     `family` (kyberswap and uniswap are both eip155), so binding it stops a
+--     kyberswap quote from authorizing a uniswap execute for the same identity.
+--     The `provider` COLUMN below is stored for auditing; the hash binds it too.
 --   (The bridge `kind` binds its own fixed tail — source/dest wallets, tokens,
---   tradeType, refundTo, referrer, referrerFeeBps, filler — see swap-prequote.ts.)
+--   tradeType, refundTo, referrer, referrerFeeBps, filler, provider — see
+--   swap-prequote.ts.)
 --
 -- Data-exposure invariant: `safety_detail` and `route_ref` carry ONLY bounded,
 -- structural fields (per-leg verdicts + audited booleans/numbers, or a bounded

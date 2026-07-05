@@ -32,6 +32,7 @@ import { PREQUOTE_QUOTE_TOOLS, PREQUOTE_MAX_AGE_MS } from "./registry.js";
 import { computePrequoteMatchHash } from "./identity/hash.js";
 import type { BridgeMatchInput } from "./identity/hash.js";
 import { buildBridgeIdentity } from "./identity/bridge.js";
+import { buildRelayBridgeIdentity, isValidRelayQuoteShape } from "./identity/relay-bridge.js";
 import { extractQuote } from "./safety/extract.js";
 import { canonSlippageBps, readParamSlippageBps } from "./slippage.js";
 
@@ -90,7 +91,7 @@ export async function recordPrequoteFromQuote(
   }
 
   if (registered.kind === "bridge") {
-    await recordBridgePrequote(toolId, sessionId, registered.provider, params, context);
+    await recordBridgePrequote(toolId, sessionId, registered.provider, params, resultData, context);
     return;
   }
   await recordSwapPrequote(toolId, sessionId, registered, params, resultData, context);
@@ -137,6 +138,8 @@ async function recordSwapPrequote(
     kind: "swap",
     sessionId,
     family: registered.family,
+    // Venue binding (LOCKED #4) — the quoting provider is part of the identity.
+    provider: registered.provider,
     chainId: extracted.chainId,
     walletAddress,
     tokenIn: extracted.tokenIn,
@@ -197,11 +200,24 @@ async function recordBridgePrequote(
   sessionId: string,
   provider: string,
   params: Record<string, unknown>,
+  resultData: Record<string, unknown>,
   context: ProtocolExecutionContext,
 ): Promise<void> {
+  // Relay gets its OWN extraction (LOCKED #5): validate the quote's step shape
+  // (transaction steps only, chainIds ∈ {origin, destination}) BEFORE recording,
+  // so a malformed quote never seeds the gate. Khalani route availability is
+  // proven by its own quote validation upstream.
+  if (provider === "relay" && !isValidRelayQuoteShape(resultData)) {
+    logger.warn("protocol.prequote.skipped", { toolId, reason: "relay_shape_invalid" });
+    return;
+  }
+
   let identity: BridgeMatchInput;
   try {
-    identity = await buildBridgeIdentity(sessionId, params, context);
+    identity =
+      provider === "relay"
+        ? await buildRelayBridgeIdentity(sessionId, params, context)
+        : await buildBridgeIdentity(sessionId, params, context);
   } catch (err) {
     const reason = err instanceof VexError ? err.code : "bridge_identity_failed";
     logger.warn("protocol.prequote.skipped", { toolId, reason });

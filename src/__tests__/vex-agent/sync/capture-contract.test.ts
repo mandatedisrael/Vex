@@ -46,7 +46,8 @@ describe("capture contract — structural coverage", () => {
 
   it("pnl_spot tools all have capture:full", () => {
     const spot = getToolsByRole("pnl_spot");
-    expect(spot.length).toBe(3);
+    // solana.swap.execute, kyberswap.swap.sell/buy, uniswap.swap.sell/buy (Wave 2c).
+    expect(spot.length).toBe(5);
     for (const [toolId, c] of spot) {
       expect(c.capture, `${toolId} should have capture:full`).toBe("full");
     }

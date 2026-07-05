@@ -35,8 +35,10 @@ import type {
 
 import { EXECUTE_GATE_TOOLS } from "./registry.js";
 import type { ExecuteGateRegistration } from "./registry.js";
+import { resolveUniswapChainId } from "@tools/uniswap/chains.js";
 import { computePrequoteMatchHash } from "./identity/hash.js";
 import { assertBridgeParamsBindable, buildBridgeIdentity } from "./identity/bridge.js";
+import { buildRelayBridgeIdentity } from "./identity/relay-bridge.js";
 import { GateIdentityError } from "./gate-errors.js";
 import type { GateBlockReason } from "./gate-errors.js";
 import { canonSlippageBps, readParamSlippageBps } from "./slippage.js";
@@ -226,14 +228,29 @@ function evmLegIdentity(param: string): string {
  * redirects the output or flips the allowance behavior produces a different
  * digest than the quote (which defaulted self/false) → the gate blocks.
  */
-function buildEvmIdentity(params: Record<string, unknown>, selectedWallet: string): GateIdentity {
+function buildEvmIdentity(
+  params: Record<string, unknown>,
+  selectedWallet: string,
+  provider: string,
+): GateIdentity {
   const chainParam = typeof params.chain === "string" ? params.chain : "";
   const tokenInParam = typeof params.tokenIn === "string" ? params.tokenIn : "";
   const tokenOutParam = typeof params.tokenOut === "string" ? params.tokenOut : "";
   const amount = typeof params.amountIn === "string" ? params.amountIn : "";
-  // resolveChainSlug + slugToChainId are local (no network); an unsupported
-  // chain throws a VexError → caught upstream → gate_error block (fail-closed).
-  const chainId = slugToChainId(resolveChainSlug(chainParam));
+  // De-kyber-coupled chain resolution (LOCKED #4): uniswap-on-4663 (and any
+  // uniswap chain) resolves via the uniswap registry (local + slug map, network-
+  // free); kyber resolves byte-identically via its slug map. Both throw on an
+  // unsupported chain → caught upstream → gate_error block (fail-closed).
+  let chainId: number;
+  if (provider === "uniswap") {
+    const resolved = resolveUniswapChainId(chainParam);
+    if (resolved === undefined) {
+      throw new VexError(ErrorCodes.KYBER_UNSUPPORTED_CHAIN, `Uniswap unsupported chain: ${chainParam}`);
+    }
+    chainId = resolved;
+  } else {
+    chainId = slugToChainId(resolveChainSlug(chainParam));
+  }
   const recipientParam = typeof params.recipient === "string" ? params.recipient.trim() : "";
   return {
     family: "eip155",
@@ -293,9 +310,13 @@ async function computeGateMatch(
   context: ProtocolExecutionContext,
 ): Promise<{ matchHash: string; family: PrequoteFamily }> {
   if (gated.kind === "bridge") {
-    // Fail closed FIRST on execute-only params the quote can never bind — before
-    // building the identity, so an unbindable execute is rejected even if the
-    // rest of the identity would otherwise match a recorded quote.
+    // Relay has its OWN identity path (LOCKED #4) — no Khalani identity reuse and
+    // no khalani-only unbindable params. Khalani fail-closes FIRST on execute-
+    // only params the quote can never bind, before building the identity.
+    if (gated.provider === "relay") {
+      const identity = await buildRelayBridgeIdentity(sessionId, params, context);
+      return { matchHash: computePrequoteMatchHash(identity), family: identity.sourceFamily };
+    }
     assertBridgeParamsBindable(params);
     const identity = await buildBridgeIdentity(sessionId, params, context);
     return { matchHash: computePrequoteMatchHash(identity), family: identity.sourceFamily };
@@ -311,12 +332,14 @@ async function computeGateMatch(
   );
   const identity =
     gated.family === "eip155"
-      ? buildEvmIdentity(params, walletAddress)
+      ? buildEvmIdentity(params, walletAddress, gated.provider)
       : await buildSolanaIdentity(params, walletAddress);
   const matchHash = computePrequoteMatchHash({
     kind: "swap",
     sessionId,
     family: gated.family,
+    // Venue binding (LOCKED #4) — the execute provider must equal the quote's.
+    provider: gated.provider,
     chainId: identity.chainId,
     walletAddress,
     tokenIn: identity.tokenIn,

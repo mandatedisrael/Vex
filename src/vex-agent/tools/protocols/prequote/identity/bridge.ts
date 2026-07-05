@@ -125,6 +125,8 @@ export async function buildBridgeIdentity(
   return {
     kind: "bridge",
     sessionId,
+    // Venue binding (LOCKED #4) — Khalani's own bridge identity path.
+    provider: "khalani",
     sourceFamily,
     destFamily,
     fromChainId,

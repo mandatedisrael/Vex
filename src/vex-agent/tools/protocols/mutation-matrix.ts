@@ -68,6 +68,11 @@ const entries: [string, MutationContract][] = [
   ["solana.swap.execute",    { role: "pnl_spot", capture: "full", expectedType: "swap",       previewSupport: false, fanOut: "single", requiredFields: PNL_SPOT_FIELDS, exceptions: ["neutral swap: no tradeSide when meta.stableSwap or meta.ambiguousSwap"], valuationExpected: "exact" }],
   ["kyberswap.swap.sell",    { role: "pnl_spot", capture: "full", expectedType: "swap",       previewSupport: true,  fanOut: "single", requiredFields: PNL_SPOT_FIELDS, valuationExpected: "exact" }],
   ["kyberswap.swap.buy",     { role: "pnl_spot", capture: "full", expectedType: "swap",       previewSupport: true,  fanOut: "single", requiredFields: PNL_SPOT_FIELDS, valuationExpected: "exact" }],
+  // Uniswap has no aggregator USD — honest valuationExpected "none" (the portfolio
+  // sync values holdings later via DexScreener). Token addresses are still
+  // captured so the self-learning balance sync auto-tracks acquired tokens.
+  ["uniswap.swap.sell",      { role: "pnl_spot", capture: "full", expectedType: "swap",       previewSupport: true,  fanOut: "single", requiredFields: PNL_SPOT_FIELDS, valuationExpected: "none" }],
+  ["uniswap.swap.buy",       { role: "pnl_spot", capture: "full", expectedType: "swap",       previewSupport: true,  fanOut: "single", requiredFields: PNL_SPOT_FIELDS, valuationExpected: "none" }],
 
   // ── pnl_prediction ────────────────────────────────────────
   // Solana predictions — single positionPubkey per buy/sell/claim
@@ -99,6 +104,7 @@ const entries: [string, MutationContract][] = [
 
   // ── audit (capture: full) ─────────────────────────────────
   ["khalani.bridge",           { role: "audit", capture: "full", expectedType: "bridge",       previewSupport: true,  fanOut: "single", requiredFields: AUDIT_FIELDS, valuationExpected: "none" }],
+  ["relay.bridge",             { role: "audit", capture: "full", expectedType: "bridge",       previewSupport: true,  fanOut: "single", requiredFields: AUDIT_FIELDS, valuationExpected: "none" }],
   ["solana.lend.deposit",      { role: "audit", capture: "full", expectedType: "lend",         previewSupport: false, fanOut: "single", requiredFields: AUDIT_FIELDS, valuationExpected: "none" }],
   ["solana.lend.withdraw",     { role: "audit", capture: "full", expectedType: "lend",         previewSupport: false, fanOut: "single", requiredFields: AUDIT_FIELDS, valuationExpected: "none" }],
 

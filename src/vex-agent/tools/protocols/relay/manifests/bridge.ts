@@ -1,0 +1,50 @@
+import type { ProtocolToolManifest } from "../../types.js";
+import { RELAY_BRIDGE_DISCOVERY } from "../../embeddings/relay/bridge.js";
+
+const BRIDGE_PARAMS = [
+  { key: "fromChain", type: "string" as const, required: true, description: "Source chain id or alias (e.g. base, 8453, robinhood, 4663)." },
+  { key: "fromToken", type: "string" as const, required: true, description: "Source token address, or native ETH/native." },
+  { key: "toChain", type: "string" as const, required: true, description: "Destination chain id or alias." },
+  { key: "toToken", type: "string" as const, required: true, description: "Destination token address, or native ETH/native." },
+  { key: "amount", type: "string" as const, required: true, description: "Amount in smallest units (wei)." },
+  { key: "recipient", type: "string" as const, description: "Destination recipient (default: your wallet)." },
+  { key: "refundTo", type: "string" as const, description: "Refund address (default: your wallet)." },
+  { key: "slippageBps", type: "string" as const, description: "Slippage tolerance in basis points." },
+];
+
+export const RELAY_BRIDGE_TOOLS: readonly ProtocolToolManifest[] = [
+  {
+    toolId: "relay.quote.get",
+    namespace: "relay",
+    lifecycle: "active",
+    description: "Preview a cross-chain bridge via Relay — routes, fees, ETA. The ONLY bridge to/from Robinhood Chain (Khalani doesn't cover it). Resolve token addresses first. `amount` is in smallest units (wei). Read-only.",
+    mutating: false,
+    actionKind: "read",
+    params: [
+      { key: "fromChain", type: "string", required: true, description: "Source chain id or alias (e.g. base, 8453, robinhood, 4663)." },
+      { key: "fromToken", type: "string", required: true, description: "Source token address, or native ETH/native." },
+      { key: "toChain", type: "string", required: true, description: "Destination chain id or alias." },
+      { key: "toToken", type: "string", required: true, description: "Destination token address, or native ETH/native." },
+      { key: "amount", type: "string", required: true, description: "Amount in smallest units (wei)." },
+      { key: "recipient", type: "string", description: "Destination recipient (default: your wallet)." },
+      { key: "refundTo", type: "string", description: "Refund address (default: your wallet)." },
+      { key: "slippageBps", type: "string", description: "Slippage tolerance in basis points." },
+    ],
+    exampleParams: { fromChain: "base", fromToken: "native", toChain: "robinhood", toToken: "native", amount: "1000000000000000" },
+    discovery: RELAY_BRIDGE_DISCOVERY["relay.quote.get"],
+  },
+  {
+    toolId: "relay.bridge",
+    namespace: "relay",
+    lifecycle: "active",
+    description: "Execute a REAL cross-chain bridge via Relay (signs + broadcasts on the source chain). The ONLY bridge to/from Robinhood Chain (Khalani doesn't cover it). REQUIRES a fresh matching relay.quote.get first. `amount` is in smallest units (wei).",
+    mutating: true,
+    actionKind: "user_wallet_broadcast",
+    params: [
+      ...BRIDGE_PARAMS,
+      { key: "dryRun", type: "boolean", description: "If true, fetch the route without signing." },
+    ],
+    exampleParams: { fromChain: "base", fromToken: "native", toChain: "robinhood", toToken: "native", amount: "1000000000000000" },
+    discovery: RELAY_BRIDGE_DISCOVERY["relay.bridge"],
+  },
+];

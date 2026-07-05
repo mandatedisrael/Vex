@@ -138,6 +138,59 @@ describe("bridge alias — routing + translation", () => {
   });
 });
 
+describe("bridge alias — Robinhood Chain 4663 routes to Relay, never Khalani (LOCKED #3)", () => {
+  const VIRTUAL = "0xc6911796042b15d7Fa4F6CDe69e245DdCd3d9c31";
+  const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+
+  it("toChain 'robinhood' → relay.bridge (NOT khalani), Khalani-only fields dropped", async () => {
+    await dispatchTool(
+      {
+        name: "bridge",
+        args: {
+          fromChain: "base",
+          fromToken: BASE_USDC,
+          toChain: "robinhood",
+          toToken: VIRTUAL,
+          amount: "1000000",
+          // Khalani-only knobs — must NOT reach the Relay target.
+          referrer: "0x" + "ef".repeat(20),
+          filler: "native-filler",
+          // Relay-only slippage — SHOULD pass through.
+          slippageBps: "50",
+        },
+        toolCallId: "rhb1",
+      },
+      ctx(),
+    );
+    const [req] = executeProtocolTool.mock.calls[0] as [{ toolId: string; params: Record<string, unknown> }];
+    expect(req.toolId).toBe("relay.bridge");
+    expect(req.toolId).not.toContain("khalani");
+    expect(req.params).toEqual({
+      fromChain: "base",
+      fromToken: BASE_USDC,
+      toChain: "robinhood",
+      toToken: VIRTUAL,
+      amount: "1000000",
+      slippageBps: "50",
+    });
+    expect(req.params).not.toHaveProperty("referrer");
+    expect(req.params).not.toHaveProperty("filler");
+  });
+
+  it("fromChain '4663' → relay.bridge (either side local routes to Relay)", async () => {
+    await dispatchTool(
+      {
+        name: "bridge",
+        args: { fromChain: "4663", fromToken: VIRTUAL, toChain: "base", toToken: BASE_USDC, amount: "1000000" },
+        toolCallId: "rhb2",
+      },
+      ctx(),
+    );
+    const [req] = executeProtocolTool.mock.calls[0] as [{ toolId: string }];
+    expect(req.toolId).toBe("relay.bridge");
+  });
+});
+
 describe("bridge alias — skips the internal approval gate (executeProtocolTool owns approval)", () => {
   it("restricted + unapproved STILL reaches executeProtocolTool (no dispatcher-side short-circuit)", async () => {
     await dispatchTool({ name: "bridge", args: BRIDGE_ARGS, toolCallId: "b4" }, ctx({ sessionPermission: "restricted", approved: false }));

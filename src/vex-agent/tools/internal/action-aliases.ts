@@ -30,6 +30,12 @@ import type { InternalToolContext } from "./types.js";
 import { fail } from "./types.js";
 import { executeProtocolTool } from "../protocols/runtime.js";
 import { classifySwapFamily, isEvmSwapTokenInput } from "./swap-family.js";
+import { resolveBridgeVenue } from "@tools/relay/bridge-venue.js";
+import {
+  isFallbackEligibleQuoteCategory,
+  resolveUniswapFallbackChainKey,
+} from "@tools/uniswap/venue-router.js";
+import logger from "@utils/logger.js";
 
 // ── Shared dispatch context projection ───────────────────────────────
 //
@@ -98,10 +104,10 @@ export async function handleSwapQuote(
     return executeProtocolTool({ toolId: "solana.swap.quote", params }, protocolContext(context));
   }
 
-  // EVM → KyberSwap. Tokens MUST be a contract address or native — the quote
-  // handler resolves strictly (resolveTokenMetadataStrict), so DEX symbol
-  // search is disabled to avoid wrong-contract matches (e.g. "USDC" → axlUSDC).
-  // Reject a bare symbol here with a CLEAR message before dispatch.
+  // EVM → the VENUE ROUTER's primary venue (KyberSwap where supported, Uniswap on
+  // Robinhood Chain / as an all-EVM fallback). Both quote handlers resolve tokens
+  // strictly (address-only), so DEX symbol search is disabled to avoid
+  // wrong-contract matches (e.g. "USDC" → axlUSDC). Reject a bare symbol here.
   if (!isEvmSwapTokenInput(a.tokenIn) || !isEvmSwapTokenInput(a.tokenOut)) {
     return fail(
       "swap_quote: EVM tokens must be a contract address — resolve the symbol " +
@@ -110,15 +116,56 @@ export async function handleSwapQuote(
     );
   }
 
-  // amount → amountIn (both human decimal strings).
-  const params: Record<string, unknown> = {
-    chain: family.chainSlug,
+  // amount → amountIn (both human decimal strings). Route quote to the SAME venue
+  // the `swap` execute alias uses (shared classifier), so the prequote gate's
+  // venue-bound match-hash collides between the quote and the execute.
+  const buildParams = (chain: string): Record<string, unknown> => ({
+    chain,
     tokenIn: a.tokenIn,
     tokenOut: a.tokenOut,
     amountIn: a.amount,
     ...(a.slippageBps !== undefined ? { slippageBps: a.slippageBps } : {}),
-  };
-  return executeProtocolTool({ toolId: "kyberswap.swap.quote", params }, protocolContext(context));
+  });
+
+  const primaryToolId = family.venue === "uniswap" ? "uniswap.swap.quote" : "kyberswap.swap.quote";
+  const primary = await executeProtocolTool(
+    { toolId: primaryToolId, params: buildParams(family.chain) },
+    protocolContext(context),
+  );
+
+  // Runtime Kyber→Uniswap QUOTE fallback (LOCKED Wave-2 #3). ONLY when KyberSwap
+  // was the primary venue AND its quote FAILED with a transport/API/route error
+  // AND a verified Uniswap deployment exists for the chain. A honeypot/token-
+  // safety verdict is surfaced on a SUCCESSFUL quote (never a throw), so it can
+  // never reach this branch — the fallback can never launder a safety block. The
+  // Uniswap quote records provider "uniswap", so the venue-bound prequote identity
+  // binds a later execute to Uniswap automatically (a KyberSwap execute would
+  // hash to a different identity and fail the gate). Policy (eligible categories +
+  // fallback availability) lives in the single venue-router module.
+  if (primary.success || family.venue !== "kyberswap") return primary;
+  if (!isFallbackEligibleQuoteCategory(runtimeFailureCategory(primary.output))) return primary;
+  const fallbackChain = resolveUniswapFallbackChainKey(a.chain);
+  if (fallbackChain === undefined) return primary;
+  logger.info("swap_quote.venue_fallback", {
+    fromVenue: "kyberswap",
+    toVenue: "uniswap",
+    chain: fallbackChain,
+  });
+  return executeProtocolTool(
+    { toolId: "uniswap.swap.quote", params: buildParams(fallbackChain) },
+    protocolContext(context),
+  );
+}
+
+/**
+ * Extract the coarse runtime error category the protocol runtime embeds in a
+ * THROWN handler failure's output (`"<toolId> failed (<category>): <message>"`;
+ * see protocols/runtime/errors.ts). Returns "" when the output is not a
+ * thrown-failure summary — e.g. a returned validation `fail(...)` carries no
+ * category — so a non-transport failure is never treated as fallback-eligible.
+ */
+function runtimeFailureCategory(output: string): string {
+  return /\bfailed \(([a-z_]+)\):/.exec(output)?.[1] ?? "";
 }
 
 // ── token_check — EVM honeypot / fee-on-transfer ─────────────────────
@@ -202,6 +249,7 @@ const BridgeQuoteArgs = z.object({
   referrer: z.string().min(1).optional(),
   referrerFeeBps: z.string().min(1).optional(),
   filler: z.string().min(1).optional(),
+  slippageBps: z.string().min(1).optional(),
 });
 
 export async function handleBridgeQuote(
@@ -213,6 +261,24 @@ export async function handleBridgeQuote(
     return fail(`bridge_quote: ${parsed.error.issues.map((i) => i.message).join("; ")}`);
   }
   const a = parsed.data;
+
+  // Route the quote to the SAME venue the `bridge` execute alias uses (Relay when
+  // either side is Robinhood Chain, else Khalani), so the venue-bound bridge
+  // prequote gate collides between the quote and the execute.
+  if (resolveBridgeVenue(a.fromChain, a.toChain) === "relay") {
+    const params: Record<string, unknown> = {
+      fromChain: a.fromChain,
+      fromToken: a.fromToken,
+      toChain: a.toChain,
+      toToken: a.toToken,
+      amount: a.amount,
+    };
+    if (a.tradeType !== undefined) params.tradeType = a.tradeType;
+    if (a.recipient !== undefined) params.recipient = a.recipient;
+    if (a.refundTo !== undefined) params.refundTo = a.refundTo;
+    if (a.slippageBps !== undefined) params.slippageBps = a.slippageBps;
+    return executeProtocolTool({ toolId: "relay.quote.get", params }, protocolContext(context));
+  }
 
   const params: Record<string, unknown> = {
     fromChain: a.fromChain,

@@ -29,6 +29,10 @@ import { SOLANA_JUPITER_TOOLS } from "./solana-jupiter/manifest.js";
 import { SOLANA_JUPITER_HANDLERS } from "./solana-jupiter/handlers.js";
 import { KYBERSWAP_TOOLS } from "./kyberswap/manifest.js";
 import { KYBERSWAP_HANDLERS } from "./kyberswap/handlers.js";
+import { UNISWAP_TOOLS } from "./uniswap/manifest.js";
+import { UNISWAP_HANDLERS } from "./uniswap/handlers.js";
+import { RELAY_TOOLS } from "./relay/manifest.js";
+import { RELAY_HANDLERS } from "./relay/handlers.js";
 import { DEXSCREENER_TOOLS } from "./dexscreener/manifest.js";
 import { DEXSCREENER_HANDLERS } from "./dexscreener/handlers.js";
 import { POLYMARKET_TOOLS } from "./polymarket/manifest.js";
@@ -39,6 +43,8 @@ import { POLYMARKET_HANDLERS } from "./polymarket/handlers.js";
 export const PROTOCOL_NAMESPACE_ALLOWLIST: readonly ProtocolNamespace[] = [
   "khalani",
   "kyberswap",
+  "uniswap",
+  "relay",
   "solana",
   "polymarket",
   "dexscreener",
@@ -70,6 +76,8 @@ export const NAMESPACE_MODULES: readonly NamespaceModule[] = [
   { namespace: "khalani", manifests: KHALANI_TOOLS, handlers: KHALANI_HANDLERS },
   { namespace: "solana", manifests: SOLANA_JUPITER_TOOLS, handlers: SOLANA_JUPITER_HANDLERS },
   { namespace: "kyberswap", manifests: KYBERSWAP_TOOLS, handlers: KYBERSWAP_HANDLERS },
+  { namespace: "uniswap", manifests: UNISWAP_TOOLS, handlers: UNISWAP_HANDLERS },
+  { namespace: "relay", manifests: RELAY_TOOLS, handlers: RELAY_HANDLERS },
   { namespace: "dexscreener", manifests: DEXSCREENER_TOOLS, handlers: DEXSCREENER_HANDLERS },
   { namespace: "polymarket", manifests: POLYMARKET_TOOLS, handlers: POLYMARKET_HANDLERS },
 ];
@@ -169,7 +177,9 @@ export type NamespaceDefault = "mixed_trading" | "bridge" | "non_portfolio";
 export const NAMESPACE_DEFAULTS: Record<ProtocolNamespace, NamespaceDefault> = {
   solana: "mixed_trading",
   kyberswap: "mixed_trading",
+  uniswap: "mixed_trading",
   polymarket: "mixed_trading",
   khalani: "bridge",
+  relay: "bridge",
   dexscreener: "non_portfolio",
 };

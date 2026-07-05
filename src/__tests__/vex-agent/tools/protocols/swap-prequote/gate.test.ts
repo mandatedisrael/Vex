@@ -295,6 +295,7 @@ describe("evaluateSwapPrequoteGate", () => {
         kind: "swap",
         sessionId: SESSION_ID,
         family: "eip155",
+        provider: "kyberswap",
         chainId: 8453,
         walletAddress: "0xWALLET",
         tokenIn: NATIVE_TOKEN_ADDRESS,
@@ -328,6 +329,7 @@ describe("evaluateSwapPrequoteGate", () => {
       kind: "swap",
       sessionId: SESSION_ID,
       family: "eip155",
+      provider: "kyberswap",
       chainId: 8453,
       walletAddress: "0xWALLET",
       tokenIn: GATE_TOKEN_IN,
@@ -370,6 +372,7 @@ describe("evaluateSwapPrequoteGate", () => {
       kind: "swap",
       sessionId: SESSION_ID,
       family: "solana",
+      provider: "jupiter",
       chainId: null,
       walletAddress: "0xWALLET",
       tokenIn: SOLANA_MINT_A,
@@ -381,6 +384,101 @@ describe("evaluateSwapPrequoteGate", () => {
     });
     expect(mockFindLatest.mock.calls[0]![1]).toBe(expected);
     expect(mockFindLatest.mock.calls[0]![2]).toBe("swap");
+  });
+
+  // ── Wave-2c venue binding (LOCKED #4) — cross-venue quote→execute REJECTED ──
+
+  it("VENUE: a kyberswap quote hash can never authorize a uniswap execute (same identity)", async () => {
+    // The hash a kyber QUOTE would have recorded for this exact identity.
+    const kyberHash = mod.computePrequoteMatchHash({
+      kind: "swap",
+      sessionId: SESSION_ID,
+      family: "eip155",
+      provider: "kyberswap",
+      chainId: 8453,
+      walletAddress: "0xWALLET",
+      tokenIn: GATE_TOKEN_IN,
+      tokenOut: GATE_TOKEN_OUT,
+      amount: "1",
+      recipient: "0xWALLET",
+      approveExact: false,
+      slippageBps: "",
+    });
+    // A UNISWAP execute for the SAME tokens/amount/chain/wallet looks up a
+    // DIFFERENT hash — so the kyber prequote row can never match → no_quote.
+    mockExistsFail.mockResolvedValue(false);
+    mockFindLatest.mockResolvedValue(null);
+    const d = await mod.evaluatePrequoteGate("uniswap.swap.sell", EVM_PARAMS, ctx());
+    expect(d.kind).toBe("block");
+    if (d.kind === "block") expect(d.reason).toBe("no_quote");
+    expect(mockFindLatest.mock.calls[0]![1]).not.toBe(kyberHash);
+    // And the uniswap gate hash equals the uniswap-provider hash (record-side
+    // symmetry: the uniswap quote recorder pins provider "uniswap").
+    const uniswapHash = mod.computePrequoteMatchHash({
+      kind: "swap",
+      sessionId: SESSION_ID,
+      family: "eip155",
+      provider: "uniswap",
+      chainId: 8453,
+      walletAddress: "0xWALLET",
+      tokenIn: GATE_TOKEN_IN,
+      tokenOut: GATE_TOKEN_OUT,
+      amount: "1",
+      recipient: "0xWALLET",
+      approveExact: false,
+      slippageBps: "",
+    });
+    expect(mockFindLatest.mock.calls[0]![1]).toBe(uniswapHash);
+  });
+
+  it("VENUE: uniswap execute on Robinhood Chain (4663) is gate-able (de-kyber-coupled chain resolution)", async () => {
+    // "robinhood" is NOT a KyberSwap slug — pre-2c the EVM identity builder would
+    // have thrown (gate_error). Now the uniswap provider branch resolves 4663 via
+    // the local registry and the gate computes a real identity.
+    mockExistsFail.mockResolvedValue(false);
+    mockFindLatest.mockResolvedValue(prequoteRow("pass", { provider: "uniswap", chainId: 4663 }));
+    const d = await mod.evaluatePrequoteGate(
+      "uniswap.swap.sell",
+      { ...EVM_PARAMS, chain: "robinhood" },
+      ctx(),
+    );
+    expect(d.kind).toBe("allow");
+    const expected = mod.computePrequoteMatchHash({
+      kind: "swap",
+      sessionId: SESSION_ID,
+      family: "eip155",
+      provider: "uniswap",
+      chainId: 4663,
+      walletAddress: "0xWALLET",
+      tokenIn: GATE_TOKEN_IN,
+      tokenOut: GATE_TOKEN_OUT,
+      amount: "1",
+      recipient: "0xWALLET",
+      approveExact: false,
+      slippageBps: "",
+    });
+    expect(mockFindLatest.mock.calls[0]![1]).toBe(expected);
+  });
+
+  it("VENUE: kyberswap flows are byte-identical — the kyber gate hash did not change shape", async () => {
+    mockExistsFail.mockResolvedValue(false);
+    mockFindLatest.mockResolvedValue(prequoteRow("pass"));
+    await mod.evaluateSwapPrequoteGate("kyberswap.swap.sell", EVM_PARAMS, ctx());
+    const kyberHash = mod.computePrequoteMatchHash({
+      kind: "swap",
+      sessionId: SESSION_ID,
+      family: "eip155",
+      provider: "kyberswap",
+      chainId: 8453,
+      walletAddress: "0xWALLET",
+      tokenIn: GATE_TOKEN_IN,
+      tokenOut: GATE_TOKEN_OUT,
+      amount: "1",
+      recipient: "0xWALLET",
+      approveExact: false,
+      slippageBps: "",
+    });
+    expect(mockFindLatest.mock.calls[0]![1]).toBe(kyberHash);
   });
 
   // ── R3 fail-closed ─────────────────────────────────────────────────────

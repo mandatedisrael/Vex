@@ -34,6 +34,8 @@ export type NamespaceLifecycle = "active" | "deprecated_hidden" | "reserved";
 export const NAMESPACE_LIFECYCLE: Record<ProtocolNamespace, NamespaceLifecycle> = {
   khalani: "active",
   kyberswap: "active",
+  uniswap: "active",
+  relay: "active",
   solana: "active",
   polymarket: "active",
   dexscreener: "active",

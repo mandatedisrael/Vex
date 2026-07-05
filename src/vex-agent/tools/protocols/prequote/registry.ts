@@ -29,8 +29,10 @@ type PrequoteQuoteRegistration =
 
 export const PREQUOTE_QUOTE_TOOLS: Record<string, PrequoteQuoteRegistration> = {
   "kyberswap.swap.quote": { kind: "swap", family: "eip155", provider: "kyberswap" },
+  "uniswap.swap.quote": { kind: "swap", family: "eip155", provider: "uniswap" },
   "solana.swap.quote": { kind: "swap", family: "solana", provider: "jupiter" },
   "khalani.quote.get": { kind: "bridge", provider: "khalani" },
+  "relay.quote.get": { kind: "bridge", provider: "relay" },
 };
 
 /**
@@ -53,12 +55,15 @@ export const PREQUOTE_MAX_AGE_MS = 15 * 60_000;
  * pass through untouched.
  */
 export type ExecuteGateRegistration =
-  | { readonly kind: "swap"; readonly family: PrequoteFamily }
-  | { readonly kind: "bridge" };
+  | { readonly kind: "swap"; readonly family: PrequoteFamily; readonly provider: string }
+  | { readonly kind: "bridge"; readonly provider: string };
 
 export const EXECUTE_GATE_TOOLS: Record<string, ExecuteGateRegistration> = {
-  "kyberswap.swap.sell": { kind: "swap", family: "eip155" },
-  "kyberswap.swap.buy": { kind: "swap", family: "eip155" },
-  "solana.swap.execute": { kind: "swap", family: "solana" },
-  "khalani.bridge": { kind: "bridge" },
+  "kyberswap.swap.sell": { kind: "swap", family: "eip155", provider: "kyberswap" },
+  "kyberswap.swap.buy": { kind: "swap", family: "eip155", provider: "kyberswap" },
+  "uniswap.swap.sell": { kind: "swap", family: "eip155", provider: "uniswap" },
+  "uniswap.swap.buy": { kind: "swap", family: "eip155", provider: "uniswap" },
+  "solana.swap.execute": { kind: "swap", family: "solana", provider: "jupiter" },
+  "khalani.bridge": { kind: "bridge", provider: "khalani" },
+  "relay.bridge": { kind: "bridge", provider: "relay" },
 };

@@ -1,0 +1,195 @@
+/**
+ * Uniswap execution — calldata builders (V2 Router02 / V3 SwapRouter02) + send.
+ *
+ * The builders are PURE (deterministic calldata from a resolved route), so they
+ * are unit-tested without any RPC. Native legs:
+ *   - native INPUT  → V2 swapExactETHForTokens / V3 exactInput* with msg.value
+ *     (the router wraps the ETH to WETH),
+ *   - native OUTPUT → V2 swapExactTokensForETH / V3 swap into the router
+ *     (recipient = ADDRESS_THIS) then unwrapWETH9(minOut, user).
+ * V3 deadline is enforced by wrapping the swap (+ optional unwrap) in
+ * SwapRouter02.multicall(deadline, data[]) — SwapRouter02's swap structs have no
+ * deadline field.
+ */
+
+import {
+  encodeFunctionData,
+  encodePacked,
+  getAddress,
+  type Address,
+  type Chain,
+  type Hex,
+  type PublicClient,
+  type Transport,
+  type WalletClient,
+  type Account,
+} from "viem";
+
+import { VexError, ErrorCodes } from "../../errors.js";
+import {
+  UNISWAP_V2_ROUTER_ABI,
+  UNISWAP_V3_SWAP_ROUTER_02_ABI,
+} from "./abis.js";
+import type { UniswapDeployment } from "./deployments.js";
+import type { UniswapRoute } from "./types.js";
+
+/** Native EVM token sentinel (same across all EVM chains; shared with kyberswap). */
+export const NATIVE_TOKEN_ADDRESS: Address = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+
+/** SwapRouter02 sentinel meaning "the router itself" (holds output for unwrap). */
+const ADDRESS_THIS: Address = "0x0000000000000000000000000000000000000002";
+
+export interface BuiltSwapTx {
+  readonly to: Address;
+  readonly data: Hex;
+  readonly value: bigint;
+}
+
+export interface BuildSwapArgs {
+  readonly deployment: UniswapDeployment;
+  readonly route: UniswapRoute;
+  readonly amountIn: bigint;
+  readonly minAmountOut: bigint;
+  readonly recipient: Address;
+  readonly deadline: bigint;
+  readonly tokenInIsNative: boolean;
+  readonly tokenOutIsNative: boolean;
+}
+
+function encodeV3Path(tokens: readonly Address[], fees: readonly number[]): Hex {
+  const types: string[] = ["address"];
+  const values: unknown[] = [tokens[0]];
+  for (let i = 0; i < fees.length; i += 1) {
+    types.push("uint24", "address");
+    values.push(fees[i], tokens[i + 1]);
+  }
+  return encodePacked(types, values);
+}
+
+/** Build the V2 Router02 swap calldata for the resolved route. */
+export function buildV2SwapTx(args: BuildSwapArgs): BuiltSwapTx {
+  const { deployment, route, amountIn, minAmountOut, recipient, deadline, tokenInIsNative, tokenOutIsNative } = args;
+  if (!deployment.v2) throw new VexError(ErrorCodes.SWAP_FAILED, "V2 router not deployed on this chain.");
+  const router = getAddress(deployment.v2.router02);
+  const path = route.path.map((p) => getAddress(p)) as Address[];
+
+  if (tokenInIsNative) {
+    return {
+      to: router,
+      value: amountIn,
+      data: encodeFunctionData({
+        abi: UNISWAP_V2_ROUTER_ABI,
+        functionName: "swapExactETHForTokens",
+        args: [minAmountOut, path, recipient, deadline],
+      }),
+    };
+  }
+  if (tokenOutIsNative) {
+    return {
+      to: router,
+      value: 0n,
+      data: encodeFunctionData({
+        abi: UNISWAP_V2_ROUTER_ABI,
+        functionName: "swapExactTokensForETH",
+        args: [amountIn, minAmountOut, path, recipient, deadline],
+      }),
+    };
+  }
+  return {
+    to: router,
+    value: 0n,
+    data: encodeFunctionData({
+      abi: UNISWAP_V2_ROUTER_ABI,
+      functionName: "swapExactTokensForTokens",
+      args: [amountIn, minAmountOut, path, recipient, deadline],
+    }),
+  };
+}
+
+/** Build the V3 SwapRouter02 swap calldata (wrapped in multicall for the deadline). */
+export function buildV3SwapTx(args: BuildSwapArgs): BuiltSwapTx {
+  const { deployment, route, amountIn, minAmountOut, recipient, deadline, tokenInIsNative, tokenOutIsNative } = args;
+  if (!deployment.v3) throw new VexError(ErrorCodes.SWAP_FAILED, "V3 router not deployed on this chain.");
+  if (!route.fees || route.fees.length !== route.path.length - 1) {
+    throw new VexError(ErrorCodes.SWAP_FAILED, "V3 route is missing per-hop fee tiers.");
+  }
+  const router = getAddress(deployment.v3.swapRouter02);
+  const path = route.path.map((p) => getAddress(p)) as Address[];
+
+  // When the output is native ETH, the swap must deliver WETH to the router
+  // (ADDRESS_THIS) so a trailing unwrapWETH9 can send ETH to the user.
+  const swapRecipient = tokenOutIsNative ? ADDRESS_THIS : recipient;
+
+  let swapCall: Hex;
+  if (route.path.length === 2) {
+    swapCall = encodeFunctionData({
+      abi: UNISWAP_V3_SWAP_ROUTER_02_ABI,
+      functionName: "exactInputSingle",
+      args: [{
+        tokenIn: path[0],
+        tokenOut: path[1],
+        fee: route.fees[0],
+        recipient: swapRecipient,
+        amountIn,
+        amountOutMinimum: minAmountOut,
+        sqrtPriceLimitX96: 0n,
+      }],
+    });
+  } else {
+    swapCall = encodeFunctionData({
+      abi: UNISWAP_V3_SWAP_ROUTER_02_ABI,
+      functionName: "exactInput",
+      args: [{
+        path: encodeV3Path(path, route.fees),
+        recipient: swapRecipient,
+        amountIn,
+        amountOutMinimum: minAmountOut,
+      }],
+    });
+  }
+
+  const inner: Hex[] = [swapCall];
+  if (tokenOutIsNative) {
+    inner.push(encodeFunctionData({
+      abi: UNISWAP_V3_SWAP_ROUTER_02_ABI,
+      functionName: "unwrapWETH9",
+      args: [minAmountOut, recipient],
+    }));
+  }
+
+  return {
+    to: router,
+    value: tokenInIsNative ? amountIn : 0n,
+    data: encodeFunctionData({
+      abi: UNISWAP_V3_SWAP_ROUTER_02_ABI,
+      functionName: "multicall",
+      args: [deadline, inner],
+    }),
+  };
+}
+
+/** Build the swap tx for a route (dispatches V2/V3). */
+export function buildSwapTx(args: BuildSwapArgs): BuiltSwapTx {
+  return args.route.version === "v2" ? buildV2SwapTx(args) : buildV3SwapTx(args);
+}
+
+/** Send a pre-built Uniswap swap tx and wait for the receipt. Returns the hash. */
+export async function sendUniswapTransaction(
+  publicClient: PublicClient<Transport, Chain>,
+  walletClient: WalletClient<Transport, Chain, Account>,
+  tx: BuiltSwapTx,
+): Promise<Hex> {
+  try {
+    const hash = await walletClient.sendTransaction({
+      account: walletClient.account,
+      chain: walletClient.chain,
+      to: tx.to,
+      data: tx.data,
+      value: tx.value,
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    return hash;
+  } catch (err) {
+    throw new VexError(ErrorCodes.SWAP_FAILED, `Transaction failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}

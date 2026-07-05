@@ -37,6 +37,7 @@ This is behavioral guidance. The runtime validates tokens where possible but can
 Every mutating DeFi tool that supports \`dryRun\` / preview must be previewed first. Proceed to execution only after confirming the route.
 
 - **2-step transfer rule.** Step 1: quote / preview (non-mutating). Step 2: execute with explicit confirmation (mutating). Never skip step 1.
+- **Same-venue quote and execute.** A swap or bridge executes only against a fresh quote from the SAME venue/provider (e.g. a \`kyberswap\` quote cannot authorize a \`uniswap\` execute, and a \`khalani\` quote cannot authorize a \`relay\` execute). The runtime enforces this — quote on the venue you intend to execute on.
 - **Mutating calls are blocked at the pressure barrier.** At ≥ 88% context the only mutating action available is \`compact_now\`; preview / dryRun passes through, the actual mutation does not. Compact first, then resume — the post-compact resume packet inherits the rolling summary you supplied as \`conversation_summary\`.
 
 ## DeFi safety rules

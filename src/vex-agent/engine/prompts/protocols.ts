@@ -118,6 +118,24 @@ export function buildProtocolsPrompt(): string {
     }
   }
 
+  // ── Venue & Bridge Routing (Wave 2c) — static routing policy, lands WITH the
+  // tools it describes. Imperative rules; no live data (KV-cache safe). Mirrors
+  // the venue-router policy modules so guidance and code stay aligned.
+  lines.push("## Venue & Bridge Routing");
+  lines.push("");
+  lines.push("Swap venue by chain:");
+  lines.push("- On KyberSwap-supported EVM chains, prefer `kyberswap.*` (aggregated pricing plus honeypot/fee-on-transfer flags).");
+  lines.push("- If KyberSwap fails or lacks the chain, fall back to `uniswap.*` (best route across Uniswap V2 and V3).");
+  lines.push("- On Robinhood Chain, `uniswap.*` is the ONLY venue. $VEX and other Virtuals agent tokens trade against VIRTUAL there, so route through VIRTUAL (or WETH) as the base pair.");
+  lines.push("- Quote and execute on the SAME venue: a `kyberswap` quote authorizes only a `kyberswap` execute, and a `uniswap` quote only a `uniswap` execute. The runtime enforces this.");
+  lines.push("");
+  lines.push("Bridge venue by chain:");
+  lines.push("- Between Khalani-supported chains, use `khalani.*`.");
+  lines.push("- Khalani does NOT cover Robinhood Chain — to or from it, use `relay.*`.");
+  lines.push("- To fund Robinhood Chain, bridge ETH, USDG, or VIRTUAL in with `relay.*`, then swap on-chain with `uniswap.*`; reverse the flow to exit.");
+  lines.push("- Quote and execute on the SAME bridge provider (`khalani` or `relay`). The runtime enforces this.");
+  lines.push("");
+
   cached = lines.join("\n");
   return cached;
 }

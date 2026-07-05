@@ -40,6 +40,32 @@ export const MARKET_PROTOCOL_NAVIGATION: readonly ProtocolNamespaceNavigation[] 
     ],
   },
   {
+    namespace: "relay",
+    advertised: true,
+    groupId: "cross-chain",
+    groupLabel: "Cross-chain",
+    summary: "Keyless cross-chain bridge (Relay) — the ONLY bridge to/from Robinhood Chain (4663); also bridges across its wider chain registry.",
+    whenToUse:
+      "Use to bridge funds to or from Robinhood Chain (Khalani does not cover 4663): bridge ETH/USDG/VIRTUAL in to fund trading, or bridge back out, then swap on-chain via uniswap.",
+    preferInstead:
+      "Use `khalani` for bridges between its supported chains; use `relay` whenever either side is Robinhood Chain (or Khalani lacks the route).",
+    exampleQueries: [
+      'discover_tools(query="bridge to robinhood", namespace="relay")',
+      'discover_tools(query="bridge quote relay", namespace="relay")',
+      'discover_tools(query="bridge out of robinhood", namespace="relay")',
+    ],
+    aliases: ["relay", "bridge to robinhood", "bridge from robinhood", "fund robinhood"],
+    discoveryHints: ["bridge to robinhood", "bridge from robinhood", "relay bridge quote", "fund robinhood wallet"],
+    facets: [
+      {
+        label: "Bridge quotes and execution",
+        summary: "Quote/execute keyless cross-chain bridges to and from Robinhood Chain and Relay's other chains.",
+        toolPrefixes: ["relay.quote", "relay.bridge"],
+        hints: ["bridge quote", "bridge to robinhood", "bridge eth", "cross-chain transfer"],
+      },
+    ],
+  },
+  {
     namespace: "kyberswap",
     advertised: true,
     groupId: "evm-trading",
@@ -80,6 +106,32 @@ export const MARKET_PROTOCOL_NAVIGATION: readonly ProtocolNamespaceNavigation[] 
         summary: "Search pools and zap in/out/migrate concentrated-liquidity positions.",
         toolPrefixes: ["kyberswap.zap"],
         hints: ["zap liquidity", "lp position", "migrate lp", "pool search"],
+      },
+    ],
+  },
+  {
+    namespace: "uniswap",
+    advertised: true,
+    groupId: "evm-trading",
+    groupLabel: "EVM Trading",
+    summary: "Keyless on-chain Uniswap V2/V3 swaps (best route). The ONLY venue on Robinhood Chain (4663) — where $VEX and Virtuals agent tokens trade against VIRTUAL — and an all-EVM fallback for KyberSwap.",
+    whenToUse:
+      "Use for swaps on Robinhood Chain (the only venue there — quote/sell/buy against VIRTUAL/ETH), or as a fallback on any EVM chain when KyberSwap is unavailable. Pass token contract ADDRESSES (no symbol search).",
+    preferInstead:
+      "Prefer `kyberswap` on the chains it supports (aggregated pricing + token safety flags); use `uniswap` on Robinhood Chain or when Kyber lacks the chain/route.",
+    exampleQueries: [
+      'discover_tools(query="swap on robinhood", namespace="uniswap")',
+      'discover_tools(query="uniswap quote", namespace="uniswap")',
+      'discover_tools(query="buy vex with virtual", namespace="uniswap")',
+    ],
+    aliases: ["uniswap", "robinhood swap", "v2 v3 swap", "uniswap fallback"],
+    discoveryHints: ["swap on robinhood", "uniswap quote", "buy on robinhood", "sell on robinhood", "virtual to vex"],
+    facets: [
+      {
+        label: "Swaps",
+        summary: "Quote or execute best-route V2/V3 swaps after resolving token addresses.",
+        toolPrefixes: ["uniswap.swap"],
+        hints: ["swap quote", "sell token", "buy token", "robinhood swap", "best route v2 v3"],
       },
     ],
   },

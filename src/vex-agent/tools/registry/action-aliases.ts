@@ -45,14 +45,14 @@ export const ACTION_ALIAS_TOOLS: readonly ToolDef[] = [
     pressureSafety: "read_only",
     actionKind: "read",
     description:
-      "Preview a token swap WITHOUT executing — best route, expected output, price impact, and (EVM) token-safety legs. Auto-routes by chain: any EVM chain (ethereum, base, arbitrum, …) → KyberSwap aggregator across 400+ DEXs; chain \"solana\" → Jupiter. EVM tokens must be a CONTRACT ADDRESS (resolve a symbol with token_find first) or native ETH/native — EVM symbol resolution is disabled here to avoid wrong-contract matches; Solana accepts a symbol or mint. `amount` is the HUMAN decimal of tokenIn (e.g. \"1.5\", not wei/lamports). Call this BEFORE any swap: a fresh matching quote is what unlocks execution.",
+      "Preview a token swap WITHOUT executing — best route, expected output, price impact, and token-safety signals. Auto-routes by chain: KyberSwap on its supported EVM chains; Uniswap on Robinhood Chain (the only venue there) and as an all-EVM fallback; chain \"solana\" → Jupiter. EVM tokens must be a CONTRACT ADDRESS (resolve a symbol with token_find first) or native ETH/native — EVM symbol resolution is disabled here to avoid wrong-contract matches; Solana accepts a symbol or mint. `amount` is the HUMAN decimal of tokenIn (e.g. \"1.5\", not wei/lamports). Call this BEFORE any swap: a fresh matching quote (same venue) is what unlocks execution.",
     parameters: {
       type: "object",
       properties: {
         chain: {
           type: "string",
           description:
-            "Chain to swap on. Any EVM slug/alias (ethereum, eth, base, arbitrum, arb, polygon, …) routes to KyberSwap; the literal \"solana\" routes to Jupiter.",
+            "Chain to swap on. EVM slugs/aliases route to KyberSwap where supported (ethereum, base, arbitrum, …); \"robinhood\" (4663) routes to Uniswap; the literal \"solana\" routes to Jupiter.",
         },
         tokenIn: {
           type: "string",
@@ -88,14 +88,14 @@ export const ACTION_ALIAS_TOOLS: readonly ToolDef[] = [
     // result already carries the target's actionKind from executeProtocolTool.
     actionKind: "user_wallet_broadcast",
     description:
-      "Execute a REAL on-chain token swap (spends funds, broadcasts a signed transaction). Auto-routes by chain: any EVM chain (ethereum, base, arbitrum, …) → KyberSwap; chain \"solana\" → Jupiter. REQUIRES a fresh matching swap_quote FIRST — the execute gate blocks a swap that has no fresh quote for these exact params, so always preview with swap_quote before calling this. EVM tokens must be a CONTRACT ADDRESS (resolve a symbol with token_find first) or native ETH/native — EVM symbol resolution is disabled to avoid wrong-contract matches; Solana accepts a symbol or mint. `amount` is the HUMAN decimal of tokenIn (e.g. \"1.5\", not wei/lamports). `side` (\"sell\"/\"buy\") is EVM-only; it tags the trade for portfolio tracking and does not apply to Solana.",
+      "Execute a REAL on-chain token swap (spends funds, broadcasts a signed transaction). Auto-routes by chain: KyberSwap on its supported EVM chains; Uniswap on Robinhood Chain (the only venue there) and as an all-EVM fallback; chain \"solana\" → Jupiter. REQUIRES a fresh matching swap_quote FIRST on the SAME venue — the execute gate blocks a swap that has no fresh matching quote (a Kyber quote can't authorize a Uniswap swap, and vice-versa), so always preview with swap_quote before calling this. EVM tokens must be a CONTRACT ADDRESS (resolve a symbol with token_find first) or native ETH/native — EVM symbol resolution is disabled to avoid wrong-contract matches; Solana accepts a symbol or mint. `amount` is the HUMAN decimal of tokenIn (e.g. \"1.5\", not wei/lamports). `side` (\"sell\"/\"buy\") is EVM-only; it tags the trade for portfolio tracking and does not apply to Solana.",
     parameters: {
       type: "object",
       properties: {
         chain: {
           type: "string",
           description:
-            "Chain to swap on. Any EVM slug/alias (ethereum, eth, base, arbitrum, arb, polygon, …) routes to KyberSwap; the literal \"solana\" routes to Jupiter.",
+            "Chain to swap on. EVM slugs/aliases route to KyberSwap where supported (ethereum, base, arbitrum, …); \"robinhood\" (4663) routes to Uniswap; the literal \"solana\" routes to Jupiter.",
         },
         tokenIn: {
           type: "string",
@@ -141,7 +141,7 @@ export const ACTION_ALIAS_TOOLS: readonly ToolDef[] = [
     // actionKind from executeProtocolTool.
     actionKind: "user_wallet_broadcast",
     description:
-      "Execute a REAL cross-chain bridge via Khalani (spends funds, signs + broadcasts a deposit on the source chain). REQUIRES a fresh matching bridge_quote FIRST — the execute gate blocks a bridge that has no fresh quote for these exact params, so always preview with bridge_quote before calling this. Resolve fromToken/toToken addresses via token_find first. `amount` is in SMALLEST units (wei/lamports), matching the bridge quote.",
+      "Execute a REAL cross-chain bridge (spends funds, signs + broadcasts on the source chain). Auto-routes by chain: Khalani between its supported chains; Relay to/from Robinhood Chain (which Khalani does NOT cover). REQUIRES a fresh matching bridge_quote FIRST on the SAME provider — the execute gate blocks a bridge with no fresh matching quote, so always preview with bridge_quote before calling this. Resolve fromToken/toToken addresses via token_find first. `amount` is in SMALLEST units (wei/lamports), matching the bridge quote.",
     parameters: {
       type: "object",
       properties: {
@@ -217,7 +217,7 @@ export const ACTION_ALIAS_TOOLS: readonly ToolDef[] = [
     pressureSafety: "read_only",
     actionKind: "read",
     description:
-      "Preview a cross-chain bridge WITHOUT executing — routes, pricing, fees, and ETA via Khalani. Resolve fromToken/toToken addresses via token_find first. `amount` is in SMALLEST units (wei/lamports), matching the underlying bridge quote. Read-only.",
+      "Preview a cross-chain bridge WITHOUT executing — routes, pricing, fees, and ETA. Auto-routes by chain: Khalani between its supported chains; Relay to/from Robinhood Chain (which Khalani doesn't cover). Resolve fromToken/toToken addresses via token_find first. `amount` is in SMALLEST units (wei/lamports), matching the underlying bridge quote. Read-only.",
     parameters: {
       type: "object",
       properties: {

@@ -169,6 +169,8 @@ describe("computePrequoteMatchHash", () => {
     kind: "swap" as const,
     sessionId: SESSION_ID,
     family: "eip155" as const,
+    // Wave-2c venue binding (LOCKED #4) — the quoting provider is identity.
+    provider: "kyberswap",
     chainId: 8453,
     walletAddress: "0xWALLET",
     tokenIn: EVM_TOKEN_IN,
@@ -205,6 +207,7 @@ describe("computePrequoteMatchHash", () => {
       kind: "swap" as const,
       sessionId: SESSION_ID,
       family: "solana" as const,
+      provider: "jupiter",
       chainId: null,
       walletAddress: "SolWalletAddr",
       tokenIn: SOLANA_MINT_A,
@@ -269,6 +272,8 @@ describe("computePrequoteMatchHash", () => {
           "0xwallet",
           "0",
           "",
+          // Wave-2c venue binding — the provider token (lowercased).
+          "kyberswap",
         ].join(" "),
       )
       .digest("hex");
@@ -296,5 +301,41 @@ describe("computePrequoteMatchHash", () => {
     expect(fifty).not.toBe(omitted);
     expect(tenK).not.toBe(fifty);
     expect(tenK).not.toBe(omitted);
+  });
+
+  // ── Wave-2c — venue binding (LOCKED #4) ──────────────────────────────────
+  it("a different venue/provider changes the swap hash (kyber vs uniswap)", () => {
+    const kyber = mod.computePrequoteMatchHash({ ...base, provider: "kyberswap" });
+    const uni = mod.computePrequoteMatchHash({ ...base, provider: "uniswap" });
+    // Same tokens/amount/chain/wallet, DIFFERENT venue → DIFFERENT hash, so a
+    // kyber quote can never authorize a uniswap execute (and vice-versa).
+    expect(uni).not.toBe(kyber);
+    // Provider is case/space-insensitive (canonicalized).
+    expect(mod.computePrequoteMatchHash({ ...base, provider: " KyberSwap " })).toBe(kyber);
+  });
+
+  it("a bridge hash binds its provider (khalani vs relay)", () => {
+    const bridgeBase = {
+      kind: "bridge" as const,
+      sessionId: SESSION_ID,
+      provider: "khalani",
+      sourceFamily: "eip155" as const,
+      destFamily: "eip155" as const,
+      fromChainId: 8453,
+      toChainId: 4663,
+      sourceWallet: "0xWALLET",
+      recipient: "0xWALLET",
+      fromToken: EVM_TOKEN_IN,
+      toToken: EVM_TOKEN_OUT,
+      amount: "1000",
+      tradeType: "EXACT_INPUT" as const,
+      refundTo: "0xWALLET",
+      referrer: "",
+      referrerFeeBps: "",
+      filler: "",
+    };
+    const khalani = mod.computePrequoteMatchHash(bridgeBase);
+    const relay = mod.computePrequoteMatchHash({ ...bridgeBase, provider: "relay" });
+    expect(relay).not.toBe(khalani);
   });
 });

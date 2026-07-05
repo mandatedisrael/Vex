@@ -4,7 +4,14 @@
  * The hash is computed IDENTICALLY at record-time and gate-time so the digests
  * collide. This module owns the canonical identity shapes, the per-field
  * canonicalization (address case, amount normalization), and the fixed-order
- * hash material. `provider` is deliberately EXCLUDED (it derives from family).
+ * hash material.
+ *
+ * VENUE-BOUND scheme (LOCKED Wave-2 correction #4): `provider`/venue IS part of
+ * the identity — it is the LAST field of both the swap and the bridge hash
+ * material. On EVM the provider does NOT derive from `family` (kyberswap and
+ * uniswap are both eip155; khalani and relay both bridge), so binding it is what
+ * stops a kyberswap quote from authorizing a uniswap execute (or a khalani quote
+ * a relay execute) for the same tokens/amount.
  */
 
 import { createHash } from "node:crypto";
@@ -35,6 +42,16 @@ export interface SwapMatchInput {
   readonly kind: "swap";
   readonly sessionId: string;
   readonly family: PrequoteFamily;
+  /**
+   * VENUE binding (LOCKED Wave-2 correction #4). The quoting venue/provider
+   * (e.g. "kyberswap" | "uniswap" | "jupiter") is bound into the hash so a
+   * KyberSwap quote can NEVER authorize a Uniswap execute for the same
+   * tokens/amount (and vice-versa). Unlike Solana, an EVM `provider` does NOT
+   * derive from `family` (kyber and uniswap are both eip155), so it must be an
+   * explicit identity dimension. The recorder pins it from the quote-tool
+   * registration; the gate pins it from the execute-tool registration.
+   */
+  readonly provider: string;
   /** EVM numeric chainId; null/undefined for Solana (single chain in scope). */
   readonly chainId: number | null | undefined;
   readonly walletAddress: string;
@@ -86,6 +103,13 @@ export interface SwapMatchInput {
 export interface BridgeMatchInput {
   readonly kind: "bridge";
   readonly sessionId: string;
+  /**
+   * VENUE binding (LOCKED Wave-2 correction #4). The bridge provider (e.g.
+   * "khalani" | "relay") is bound into the hash so a Khalani quote can never
+   * authorize a Relay execute for the same route (and vice-versa). Relay gets
+   * its OWN bridge identity path — it does NOT reuse Khalani's.
+   */
+  readonly provider: string;
   /** Family of the SOURCE chain (where the deposit signs). Canonicalizes from*. */
   readonly sourceFamily: PrequoteFamily;
   /** Family of the DEST chain (where funds land). Canonicalizes the dest leg. */
@@ -157,17 +181,19 @@ function canonAmount(raw: string): string {
 
 /**
  * Deterministic sha256-hex match-hash over the trade identity. Identical at
- * record-time and gate-time. `provider` is deliberately EXCLUDED (it derives
- * from family). Exported so the gate reuses the EXACT function.
+ * record-time and gate-time. The quoting `provider`/venue IS bound (LOCKED
+ * Wave-2 #4) as the LAST material field. Exported so the gate reuses the EXACT
+ * function.
  *
  * Stage 8c: the material is prefixed with the `kind` discriminant tag and then
  * the kind-specific fields in a FIXED order, so a swap and a bridge with
  * otherwise-similar values produce different digests (Codex requirement #4).
+ * Wave-2c appends the venue `provider` last on both kinds.
  *   - swap   : ["swap", sessionId, family, chainId|"", wallet, tokenIn, tokenOut,
- *               amount, recipient, approveExact, slippageBps]
+ *               amount, recipient, approveExact, slippageBps, provider]
  *   - bridge : ["bridge", sessionId, sourceFamily, destFamily, fromChainId,
  *               toChainId, sourceWallet, recipient, fromToken, toToken, amount,
- *               tradeType, refundTo, referrer, referrerFeeBps, filler]
+ *               tradeType, refundTo, referrer, referrerFeeBps, filler, provider]
  * EVM addresses/tokens lowercase; Solana mints case-preserved; amount via
  * `canonAmount`.
  *
@@ -213,6 +239,9 @@ function swapHashMaterial(input: SwapMatchInput): string {
     canonAddress(input.family, input.recipient),
     input.approveExact ? "1" : "0",
     input.slippageBps,
+    // Wave-2c venue binding (LOCKED #4): the quoting provider/venue, so a
+    // kyber quote and a uniswap quote for the same identity hash differently.
+    input.provider.trim().toLowerCase(),
   ].join(" ");
 }
 
@@ -245,5 +274,8 @@ function bridgeHashMaterial(input: BridgeMatchInput): string {
     input.referrer === "" ? "" : canonAddress("eip155", input.referrer),
     input.referrerFeeBps,
     input.filler.trim(),
+    // Wave-2c venue binding (LOCKED #4): the bridge provider/venue, so a khalani
+    // quote and a relay quote for the same route hash differently.
+    input.provider.trim().toLowerCase(),
   ].join(" ");
 }

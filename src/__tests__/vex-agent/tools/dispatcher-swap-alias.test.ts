@@ -169,6 +169,37 @@ describe("swap alias — side routing", () => {
   });
 });
 
+describe("swap alias — Robinhood Chain 4663 routes to Uniswap, never KyberSwap (LOCKED #3)", () => {
+  // Uniswap tokens are ADDRESS-ONLY (VIRTUAL → VEX on Robinhood Chain).
+  const VIRTUAL = "0xc6911796042b15d7Fa4F6CDe69e245DdCd3d9c31";
+  const VEX = "0x8Ff92566f2e81BDd68EDfAa8cde73942A723796b";
+  const RH_ARGS = { chain: "robinhood", tokenIn: VIRTUAL, tokenOut: VEX, amount: "1.5", slippageBps: 50 };
+
+  it("chain 'robinhood' (default side) → uniswap.swap.sell (NOT kyberswap)", async () => {
+    await dispatchTool({ name: "swap", args: RH_ARGS, toolCallId: "rh1" }, ctx());
+    const [req] = executeProtocolTool.mock.calls[0] as [{ toolId: string; params: Record<string, unknown> }];
+    expect(req.toolId).toBe("uniswap.swap.sell");
+    expect(req.toolId).not.toContain("kyberswap");
+    expect(req.params).toEqual({ chain: "robinhood", tokenIn: VIRTUAL, tokenOut: VEX, amountIn: "1.5", slippageBps: 50 });
+  });
+
+  it("chain '4663' with side:'buy' → uniswap.swap.buy", async () => {
+    await dispatchTool({ name: "swap", args: { ...RH_ARGS, chain: "4663", side: "buy" }, toolCallId: "rh2" }, ctx());
+    const [req] = executeProtocolTool.mock.calls[0] as [{ toolId: string }];
+    expect(req.toolId).toBe("uniswap.swap.buy");
+  });
+
+  it("a chain with NO venue (neither kyber nor uniswap) → clean error, NO dispatch", async () => {
+    const result = await dispatchTool(
+      { name: "swap", args: { chain: "narnia", tokenIn: VIRTUAL, tokenOut: VEX, amount: "1" }, toolCallId: "rh3" },
+      ctx(),
+    );
+    expect(result.success).toBe(false);
+    expect(result.output).toMatch(/cannot determine swap family/i);
+    expect(executeProtocolTool).not.toHaveBeenCalled();
+  });
+});
+
 describe("swap alias — skips the internal approval gate (executeProtocolTool owns approval)", () => {
   it("restricted + unapproved STILL reaches executeProtocolTool (no dispatcher-side pendingApproval short-circuit)", async () => {
     // A regular mutating internal tool (e.g. polymarket_setup) would be

@@ -33,6 +33,7 @@
 import { z } from "zod";
 
 import { classifySwapFamily, isEvmSwapTokenInput } from "./internal/swap-family.js";
+import { resolveBridgeVenue } from "@tools/relay/bridge-venue.js";
 
 /** A resolved target for a mutating protocol-alias. */
 export interface ResolvedAliasTarget {
@@ -147,13 +148,22 @@ function routeSwap(args: Record<string, unknown>): ResolvedAliasTarget {
     );
   }
 
-  // EVM → KyberSwap. `side === "buy"` → buy (opens a lot on tokenOut for
-  // portfolio tracking); "sell"/default → sell. amount → amountIn (both human
-  // decimal strings). Param keys verified against kyberswap/manifests/swap.ts
-  // (SWAP_EXECUTION_PARAMS): chain, tokenIn, tokenOut, amountIn, slippageBps?, recipient?.
-  const toolId = a.side === "buy" ? "kyberswap.swap.buy" : "kyberswap.swap.sell";
+  // EVM → the VENUE ROUTER's primary venue (KyberSwap where supported, Uniswap on
+  // Robinhood Chain / as an all-EVM fallback). `side === "buy"` → buy (opens a lot
+  // on tokenOut); "sell"/default → sell. amount → amountIn (both human decimal).
+  // Both venues share the same execute param shape (chain, tokenIn, tokenOut,
+  // amountIn, slippageBps?, recipient?), verified against their manifests.
+  const isBuy = a.side === "buy";
+  const toolId =
+    family.venue === "uniswap"
+      ? isBuy
+        ? "uniswap.swap.buy"
+        : "uniswap.swap.sell"
+      : isBuy
+        ? "kyberswap.swap.buy"
+        : "kyberswap.swap.sell";
   const params: Record<string, unknown> = {
-    chain: family.chainSlug,
+    chain: family.chain,
     tokenIn: a.tokenIn,
     tokenOut: a.tokenOut,
     amountIn: a.amount,
@@ -200,16 +210,20 @@ const BridgeArgs = z
     referrer: z.string().min(1).optional(),
     referrerFeeBps: z.string().min(1).optional(),
     filler: z.string().min(1).optional(),
+    // Relay-only slippage (bps string). Ignored on the Khalani path.
+    slippageBps: z.string().min(1).optional(),
   })
   .strict();
 
 type BridgeArgs = z.infer<typeof BridgeArgs>;
 
 /**
- * Resolve the `bridge` alias to `khalani.bridge` + translated params. Throws
+ * Resolve the `bridge` alias to `khalani.bridge` OR `relay.bridge` + translated
+ * params, per the bridge VENUE ROUTER (Relay whenever either side is Robinhood
+ * Chain, which Khalani doesn't cover; Khalani primary otherwise). Throws
  * `MutatingAliasRouteError` on invalid args. The dedicated dispatcher branch
- * routes the result through `executeProtocolTool`, which runs the bridge
- * prequote gate (kind 'bridge') → approval gate → capture.
+ * routes the result through `executeProtocolTool`, which runs the bridge prequote
+ * gate (kind 'bridge', venue-bound) → approval gate → capture.
  */
 function routeBridge(args: Record<string, unknown>): ResolvedAliasTarget {
   const parsed = BridgeArgs.safeParse(args);
@@ -221,6 +235,23 @@ function routeBridge(args: Record<string, unknown>): ResolvedAliasTarget {
     );
   }
   const a: BridgeArgs = parsed.data;
+
+  if (resolveBridgeVenue(a.fromChain, a.toChain) === "relay") {
+    // Relay params — no referrer/fee/filler/fromAddress surface (Khalani-only).
+    const params: Record<string, unknown> = {
+      fromChain: a.fromChain,
+      fromToken: a.fromToken,
+      toChain: a.toChain,
+      toToken: a.toToken,
+      amount: a.amount,
+    };
+    if (a.tradeType !== undefined) params.tradeType = a.tradeType;
+    if (a.recipient !== undefined) params.recipient = a.recipient;
+    if (a.refundTo !== undefined) params.refundTo = a.refundTo;
+    if (a.slippageBps !== undefined) params.slippageBps = a.slippageBps;
+    return { toolId: "relay.bridge", params };
+  }
+
   const params: Record<string, unknown> = {
     fromChain: a.fromChain,
     fromToken: a.fromToken,
