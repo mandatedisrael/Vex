@@ -86,14 +86,18 @@ function runTsc(tsconfig) {
   const tscBin = require.resolve("typescript/bin/tsc");
   const res = spawnSync(
     process.execPath,
-    [tscBin, "--noEmit", "--pretty", "false", "-p", tsconfig],
+    // Explicit heap ceiling: the main project's type graph (whole root ../src
+    // tree via aliases) peaks >3 GB RSS. CI runners derive Node's DEFAULT heap
+    // limit from machine/cgroup memory and land below that, so V8 kills the
+    // child mid-compile (status null, zero output) while dev machines pass.
+    ["--max-old-space-size=4096", tscBin, "--noEmit", "--pretty", "false", "-p", tsconfig],
     { cwd: appRoot, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   );
   if (res.error) {
     console.log(`${RED}✗ failed to spawn tsc for ${tsconfig}: ${res.error.message}${RESET}`);
     process.exit(1);
   }
-  return { output: `${res.stdout ?? ""}${res.stderr ?? ""}`, status: res.status };
+  return { output: `${res.stdout ?? ""}${res.stderr ?? ""}`, status: res.status, signal: res.signal };
 }
 
 /**
@@ -101,7 +105,7 @@ function runTsc(tsconfig) {
  * behind each key (for readable violation reporting), and any drift lines.
  */
 function parseProject({ name, tsconfig }) {
-  const { output, status } = runTsc(tsconfig);
+  const { output, status, signal } = runTsc(tsconfig);
   const counts = new Map(); // "file::code" -> integer count
   const rawByKey = new Map(); // "file::code" -> string[] raw offending lines
   const drift = []; // lines that look like errors but did not parse
@@ -119,7 +123,7 @@ function parseProject({ name, tsconfig }) {
     }
   }
   const total = [...counts.values()].reduce((a, b) => a + b, 0);
-  return { name, counts, rawByKey, drift, status, total };
+  return { name, counts, rawByKey, drift, status, signal, total };
 }
 
 /** Fail-closed checks (a) + (b). Returns true if the project is unusable. */
@@ -134,8 +138,9 @@ function isFailClosed(project) {
     return true;
   }
   if (project.status !== 0 && project.total === 0) {
+    const killed = project.signal ? ` (killed by ${project.signal})` : "";
     console.log(
-      `${RED}✗ ${project.name}: tsc exited ${project.status} but produced ZERO ` +
+      `${RED}✗ ${project.name}: tsc exited ${project.status}${killed} but produced ZERO ` +
         `parseable errors — config breakage or OOM, not a clean compile.${RESET}`,
     );
     return true;
