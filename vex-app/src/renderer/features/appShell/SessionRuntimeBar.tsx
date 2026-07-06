@@ -109,6 +109,41 @@ const PILL =
 const STACK_ROW =
   "flex w-full items-center gap-2 border-b border-[var(--vex-line)] py-1.5 font-mono text-[10px] last:border-b-0";
 
+/**
+ * Landing hero-meta micro-label: a muted, tracked, uppercase mono key that
+ * sits next to a stronger tabular value — the treatment that replaced the
+ * `↑/↓/⚡/Σ` glyph soup with words. Shared by the usage figures and the
+ * context meter so the whole runtime strip speaks one language.
+ */
+const METRIC_LABEL = "uppercase tracking-[0.16em] text-[var(--vex-text-3)]";
+
+/**
+ * Strong value tone: inline mirrors the model name's `text-foreground`, the
+ * BOOK stack mirrors its `--vex-text` (both resolve to the landing paper
+ * white). Muted label vs stronger value is the whole point of the restyle.
+ */
+function valueClass(stack: boolean): string {
+  return stack ? "text-[var(--vex-text)]" : "text-foreground";
+}
+
+/** One key/value micro-metric (e.g. `IN 60.1k`). */
+function Metric({
+  label,
+  value,
+  stack,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly stack: boolean;
+}): JSX.Element {
+  return (
+    <span className="inline-flex items-baseline gap-1">
+      <span className={METRIC_LABEL}>{label}</span>
+      <span className={`tabular-nums ${valueClass(stack)}`}>{value}</span>
+    </span>
+  );
+}
+
 function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
@@ -210,19 +245,36 @@ function UsageChip({
       title={buildUsageTitle(lastTurn, totals)}
     >
       {lastTurn !== null ? (
-        <span aria-label="last turn tokens">
-          ↑{fmtTokens(lastTurn.promptTokens)} ↓
-          {fmtTokens(lastTurn.completionTokens)}
+        <span aria-label="last turn tokens" className="inline-flex items-baseline gap-2">
+          <Metric
+            label="in"
+            value={fmtTokens(lastTurn.promptTokens)}
+            stack={stack}
+          />
+          <Metric
+            label="out"
+            value={fmtTokens(lastTurn.completionTokens)}
+            stack={stack}
+          />
         </span>
       ) : null}
       {cached !== null ? (
-        <span aria-label="cached tokens">⚡{fmtTokens(cached)}</span>
+        <span aria-label="cached tokens">
+          <Metric label="cache" value={fmtTokens(cached)} stack={stack} />
+        </span>
       ) : null}
       {sessionTotal !== null ? (
-        <span aria-label="session total tokens">Σ{fmtTokens(sessionTotal)}</span>
+        <span aria-label="session total tokens">
+          <Metric label="total" value={fmtTokens(sessionTotal)} stack={stack} />
+        </span>
       ) : null}
       {cost !== null ? (
-        <span aria-label="session cost">{fmtCost(cost)}</span>
+        <span
+          aria-label="session cost"
+          className={`tabular-nums ${valueClass(stack)}`}
+        >
+          {fmtCost(cost)}
+        </span>
       ) : null}
     </span>
   );
@@ -297,7 +349,7 @@ function ContextMeter({
         className={stack ? `${STACK_ROW} tabular-nums` : PILL}
         title="Context limit unavailable (invalid AGENT_CONTEXT_LIMIT)"
       >
-        ctx {fmtTokens(tokensUsed)}
+        <Metric label="ctx" value={fmtTokens(tokensUsed)} stack={stack} />
       </span>
     );
   }

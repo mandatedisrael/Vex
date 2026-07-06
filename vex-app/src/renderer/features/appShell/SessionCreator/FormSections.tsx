@@ -13,6 +13,7 @@
  */
 
 import type { JSX } from "react";
+import { Ethereum, Solana } from "@thesvg/react";
 import {
   SESSION_TITLE_MAX_LENGTH,
   type SessionMode,
@@ -155,12 +156,16 @@ export function WalletFieldset({
       <div className="grid grid-cols-2 gap-2">
         <WalletSelect
           label="EVM wallet"
+          caption="EVM"
+          icon={<Ethereum width={16} height={16} aria-hidden focusable={false} />}
           value={selectedEvmWalletId}
           options={evmOptions}
           onChange={onEvmChange}
         />
         <WalletSelect
           label="Solana wallet"
+          caption="SOL"
+          icon={<Solana width={16} height={16} aria-hidden focusable={false} />}
           value={selectedSolanaWalletId}
           options={solanaOptions}
           onChange={onSolanaChange}

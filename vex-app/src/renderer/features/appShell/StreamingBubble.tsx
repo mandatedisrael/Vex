@@ -123,10 +123,14 @@ const ReasoningStrip = memo(function ReasoningStrip({
         ) : null}
       </span>
       {showTrace ? (
+        // Expanded trace flows at full height in the transcript — the old
+        // max-h scrollbox drew its own scrollbar mid-conversation and boxed
+        // the strip off from the tape (seamless-chat owner review). Only the
+        // collapsed 46px working peek keeps its masked window.
         <div
           className={
             expanded
-              ? "mt-1 max-h-[240px] overflow-y-auto"
+              ? "mt-1"
               : "vex-fade-top mt-1 flex max-h-[46px] flex-col justify-end overflow-hidden"
           }
         >

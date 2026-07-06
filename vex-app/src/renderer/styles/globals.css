@@ -316,11 +316,22 @@
   --vex-pin-fill-hover: color-mix(in oklab, #ffce5a 16%, transparent);
   /* compaction permanently-failed text — danger family (unrecoverable). */
   --vex-warn-text: color-mix(in oklab, var(--color-danger) 70%, white);
-  /* Glass rail surface — user-sanctioned translucent ink for the two side
-   * rails (SessionsList / BookPanel) floating over the Signal Sky. The ONLY
-   * surfaces allowed to pair this with backdrop-blur (guard-whitelisted). */
+  /* Glass instrument surface — user-sanctioned translucent ink for the
+   * floating Signal Console composer (SessionComposer), paired with
+   * backdrop-blur over the Signal Sky (guard-whitelisted). --vex-glass-strong
+   * is the focus step (.vex-console:focus-within). */
   --vex-glass: rgba(11, 15, 29, 0.66);
   --vex-glass-strong: rgba(11, 15, 29, 0.82);
+  /* Side-rail surface — the two rails (SessionsList / BookPanel) wear a
+   * softer, more translucent tint than the composer glass so they merge into
+   * one Signal-Sky canvas with the center column instead of reading as bordered
+   * panels (owner review: the rails should form a unity with the main screen,
+   * "schludnie fancy"; round 2: NO separating stroke at all — pure glass, the
+   * tint step is the only edge). Still glass (backdrop-blur, guard-whitelisted)
+   * for legibility over the sky. --vex-rail-strong anchors the brand strip +
+   * footer registry bands. */
+  --vex-rail: rgba(11, 15, 29, 0.5);
+  --vex-rail-strong: rgba(11, 15, 29, 0.68);
   /* shadcn projection — stock Button/Input/Dialog inside the shell speak
    * the brand automatically (same mechanism as the onboarding scope). */
   --color-primary: var(--vex-accent);
@@ -389,6 +400,15 @@
 [data-vex-shell="true"]::-webkit-scrollbar-track,
 [data-vex-shell="true"] *::-webkit-scrollbar-track {
   background: transparent;
+}
+/* No stepper arrows: Windows Chromium paints ▲/▼ scrollbar buttons on custom
+ * scrollbars unless they are explicitly removed — they bracketed the chat
+ * column like a separate instrument (seamless-chat owner review). */
+[data-vex-shell="true"]::-webkit-scrollbar-button,
+[data-vex-shell="true"] *::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }
 [data-vex-shell="true"]::-webkit-scrollbar-thumb,
 [data-vex-shell="true"] *::-webkit-scrollbar-thumb {

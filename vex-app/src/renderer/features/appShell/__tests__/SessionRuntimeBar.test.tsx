@@ -407,7 +407,7 @@ describe("SessionRuntimeBar", () => {
     });
   });
 
-  it("⚡ chip gating unchanged: shows on cachedTokens > 0 even with negative savings", async () => {
+  it("cache chip gating unchanged: shows on cachedTokens > 0 even with negative savings", async () => {
     setVex({
       getModel: vi.fn().mockResolvedValue(ok(MODEL_CONFIGURED)),
       getLastTurn: vi

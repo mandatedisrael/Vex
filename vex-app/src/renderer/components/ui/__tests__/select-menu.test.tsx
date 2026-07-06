@@ -21,9 +21,11 @@ const OPTIONS: ReadonlyArray<SelectMenuOption> = [
 function Harness({
   initial = "",
   onChange,
+  placement,
 }: {
   readonly initial?: string;
   readonly onChange?: (value: string) => void;
+  readonly placement?: "top" | "bottom";
 }): JSX.Element {
   const [value, setValue] = useState(initial);
   return (
@@ -31,6 +33,7 @@ function Harness({
       value={value}
       options={OPTIONS}
       ariaLabel="Test select"
+      placement={placement}
       onChange={(next) => {
         setValue(next);
         onChange?.(next);
@@ -104,6 +107,24 @@ describe("SelectMenu", () => {
     expect(screen.queryByRole("listbox")).not.toBeNull();
     fireEvent.mouseDown(document.body);
     expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("opens downward by default (top-full, mt-1)", () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("combobox"));
+    const list = screen.getByRole("listbox");
+    expect(list.classList.contains("top-full")).toBe(true);
+    expect(list.classList.contains("mt-1")).toBe(true);
+    expect(list.classList.contains("bottom-full")).toBe(false);
+  });
+
+  it("opens upward with placement='top' (bottom-full, mb-1)", () => {
+    render(<Harness placement="top" />);
+    fireEvent.click(screen.getByRole("combobox"));
+    const list = screen.getByRole("listbox");
+    expect(list.classList.contains("bottom-full")).toBe(true);
+    expect(list.classList.contains("mb-1")).toBe(true);
+    expect(list.classList.contains("top-full")).toBe(false);
   });
 
   it("never submits a surrounding form (type=button + preventDefault)", () => {

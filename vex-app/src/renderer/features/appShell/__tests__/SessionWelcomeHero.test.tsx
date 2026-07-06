@@ -136,9 +136,12 @@ describe("SessionWelcomeHero", () => {
     // INSIDE the sigil box (default theme = the VEX monogram).
     const sigilImg = sigil?.querySelector("[data-vex-sigil-fallback]");
     expect(sigilImg?.getAttribute("src")).toBe("/logo_clean.png");
-    // The ONLY imagery OUTSIDE the sigil is the backed-by partner strip.
+    // The backed-by partner strip is present outside the sigil. (The welcome
+    // integrations rail added by the UI pass contributes additional decorative
+    // empty-alt icons — the pin asserts the two NAMED partner marks exist,
+    // not img exclusivity.)
     const backing = Array.from(container.querySelectorAll("img")).filter(
-      (img) => sigil?.contains(img) === false,
+      (img) => sigil?.contains(img) === false && (img.getAttribute("alt") ?? "") !== "",
     );
     expect(backing.map((img) => img.getAttribute("alt")).sort()).toEqual([
       "Robinhood",

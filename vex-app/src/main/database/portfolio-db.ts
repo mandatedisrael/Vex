@@ -30,8 +30,10 @@ import { err, ok, type Result, type VexError } from "@shared/ipc/result.js";
 import type {
   PortfolioDto,
   PortfolioReadInput,
+  PositionChainDto,
   PositionTokenDto,
 } from "@shared/schemas/portfolio.js";
+import { familyForChainId } from "@shared/chains/display.js";
 import { listWallets } from "@vex-lib/wallet.js";
 import { getSessionWalletScope } from "./sessions-db.js";
 import { buildPoolConfig } from "./db-config.js";
@@ -119,6 +121,13 @@ interface SnapshotRow {
   readonly at: string | Date | null;
 }
 
+interface ChainBreakdownRow {
+  readonly chain_id: number | string;
+  readonly chain_total: number | string;
+  readonly token_symbol: string | null;
+  readonly token_usd: number | string | null;
+}
+
 /**
  * Cap on per-(chain, token) holding lines. Matches the `portfolioDtoSchema`
  * `tokens` `.max(500)` so the response can never overflow the output-schema
@@ -126,6 +135,66 @@ interface SnapshotRow {
  * handler's output validation). Enforced in BOTH the SQL LIMIT and a TS slice.
  */
 const MAX_TOKEN_LINES = 500;
+
+/**
+ * Caps for the per-chain breakdown — mirror `portfolioDtoSchema.chains`
+ * (`.max(64)` chains, `.max(3)` tokens each). The SQL emits at most
+ * 64 chains × ≤3 token rows; TS slices defensively to the same bounds.
+ */
+const MAX_BREAKDOWN_CHAINS = 64;
+const MAX_CHAIN_TOKENS = 3;
+
+/**
+ * Assemble `PositionChainDto[]` from the breakdown query's flat rows
+ * (one row per surviving (chain, top-token) pair, chain totals repeated,
+ * ordered chain-total DESC then chain id ASC then token rank ASC — the
+ * chain-id tie-breaker keeps equal-total chains CONTIGUOUS, which this
+ * single-pass grouper depends on; codex final review). Rows arrive
+ * pre-filtered: positive chain totals, positive token USD, NULL chain_id
+ * excluded.
+ */
+function buildChainBreakdown(
+  rows: readonly ChainBreakdownRow[],
+): PositionChainDto[] {
+  const chains: PositionChainDto[] = [];
+  let current: {
+    chainId: number;
+    totalUsd: number;
+    tokens: { symbol: string | null; balanceUsd: number }[];
+  } | null = null;
+  for (const row of rows) {
+    const chainId = toChainId(row.chain_id);
+    const totalUsd = toNumber(row.chain_total);
+    // Defensive: the SQL already excludes NULL chain ids and non-positive
+    // totals; a row that still fails coercion is dropped, not fabricated.
+    if (chainId === null || totalUsd <= 0) continue;
+    if (current === null || current.chainId !== chainId) {
+      if (current !== null) {
+        chains.push({
+          chainId: current.chainId,
+          family: familyForChainId(current.chainId),
+          totalUsd: current.totalUsd,
+          tokens: current.tokens,
+        });
+        if (chains.length >= MAX_BREAKDOWN_CHAINS) return chains;
+      }
+      current = { chainId, totalUsd, tokens: [] };
+    }
+    const tokenUsd = toNumberOrNull(row.token_usd);
+    if (tokenUsd !== null && tokenUsd > 0 && current.tokens.length < MAX_CHAIN_TOKENS) {
+      current.tokens.push({ symbol: row.token_symbol, balanceUsd: tokenUsd });
+    }
+  }
+  if (current !== null && chains.length < MAX_BREAKDOWN_CHAINS) {
+    chains.push({
+      chainId: current.chainId,
+      family: familyForChainId(current.chainId),
+      totalUsd: current.totalUsd,
+      tokens: current.tokens,
+    });
+  }
+  return chains;
+}
 
 /**
  * `NUMERIC`/`float8` columns come back from `pg` as strings or numbers. We
@@ -173,6 +242,7 @@ function emptyPortfolio(scope: PortfolioReadInput["scope"]): PortfolioDto {
     pnlVsPrev: null,
     snapshotAt: null,
     tokens: [],
+    chains: [],
   };
 }
 
@@ -259,6 +329,51 @@ export async function getPortfolio(
           balanceUsd: toNumber(row.usd),
         }));
 
+      // (b2) Per-chain breakdown for the POSITION chain switcher — a
+      // PURPOSE-BUILT window query over the FULL balance set (Codex plan
+      // review: post-processing the capped flat query above would silently
+      // drop chains once the 500-row bound bites). Invariants pushed into
+      // SQL: NULL chain ids excluded (legacy `tokens` still carries them),
+      // only chains with a strictly positive total survive, and each chain
+      // contributes its top-${MAX_CHAIN_TOKENS} positive-USD token lines.
+      const breakdownResult = await client.query<ChainBreakdownRow>(
+        `WITH lines AS (
+           SELECT chain_id,
+                  token_symbol,
+                  COALESCE(SUM(balance_usd), 0)::float8 AS usd
+             FROM proj_balances
+            WHERE wallet_address = ANY($1::text[])
+              AND chain_id IS NOT NULL
+            GROUP BY chain_id, token_symbol
+         ),
+         ranked AS (
+           SELECT chain_id, token_symbol, usd,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY chain_id ORDER BY usd DESC NULLS LAST
+                  ) AS rn
+             FROM lines
+            WHERE usd > 0
+         ),
+         totals AS (
+           SELECT chain_id, SUM(usd)::float8 AS chain_total
+             FROM lines
+            GROUP BY chain_id
+           HAVING SUM(usd) > 0
+            ORDER BY chain_total DESC
+            LIMIT ${MAX_BREAKDOWN_CHAINS}
+         )
+         SELECT t.chain_id,
+                t.chain_total,
+                r.token_symbol,
+                r.usd AS token_usd
+           FROM totals t
+           LEFT JOIN ranked r
+             ON r.chain_id = t.chain_id AND r.rn <= ${MAX_CHAIN_TOKENS}
+          ORDER BY t.chain_total DESC, t.chain_id ASC, r.rn ASC NULLS LAST`,
+        [addrParam],
+      );
+      const chains = buildChainBreakdown(breakdownResult.rows);
+
       // (c) PnL across COMPLETE snapshot cycles: the latest TWO groups that
       // cover EXACTLY the resolved address set (HAVING COUNT(DISTINCT)=N — a
       // partial group for a subset of the wallets is ignored). Aggregate PnL is
@@ -290,7 +405,7 @@ export async function getPortfolio(
       log.info(
         `[portfolio-db] getPortfolio ok scope=${input.scope} ` +
           `wallets=${addresses.length} tokens=${tokens.length} ` +
-          `snapshot=${latest !== undefined}`,
+          `chains=${chains.length} snapshot=${latest !== undefined}`,
       );
 
       return ok({
@@ -301,6 +416,7 @@ export async function getPortfolio(
         pnlVsPrev,
         snapshotAt,
         tokens,
+        chains,
       });
     } catch (cause) {
       return dbError("getPortfolio query failed", cause);

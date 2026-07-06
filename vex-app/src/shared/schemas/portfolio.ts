@@ -55,6 +55,43 @@ export const positionTokenDtoSchema = z
 export type PositionTokenDto = z.infer<typeof positionTokenDtoSchema>;
 
 /**
+ * One token line inside a per-chain breakdown — like `positionTokenDtoSchema`
+ * but WITHOUT `chainId` (the parent chain carries it) and guaranteed a
+ * strictly positive USD figure by the purpose-built breakdown query.
+ */
+export const chainTokenDtoSchema = z
+  .object({
+    symbol: z.string().max(64).nullable(),
+    balanceUsd: z.number().positive(),
+  })
+  .strict();
+export type ChainTokenDto = z.infer<typeof chainTokenDtoSchema>;
+
+/**
+ * Per-chain position breakdown (the POSITION chain switcher's data source).
+ * Built by a PURPOSE-BUILT query (window function over the full balance set —
+ * NOT a post-process of the capped flat `tokens` list, which is bounded at
+ * 500 rows and could silently drop chains). Invariants by construction:
+ *
+ *  - only chains with a strictly positive `totalUsd` appear ("see more"
+ *    lists only chains with balance > $0);
+ *  - `tokens` holds that chain's top holdings by USD, max 3, each > $0;
+ *  - rows with a NULL `chain_id` stay in the legacy flat `tokens` field
+ *    only — they can't be attributed to a chain switcher entry;
+ *  - `family` derives from the chain id (the Khalani synthetic Solana id
+ *    vs everything-else-EVM, see `@shared/chains/display.js`).
+ */
+export const positionChainDtoSchema = z
+  .object({
+    chainId: z.number(),
+    family: z.enum(["evm", "solana"]),
+    totalUsd: z.number().positive(),
+    tokens: z.array(chainTokenDtoSchema).max(3),
+  })
+  .strict();
+export type PositionChainDto = z.infer<typeof positionChainDtoSchema>;
+
+/**
  * Portfolio read result for one scope.
  *
  *  - `walletCount`     — number of resolved addresses in the allow-list
@@ -66,6 +103,9 @@ export type PositionTokenDto = z.infer<typeof positionTokenDtoSchema>;
  *                        set; all `null` when no such snapshot exists.
  *  - `tokens`          — per-(chain,token) live USD lines, newest USD first,
  *                        capped at 500 (defensive bound, never expected to hit).
+ *                        UNCHANGED legacy field — additive evolution only.
+ *  - `chains`          — per-chain breakdown for the chain switcher: positive
+ *                        totals only, top-3 tokens each, bounded at 64 chains.
  */
 export const portfolioDtoSchema = z
   .object({
@@ -76,6 +116,7 @@ export const portfolioDtoSchema = z
     pnlVsPrev: z.number().nullable(),
     snapshotAt: z.string().datetime({ offset: true }).nullable(),
     tokens: z.array(positionTokenDtoSchema).max(500),
+    chains: z.array(positionChainDtoSchema).max(64),
   })
   .strict();
 export type PortfolioDto = z.infer<typeof portfolioDtoSchema>;

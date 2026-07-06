@@ -158,10 +158,12 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
   return (
     <aside
       className={cn(
-        // Glass rail (Signal Sky): translucent ink floating over the WebGL
-        // sky behind the shell — the ONLY sanctioned backdrop-blur surface
-        // besides BookPanel (guard-whitelisted).
-        "relative z-10 flex h-full shrink-0 flex-col border-r border-[var(--vex-line)] bg-[var(--vex-glass)] backdrop-blur-xl transition-[width] duration-200",
+        // Rail over the Signal Sky: softer translucent ink (--vex-rail) so the
+        // sidebar merges with the center column into ONE canvas — pure glass,
+        // NO separating stroke of any kind (owner review round 2: even the
+        // edge-fading hairline still read as a dividing line). Backdrop-blur
+        // stays guard-whitelisted for this rail.
+        "relative z-10 flex h-full shrink-0 flex-col bg-[var(--vex-rail)] backdrop-blur-xl transition-[width] duration-200",
         sidebarOpen ? "w-[296px]" : "w-[72px]",
       )}
       data-vex-area="sessions-sidebar"
@@ -169,16 +171,16 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
     >
       <header
         className={cn(
-          // glass-strong anchors the brand strip: extra ink keeps the logo
+          // rail-strong anchors the brand strip: extra ink keeps the logo
           // mark solid where the sky is brightest (top of the canvas). The
           // static logo mark is the sole brand (no wordmark) and doubles as
           // the "Back to welcome" control (SidebarHomeSigil). The header
           // border-b was dropped so the top band reads as one seamless surface
-          // with the desk rule — the glass-strong luminance step separates the
+          // with the desk rule — the rail-strong luminance step separates the
           // brand strip from the actions below. Open height aligns with the
           // h-12 desk rule; collapsed stays taller to stack the mark above the
           // collapse toggle.
-          "relative flex shrink-0 bg-[var(--vex-glass-strong)]",
+          "relative flex shrink-0 bg-[var(--vex-rail-strong)]",
           sidebarOpen
             ? "h-12 items-center justify-center px-4"
             : "h-14 flex-col items-center justify-center gap-1 px-2",
@@ -368,10 +370,10 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
       {/* Footer registry: every row carries its own border-t hairline (the
        * first one doubles as the footer's top rule), so separators stay
        * correct when MemoryButton renders null (capability-gated).
-       * glass-strong anchors the registry rows against the sky's flecks. */}
+       * rail-strong anchors the registry rows against the sky's flecks. */}
       <footer
         className={cn(
-          "flex flex-col bg-[var(--vex-glass-strong)]",
+          "flex flex-col bg-[var(--vex-rail-strong)]",
           sidebarOpen ? "" : "items-stretch",
         )}
       >

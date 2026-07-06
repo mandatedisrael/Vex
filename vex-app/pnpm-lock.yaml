@@ -27,8 +27,8 @@ importers:
         specifier: ~5.100.9
         version: 5.100.9(react@19.2.6)
       '@thesvg/react':
-        specifier: ~2.1.10
-        version: 2.1.10(react@19.2.6)
+        specifier: ~3.2.2
+        version: 3.2.2(react@19.2.6)
       class-variance-authority:
         specifier: ~0.7.1
         version: 0.7.1
@@ -1067,8 +1067,8 @@ packages:
       '@types/react-dom':
         optional: true
 
-  '@thesvg/react@2.1.10':
-    resolution: {integrity: sha512-xBD/fhlwelYDWfyOCIQiSARzKXoKW/Duld9HOlnoeSh13jRmZPeTD8lyWOefsznIetCTJ9SP/qILsLe5QmkW6w==}
+  '@thesvg/react@3.2.2':
+    resolution: {integrity: sha512-ETh9Trqjlhf4ON5S3XDKW/xQJrYcdhrsjoVpFd33YrZ42QP5+kfJbGO9nqijxBODBceJXlChUKy8Go0XMGkvkg==}
     engines: {node: '>=18'}
     peerDependencies:
       react: '>=18'
@@ -3917,7 +3917,7 @@ snapshots:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)
 
-  '@thesvg/react@2.1.10(react@19.2.6)':
+  '@thesvg/react@3.2.2(react@19.2.6)':
     dependencies:
       react: 19.2.6
 

@@ -14,6 +14,13 @@
  *    address array (never a renderer-supplied address);
  *  - CROSS-SESSION ISOLATION: a session scoped to wallet A binds ONLY wallet
  *    A's address — wallet B's address never appears in any param;
+ *  - STRICT PER-SESSION attribution: the SELECT INNER JOINs
+ *    `protocol_executions` on `execution_id` and filters `session_id = $2`
+ *    (bound to the session). NULL-execution rows and foreign/NULL-session
+ *    rows are excluded at the DB BY THAT QUERY SHAPE — verified structurally
+ *    here (query text + param binding), mirroring how the wallet-isolation
+ *    test verifies exclusion via binding rather than a live DB filter (this
+ *    package mocks `pg`, so no real JOIN runs);
  *  - the tolerant mapper passes through a row with `trade_side = null`,
  *    `capture_status = 'filled'`, and `value_usd = null`;
  *  - a failed session-scope read propagates (fail closed);
@@ -184,6 +191,85 @@ describe("moves-db getMovesForSession — scoping + binding", () => {
     expect(sql).not.toContain("result");
     expect(sql).not.toContain("trade_capture");
     expect(sql).toContain("LIMIT 50");
+  });
+});
+
+describe("moves-db getMovesForSession — strict per-session attribution (JOIN)", () => {
+  it("excludes NULL-execution rows via an INNER JOIN on execution_id (not LEFT JOIN)", async () => {
+    // The INNER JOIN is the DB mechanism that drops proj_activity rows whose
+    // execution_id is NULL (externally-detected deposits, historical activity).
+    // The mock cannot run the JOIN, so the exclusion is asserted structurally.
+    mocks.getSessionWalletScope.mockResolvedValue(scopeOk(WALLET_A, null));
+    mocks.query.mockResolvedValueOnce({ rows: [] });
+
+    const result = await getMovesForSession(SESSION);
+    expect(result.ok).toBe(true);
+
+    const sql = String(mocks.query.mock.calls[0]?.[0] ?? "");
+    expect(sql).toContain("JOIN protocol_executions");
+    expect(sql).not.toContain("LEFT JOIN");
+    expect(sql).toContain("a.execution_id");
+  });
+
+  it("excludes foreign/NULL-session rows: filters protocol_executions.session_id = $2 bound to the session", async () => {
+    // session_id = $2 (with $2 = the server-resolved session id) is the DB
+    // mechanism that drops executions owned by another session or with a NULL
+    // session_id (both comparisons evaluate to UNKNOWN → excluded).
+    mocks.getSessionWalletScope.mockResolvedValue(scopeOk(WALLET_A, null));
+    mocks.query.mockResolvedValueOnce({ rows: [] });
+
+    await getMovesForSession(SESSION);
+    const call = mocks.query.mock.calls[0];
+    const sql = String(call?.[0] ?? "");
+    expect(sql).toContain("session_id = $2");
+    // $2 is the session id — server-resolved, never renderer-supplied as an
+    // address; bound alongside the address array as [$1, $2].
+    expect(call?.[1]).toEqual([[WALLET_A], SESSION]);
+  });
+
+  it("keeps the wallet-address scope as defense-in-depth alongside the session filter", async () => {
+    mocks.getSessionWalletScope.mockResolvedValue(scopeOk(WALLET_A, SOL_ADDR));
+    mocks.query.mockResolvedValueOnce({ rows: [] });
+
+    await getMovesForSession(SESSION);
+    const call = mocks.query.mock.calls[0];
+    const sql = String(call?.[0] ?? "");
+    // BOTH predicates present: the session attribution AND the wallet allow-list.
+    expect(sql).toContain("ANY($1::text[])");
+    expect(sql).toContain("session_id = $2");
+    const params = call?.[1];
+    expect(Array.isArray(params) ? params[0] : undefined).toEqual([WALLET_A, SOL_ADDR]);
+    expect(Array.isArray(params) ? params[1] : undefined).toBe(SESSION);
+  });
+
+  it("admits and maps a session-attributed row the JOIN returns (happy path post-JOIN)", async () => {
+    mocks.getSessionWalletScope.mockResolvedValue(scopeOk(WALLET_A, null));
+    mocks.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 42,
+          trade_side: "buy",
+          input_token: "USDC",
+          input_amount: "50",
+          output_token: "ETH",
+          output_amount: "0.02",
+          value_usd: "50",
+          capture_status: "executed",
+          instrument_key: "eth-usdc",
+          chain: "ethereum",
+          tx_ref: "0xfeed",
+          created_at: "2026-06-01T12:00:00.000Z",
+        },
+      ],
+    });
+
+    const result = await getMovesForSession(SESSION);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]?.id).toBe("42");
+    expect(result.data[0]?.chain).toBe("ethereum");
+    expect(result.data[0]?.txRef).toBe("0xfeed");
   });
 });
 

@@ -21,9 +21,11 @@
  *      statement, wearing the landing barcode flicker (.vex-title-barcode).
  *      The H1 "What should I execute?" is test-pinned: a REAL heading with
  *      this exact copy. Nothing else renders above the composer.
- *   3. BOTTOM ROW (absolute at the stage's bottom edge — the parent's
- *      trailing spacer keeps this band clear): the landing .hero-bottom —
- *      barcode strip + LOCAL-FIRST CAPITAL RUNTIME left, YOU SIGN EVERY
+ *   3. BOTTOM BAND (absolute at the stage's bottom edge — the parent's
+ *      trailing spacer keeps this band clear): the INTEGRATIONS RAIL
+ *      (protocol coins + chain coverage, `WelcomeIntegrationsRail`) stacked
+ *      over the landing .hero-bottom runtime row — barcode strip +
+ *      LOCAL-FIRST CAPITAL RUNTIME left, BACKED BY center, YOU SIGN EVERY
  *      ACTION right. The ONLY other copy on the stage.
  *
  * Load-in: the one-shot .vex-rise choreography, shifted one step for the
@@ -44,6 +46,7 @@ import {
   VexSigil,
 } from "./VexSigil.js";
 import { ThemeToggle } from "./ThemeToggle.js";
+import { WelcomeIntegrationsRail } from "./WelcomeIntegrationsRail.js";
 
 /** ~4.2s per quip — long enough to read, short enough to feel alive. */
 const TAGLINE_ROTATE_MS = 4200;
@@ -199,45 +202,53 @@ export function SessionWelcomeHero(): JSX.Element {
         </h1>
       </div>
 
-      {/* BOTTOM ROW — the landing .hero-bottom at the stage's bottom edge, now
-       * a three-zone grid: the two runtime lines flank a centered BACKED BY
-       * cluster (Virtuals + Robinhood marks) with the Robinhood-mode toggle.
+      {/* BOTTOM BAND — the landing .hero-bottom at the stage's bottom edge,
+       * now TWO stacked lines closing the load-in together:
+       *   1. the INTEGRATIONS RAIL (protocol coins + chain coverage) — the
+       *      execution-surface evidence line;
+       *   2. the runtime row: barcode + LOCAL-FIRST left, BACKED BY hallmark
+       *      (Virtuals + Robinhood marks) with the mode toggle center,
+       *      YOU SIGN EVERY ACTION right.
        * The band stays click-transparent (pointer-events-none); ONLY the
-       * toggle restores pointer-events (it re-enables them on itself). */}
-      <div className="vex-rise vex-rise-d4 pointer-events-none absolute inset-x-0 bottom-0 z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-8 pb-5 sm:px-12">
-        <span className="flex min-w-0 items-center gap-3 font-mono text-[9px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]">
-          <span
-            aria-hidden
-            className="vex-barcode h-3 w-24 shrink-0 opacity-40"
-          />
-          <span className="truncate">LOCAL-FIRST CAPITAL RUNTIME</span>
-        </span>
+       * toggle and the rail restore pointer-events on themselves. */}
+      <div className="vex-rise vex-rise-d4 pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col gap-3.5 px-8 pb-5 sm:px-12">
+        <WelcomeIntegrationsRail />
 
-        {/* BACKED BY — the partner hallmark, enlarged (~1.75x) but still quiet:
-         * monochrome marks at opacity-70, comfortable spacing, then the mode
-         * switch. A hallmark, not a billboard. */}
-        <div className="flex items-center justify-center gap-4">
-          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]">
-            Backed by
-          </span>
-          <span className="flex items-center gap-4">
-            <img
-              src="/logo/virtuals.svg"
-              alt="Virtuals"
-              className="h-7 w-7 opacity-70"
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+          <span className="flex min-w-0 items-center gap-3 font-mono text-[9px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]">
+            <span
+              aria-hidden
+              className="vex-barcode h-3 w-24 shrink-0 opacity-40"
             />
-            <img
-              src="/logo/robinhood.svg"
-              alt="Robinhood"
-              className="h-7 w-7 opacity-70"
-            />
+            <span className="truncate">LOCAL-FIRST CAPITAL RUNTIME</span>
           </span>
-          <ThemeToggle />
+
+          {/* BACKED BY — the partner hallmark, enlarged (~1.75x) but still
+           * quiet: monochrome marks at opacity-70, comfortable spacing, then
+           * the mode switch. A hallmark, not a billboard. */}
+          <div className="flex items-center justify-center gap-4">
+            <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]">
+              Backed by
+            </span>
+            <span className="flex items-center gap-4">
+              <img
+                src="/logo/virtuals.svg"
+                alt="Virtuals"
+                className="h-7 w-7 opacity-70"
+              />
+              <img
+                src="/logo/robinhood.svg"
+                alt="Robinhood"
+                className="h-7 w-7 opacity-70"
+              />
+            </span>
+            <ThemeToggle />
+          </div>
+
+          <span className="justify-self-end shrink-0 font-mono text-[9px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]">
+            YOU SIGN EVERY ACTION
+          </span>
         </div>
-
-        <span className="justify-self-end shrink-0 font-mono text-[9px] uppercase tracking-[0.3em] text-[var(--vex-text-3)]">
-          YOU SIGN EVERY ACTION
-        </span>
       </div>
     </>
   );

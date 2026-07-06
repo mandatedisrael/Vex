@@ -31,6 +31,29 @@ function truncateAddress(address: string): string {
   return `${address.slice(0, PREFIX_LEN)}…${address.slice(-SUFFIX_LEN)}`;
 }
 
+/**
+ * Permissionless copy: an off-screen readonly textarea + the selection copy
+ * command. Deprecated API, but the reliable path in a renderer whose
+ * permissions API is deny-all — no privileged IPC surface needed for a
+ * public address string.
+ */
+function copyViaSelection(text: string): boolean {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export function AddressDisplay({
   address,
   className,
@@ -46,18 +69,21 @@ export function AddressDisplay({
   }, []);
 
   const handleCopy = async (): Promise<void> => {
+    // The shell's permission handlers are deny-all (main/permissions.ts), so
+    // `navigator.clipboard.writeText` is rejected in the renderer. Try it
+    // first (future-proof), then fall back to the selection-based copy path,
+    // which needs no permissions API. Feedback fires ONLY on a real success.
+    let ok = false;
     try {
       await navigator.clipboard.writeText(address);
-      setCopied(true);
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(
-        () => setCopied(false),
-        COPY_FEEDBACK_MS
-      );
+      ok = true;
     } catch {
-      // Clipboard API may be unavailable in some Electron contexts;
-      // fail silently rather than spam the user with an error.
+      ok = copyViaSelection(address);
     }
+    if (!ok) return;
+    setCopied(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
   };
 
   const displayed = truncate ? truncateAddress(address) : address;

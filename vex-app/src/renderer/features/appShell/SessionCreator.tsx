@@ -165,9 +165,9 @@ export function SessionCreator({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Brand chrome (raised ink panel, hairline, black/70 no-blur backdrop)
        * is the Dialog base since the rebrand — only width is per-modal. */}
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-2xl">
         <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
-          <DialogHeader className="gap-2.5 border-[var(--vex-line)] py-5">
+          <DialogHeader className="gap-2.5 border-[var(--vex-line)] px-8 py-5">
             {/* The stamp becomes the landing eyebrow (mono micro-label +
              * leading rule). Same <h2>, same aria-labelledby id — only the
              * register changes; text stays "New session" (uppercased by
@@ -184,7 +184,7 @@ export function SessionCreator({
             </DialogDescription>
           </DialogHeader>
 
-          <DialogBody className="gap-6">
+          <DialogBody className="gap-6 px-8">
             <NameField name={name} onNameChange={setName} nameRef={nameRef} />
 
             <ModeFieldset mode={mode} onModeChange={setMode} />
@@ -206,7 +206,7 @@ export function SessionCreator({
             <SubmitError submitError={submitError} />
           </DialogBody>
 
-          <DialogFooter className="border-[var(--vex-line)] py-4">
+          <DialogFooter className="border-[var(--vex-line)] px-8 py-4">
             <Button
               type="button"
               variant="ghost"

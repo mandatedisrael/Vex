@@ -6,16 +6,17 @@
  * inventory POSITION ("Portfolio"). The MISSION contract/setup lives in the
  * centre column (SessionPanel), not here — this rail is instruments only.
  *
- * The rail is ONE continuous editorial column of GLASS — translucent ink
- * (--vex-glass + backdrop-blur, guard-whitelisted for exactly this file and
+ * The rail is ONE continuous editorial column of soft translucent ink
+ * (--vex-rail + backdrop-blur, guard-whitelisted for exactly this file and
  * SessionsList) floating over the Signal Sky WebGL canvas behind the shell,
- * behind a single left hairline. Inside, the landing right-workspace-column
- * grammar (.ws-col) holds: eyebrow section heads + border-t hairlines between
- * sections (BookBlock owns that chrome), no boxed tiles, so the column reads
- * as one pane of glass, not a card stack. Mode is a pure derivation of
- * `activeSessionId`: null = welcome (global), else the open session (scoped).
- * Slides in via a CSP-safe one-shot keyframe (`vex-book-enter`); reduced
- * motion collapses it to the final frame.
+ * delimited only by the edge-fading .vex-rail-seam-l hairline (seamless-shell
+ * owner review — no full-height border wall). Inside, the landing
+ * right-workspace-column grammar (.ws-col) holds: eyebrow section heads +
+ * border-t hairlines between sections (BookBlock owns that chrome), no boxed
+ * tiles, so the column reads as one pane, not a card stack. Mode is a pure
+ * derivation of `activeSessionId`: null = welcome (global), else the open
+ * session (scoped). Slides in via a CSP-safe one-shot keyframe
+ * (`vex-book-enter`); reduced motion collapses it to the final frame.
  *
  * The panel owns its own collapse header bar (first child): the version stamp
  * (relocated from the DESK RULE) + a chevron that calls the same `toggleBook`
@@ -54,9 +55,12 @@ export function BookPanel({
       data-vex-book-open={bookOpen ? "true" : "false"}
       aria-label="Session instrument"
       className={cn(
-        // Glass rail (Signal Sky): the pane is translucent ink over the WebGL
-        // sky in BOTH states — the collapsed spine is the same glass, thinner.
-        "vex-book-enter flex h-full shrink-0 flex-col overflow-y-auto border-l border-[var(--vex-line)] bg-[var(--vex-glass)] backdrop-blur-xl",
+        // Rail over the Signal Sky: softer translucent ink (--vex-rail) in
+        // BOTH states — the collapsed spine is the same tint, thinner. Pure
+        // glass, NO separating stroke (owner review round 2: even the
+        // edge-fading hairline still read as a dividing line). Backdrop-blur
+        // stays guard-whitelisted for this rail.
+        "vex-book-enter flex h-full shrink-0 flex-col overflow-y-auto bg-[var(--vex-rail)] backdrop-blur-xl",
         // Collapsed: a thin spine carrying only the header bar (version +
         // chevron). Expanded: the full instrument rail. Width change is CSS
         // only — the panel never remounts, so the blocks keep their state.

@@ -12,12 +12,25 @@
  *
  * `proj_activity` is success-only BY CONSTRUCTION (the engine writes an
  * activity row only after a capture succeeds), so there is NO `success = true`
- * predicate — and no JOIN to `protocol_executions`.
+ * predicate.
+ *
+ * STRICT PER-SESSION attribution: the read INNER JOINs `protocol_executions`
+ * on `proj_activity.execution_id = protocol_executions.id` and filters
+ * `protocol_executions.session_id = $2`, so ONLY moves whose originating
+ * execution was recorded under THIS session appear. Rows with a NULL
+ * `execution_id`, or an execution owned by another session / carrying a NULL
+ * `session_id` (historical or externally-detected activity), are excluded
+ * (fail-closed; externally-detected deposits intentionally drop out of the
+ * session view). `protocol_executions.session_id` is written by the engine's
+ * `recordExecution` from the same app session id used for the wallet scope
+ * (renderer sends session id → engine turn `context.sessionId` → capture), so
+ * the JOIN key and the wallet scope share one id space.
  *
  * SECURITY (non-negotiable):
  *  - The SELECT carries `WHERE wallet_address = ANY($1::text[])` with a bound,
- *    finite array resolved from the session's wallet scope. The filter is
- *    never omitted.
+ *    finite array resolved from the session's wallet scope, AND
+ *    `protocol_executions.session_id = $2` via the INNER JOIN. The wallet
+ *    filter is retained as defense-in-depth and is never omitted.
  *  - addresses.length === 0 → return the EMPTY DTO (`ok([])`) BEFORE any SQL
  *    (empty session scope, or a session with no selected wallets). Fail closed.
  *  - addresses are resolved SERVER-SIDE (session scope); a renderer-supplied
@@ -167,7 +180,9 @@ async function resolveSessionAddresses(
  *
  * Returns the EMPTY DTO (`ok([])`, no SQL issued) when the resolved allow-list
  * is empty. Otherwise selects up to `MOVES_MAX` bounded `proj_activity` rows
- * (activity rows / fills, NOT executions) scoped to the session's wallets.
+ * (activity rows / fills, NOT executions) that are BOTH scoped to the session's
+ * wallets AND attributed to this session via an INNER JOIN to
+ * `protocol_executions` (`session_id = $2`); newest first.
  */
 export async function getMovesForSession(
   sessionId: string,
@@ -186,25 +201,37 @@ export async function getMovesForSession(
 
   return withClient(async (client) => {
     try {
+      // STRICT PER-SESSION attribution. INNER JOIN protocol_executions on
+      // execution_id and filter session_id = $2:
+      //  - the INNER JOIN drops rows with a NULL execution_id (never a session);
+      //  - session_id = $2 drops rows whose execution belongs to another
+      //    session OR carries a NULL session_id (both comparisons evaluate to
+      //    UNKNOWN → excluded). Fail-closed: externally-detected / historical
+      //    activity without a matching session execution never leaks in.
+      // The wallet_address filter is KEPT as defense-in-depth (never omitted).
+      // Columns are qualified with the `a` alias because proj_activity and
+      // protocol_executions share `id`, `created_at`, and `external_refs`.
       const result = await client.query<MoveRow>(
-        `SELECT id,
-                trade_side,
-                input_token,
-                input_amount,
-                output_token,
-                output_amount,
-                value_usd,
-                capture_status,
-                instrument_key,
-                chain,
-                COALESCE(external_refs->>'txHash', external_refs->>'signature')
+        `SELECT a.id,
+                a.trade_side,
+                a.input_token,
+                a.input_amount,
+                a.output_token,
+                a.output_amount,
+                a.value_usd,
+                a.capture_status,
+                a.instrument_key,
+                a.chain,
+                COALESCE(a.external_refs->>'txHash', a.external_refs->>'signature')
                   AS tx_ref,
-                created_at
-           FROM proj_activity
-          WHERE wallet_address = ANY($1::text[])
-          ORDER BY created_at DESC, id DESC
+                a.created_at
+           FROM proj_activity a
+           JOIN protocol_executions e ON e.id = a.execution_id
+          WHERE a.wallet_address = ANY($1::text[])
+            AND e.session_id = $2
+          ORDER BY a.created_at DESC, a.id DESC
           LIMIT ${MOVES_MAX}`,
-        [addrParam],
+        [addrParam, sessionId],
       );
 
       const moves: MovesDto = result.rows.map((row) => ({

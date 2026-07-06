@@ -44,6 +44,7 @@ export function SelectMenu({
   ariaLabel,
   placeholder = "Select…",
   disabled = false,
+  placement = "bottom",
   className,
 }: {
   readonly value: string;
@@ -53,6 +54,14 @@ export function SelectMenu({
   readonly ariaLabel?: string;
   readonly placeholder?: string;
   readonly disabled?: boolean;
+  /**
+   * Static open direction. "bottom" (default) opens below the trigger;
+   * "top" opens above it. There is no dynamic geometry measurement — a
+   * caller sitting near the bottom of a scrollable modal passes "top" so
+   * the absolutely-positioned panel never extends its parent's scroll
+   * bounds (which would surface a modal scrollbar).
+   */
+  readonly placement?: "top" | "bottom";
   readonly className?: string;
 }): JSX.Element {
   const listboxId = useId();
@@ -212,8 +221,12 @@ export function SelectMenu({
           aria-label={ariaLabel}
           aria-labelledby={ariaLabelledBy}
           // Solid semantic popover surface (A6) — depth from luminance + a
-          // hairline, never backdrop blur or a resting glow.
-          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground"
+          // hairline, never backdrop blur or a resting glow. `placement`
+          // flips the anchor edge (down vs up); everything else is shared.
+          className={cn(
+            "absolute left-0 right-0 z-20 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground",
+            placement === "top" ? "bottom-full mb-1" : "top-full mt-1",
+          )}
         >
           {options.map((opt, index) => {
             const active = index === activeIndex;

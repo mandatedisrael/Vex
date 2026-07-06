@@ -13,14 +13,16 @@
  * WebGL dither sky (SignalSky, z-0 — no imagery), running FULL on the
  * welcome/idle stage and DIMMED behind an active session transcript. The
  * columns float above it: the center section carries `relative z-10`; the
- * two side rails (SessionsList / BookPanel) are guard-whitelisted glass
- * (--vex-glass over a blurred backdrop) so the sky reads through them.
+ * two side rails (SessionsList / BookPanel) are guard-whitelisted soft ink
+ * (--vex-rail over a blurred backdrop, edge-fading seams instead of border
+ * walls) so the sky reads through them and the shell stays ONE canvas.
  *
  * Layout: sidebar rail (SessionsList) | content column under the DESK RULE
  * | optional on-demand BOOK panel (right <aside>, gated on bookOpen). The
  * DESK RULE (h-12 header) is a 3-zone grid: the live tape-state word (left),
  * the MISSION/PLAN badge cluster (`MissionRail`, center — session view only),
- * and the BOOK toggle (right; the version stamp lives in BookPanel). Its
+ * and an empty right flank (the BOOK toggle + version stamp both live in
+ * BookPanel's collapse header — single-toggle owner review). Its
  * bottom-hairline accent tick sits over the left-anchored transcript spine.
  *
  * `data-vex-shell="true"` scopes the Protocol Desk tokens (sibling of
@@ -31,11 +33,6 @@
  */
 
 import type { JSX } from "react";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  PanelRightCloseIcon,
-  PanelRightOpenIcon,
-} from "@hugeicons/core-free-icons";
 import { useUiStore } from "../../stores/uiStore.js";
 import { BookPanel } from "./BookPanel.js";
 import { DeskRuleTapeState } from "./DeskRuleTapeState.js";
@@ -45,7 +42,6 @@ import { SessionCreator } from "./SessionCreator.js";
 import { SessionPanel } from "./SessionPanel.js";
 import { SessionsLibrary } from "./SessionsLibrary.js";
 import { SessionsList } from "./SessionsList.js";
-import { SidebarIconButton } from "./SessionRows.js";
 import { MemoryPanel } from "./MemoryPanel.js";
 import { SignalSky } from "./SignalSky.js";
 
@@ -97,8 +93,11 @@ export function AppShell(): JSX.Element {
          * tick that heads the left-anchored transcript spine remains. Three
          * zones on a 1fr/auto/1fr grid (equal flanks keep the center truly
          * centered): live tape state (left), MISSION/PLAN badge cluster
-         * (center), BOOK toggle (right). The rule itself never moves; only the
-         * tape-state word and the cluster's badge states change. */}
+         * (center), and an intentionally-empty right flank (the BOOK toggle
+         * lives ONLY in BookPanel's collapse header since the single-toggle
+         * owner review — the empty cell keeps the center truly centered). The
+         * rule itself never moves; only the tape-state word and the cluster's
+         * badge states change. */}
         <header className="relative grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 px-6">
           <span
             aria-hidden
@@ -115,27 +114,7 @@ export function AppShell(): JSX.Element {
               <MissionRail activeSessionId={activeSessionId} />
             ) : null}
           </div>
-          <div className="flex items-center justify-end gap-3">
-            {appShellView === "session" ? (
-              // Collapse/expand chevron — same affordance as the sidebar's
-              // PanelLeft toggle, mirrored to the right panel (PanelRight). The
-              // version stamp now lives in the BookPanel collapse header; the
-              // BookPanel itself carries a matching chevron, so both call the
-              // same toggleBook.
-              <SidebarIconButton
-                label={
-                  bookOpen ? "Collapse the BOOK panel" : "Expand the BOOK panel"
-                }
-                onClick={toggleBook}
-              >
-                <HugeiconsIcon
-                  icon={bookOpen ? PanelRightCloseIcon : PanelRightOpenIcon}
-                  size={17}
-                  aria-hidden
-                />
-              </SidebarIconButton>
-            ) : null}
-          </div>
+          <div aria-hidden className="flex items-center justify-end gap-3" />
         </header>
 
         <div className="min-h-0 flex-1">

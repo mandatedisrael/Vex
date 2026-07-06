@@ -270,10 +270,12 @@ describe("SessionTranscript", () => {
     let withExtra = false;
     listMock.mockImplementation((input: { readonly cursor: unknown }) => {
       if (input.cursor !== null) return Promise.resolve(failure); // older fails
+      // The live arrival is an ASSISTANT row — bottom-follow semantics. (A
+      // live USER row now top-anchors instead; covered by its own test.)
       const items = withExtra
         ? [
             msg({ id: 3, role: "user", kind: "text", content: "newest" }),
-            msg({ id: 4, role: "user", kind: "text", content: "newer" }),
+            msg({ id: 4, role: "assistant", kind: "text", content: "newer" }),
           ]
         : [msg({ id: 3, role: "user", kind: "text", content: "newest" })];
       return Promise.resolve(page(items, 3)); // hasMore → load-older is offered
@@ -315,5 +317,71 @@ describe("SessionTranscript", () => {
 
     // Bottom-follow ran (a stale anchor would have blocked it) → scrolled to 700.
     expect(scroller.scrollTop).toBe(700);
+  });
+
+  it("anchors a just-sent user message at the viewport top with a run-out spacer", async () => {
+    let withExtra = false;
+    listMock.mockImplementation(() => {
+      const items = withExtra
+        ? [
+            msg({ id: 3, role: "user", kind: "text", content: "newest" }),
+            msg({ id: 4, role: "user", kind: "text", content: "just sent" }),
+          ]
+        : [msg({ id: 3, role: "user", kind: "text", content: "newest" })];
+      return Promise.resolve(page(items, null));
+    });
+    setVex();
+    const client = freshClient();
+    const { container } = render(
+      createElement(SessionTranscript, { sessionId: SESSION }),
+      { wrapper: makeWrapper(client) },
+    );
+    await waitFor(() => {
+      expect(screen.getByText("newest")).not.toBeNull();
+    });
+
+    const scroller = getScroller(container);
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 200 });
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 500 });
+    scroller.scrollTop = 300; // pinned to the bottom (500 − 300 − 200 = 0)
+    fireEvent.scroll(scroller);
+
+    // The user sends a message — a LIVE user append lands via refetch.
+    withExtra = true;
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ["messages", SESSION] });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("just sent")).not.toBeNull();
+    });
+
+    // NOT bottom-followed: anchored so the sent message reads at the top.
+    // jsdom rects are all 0, so the math resolves to scrollTop − gap:
+    // 0 − 0 + 300 − 12 = 288 (definitely not scrollHeight = 500).
+    expect(scroller.scrollTop).toBe(288);
+    // The run-out spacer opened beneath the turn (clientHeight − 96 = 104).
+    const spacer = scroller.querySelector('div[aria-hidden][style*="height"]');
+    expect(spacer).not.toBeNull();
+    expect((spacer as HTMLElement).style.height).toBe("104px");
+  });
+
+  it("does NOT anchor a historical trailing user message on session open", async () => {
+    listMock.mockResolvedValue(
+      page([msg({ id: 3, role: "user", kind: "text", content: "old send" })], null),
+    );
+    setVex();
+    const { container } = render(
+      createElement(SessionTranscript, { sessionId: SESSION }),
+      { wrapper: makeWrapper(freshClient()) },
+    );
+    await waitFor(() => {
+      expect(screen.getByText("old send")).not.toBeNull();
+    });
+    const scroller = getScroller(container);
+    // Initial-load rows are settled history → the spacer stays collapsed
+    // (no dead scroll region when browsing an old session).
+    const spacer = scroller.querySelector("div[aria-hidden]:last-child");
+    expect(spacer).not.toBeNull();
+    expect((spacer as HTMLElement).style.height).not.toBe("104px");
   });
 });

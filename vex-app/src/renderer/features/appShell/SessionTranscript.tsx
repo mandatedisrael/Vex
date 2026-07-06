@@ -2,8 +2,10 @@
  * Session transcript surface (stage 8-1 + 8-2b load-older).
  *
  * Pages backward through `useTranscriptInfinite` (newest page first). Renders
- * loading (dotmatrix) / error / empty / list, bottom-anchored: jumps to newest
- * on session change and follows new arrivals only while pinned to the bottom.
+ * loading (dotmatrix) / error / empty / list. Scroll model: jumps to newest on
+ * session change; a just-sent USER message anchors at the viewport TOP (reply
+ * streams into view below it — the trailing anchor spacer guarantees the
+ * scroll range); other arrivals follow to the bottom only while pinned there.
  * Scrolling near the top loads the next older page (capped at
  * `MAX_TRANSCRIPT_PAGES` until 8-2c adds virtualization); the viewport is held
  * steady across that prepend by restoring the scrollHeight delta — and ONLY
@@ -109,6 +111,7 @@ export function SessionTranscript({
   const query = useTranscriptInfinite(sessionId);
   const preview = useStreamPreview(sessionId);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const anchorSpacerRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
   // Set ONLY by an intentional load-older fetch; consumed by the settle effect
   // below for scroll restoration. It never gates fetching or bottom-follow, so
@@ -167,20 +170,56 @@ export function SessionTranscript({
     items.length > 0 &&
     ((pages?.some((page) => !page.ok) ?? false) || query.isError);
 
-  // Session change → jump to the newest message.
+  // Session change → jump to the newest message. The anchor spacer is zeroed
+  // FIRST so the jump lands on real content, not send-time run-out space.
   useEffect(() => {
     pinnedToBottom.current = true;
     prependAnchor.current = null;
+    const spacer = anchorSpacerRef.current;
+    if (spacer !== null) spacer.style.height = "0px";
     const el = scrollRef.current;
     if (el !== null) el.scrollTop = el.scrollHeight;
   }, [sessionId]);
 
-  // New newest message while pinned → follow to the bottom. A load-older
-  // prepend never changes `newestId`, so this stays quiet during one.
-  useEffect(() => {
+  // New newest message. A just-SENT user message (a LIVE append — its id is
+  // outside the settled set, the same signal that drives the entry-settle
+  // print) anchors at the viewport TOP: the reading position for the reply
+  // streaming in below it, with the trailing spacer guaranteeing the scroll
+  // range even when nothing follows yet. Anchoring deliberately leaves
+  // `pinnedToBottom` false via the onScroll recalc, so the preview-follow
+  // effect below cannot yank the view while the user reads from the anchor
+  // down. A HISTORICAL user row (opening an old session) never anchors —
+  // that path keeps the bottom jump. Any other newest row keeps the old
+  // bottom-follow while pinned. A load-older prepend never changes
+  // `newestId`, so this stays quiet during one. Scrolls are instant (no
+  // smooth) — reduced-motion safe.
+  const newestVariant = rows.at(-1)?.variant ?? null;
+  const newestIsLiveAppend =
+    settledIds !== null && newestId !== 0 && !settledIds.has(newestId);
+  useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el !== null && pinnedToBottom.current) el.scrollTop = el.scrollHeight;
-  }, [newestId]);
+    if (el === null || newestId === 0) return;
+    if (newestVariant === "user" && newestIsLiveAppend) {
+      const target = el.querySelector(
+        `[data-vex-entry-id="${newestId}"][data-vex-entry-variant="user"]`,
+      );
+      if (target instanceof HTMLElement) {
+        const spacer = anchorSpacerRef.current;
+        if (spacer !== null) {
+          spacer.style.height = `${Math.max(0, el.clientHeight - 96)}px`;
+        }
+        const gap = 12;
+        el.scrollTop =
+          target.getBoundingClientRect().top -
+          el.getBoundingClientRect().top +
+          el.scrollTop -
+          gap;
+        pinnedToBottom.current = false;
+        return;
+      }
+    }
+    if (pinnedToBottom.current) el.scrollTop = el.scrollHeight;
+  }, [newestId, newestVariant, newestIsLiveAppend]);
 
   // The growing preview bubble must keep the view pinned too. Follow on ANY
   // visible preview change (new stream, new text, tool name, phase) so a
@@ -295,15 +334,11 @@ export function SessionTranscript({
           math is unchanged: scrollHeight still equals total row height + py-4
           (the bottom-follow + load-older anchoring on scrollRef are untouched). */}
       <div className="relative flex flex-col gap-3">
-        {/* The spine: a quiet hairline time/sequence axis at the gutter x
-            (left-[9px] = the 9px gutter centre; px-1 on the scroll parent puts
-            it 13px from the panel edge). Accent is rationed OUT of the resting
-            axis — the live/pending node (StreamingBubble) is the only blue that
-            ever lights on it. aria-hidden: pure structure. */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute left-[9px] top-0 bottom-0 w-px bg-[var(--vex-line)]"
-        />
+        {/* The spine hairline that used to run the gutter's full height was
+            removed (seamless-chat owner review): a wall-to-wall vertical rule
+            bracketed the conversation into its own box. The gutter still hosts
+            the live working mark (StreamingBubble, left-0) — an indicator, not
+            a wall. */}
         {query.isFetchingNextPage ? (
           <div className="flex justify-center py-1">
             <DotmHex3 size={18} dotSize={3} color="var(--vex-accent)" ariaLabel="Loading older messages" />
@@ -325,6 +360,8 @@ export function SessionTranscript({
           // its first call row's id, so its settle status matches its members'.
           <div
             key={entryKey(row)}
+            data-vex-entry-id={row.id}
+            data-vex-entry-variant={row.variant}
             className={cn(
               row.variant === "user" && "mt-4",
               settledIds !== null && !settledIds.has(row.id) && "vex-entry-settle",
@@ -339,6 +376,12 @@ export function SessionTranscript({
             awaitingApproval={hasPendingApproval}
           />
         ) : null}
+        {/* Anchor spacer — inert run-out below the newest turn. Sized (via the
+            top-anchor effect, direct style so it lands in the same frame as
+            the scroll) so a just-sent user message can anchor at the viewport
+            TOP with the reply streaming into the space beneath it. Zeroed on
+            session switch: history browsing gets no dead scroll region. */}
+        <div ref={anchorSpacerRef} aria-hidden className="shrink-0" />
       </div>
     </div>
   );

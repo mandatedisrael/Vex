@@ -10,9 +10,12 @@
  * component only renders the resolved DTO.
  *
  * Surface shows: the live total USD (blue rationed to this one figure), the
- * most recent snapshot total + PnL when present, the resolved wallet COUNT,
- * and the top token holdings (capped, remainder noted). Loading / error /
- * empty (no wallets) states are boxless lines on the same register.
+ * most recent snapshot total + PnL when present, and the resolved wallet
+ * COUNT. SESSION scope then renders the redesigned register — copy-ready
+ * deposit addresses (DepositAddresses) + the per-chain holdings switcher
+ * (PositionChains); GLOBAL keeps the legacy flat top-holdings list (capped,
+ * remainder noted). Loading / error / empty (no wallets) states are boxless
+ * lines on the same register.
  *
  * Token rows that would print `$0.00` (|USD| below formatUsd's 2-decimal
  * rounding threshold) are hidden — the cap and "+N more" count only rows
@@ -32,8 +35,11 @@ import type {
   PositionTokenDto,
 } from "@shared/schemas/portfolio.js";
 import { usePortfolio } from "../../../lib/api/portfolio.js";
+import { useSessionWallets } from "../../../lib/api/session-wallets.js";
 import { formatUsd, formatUsdDelta } from "../../../lib/format.js";
 import { BookBlock } from "./BookBlock.js";
+import { DepositAddresses } from "./DepositAddresses.js";
+import { PositionChains } from "./PositionChains.js";
 
 /** Visible token rows before the "+N more" tail. */
 const TOKENS_VISIBLE = 8;
@@ -103,8 +109,54 @@ export function PositionBlock({
         portfolio.walletCount === 1 ? "wallet" : "wallets"
       }`}
     >
-      <PositionBody portfolio={portfolio} hero={hero} />
+      {isSession && activeSessionId !== null ? (
+        <SessionPositionBody
+          portfolio={portfolio}
+          sessionId={activeSessionId}
+          hero={hero}
+        />
+      ) : (
+        <PositionBody portfolio={portfolio} hero={hero} />
+      )}
     </BookBlock>
+  );
+}
+
+/**
+ * Session-scope body — the redesigned register (owner request): the hero
+ * total, the session's copy-ready deposit addresses, then the per-chain
+ * holdings switcher (EVM default Ethereum + quick chains + "more" dialog,
+ * Solana headed by its mark). The legacy flat token list stays GLOBAL-only.
+ * `key={sessionId}` remounts the switcher per session so the selected chain
+ * always resets to Ethereum.
+ */
+function SessionPositionBody({
+  portfolio,
+  sessionId,
+  hero,
+}: {
+  readonly portfolio: PortfolioDto;
+  readonly sessionId: string;
+  readonly hero: boolean;
+}): JSX.Element {
+  const walletsQuery = useSessionWallets(sessionId);
+  const scope = walletsQuery.data?.ok ? walletsQuery.data.data : null;
+  return (
+    <div className="flex flex-col gap-2.5">
+      <TotalRow
+        liveTotalUsd={portfolio.liveTotalUsd}
+        snapshotTotalUsd={portfolio.snapshotTotalUsd}
+        pnlVsPrev={portfolio.pnlVsPrev}
+        hero={hero}
+      />
+      <DepositAddresses sessionId={sessionId} />
+      <PositionChains
+        key={sessionId}
+        chains={portfolio.chains}
+        hasEvmWallet={scope?.evm != null}
+        hasSolanaWallet={scope?.solana != null}
+      />
+    </div>
   );
 }
 

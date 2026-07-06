@@ -68,6 +68,15 @@ vi.mock("@hugeicons/core-free-icons", () => ({
 vi.mock("@thesvg/react", () => ({
   Docker: () => null,
   Ethereum: () => null,
+  Solana: () => null,
+  Base: () => null,
+  Robinhood: () => null,
+  Polygon: () => null,
+  Optimism: () => null,
+  BnbChain: () => null,
+  Tether: () => null,
+  Circle: () => null,
+  Chainlink: () => null,
   Postgresql: () => null,
 }));
 

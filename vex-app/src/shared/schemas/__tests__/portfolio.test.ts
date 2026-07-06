@@ -66,6 +66,14 @@ describe("portfolio dto schema", () => {
         { chainId: 1, symbol: "ETH", balanceUsd: 1000 },
         { chainId: 137, symbol: "USDC", balanceUsd: 234.56 },
       ],
+      chains: [
+        {
+          chainId: 1,
+          family: "evm",
+          totalUsd: 1000,
+          tokens: [{ symbol: "ETH", balanceUsd: 1000 }],
+        },
+      ],
       ...overrides,
     };
   }
@@ -83,6 +91,7 @@ describe("portfolio dto schema", () => {
       pnlVsPrev: null,
       snapshotAt: null,
       tokens: [],
+      chains: [],
     });
     expect(parsed.success).toBe(true);
   });
@@ -135,5 +144,75 @@ describe("portfolio dto schema", () => {
     expect(portfolioDtoSchema.safeParse(dtoFixture({ tokens })).success).toBe(
       false,
     );
+  });
+
+  // ── Per-chain breakdown strictness (codex plan review) ────────────────
+
+  function chainFixture(overrides: Record<string, unknown> = {}) {
+    return {
+      chainId: 8453,
+      family: "evm",
+      totalUsd: 12.5,
+      tokens: [{ symbol: "USDC", balanceUsd: 12.5 }],
+      ...overrides,
+    };
+  }
+
+  it("requires the chains field (additive but not optional)", () => {
+    const { chains: _chains, ...withoutChains } = dtoFixture();
+    expect(portfolioDtoSchema.safeParse(withoutChains).success).toBe(false);
+  });
+
+  it("rejects a non-positive chain totalUsd (positive by construction)", () => {
+    for (const totalUsd of [0, -1]) {
+      expect(
+        portfolioDtoSchema.safeParse(
+          dtoFixture({ chains: [chainFixture({ totalUsd })] }),
+        ).success,
+      ).toBe(false);
+    }
+  });
+
+  it("rejects a non-positive chain token balanceUsd", () => {
+    expect(
+      portfolioDtoSchema.safeParse(
+        dtoFixture({
+          chains: [chainFixture({ tokens: [{ symbol: "X", balanceUsd: 0 }] })],
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("rejects more than 3 tokens on a chain (top-3 bound)", () => {
+    const tokens = Array.from({ length: 4 }, (_, i) => ({
+      symbol: `T${i}`,
+      balanceUsd: 4 - i,
+    }));
+    expect(
+      portfolioDtoSchema.safeParse(dtoFixture({ chains: [chainFixture({ tokens })] }))
+        .success,
+    ).toBe(false);
+  });
+
+  it("rejects more than 64 chains (defensive bound)", () => {
+    const chains = Array.from({ length: 65 }, (_, i) =>
+      chainFixture({ chainId: 1000 + i }),
+    );
+    expect(portfolioDtoSchema.safeParse(dtoFixture({ chains })).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects an unknown key on a chain entry and an invalid family (strict)", () => {
+    expect(
+      portfolioDtoSchema.safeParse(
+        dtoFixture({ chains: [chainFixture({ extra: true })] }),
+      ).success,
+    ).toBe(false);
+    expect(
+      portfolioDtoSchema.safeParse(
+        dtoFixture({ chains: [chainFixture({ family: "bitcoin" })] }),
+      ).success,
+    ).toBe(false);
   });
 });
