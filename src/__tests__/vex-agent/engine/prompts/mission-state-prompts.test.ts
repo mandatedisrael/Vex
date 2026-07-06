@@ -42,6 +42,14 @@ describe("mission state prompts", () => {
     expect(prompt).toContain("do not spiral into open-ended market analysis before the draft is ready");
     expect(prompt).toContain("Do NOT execute any mutating tools (swaps, bridges, transfers) during setup");
     expect(prompt).toContain("`mission_draft_update` is the source of truth for readiness");
+    // Standing execution lock — the proactive counterpart to the prequote
+    // gate's `wallet_setup` fail-close: the model must know every on-chain
+    // mutation is refused pre-acceptance so it never invents workarounds
+    // (e.g. "my tools have no approve()" → sending the user to MetaMask).
+    expect(prompt).toContain("**Execution lock (standing rule):**");
+    expect(prompt).toContain("blocked by the runtime gate");
+    expect(prompt).toContain("do not invent workarounds");
+    expect(prompt).toContain("tell the user to press Accept contract");
 
     // Negative: old vocabulary and the dropped `social` namespace are gone.
     expect(prompt).not.toContain("research and planning phase");
@@ -144,6 +152,11 @@ describe("mission state prompts", () => {
     expect(prompt).toContain("each research loop must produce a shortlist, an execution candidate, a defer decision, or a contract-valid stop");
     // Fresh-token steering: prefer Jupiter's recent feed over the free DexScreener feed.
     expect(prompt).toContain("category=recent");
+    // Setup-only proof: the execution-lock standing rule must NOT leak into the
+    // run prompt — during an active run the gate is open and the lock would be
+    // false, contradictory guidance.
+    expect(prompt).not.toContain("Execution lock (standing rule)");
+    expect(prompt).not.toContain("blocked by the runtime gate");
   });
 
 });

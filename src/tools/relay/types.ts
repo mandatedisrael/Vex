@@ -86,11 +86,33 @@ export const RelayStepSchema = z
   .passthrough();
 export type RelayStep = z.infer<typeof RelayStepSchema>;
 
+/**
+ * One side of the quote's `details` (`currencyIn` / `currencyOut`) — the
+ * currency metadata (symbol/decimals) + human-readable `amountFormatted` the
+ * bridge handler records in its trade capture. Tolerant: Relay may omit any
+ * of it; the capture falls back to addresses / raw amounts.
+ */
+export const RelayQuoteDetailsSideSchema = z
+  .object({
+    currency: RelayCurrencySchema.optional(),
+    amount: z.string().optional(),
+    amountFormatted: z.string().optional(),
+  })
+  .passthrough();
+export type RelayQuoteDetailsSide = z.infer<typeof RelayQuoteDetailsSideSchema>;
+
+export const RelayQuoteDetailsSchema = z
+  .object({
+    currencyIn: RelayQuoteDetailsSideSchema.optional(),
+    currencyOut: RelayQuoteDetailsSideSchema.optional(),
+  })
+  .passthrough();
+
 export const RelayQuoteResponseSchema = z
   .object({
     steps: z.array(RelayStepSchema),
     fees: z.record(z.string(), z.unknown()).optional(),
-    details: z.record(z.string(), z.unknown()).optional(),
+    details: RelayQuoteDetailsSchema.optional(),
   })
   .passthrough();
 export type RelayQuoteResponse = z.infer<typeof RelayQuoteResponseSchema>;

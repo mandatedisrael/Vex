@@ -33,8 +33,8 @@ Use the Tool Map: if a tool is not in it RIGHT NOW, it is not callable. The pres
 
 Balances, prices, gas, open positions, quotes, transaction hashes are LIVE state. Re-query each turn — do not save them into knowledge or memory.
 
-- Your own wallet across all families in one call: \`wallet_balances\`.
-- One family / different address: \`khalani_tokens_balances\`.
+- Your own wallet across all families in one call: \`wallet_balances\` — covers Khalani chains AND local chains (Robinhood 4663, direct-RPC).
+- One family / different address: \`khalani_tokens_balances\` — Khalani-covered chains only; for Robinhood balances use \`wallet_balances\`.
 - On-chain EVM forensics (tx receipts, ERC-721 mint detection): \`chain_read\`. (Native balances → \`wallet_balances\`; token metadata/decimals → \`token_find\`.)
 - Your projected portfolio (positions, lots, PnL, history): \`portfolio\` — reads from your own DB projections (\`portfolio(view="summary")\`, \`open_positions\`, \`lots\`, \`profits\`, \`unrealized\`, \`bridges\`, \`orders\`, \`activity\`, \`executions\`).
 

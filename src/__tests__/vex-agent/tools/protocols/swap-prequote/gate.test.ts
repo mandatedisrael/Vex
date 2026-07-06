@@ -460,6 +460,84 @@ describe("evaluateSwapPrequoteGate", () => {
     expect(mockFindLatest.mock.calls[0]![1]).toBe(expected);
   });
 
+  // ── Uniswap native-leg identity — record→gate hash collision ────────────
+  //
+  // The uniswap quote echoes its routing WETH address for a native leg
+  // (isNative: true) while the gate canonicalizes execute-time "native"/ETH
+  // input to NATIVE_TOKEN_ADDRESS. The recorder must store the SAME sentinel
+  // or a native-leg quote can never authorize its execute (live bug: every
+  // ETH-leg uniswap swap on Robinhood 4663 blocked with no_quote).
+
+  const ROBINHOOD_WETH = "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73";
+  const UNISWAP_SAFETY_PASS = {
+    factory: { checked: true, allowlisted: true },
+    liquidity: { checked: true, usd: 50_000, aboveThreshold: true },
+    fot: { suspected: false },
+  };
+
+  it("UNISWAP native IN: a WETH-echoed native-leg quote records the sentinel and authorizes a 'native' execute", async () => {
+    await mod.recordPrequoteFromQuote(
+      "uniswap.swap.quote",
+      { chain: "robinhood", tokenIn: "native", tokenOut: GATE_TOKEN_OUT, amountIn: "0.001" },
+      {
+        chainId: 4663,
+        tokenIn: { address: ROBINHOOD_WETH, isNative: true },
+        tokenOut: { address: GATE_TOKEN_OUT, isNative: false },
+        safety: UNISWAP_SAFETY_PASS,
+      },
+      ctx(),
+    );
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    const row = mockCreate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(row.tokenIn).toBe(NATIVE_TOKEN_ADDRESS);
+    expect(row.tokenOut).toBe(GATE_TOKEN_OUT);
+    const recordedHash = String(row.matchHash);
+
+    resetMocks();
+    mockExistsFail.mockResolvedValue(false);
+    mockFindLatest.mockResolvedValue(
+      prequoteRow("pass", { provider: "uniswap", chainId: 4663, matchHash: recordedHash }),
+    );
+    const d = await mod.evaluatePrequoteGate(
+      "uniswap.swap.buy",
+      { chain: "robinhood", tokenIn: "native", tokenOut: GATE_TOKEN_OUT, amountIn: "0.001" },
+      ctx(),
+    );
+    expect(d.kind).toBe("allow");
+    expect(mockFindLatest.mock.calls[0]![1]).toBe(recordedHash);
+  });
+
+  it("UNISWAP native OUT: a token→ETH quote records the sentinel out-leg and matches an 'ETH' execute hash", async () => {
+    await mod.recordPrequoteFromQuote(
+      "uniswap.swap.quote",
+      { chain: "robinhood", tokenIn: GATE_TOKEN_IN, tokenOut: "ETH", amountIn: "5" },
+      {
+        chainId: 4663,
+        tokenIn: { address: GATE_TOKEN_IN, isNative: false },
+        tokenOut: { address: ROBINHOOD_WETH, isNative: true },
+        safety: UNISWAP_SAFETY_PASS,
+      },
+      ctx(),
+    );
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    const row = mockCreate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(row.tokenOut).toBe(NATIVE_TOKEN_ADDRESS);
+    const recordedHash = String(row.matchHash);
+
+    resetMocks();
+    mockExistsFail.mockResolvedValue(false);
+    mockFindLatest.mockResolvedValue(
+      prequoteRow("pass", { provider: "uniswap", chainId: 4663, matchHash: recordedHash }),
+    );
+    const d = await mod.evaluatePrequoteGate(
+      "uniswap.swap.sell",
+      { chain: "robinhood", tokenIn: GATE_TOKEN_IN, tokenOut: "ETH", amountIn: "5" },
+      ctx(),
+    );
+    expect(d.kind).toBe("allow");
+    expect(mockFindLatest.mock.calls[0]![1]).toBe(recordedHash);
+  });
+
   it("VENUE: kyberswap flows are byte-identical — the kyber gate hash did not change shape", async () => {
     mockExistsFail.mockResolvedValue(false);
     mockFindLatest.mockResolvedValue(prequoteRow("pass"));

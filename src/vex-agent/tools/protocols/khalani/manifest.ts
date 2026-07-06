@@ -69,7 +69,7 @@ export const KHALANI_TOOLS: readonly ProtocolToolManifest[] = [
     toolId: "khalani.tokens.balances",
     namespace: "khalani",
     lifecycle: "active",
-    description: "Read your token balances on Khalani-supported chains for one wallet family (EVM or Solana). Defaults to your personal wallet — pass `address` to override with a different one. Returns balances with USD prices, scanned per chain for complete multi-chain results.",
+    description: "Read your token balances on Khalani-supported chains for one wallet family (EVM or Solana). Defaults to your personal wallet — pass `address` to override with a different one. Returns balances with USD prices, scanned per chain for complete multi-chain results. Does NOT cover local chains like Robinhood Chain (4663) — read those with the internal `wallet_balances` tool.",
     mutating: false,
     actionKind: "read",
     params: [

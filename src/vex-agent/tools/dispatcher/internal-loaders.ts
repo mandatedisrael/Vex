@@ -91,6 +91,7 @@ export const INTERNAL_TOOL_LOADERS: Readonly<Record<string, InternalHandlerLoade
 
   // Wallet
   wallet_balances: async () => (await import("../internal/wallet/read.js")).handleWalletBalances,
+  wallet_track_token: async () => (await import("../internal/wallet/track.js")).handleWalletTrackToken,
   wallet_send_prepare: async () => (await import("../internal/wallet/send.js")).handleWalletSendPrepare,
   wallet_send_confirm: async () => (await import("../internal/wallet/send.js")).handleWalletSendConfirm,
 };

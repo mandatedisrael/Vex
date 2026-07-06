@@ -7,10 +7,14 @@
  * state. Capture mirrors khalani.bridge's audit shape (type "bridge").
  */
 
+import { formatUnits, getAddress, isAddress } from "viem";
+
+import { getLocalChain } from "@tools/evm-chains/registry.js";
 import { getRelayClient, getCachedRelayChains } from "@tools/relay/client.js";
-import { resolveRelayChainId, toRelayCurrency } from "@tools/relay/chains.js";
+import { resolveRelayChainId, toRelayCurrency, RELAY_NATIVE_CURRENCY } from "@tools/relay/chains.js";
 import { executeRelayBridge } from "@tools/relay/execute.js";
-import type { RelayChain, RelayQuoteRequest, RelayQuoteResponse } from "@tools/relay/types.js";
+import { pinTrackedToken } from "@vex-agent/db/repos/tracked-tokens.js";
+import type { RelayChain, RelayQuoteDetailsSide, RelayQuoteRequest, RelayQuoteResponse } from "@tools/relay/types.js";
 
 import type { ChainWallet } from "@tools/wallet/multi-auth.js";
 import { resolveSelectedAddress, resolveSigningWallet, walletScopeErrorToResult } from "@vex-agent/tools/internal/wallet/resolve.js";
@@ -45,6 +49,40 @@ function firstRequestId(quote: RelayQuoteResponse): string | null {
     if (step.requestId) return step.requestId;
   }
   return null;
+}
+
+interface CaptureLeg {
+  /** Display token: SYMBOL when known, else the currency address. */
+  token: string;
+  /** Human-readable amount, or null when Relay gave nothing convertible. */
+  amount: string | null;
+}
+
+/**
+ * One trade-capture leg from the quote's `details` (currencyIn/currencyOut).
+ * Symbol precedence: quote currency metadata → the chain's native-currency
+ * symbol (zero-address native) → the raw currency address (legacy fallback).
+ * Amount precedence: Relay's `amountFormatted` → formatUnits(amount, decimals)
+ * → null. No network calls — everything comes from the quote + cached chains.
+ */
+function captureLeg(
+  side: RelayQuoteDetailsSide | undefined,
+  currency: string,
+  chainId: number,
+  chains: readonly RelayChain[],
+): CaptureLeg {
+  const nativeSymbol = currency === RELAY_NATIVE_CURRENCY
+    ? chains.find((c) => c.id === chainId)?.currency?.symbol
+    : undefined;
+  const token = side?.currency?.symbol ?? nativeSymbol ?? currency;
+
+  const decimals = side?.currency?.decimals;
+  const raw = side?.amount;
+  const amount = side?.amountFormatted
+    ?? (raw !== undefined && decimals !== undefined && /^\d+$/.test(raw)
+      ? formatUnits(BigInt(raw), decimals)
+      : null);
+  return { token, amount };
 }
 
 async function resolveLegs(
@@ -181,6 +219,30 @@ async function relayBridge(
         ? "failed"
         : "pending";
 
+  // Display legs (symbols + human-readable amounts) for the capture; the raw
+  // currency addresses stay in inputTokenAddress/outputTokenAddress.
+  const inLeg = captureLeg(quote.details?.currencyIn, legs.originCurrency, legs.originChainId, chains);
+  const outLeg = captureLeg(quote.details?.currencyOut, legs.destinationCurrency, legs.destinationChainId, chains);
+
+  // Auto-pin (fail-soft): an ERC-20 bridged ONTO a local chain joins the
+  // tracked_tokens set (seed ∪ pins) so balance scans and the portfolio see
+  // it. Native needs no pin. A DB bookmark — never fails the bridge result.
+  if (getLocalChain(legs.destinationChainId) && legs.destinationCurrency !== RELAY_NATIVE_CURRENCY && isAddress(legs.destinationCurrency)) {
+    try {
+      await pinTrackedToken({
+        walletAddress: signer.address,
+        chainId: legs.destinationChainId,
+        tokenAddress: getAddress(legs.destinationCurrency),
+        source: "bridge",
+      });
+    } catch (err) {
+      logger.warn("relay.bridge.auto_pin_failed", {
+        chainId: legs.destinationChainId,
+        error: err instanceof Error ? err.name : "unknown",
+      });
+    }
+  }
+
   logger.info("relay.bridge.completed", {
     originChainId: legs.originChainId,
     destinationChainId: legs.destinationChainId,
@@ -205,11 +267,12 @@ async function relayBridge(
         type: "bridge",
         chain: String(legs.originChainId),
         status: captureStatus,
-        inputToken: legs.originCurrency,
+        inputToken: inLeg.token,
         inputTokenAddress: legs.originCurrency,
-        inputAmount: legs.amount,
-        outputToken: legs.destinationCurrency,
+        inputAmount: inLeg.amount ?? legs.amount,
+        outputToken: outLeg.token,
         outputTokenAddress: legs.destinationCurrency,
+        ...(outLeg.amount !== null ? { outputAmount: outLeg.amount } : {}),
         signature: result.txHashes[0] ?? "",
         walletAddress: signer.address,
         meta: {

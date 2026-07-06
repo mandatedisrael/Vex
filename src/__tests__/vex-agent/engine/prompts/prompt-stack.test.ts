@@ -345,6 +345,10 @@ describe("prompt-stack", () => {
       }));
       expect(joined).toContain("# Mission Setup");
       expect(joined).not.toContain("# Mission Execution");
+      // The standing execution lock rides the setup layer: pre-acceptance,
+      // every on-chain mutation is gate-blocked and the model must say so
+      // instead of inventing workarounds.
+      expect(joined).toContain("Execution lock (standing rule)");
     });
 
     it("mission run includes run prompt", () => {
@@ -353,6 +357,8 @@ describe("prompt-stack", () => {
       }));
       expect(joined).toContain("# Mission Execution");
       expect(joined).not.toContain("# Mission Setup");
+      // Setup-only: the execution lock must not leak into an active run.
+      expect(joined).not.toContain("Execution lock (standing rule)");
     });
 
     it("subagent includes subagent prompt", () => {
@@ -826,7 +832,11 @@ describe("prompt-stack", () => {
       expect(joined).toContain("## Chain awareness"); // P3 style contract: H2 inside identity
       expect(joined).toContain("Robinhood Chain (4663): Arbitrum Orbit L2");
       expect(joined).toContain("Not covered by Khalani");
-      expect(joined).toContain("added to portfolio tracking automatically");
+      // Robinhood-launch fix: the awareness line routes balance reads to
+      // `wallet_balances`; the old "added to portfolio tracking automatically"
+      // promise was false (only spot swaps ever auto-tracked) and is gone.
+      expect(joined).toContain("read live balances there with `wallet_balances`");
+      expect(joined).not.toContain("added to portfolio tracking automatically");
     });
 
     it("keeps chain-awareness content in the STATIC prefix (cache-safe, no live numbers)", () => {

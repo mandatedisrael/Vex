@@ -25,7 +25,7 @@ export const UNISWAP_SWAP_DISCOVERY = {
 
   "uniswap.swap.sell": {
     embeddingText: embeddingText(
-      `Sell a token on Uniswap (V2 or V3, best route) — exact-input swap: spend the input token to receive the output. ` +
+      `Sell a token on Uniswap (V2 or V3, best route) — exact-input swap: spend the input token to receive the output. Execution handles the token approval automatically. ` +
       `Use this when the user wants to sell, dump, or exit a position on Robinhood Chain (the only venue there — sell $VEX or a Virtuals agent token for VIRTUAL/ETH) or as an all-EVM fallback for KyberSwap. ` +
       `Example queries: sell vex for virtual on robinhood, dump my robinhood token, exit position on uniswap, swap out on robinhood chain.`,
     ),
@@ -37,7 +37,7 @@ export const UNISWAP_SWAP_DISCOVERY = {
 
   "uniswap.swap.buy": {
     embeddingText: embeddingText(
-      `Buy a token on Uniswap (V2 or V3, best route) — exact-input swap marked as a buy for portfolio tracking (a lot opens on the output token). ` +
+      `Buy a token on Uniswap (V2 or V3, best route) — exact-input swap marked as a buy for portfolio tracking (a lot opens on the output token). Execution handles the token approval automatically. ` +
       `Use this when the user wants to buy, ape into, or acquire a token on Robinhood Chain (the only venue there — buy $VEX or a Virtuals agent token with VIRTUAL/ETH) or as an all-EVM fallback for KyberSwap. ` +
       `Example queries: buy vex with virtual on robinhood, ape into a robinhood token, acquire token on uniswap, open a spot position on robinhood chain.`,
     ),

@@ -62,6 +62,20 @@ function deriveTradeSide(
   return null;
 }
 
+// ── Leg token resolution ────────────────────────────────────────
+// Default: address-first — tracked-token discovery
+// (activity.getTrackedEvmTokensForChain) scans spot rows for hex addresses.
+// Bridge rows are audit/display-only (the position projector skips bridges and
+// tracked-token discovery reads spot only), so they keep the handler's SYMBOL
+// leg; the raw addresses remain in the capture's inputTokenAddress/
+// outputTokenAddress inside protocol_executions.trade_capture.
+
+function legToken(symbol: unknown, address: unknown, preferSymbol: boolean): string | null {
+  const sym = typeof symbol === "string" ? symbol : null;
+  const addr = typeof address === "string" ? address : null;
+  return preferSymbol ? (sym ?? addr) : (addr ?? sym);
+}
+
 // ── Main populator ──────────────────────────────────────────────
 
 export async function populateActivity(
@@ -77,6 +91,7 @@ export async function populateActivity(
   const chain = typeof tradeCapture.chain === "string" ? tradeCapture.chain : "unknown";
 
   const tradeSide = deriveTradeSide(tradeCapture, toolId, productType);
+  const preferSymbolLegs = productType === "bridge";
 
   // Extract valuation fields as strings — preserve precision for NUMERIC columns
   const inputValueUsd = typeof tradeCapture.inputValueUsd === "string" ? tradeCapture.inputValueUsd : null;
@@ -91,11 +106,9 @@ export async function populateActivity(
     executionId,
     captureItemId,
     walletAddress: typeof tradeCapture.walletAddress === "string" ? tradeCapture.walletAddress : null,
-    inputToken: typeof tradeCapture.inputTokenAddress === "string" ? tradeCapture.inputTokenAddress
-      : typeof tradeCapture.inputToken === "string" ? tradeCapture.inputToken : null,
+    inputToken: legToken(tradeCapture.inputToken, tradeCapture.inputTokenAddress, preferSymbolLegs),
     inputAmount: typeof tradeCapture.inputAmount === "string" ? tradeCapture.inputAmount : null,
-    outputToken: typeof tradeCapture.outputTokenAddress === "string" ? tradeCapture.outputTokenAddress
-      : typeof tradeCapture.outputToken === "string" ? tradeCapture.outputToken : null,
+    outputToken: legToken(tradeCapture.outputToken, tradeCapture.outputTokenAddress, preferSymbolLegs),
     outputAmount: typeof tradeCapture.outputAmount === "string" ? tradeCapture.outputAmount : null,
     valueUsd: null,
     inputValueUsd,

@@ -39,14 +39,18 @@ describe("RelayClient", () => {
     expect(chains.map((c) => c.id)).toEqual([4663, 8453]);
   });
 
-  it("getQuote validates the step tx shape (to/value/data/chainId)", async () => {
+  it("getQuote validates the step tx shape (to/value/data/chainId) + tolerant details legs", async () => {
     okResponse({
       steps: [{
         id: "deposit", kind: "transaction", requestId: "0xreq",
         items: [{ status: "incomplete", data: { from: "0x1111111111111111111111111111111111111111", to: "0x2222222222222222222222222222222222222222", value: "1000", data: "0xabcd", chainId: 8453 } }],
       }],
       fees: { gas: {} },
-      details: { operation: "bridge" },
+      details: {
+        operation: "bridge",
+        currencyIn: { currency: { symbol: "ETH", decimals: 18 }, amount: "1000", amountFormatted: "0.000000000000001" },
+        currencyOut: { currency: { symbol: "ETH", decimals: 18 } },
+      },
     });
     const q = await client.getQuote({
       user: "0x1111111111111111111111111111111111111111",
@@ -59,6 +63,10 @@ describe("RelayClient", () => {
     expect(q.steps[0]!.kind).toBe("transaction");
     expect(q.steps[0]!.items[0]!.data?.chainId).toBe(8453);
     expect(q.steps[0]!.requestId).toBe("0xreq");
+    // details legs (symbol + human amount) survive the tolerant schema.
+    expect(q.details?.currencyIn?.currency?.symbol).toBe("ETH");
+    expect(q.details?.currencyIn?.amountFormatted).toBe("0.000000000000001");
+    expect(q.details?.currencyOut?.amountFormatted).toBeUndefined();
   });
 
   it("rejects a malformed step (non-address `to`)", async () => {

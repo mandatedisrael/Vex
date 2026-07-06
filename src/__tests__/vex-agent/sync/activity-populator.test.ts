@@ -105,6 +105,25 @@ describe("activity-populator", () => {
     expect(mockInsertActivity.mock.calls[0][0].inputToken).toBe("SOL");
   });
 
+  it("bridge prefers SYMBOL legs over addresses (display/audit-only rows)", async () => {
+    await populateActivity(25, null, "relay.bridge", "relay", {
+      type: "bridge", chain: "4663",
+      inputToken: "ETH", inputTokenAddress: "0x0000000000000000000000000000000000000000",
+      outputToken: "ETH", outputTokenAddress: "0x0000000000000000000000000000000000000000",
+    });
+    const row = mockInsertActivity.mock.calls[0][0];
+    expect(row.inputToken).toBe("ETH");
+    expect(row.outputToken).toBe("ETH");
+  });
+
+  it("bridge falls back to the address leg when the handler recorded no symbol", async () => {
+    await populateActivity(26, null, "khalani.bridge", "khalani", {
+      type: "bridge", chain: "1",
+      inputTokenAddress: "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    });
+    expect(mockInsertActivity.mock.calls[0][0].inputToken).toBe("0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+  });
+
   it("passes instrumentKey and positionKey", async () => {
     await populateActivity(23, null, "solana.perps.close", "solana", {
       type: "perps", chain: "solana", positionKey: "PK123", instrumentKey: "solana:perps:SOL",

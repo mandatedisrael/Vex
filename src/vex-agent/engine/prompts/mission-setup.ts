@@ -28,6 +28,8 @@ export function buildMissionSetupPrompt(
   lines.push("This is Capability Orientation, not mission execution. Identify which tools/venues fit the mission and read live wallet/chain state to ground the contract in reality, then propose and refine the draft. Orientation is scoped to grounding the draft, not open-ended market operation — Operational Research belongs to the run.");
   lines.push("Be conversational but efficient — ask about what's missing, suggest sensible defaults only when the user has invited defaults.");
   lines.push("");
+  lines.push("**Execution lock (standing rule):** until the user accepts the contract via the host Accept step and the run starts, ALL on-chain mutations (swaps, bridges, sends) are blocked by the runtime gate — every attempt will be refused. Do not attempt them and do not invent workarounds (there is no separate approve step, no external wallet action, and no missing permission to fix); finalize the draft and tell the user to press Accept contract.");
+  lines.push("");
 
   lines.push("## Rules");
   lines.push("- Use setup for Capability Orientation: read your Available Tool Map (including the Research category — `web_research`, `twitter_account` — when present) and `discover_tools` metadata to identify which tools/venues fit the mission, and read live state with `wallet_balances` and `portfolio` so capital/chains match what the session holds. This is orientation, not market operation — do NOT run market scans, quotes, or `execute_tool` on market data during setup; that is the run's job");

@@ -20,8 +20,8 @@ vi.mock("@tools/evm-chains/evm-client.js", () => ({
 }));
 
 const mockTracked = vi.fn();
-vi.mock("@vex-agent/db/repos/activity.js", () => ({
-  getTrackedEvmTokensForChain: (...a: unknown[]) => mockTracked(...a),
+vi.mock("@vex-agent/db/repos/tracked-tokens.js", () => ({
+  getTrackedTokenAddressesForChain: (...a: unknown[]) => mockTracked(...a),
 }));
 
 const mockReplace = vi.fn().mockResolvedValue(0);
@@ -92,26 +92,26 @@ beforeEach(() => {
   mockReplace.mockResolvedValue(3);
   fakeClient.multicall.mockImplementation(defaultMulticall as never);
   fakeClient.getBalance.mockResolvedValue(500000000000000000n); // 0.5 ETH
-  // DexScreener: WETH $3000, VEX $0.5; NEW has no pair (priceless).
+  // DexScreener — LIVE robinhood index shape (verified 2026-07-06): WETH
+  // appears ONLY as a QUOTE token, so its USD price must derive as
+  // priceUsd/priceNative (1.5 / 0.0005 = $3000). VEX is priced base-side.
+  // NEW has no pair (priceless).
   mockGetTokens.mockResolvedValue([
-    { chainId: "robinhood", baseToken: { address: SEED.WETH }, priceUsd: "3000", liquidity: { usd: 1_000_000 } },
-    { chainId: "robinhood", baseToken: { address: SEED.VEX }, priceUsd: "0.5", liquidity: { usd: 50_000 } },
+    { chainId: "robinhood", baseToken: { address: SEED.VIRTUAL }, quoteToken: { address: SEED.WETH }, priceUsd: "1.5", priceNative: "0.0005", liquidity: { usd: 1_000_000 } },
+    { chainId: "robinhood", baseToken: { address: SEED.VEX }, quoteToken: { address: SEED.VIRTUAL }, priceUsd: "0.5", priceNative: "0.3333", liquidity: { usd: 50_000 } },
   ]);
   mockTracked.mockResolvedValue([]);
 });
 
 describe("syncLocalChainForWallet", () => {
-  it("scans seed ∪ tracked tokens, de-duping tracked against the seed set", async () => {
-    // Tracked returns VEX again (lowercase dup) plus a genuinely new token.
+  it("scans seed ∪ pinned tokens, de-duping pins against the seed set", async () => {
+    // Pins return VEX again (lowercase dup) plus a genuinely new token.
     mockTracked.mockResolvedValue([SEED.VEX.toLowerCase(), NEW_TOKEN]);
 
     await syncLocalChainForWallet("eip155", WALLET, 4663);
 
-    // Wallet-scoped + chain-key-scoped derivation (LOCKED correction #1).
-    expect(mockTracked).toHaveBeenCalledWith({
-      walletAddress: WALLET,
-      chainKeys: expect.arrayContaining(["robinhood", "robinhood chain", "robinhoodchain", "rhc", "4663"]),
-    });
+    // Wallet-scoped + chain-scoped pinned-token read (tracked_tokens table).
+    expect(mockTracked).toHaveBeenCalledWith(WALLET, 4663);
 
     // Distinct balanceOf set = 4 seed + 1 new = 5 (VEX not duplicated).
     const balContracts = balanceOfMulticallContracts();
@@ -186,6 +186,20 @@ describe("syncLocalChainForWallet", () => {
     await expect(syncLocalChainForWallet("eip155", WALLET, 4663)).rejects.toThrow("db write down");
     // The write was attempted — the RPC phase completed normally first.
     expect(mockReplace).toHaveBeenCalledTimes(1);
+  });
+
+  it("prices wrapped-native from the QUOTE side, picking the deepest pool", async () => {
+    // WETH as quote token in TWO pools — the deeper pool's derived price wins.
+    mockGetTokens.mockResolvedValue([
+      { chainId: "robinhood", baseToken: { address: SEED.VIRTUAL }, quoteToken: { address: SEED.WETH }, priceUsd: "1.5", priceNative: "0.0005", liquidity: { usd: 10_000 } }, // → $3000
+      { chainId: "robinhood", baseToken: { address: SEED.USDG }, quoteToken: { address: SEED.WETH }, priceUsd: "1.0", priceNative: "0.00035", liquidity: { usd: 200_000 } }, // → ~$2857.14
+    ]);
+
+    await syncLocalChainForWallet("eip155", WALLET, 4663);
+    const [, , rows] = mockReplace.mock.calls[0] as [string, number, Array<Record<string, unknown>>];
+    const nativeRow = rows.find((r) => String(r.tokenAddress).toLowerCase() === NATIVE)!;
+    expect(nativeRow.priceUsd).toBeCloseTo(1.0 / 0.00035, 2);
+    expect(nativeRow.balanceUsd).toBeCloseTo(0.5 / 0.00035, 2);
   });
 
   it("keeps tokens when DexScreener has no data for the chain (all priceless, still written)", async () => {

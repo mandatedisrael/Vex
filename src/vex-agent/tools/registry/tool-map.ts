@@ -34,6 +34,7 @@ export interface ToolMapCategory {
 export const TOOL_MAP_CATEGORIES: readonly ToolMapCategory[] = [
   { label: "Protocol discovery/execution", toolNames: ["discover_tools", "execute_tool"] },
   { label: "Live state reads", toolNames: ["wallet_balances", "chain_read", "portfolio"] },
+  { label: "Local-chain token pinning (Robinhood — DB bookmark, no tx)", toolNames: ["wallet_track_token"] },
   {
     label: "Khalani read shortcuts",
     toolNames: [

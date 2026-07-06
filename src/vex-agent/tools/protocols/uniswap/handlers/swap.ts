@@ -25,6 +25,8 @@ import { checkRouteFactories, probeFotSignal, UNISWAP_MIN_LIQUIDITY_USD } from "
 import type { UniswapDeployment } from "@tools/uniswap/deployments.js";
 import type { UniswapToken, UniswapRoute } from "@tools/uniswap/types.js";
 import { getDexScreenerClient } from "@tools/dexscreener/client.js";
+import { getLocalChain } from "@tools/evm-chains/registry.js";
+import { pinTrackedToken } from "@vex-agent/db/repos/tracked-tokens.js";
 
 import type { ChainWallet } from "@tools/wallet/multi-auth.js";
 import { resolveSigningWallet, walletScopeErrorToResult } from "@vex-agent/tools/internal/wallet/resolve.js";
@@ -264,6 +266,28 @@ async function executeUniswapSwap(
   const amountOutHuman = formatUnits(quoted.amountOut, tokenOut.decimals);
 
   logger.info("uniswap.swap.executed", { chain: deployment.key, version: quoted.route.version, side });
+
+  // Auto-pin (fail-soft): non-native legs of a swap on a LOCAL chain join the
+  // tracked_tokens set (seed ∪ pins) so balance scans and the portfolio keep
+  // seeing them. A DB bookmark — never allowed to fail the swap result.
+  if (getLocalChain(deployment.chainId)) {
+    for (const leg of [tokenIn, tokenOut]) {
+      if (leg.isNative) continue;
+      try {
+        await pinTrackedToken({
+          walletAddress: signer.address,
+          chainId: deployment.chainId,
+          tokenAddress: leg.address,
+          source: "swap",
+        });
+      } catch (err) {
+        logger.warn("uniswap.swap.auto_pin_failed", {
+          chain: deployment.key,
+          error: err instanceof Error ? err.name : "unknown",
+        });
+      }
+    }
+  }
 
   return {
     success: true,
