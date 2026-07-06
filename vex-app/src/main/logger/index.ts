@@ -53,7 +53,10 @@ export function configureLogger(): typeof logElectron {
   });
 
   logElectron.eventLogger.startLogging({
-    events: { app: ["before-quit"], webContents: ["render-process-gone"] },
+    events: {
+      app: { "before-quit": true },
+      webContents: { "render-process-gone": true },
+    },
   });
 
   configured = true;

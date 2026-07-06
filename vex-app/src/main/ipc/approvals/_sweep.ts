@@ -18,8 +18,8 @@ export async function runScheduledSweep(): Promise<void> {
   const correlationId = `sweep-${randomUUID()}`;
   const dbUrlOutcome = await ensureEngineDbUrl(correlationId);
   if (!dbUrlOutcome.ok) {
-    log.warn(
-      `[approvals.sweep] ensureEngineDbUrl failed code=${dbUrlOutcome.error.code} ` +
+    log.info(
+      `[approvals.sweep] waiting: database url unavailable (will retry next sweep) ` +
         `correlationId=${correlationId}`,
     );
     return;
