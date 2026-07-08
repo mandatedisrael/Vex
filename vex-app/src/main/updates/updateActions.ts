@@ -103,7 +103,15 @@ export async function startUpdateNow(
   if (downloadInFlight !== null) return ok({ started: true });
 
   const status = getCurrentStatus();
-  if (status.kind !== "available") {
+  // Accept the fresh `available` state OR a "Try again" retry from
+  // `blockedByOperation` whose blocked step was the download — otherwise the
+  // recovery CTA is a dead end. The gate is re-checked live below either way.
+  if (
+    status.kind !== "available" &&
+    !(
+      status.kind === "blockedByOperation" && status.blockedAction === "download"
+    )
+  ) {
     return err(
       publicUpdateError(
         "update.apply_failed",
@@ -193,7 +201,17 @@ export async function restartAndInstallNow(
 
   const status = getCurrentStatus();
   if (status.kind === "installing") return ok({ restarting: true });
-  if (status.kind !== "downloaded") {
+  // Accept `downloaded` OR a "Try again" retry from `blockedByOperation` whose
+  // blocked step was the install and whose artifact is already on disk —
+  // otherwise the recovery CTA is a dead end. The gate is re-checked live below.
+  if (
+    status.kind !== "downloaded" &&
+    !(
+      status.kind === "blockedByOperation" &&
+      status.blockedAction === "install" &&
+      status.wasDownloaded
+    )
+  ) {
     return err(
       publicUpdateError(
         "update.apply_failed",

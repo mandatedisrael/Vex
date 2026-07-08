@@ -251,6 +251,93 @@ describe("restartAndInstallNow (step 2: explicit restart)", () => {
   });
 });
 
+describe("Try again — recovery FROM blockedByOperation (Codex final-review blocker)", () => {
+  const BLOCKED_DOWNLOAD = {
+    kind: "blockedByOperation",
+    currentVersion: "1.0.0",
+    latestVersion: "1.1.0",
+    reason: "busy",
+    blockedAction: "download",
+    severity: "normal",
+    wasDownloaded: false,
+  } as const;
+  const BLOCKED_INSTALL = {
+    kind: "blockedByOperation",
+    currentVersion: "1.0.0",
+    latestVersion: "1.1.0",
+    reason: "migration running",
+    blockedAction: "install",
+    severity: "normal",
+    wasDownloaded: true,
+  } as const;
+
+  it("startUpdateNow retries a blocked DOWNLOAD and downloads once the gate passes", async () => {
+    currentStatus = BLOCKED_DOWNLOAD;
+    canRestartForUpdate.mockResolvedValue({ ok: true });
+    const r = await actions.startUpdateNow("retry");
+    expect(r).toEqual({ ok: true, data: { started: true } });
+    expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1);
+    expect(setStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "downloading" }),
+    );
+  });
+
+  it("startUpdateNow stays blocked on a DOWNLOAD retry while the gate still fails", async () => {
+    currentStatus = BLOCKED_DOWNLOAD;
+    canRestartForUpdate.mockResolvedValue({ ok: false, message: "still busy" });
+    const r = await actions.startUpdateNow("retry");
+    expect(r.ok).toBe(false);
+    expect(autoUpdater.downloadUpdate).not.toHaveBeenCalled();
+    expect(setStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "blockedByOperation",
+        blockedAction: "download",
+        reason: "still busy",
+      }),
+    );
+  });
+
+  it("restartAndInstallNow retries a blocked INSTALL and installs once the gate passes", async () => {
+    currentStatus = BLOCKED_INSTALL;
+    canRestartForUpdate.mockResolvedValue({ ok: true });
+    const r = await actions.restartAndInstallNow("retry");
+    expect(r).toEqual({ ok: true, data: { restarting: true } });
+    expect(autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1);
+    expect(setStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "installing" }),
+    );
+  });
+
+  it("restartAndInstallNow stays blocked on an INSTALL retry while the gate still fails", async () => {
+    currentStatus = BLOCKED_INSTALL;
+    canRestartForUpdate.mockResolvedValue({ ok: false, message: "still busy" });
+    const r = await actions.restartAndInstallNow("retry");
+    expect(r.ok).toBe(false);
+    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+    expect(setStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "blockedByOperation",
+        blockedAction: "install",
+        reason: "still busy",
+      }),
+    );
+  });
+
+  it("does not cross wires: a DOWNLOAD-blocked status cannot be install-retried", async () => {
+    currentStatus = BLOCKED_DOWNLOAD; // blockedAction is "download", not "install"
+    const r = await actions.restartAndInstallNow("retry");
+    expect(r.ok).toBe(false);
+    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+  });
+
+  it("does not cross wires: an INSTALL-blocked status cannot be download-retried", async () => {
+    currentStatus = BLOCKED_INSTALL; // blockedAction is "install", not "download"
+    const r = await actions.startUpdateNow("retry");
+    expect(r.ok).toBe(false);
+    expect(autoUpdater.downloadUpdate).not.toHaveBeenCalled();
+  });
+});
+
 describe("cancelDownload / checkNow / openReleaseNotes", () => {
   it("cancelDownload cancels the token and returns to available", async () => {
     currentStatus = AVAILABLE;
