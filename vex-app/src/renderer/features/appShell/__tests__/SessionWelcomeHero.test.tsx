@@ -108,6 +108,7 @@ describe("SessionWelcomeHero", () => {
     expect(screen.getByText(QUIPS[0])).not.toBeNull();
     expect(screen.getByText("LOCAL-FIRST CAPITAL RUNTIME")).not.toBeNull();
     expect(screen.getByText("YOU SIGN EVERY ACTION")).not.toBeNull();
+    expect(screen.getByText(/PREVIEW/)).not.toBeNull();
     // Retired compositions stay dead — the phase-3 register stack…
     expect(screen.queryByText("Peace of mind")).toBeNull();
     expect(
@@ -123,6 +124,22 @@ describe("SessionWelcomeHero", () => {
     // …and the phase-5 img-in-text quips (the inline monogram mechanism).
     expect(screen.queryByText(/Time for/i)).toBeNull();
     expect(screen.queryByAltText("Vex")).toBeNull();
+  });
+
+  it("renders the PREVIEW badge with the build version, an honest tooltip, and the d3 rise slot", () => {
+    render(<SessionWelcomeHero />);
+    const badge = screen.getByText(/PREVIEW/);
+    expect(badge.textContent).toBe("PREVIEW · v0.0.0-test");
+    expect(badge.getAttribute("title")).toBe(
+      "Preview build (v0.0.0-test). Vex is pre-1.0 and evolving. " +
+        "Self-custodial — you control your keys and every action. " +
+        "Verify before moving funds. Not financial advice.",
+    );
+    expect(badge.getAttribute("aria-label")).toBe("PREVIEW · v0.0.0-test");
+    expect(badge.classList.contains("vex-rise")).toBe(true);
+    expect(badge.classList.contains("vex-rise-d3")).toBe(true);
+    // Non-interactive: a static disclosure pill, not a button/link.
+    expect(badge.tagName).toBe("SPAN");
   });
 
   it("carries the sigil crown plus the two backed-by partner marks; the tagline line has NO inline img", () => {

@@ -1,4 +1,4 @@
-appId: com.vex.app
+appId: ai.projectvex.app
 productName: Vex
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 

@@ -17,8 +17,10 @@
  *      flex-1 zone, directly above the docked composer): the landing
  *      .hero-inner grammar — the sigil as the crown, then the centered mono
  *      status line with the live dot carrying the TaglineRotator (standalone
- *      mono-uppercase brand quips), then the H1 as the ONLY display
- *      statement, wearing the landing barcode flicker (.vex-title-barcode).
+ *      mono-uppercase brand quips), then the H1 as the only display
+ *      statement, wearing the landing barcode flicker (.vex-title-barcode),
+ *      then a static PREVIEW · v{version} pill (honest build-stage
+ *      disclosure, tooltip-only detail via a plain `title` attribute).
  *      The H1 "What should I execute?" is test-pinned: a REAL heading with
  *      this exact copy. Nothing else renders above the composer.
  *   3. BOTTOM BAND (absolute at the stage's bottom edge — the parent's
@@ -26,12 +28,13 @@
  *      (protocol coins + chain coverage, `WelcomeIntegrationsRail`) stacked
  *      over the landing .hero-bottom runtime row — barcode strip +
  *      LOCAL-FIRST CAPITAL RUNTIME left, BACKED BY center, YOU SIGN EVERY
- *      ACTION right. The ONLY other copy on the stage.
+ *      ACTION right. The only other copy on the stage.
  *
  * Load-in: the one-shot .vex-rise choreography, shifted one step for the
- * crown (sigil → d1 status → d2 H1; the parent staggers the instrument at
- * d2 and the chips row at d3; the bottom row closes at d4). Mount-once —
- * the choreography classes on the sigil, H1 and the bottom row never
+ * crown (sigil → d1 status → d2 H1 → d3 preview pill; the parent stages
+ * the instrument at d2 and its own chips row at d3 on SIBLING elements
+ * outside this component; the bottom row here closes at d4). Mount-once —
+ * the choreography classes on the sigil, H1, pill and the bottom row never
  * re-toggle on re-render; the rotator's phrase swap remounts ONLY its own
  * phrase span (keyed) so each quip replays the same one-shot rise without
  * new keyframes (CSP-safe).
@@ -200,6 +203,19 @@ export function SessionWelcomeHero(): JSX.Element {
         <h1 className="vex-title-barcode vex-rise vex-rise-d2 mt-6 text-center font-display text-[clamp(44px,6vw,72px)] font-black leading-[0.95] tracking-[-0.025em] text-[var(--vex-text)]">
           What should I execute?
         </h1>
+        {/* PREVIEW BADGE — honest build-stage disclosure, closing the crown's
+         * choreography at d3 (sigil → d1 status → d2 H1 → d3 badge; the
+         * bottom row closes at d4). Static pill mirroring the version-stamp
+         * grammar (BookPanel's collapse header, the welcome bottom-band
+         * stamps below): mono uppercase text on a hairline pill, no glass,
+         * no glow — CSP style-src 'self' safe (no inline styles). */}
+        <span
+          className="vex-rise vex-rise-d3 mt-4 inline-flex items-center gap-1.5 rounded-full border border-[var(--vex-line-strong)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--vex-text-3)]"
+          title={`Preview build (v${__VEX_APP_VERSION__}). Vex is pre-1.0 and evolving. Self-custodial — you control your keys and every action. Verify before moving funds. Not financial advice.`}
+          aria-label={`PREVIEW · v${__VEX_APP_VERSION__}`}
+        >
+          PREVIEW · v{__VEX_APP_VERSION__}
+        </span>
       </div>
 
       {/* BOTTOM BAND — the landing .hero-bottom at the stage's bottom edge,

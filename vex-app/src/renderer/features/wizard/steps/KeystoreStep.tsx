@@ -31,6 +31,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   keystorePasswordSchema,
+  PASSWORD_CREATE_MIN,
   type KeystorePasswordInput,
   type WizardStepId,
 } from "@shared/schemas/wizard.js";
@@ -38,6 +39,7 @@ import { Button } from "../../../components/ui/button.js";
 import { Label } from "../../../components/ui/label.js";
 import { PasswordField } from "../../../components/common/PasswordField.js";
 import { StrengthMeter } from "../../../components/common/StrengthMeter.js";
+import { useMasterPasswordStrength } from "./keystore/useMasterPasswordStrength.js";
 import { useEnvState } from "../../../lib/api/onboarding.js";
 import {
   useKeystoreSet,
@@ -100,6 +102,9 @@ export function KeystoreStep({
   const confirmReg = form.register("confirm");
 
   const passwordValue = form.watch("password");
+  const strength = useMasterPasswordStrength(passwordValue);
+  const meetsCreateFloor = passwordValue.length >= PASSWORD_CREATE_MIN;
+  const meetsStrengthGate = meetsCreateFloor && strength.meetsMinimumScore;
   const envHasPassword =
     envQuery.data?.ok === true && envQuery.data.data.hasKeystorePassword;
   const hasExisting = passwordPersisted || envHasPassword;
@@ -199,7 +204,7 @@ export function KeystoreStep({
         noValidate: true,
       }}
       footer={
-        <Button type="submit" disabled={submitting}>
+        <Button type="submit" disabled={submitting || !meetsStrengthGate}>
           {submitting
             ? "Saving…"
             : flowMode === "back-edit"
@@ -225,7 +230,16 @@ export function KeystoreStep({
               passwordInputRef.current = el;
             }}
           />
-          <StrengthMeter id={PASSWORD_METER_ID} value={passwordValue} />
+          <StrengthMeter
+            id={PASSWORD_METER_ID}
+            length={passwordValue.length}
+            ready={strength.ready}
+            score={strength.score}
+            label={strength.label}
+            blocked={!meetsStrengthGate}
+            warning={strength.warning}
+            suggestions={strength.suggestions}
+          />
           {passwordError ? (
             <p
               id={PASSWORD_ERROR_ID}

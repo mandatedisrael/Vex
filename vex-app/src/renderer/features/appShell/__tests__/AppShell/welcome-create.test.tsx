@@ -280,6 +280,15 @@ beforeEach(() => {
 });
 
 describe("AppShell", () => {
+  it("shows the PREVIEW build badge on the no-session welcome stage", async () => {
+    sessionsListMock.mockResolvedValueOnce({ ok: true, data: [] });
+    useUiStore.setState({ activeSessionId: null });
+    renderShell();
+
+    await screen.findByRole("heading", { name: "What should I execute?" });
+    expect(screen.getByText(/PREVIEW/)).not.toBeNull();
+  });
+
   it("welcome composer Send opens the creator with the draft carried + name pre-filled (welcome→create)", async () => {
     sessionsListMock.mockResolvedValueOnce({ ok: true, data: [] });
     useUiStore.setState({ activeSessionId: null });

@@ -1,23 +1,69 @@
-Copyright (c) 2026 Vex. All rights reserved.
+Copyright (c) 2026 Project VEX. All rights reserved.
 
-PROPRIETARY SOFTWARE LICENSE
+VEX SOURCE-AVAILABLE LICENSE (v1.0)
 
-This software and associated documentation files (the "Software") are
-the proprietary and confidential property of the copyright holder.
+This is a source-available license, NOT an open-source license. The source
+code of Vex (the "Software") is published for transparency and independent
+security review, because Vex is self-custodial software that holds users' own
+cryptographic keys and you should be able to verify what it does with them. It
+is NOT placed in the public domain and NOT licensed for reuse.
 
-The following actions are strictly prohibited without prior written
-permission from the copyright holder:
+"Software" means the source code, documentation, and assets in this
+repository. "Official Builds" means the compiled application distributed by
+Project VEX through https://www.projectvex.ai/ and the official GitHub
+Releases of this repository.
 
-1. Copying, reproducing, or duplicating the Software in any form.
-2. Forking, cloning, or creating derivative works based on the Software.
-3. Distributing, sublicensing, selling, or otherwise transferring the
-   Software to any third party.
-4. Using the Software for any purpose not explicitly authorized in
-   writing by the copyright holder.
-5. Reverse engineering, decompiling, or disassembling the Software.
+1. PERMITTED. Free of charge, you may:
+   a. view, read, and audit the Software for evaluation, education, and
+      security research;
+   b. make and run local builds of the Software solely to verify the Official
+      Builds or to evaluate the Software for the above purposes;
+   c. install and use the Official Builds to self-custody your own assets for
+      personal, non-commercial purposes;
+   d. quote limited portions of the Software with attribution for commentary,
+      research, or reporting a security issue.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-OR IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY
-CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
+2. PROHIBITED. Without prior written permission from Project VEX, you may not:
+   a. redistribute, sublicense, sell, host as a service, or otherwise make the
+      Software or Official Builds available to third parties;
+   b. use the Software or any part of it for commercial purposes;
+   c. create, publish, or distribute a derivative, forked, or competing
+      product based on the Software, in whole or in part;
+   d. remove, alter, or obscure any copyright, license, or attribution notice;
+   e. use the "Vex" or "Project VEX" names, logos, or other Project VEX
+      trademarks, except for nominative reference (e.g. "compatible with Vex").
 
-For licensing inquiries, contact the copyright holder.
+3. TRADEMARKS. "Vex", "Project VEX", the Vex logo, and related marks are
+   trademarks of Project VEX. This license grants no trademark rights. In
+   particular, redistributing a modified build under the Vex name is
+   prohibited.
+
+4. THIRD-PARTY COMPONENTS. The Software and Official Builds include
+   third-party open-source components licensed under their own terms; those
+   components remain under their respective licenses (see the third-party
+   notices distributed with the Official Builds). Nothing here overrides them.
+
+5. NO WARRANTY; ASSUMPTION OF RISK. THE SOFTWARE AND OFFICIAL BUILDS ARE
+   PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+   INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+   NON-INFRINGEMENT. Vex is self-custodial: you alone control your keys and
+   funds, and you are solely responsible for their security and for every
+   on-chain action you or the agent authorize. On-chain transactions are
+   irreversible. Nothing in the Software is financial, investment, legal, or
+   tax advice. Automated market analysis and agent suggestions are directional,
+   carry risk, and may be wrong.
+
+6. LIMITATION OF LIABILITY. IN NO EVENT SHALL PROJECT VEX BE LIABLE FOR ANY
+   CLAIM, LOSS OF FUNDS, LOST PROFITS, OR ANY DIRECT, INDIRECT, INCIDENTAL, OR
+   CONSEQUENTIAL DAMAGES ARISING FROM OR RELATED TO THE SOFTWARE, TO THE
+   MAXIMUM EXTENT PERMITTED BY LAW.
+
+7. TERMINATION. Any breach of Sections 1 to 3 terminates the rights granted
+   here automatically. Upon termination you must stop using the Software and
+   destroy your copies, except copies retained solely for security-research
+   records.
+
+8. RESERVATION. All rights not expressly granted are reserved by Project VEX.
+
+For licensing, commercial use, or partnership inquiries: legal@projectvex.ai
+Official sources: https://www.projectvex.ai/ and https://x.com/ProjectVEXai

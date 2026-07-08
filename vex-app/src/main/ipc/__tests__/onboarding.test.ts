@@ -213,12 +213,12 @@ describe("vex.onboarding.keystoreSet handler", () => {
     const fn = handlers.get(CH.onboarding.keystoreSet)!;
     const result = (await fn(trustedSender, {
       requestId: "req-ks-1",
-      payload: { password: "12345678" },
+      payload: { password: "1234567890" },
     })) as { ok: boolean; data?: { kind: string } };
 
     expect(result.ok).toBe(true);
     expect(result.data?.kind).toBe("set");
-    expect(mockSetKeystorePassword).toHaveBeenCalledWith("12345678");
+    expect(mockSetKeystorePassword).toHaveBeenCalledWith("1234567890");
   });
 
   it("maps writer ok({kind:'unchanged'}) through the IPC envelope", async () => {
@@ -255,7 +255,7 @@ describe("vex.onboarding.keystoreSet handler", () => {
     const fn = handlers.get(CH.onboarding.keystoreSet)!;
     const result = (await fn(trustedSender, {
       requestId: "req-ks-3",
-      payload: { password: "12345678" },
+      payload: { password: "1234567890" },
     })) as { ok: boolean; error?: { code: string; retryable: boolean } };
 
     expect(result.ok).toBe(false);
@@ -263,13 +263,13 @@ describe("vex.onboarding.keystoreSet handler", () => {
     expect(result.error?.retryable).toBe(true);
   });
 
-  it("rejects passwords shorter than 8 chars at the input schema", async () => {
+  it("rejects passwords shorter than 10 chars (PASSWORD_CREATE_MIN) at the input schema", async () => {
     registerOnboardingHandlers();
 
     const fn = handlers.get(CH.onboarding.keystoreSet)!;
     const result = (await fn(trustedSender, {
       requestId: "req-ks-short",
-      payload: { password: "1234567" },
+      payload: { password: "123456789" },
     })) as { ok: boolean; error?: { code: string } };
 
     expect(result.ok).toBe(false);

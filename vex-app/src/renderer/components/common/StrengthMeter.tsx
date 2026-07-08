@@ -1,68 +1,90 @@
 /**
- * Visual password-strength feedback. Length-tier only — does NOT block
- * form submission (runtime hard rule = 8 char minimum, the
- * Zod schema enforces that). Per codex turn 5 answer #3 the hint is
- * factual: "8 characters minimum. 12+ recommended." We do NOT imply
- * Phase 2 KDF / encryption properties that have not shipped yet.
+ * Real password-strength feedback for the master-password CREATION form
+ * (`KeystoreStep`, the only consumer). Purely presentational — the zxcvbn
+ * estimation itself runs in `wizard/steps/keystore/useMasterPasswordStrength.ts`
+ * so this component stays easy to unit-test with plain props.
  *
- * Tiers:
- *   < 8 chars  → "Too short" (danger)
- *   8-11       → "OK" (warning)
- *   12-15      → "Strong" (success)
- *   ≥ 16       → "Excellent" (success, full bar)
+ * `blocked` mirrors the caller's actual submit-gate decision (length >=
+ * PASSWORD_CREATE_MIN AND zxcvbn score >= MIN_ACCEPTABLE_SCORE) — this
+ * component does not recompute or duplicate that policy, it only renders it.
+ *
+ * Labels map zxcvbn's 0-4 score using its own scoring language ("too
+ * guessable" / "very guessable" / "somewhat guessable" / "safely
+ * unguessable" / "very unguessable"): 0-1 -> weak, 2 -> fair, 3 -> good,
+ * 4 -> strong.
  */
 
 import type { JSX } from "react";
 import { cn } from "../../lib/utils.js";
 
+export type PasswordStrengthLabel = "weak" | "fair" | "good" | "strong";
+
 export interface StrengthMeterProps {
-  readonly value: string;
+  /** Current password length — used only to decide whether to render anything at all. */
+  readonly length: number;
+  /** True once the zxcvbn estimator has finished loading and scored this value. */
+  readonly ready: boolean;
+  /** zxcvbn score, 0 (worst) to 4 (best). */
+  readonly score: number;
+  readonly label: PasswordStrengthLabel;
+  /** True when the password does not yet satisfy the creation gate (length or score). */
+  readonly blocked: boolean;
+  readonly warning?: string | null;
+  readonly suggestions?: ReadonlyArray<string>;
   readonly className?: string;
   /** Stable id so callers can wire `aria-describedby` from the related input. */
   readonly id?: string;
 }
 
-interface Tier {
-  readonly label: string;
-  readonly fillFraction: number;
-  readonly color: string;
-}
+const LABEL_TEXT: Record<PasswordStrengthLabel, string> = {
+  weak: "Weak",
+  fair: "Fair",
+  good: "Good",
+  strong: "Strong",
+};
 
-function tierFor(length: number): Tier {
-  if (length < 8) {
-    return { label: "Too short", fillFraction: 0.15, color: "bg-destructive" };
-  }
-  if (length < 12) {
-    return { label: "OK", fillFraction: 0.5, color: "bg-warning" };
-  }
-  if (length < 16) {
-    return { label: "Strong", fillFraction: 0.8, color: "bg-success" };
-  }
-  return { label: "Excellent", fillFraction: 1, color: "bg-success" };
-}
+const LABEL_COLOR: Record<PasswordStrengthLabel, string> = {
+  weak: "bg-destructive",
+  fair: "bg-warning",
+  good: "bg-success",
+  strong: "bg-success",
+};
+
+const SCORE_WIDTH: ReadonlyArray<string> = [
+  "w-[10%]",
+  "w-[30%]",
+  "w-1/2",
+  "w-4/5",
+  "w-full",
+];
 
 export function StrengthMeter({
-  value,
+  length,
+  ready,
+  score,
+  label,
+  blocked,
+  warning,
+  suggestions,
   className,
   id,
 }: StrengthMeterProps): JSX.Element {
-  const tier = tierFor(value.length);
   const widthClass =
-    tier.fillFraction === 1
-      ? "w-full"
-      : tier.fillFraction === 0.8
-        ? "w-4/5"
-        : tier.fillFraction === 0.5
-          ? "w-1/2"
-          : "w-[15%]";
+    length === 0 ? "w-0" : (SCORE_WIDTH[score] ?? SCORE_WIDTH[0]);
+  // "Checking…" avoids telling the user a maybe-strong password is weak
+  // while the estimator is still loading its dictionaries.
+  const labelText = !ready && length > 0 ? "Checking…" : LABEL_TEXT[label];
+  const feedbackText =
+    blocked && length > 0 ? (warning ?? suggestions?.[0] ?? null) : null;
+
   return (
     <div id={id} className={cn("flex flex-col gap-1.5", className)}>
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">
-          8 characters minimum. 12+ recommended.
+          10 characters minimum. Must score at least &quot;Good&quot;.
         </span>
         <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          {tier.label}
+          {labelText}
         </span>
       </div>
       <div
@@ -72,11 +94,16 @@ export function StrengthMeter({
         <div
           className={cn(
             "h-full rounded-full transition-[width] duration-200 ease-out",
-            tier.color,
+            LABEL_COLOR[label],
             widthClass
           )}
         />
       </div>
+      {feedbackText ? (
+        <p className="text-xs text-[var(--color-warning)]" role="status">
+          {feedbackText}
+        </p>
+      ) : null}
     </div>
   );
 }

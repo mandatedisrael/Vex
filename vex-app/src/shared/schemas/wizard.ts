@@ -36,12 +36,17 @@ const stepIndex = (id: WizardStepId): number =>
   WIZARD_STEP_IDS.indexOf(id);
 
 // ── Form-side schema (renderer only) ───────────────────────────────────────
-const PASSWORD_MIN = 8;
+// Floor for CREATING a new master password only. Deliberately separate from
+// `PASSWORD_MIN_LENGTH` (secrets.ts, =8), which governs re-entering an
+// ALREADY-EXISTING password on unlock and private-key export re-auth — those
+// paths must keep accepting existing 8-char vaults. Raising this constant
+// only tightens what a *new* master password may be.
+export const PASSWORD_CREATE_MIN = 10;
 
 export const keystorePasswordSchema = z
   .object({
-    password: z.string().min(PASSWORD_MIN, {
-      message: `Password must be at least ${PASSWORD_MIN} characters.`,
+    password: z.string().min(PASSWORD_CREATE_MIN, {
+      message: `Password must be at least ${PASSWORD_CREATE_MIN} characters.`,
     }),
     confirm: z.string(),
   })
@@ -55,11 +60,14 @@ export type KeystorePasswordInput = z.infer<typeof keystorePasswordSchema>;
 // ── IPC: keystoreSet ───────────────────────────────────────────────────────
 // Confirm-match validation is renderer-side only; main never sees the
 // confirm field so a malicious renderer cannot bypass the rule by
-// invoking IPC directly with `{password, confirm}` shapes.
+// invoking IPC directly with `{password, confirm}` shapes. This schema is
+// also the MAIN-process floor: `registerOnboardingHandlers` validates every
+// keystoreSet call against it directly (src/main/ipc/onboarding.ts), so
+// `PASSWORD_CREATE_MIN` is enforced server-side, not just in the renderer form.
 export const keystoreSetInputSchema = z
   .object({
-    password: z.string().min(PASSWORD_MIN, {
-      message: `Password must be at least ${PASSWORD_MIN} characters.`,
+    password: z.string().min(PASSWORD_CREATE_MIN, {
+      message: `Password must be at least ${PASSWORD_CREATE_MIN} characters.`,
     }),
   })
   .strict();

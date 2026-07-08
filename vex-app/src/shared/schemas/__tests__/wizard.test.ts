@@ -40,18 +40,18 @@ describe("WIZARD_STEP_IDS canonical order", () => {
 });
 
 describe("keystorePasswordSchema (form-side)", () => {
-  it("accepts an 8+ char password with matching confirm", () => {
+  it("accepts a 10+ char password with matching confirm", () => {
     const r = keystorePasswordSchema.safeParse({
-      password: "passw0rd",
-      confirm: "passw0rd",
+      password: "passw0rd12",
+      confirm: "passw0rd12",
     });
     expect(r.success).toBe(true);
   });
 
-  it("rejects a password shorter than 8 chars", () => {
+  it("rejects a password shorter than PASSWORD_CREATE_MIN (10) chars", () => {
     const r = keystorePasswordSchema.safeParse({
-      password: "short",
-      confirm: "short",
+      password: "short123",
+      confirm: "short123",
     });
     expect(r.success).toBe(false);
     if (!r.success) {
@@ -78,24 +78,34 @@ describe("keystorePasswordSchema (form-side)", () => {
 });
 
 describe("keystoreSetInputSchema (IPC boundary)", () => {
-  it("accepts {password} of 8+ chars", () => {
+  it("accepts {password} of PASSWORD_CREATE_MIN (10)+ chars", () => {
     expect(
-      keystoreSetInputSchema.safeParse({ password: "12345678" }).success
+      keystoreSetInputSchema.safeParse({ password: "1234567890" }).success
     ).toBe(true);
   });
 
   it("rejects extra fields (strict)", () => {
     expect(
       keystoreSetInputSchema.safeParse({
-        password: "12345678",
-        confirm: "12345678",
+        password: "1234567890",
+        confirm: "1234567890",
       }).success
     ).toBe(false);
   });
 
-  it("rejects passwords shorter than 8", () => {
+  it("rejects passwords shorter than PASSWORD_CREATE_MIN (10)", () => {
     expect(
-      keystoreSetInputSchema.safeParse({ password: "1234567" }).success
+      keystoreSetInputSchema.safeParse({ password: "123456789" }).success
+    ).toBe(false);
+  });
+
+  it("rejects an 8-char password that used to satisfy the old floor", () => {
+    // Regression guard for the PASSWORD_CREATE_MIN bump (8 -> 10): an
+    // 8-char password must now be rejected for CREATING a new master
+    // password, even though 8 chars is still accepted on the unlock path
+    // (see secrets.test.ts regression guard in the other direction).
+    expect(
+      keystoreSetInputSchema.safeParse({ password: "12345678" }).success
     ).toBe(false);
   });
 });

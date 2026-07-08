@@ -20,11 +20,11 @@
 #   APPLE_TEAM_ID                10-char Apple Team ID (notarytool)
 #   GH_TOKEN                     GitHub Releases upload (CI: secrets.GITHUB_TOKEN)
 
-# NOTE(owner): appId is kept as the committed `com.vex.app`. The distribution
-# note illustrates `ai.projectvex.app`. appId is a permanent app-identity /
-# updater / userData contract and cannot change after the first published
-# release without breaking auto-update. CONFIRM this value BEFORE the first tag.
-appId: com.vex.app
+# appId: permanent app-identity / auto-updater / userData contract. Locked to
+# ai.projectvex.app (reverse-DNS of app.projectvex.ai) by owner decision before
+# the first tag. MUST NOT change after the first published release — a changed
+# appId breaks auto-update for every installed client and orphans their userData.
+appId: ai.projectvex.app
 productName: Vex
 
 # Versioned + arch-unique names. Versioned (NOT versionless) is deliberate:

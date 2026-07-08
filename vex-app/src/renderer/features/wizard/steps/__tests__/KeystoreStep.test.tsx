@@ -24,14 +24,28 @@ import type {
   WizardState,
   WizardStepId,
 } from "@shared/schemas/wizard.js";
+import type { PasswordStrengthState } from "../keystore/useMasterPasswordStrength.js";
 
 const mockUseEnvState = vi.fn();
 const mockKeystoreMutate = vi.fn();
 const mockSetWizardMutate = vi.fn();
 const mockOnAdvance = vi.fn();
+// Real zxcvbn behavior is covered by
+// `keystore/__tests__/useMasterPasswordStrength.test.ts`. This suite mocks
+// the hook so submit-wiring tests are deterministic and independent of
+// dictionary-scoring nuances; default is a strength that always meets the
+// gate so existing form-flow tests only exercise the length/confirm rules.
+const mockUseMasterPasswordStrength =
+  vi.fn<(password: string) => PasswordStrengthState>();
 
 vi.mock("../../../../lib/api/onboarding.js", () => ({
   useEnvState: () => mockUseEnvState(),
+}));
+
+vi.mock("../keystore/useMasterPasswordStrength.js", () => ({
+  useMasterPasswordStrength: (password: string) =>
+    mockUseMasterPasswordStrength(password),
+  MIN_ACCEPTABLE_SCORE: 3,
 }));
 
 vi.mock("../../../../lib/api/wizard.js", async () => {
@@ -116,11 +130,27 @@ function fillPasswords(
   return { passwordInput, confirmInput };
 }
 
+function strongStrength(): PasswordStrengthState {
+  return {
+    ready: true,
+    score: 4,
+    label: "strong",
+    warning: null,
+    suggestions: [],
+    meetsMinimumScore: true,
+  };
+}
+
 beforeEach(() => {
   mockUseEnvState.mockReset();
   mockKeystoreMutate.mockReset();
   mockSetWizardMutate.mockReset();
   mockOnAdvance.mockReset();
+  mockUseMasterPasswordStrength.mockReset();
+  // Default: strength always meets the gate, so existing form-flow tests
+  // exercise only the length/confirm rules. Tests for the score gate itself
+  // override this per-case.
+  mockUseMasterPasswordStrength.mockReturnValue(strongStrength());
 });
 
 afterEach(() => {
@@ -142,13 +172,77 @@ describe("KeystoreStep", () => {
     await findByText(/already configured/i);
   });
 
-  it("rejects passwords shorter than 8 chars with a validation error", async () => {
+  it("rejects passwords shorter than 10 chars with a validation error", async () => {
     mockUseEnvState.mockReturnValue(envQueryFor(false));
     const view = renderStep();
     fillPasswords(view, "short", "short");
     fireEvent.click(view.getByRole("button", { name: /Save and continue/i }));
-    await view.findByText(/at least 8 characters/i);
+    await view.findByText(/at least 10 characters/i);
     expect(mockKeystoreMutate).not.toHaveBeenCalled();
+  });
+
+  it("disables submit while the password is under the length floor, even with a strong score", () => {
+    mockUseEnvState.mockReturnValue(envQueryFor(false));
+    mockUseMasterPasswordStrength.mockReturnValue(strongStrength());
+    const view = renderStep();
+    fillPasswords(view, "short", "short");
+    const button = view.getByRole("button", {
+      name: /Save and continue/i,
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it("disables submit when length is met but the zxcvbn score is below the minimum", () => {
+    mockUseEnvState.mockReturnValue(envQueryFor(false));
+    mockUseMasterPasswordStrength.mockReturnValue({
+      ready: true,
+      score: 1,
+      label: "weak",
+      warning: "This is a commonly used password.",
+      suggestions: ["Add more words that are less common."],
+      meetsMinimumScore: false,
+    });
+    const view = renderStep();
+    fillPasswords(view, "weak-password-but-long", "weak-password-but-long");
+    const button = view.getByRole("button", {
+      name: /Save and continue/i,
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+
+    fireEvent.click(button);
+    expect(mockKeystoreMutate).not.toHaveBeenCalled();
+  });
+
+  it("enables submit once BOTH the length floor and the zxcvbn score gate are met", async () => {
+    mockUseEnvState.mockReturnValue(envQueryFor(false));
+    mockKeystoreMutate.mockResolvedValue({ ok: true, data: { kind: "set" } });
+    mockSetWizardMutate.mockResolvedValue({
+      ok: true,
+      data: {
+        schemaVersion: 1,
+        currentStepId: "wallets",
+        completedSteps: ["keystore"],
+        completed: false,
+      },
+    });
+    mockUseMasterPasswordStrength.mockReturnValue(strongStrength());
+    const view = renderStep();
+    fillPasswords(
+      view,
+      "correct-horse-battery-staple-93!",
+      "correct-horse-battery-staple-93!"
+    );
+    const button = view.getByRole("button", {
+      name: /Save and continue/i,
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+
+    fireEvent.click(button);
+    await waitFor(() => {
+      expect(mockKeystoreMutate).toHaveBeenCalledWith({
+        password: "correct-horse-battery-staple-93!",
+      });
+    });
   });
 
   it("rejects mismatched confirm password", async () => {
