@@ -14,11 +14,11 @@
 # vex-app/electron-builder.release.yml — no feed URL is hardcoded in app source.
 #
 # ── RELEASE PROCEDURE (3 commands) ─────────────────────────────────────────
-#   1. Bump the version in vex-app/package.json (e.g. 0.1.0-dev -> 0.1.0).
+#   1. Bump the version in vex-app/package.json (e.g. 0.1.0 -> 0.1.1).
 #      It MUST be strictly higher than the last release and MUST equal the tag
 #      below (a guard step enforces tag == vex-app/package.json version).
-#   2. git tag v0.1.0
-#   3. git push origin v0.1.0
+#   2. git tag v0.1.1
+#   3. git push origin v0.1.1
 #   Then, in GitHub, review the DRAFT release (confirm signed+notarized macOS
 #   artifacts and both latest-*.yml uploaded), add notes, and click
 #   "Publish release". Users' updaters only see PUBLISHED releases.

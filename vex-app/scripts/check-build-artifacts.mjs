@@ -29,6 +29,8 @@
  *      `REPLACE_WITH_VERIFIED_DIGEST_BEFORE_FIRST_RUN` placeholders behind.
  *   10. Packaged migration resources are byte-for-byte in sync with the
  *      canonical `src/vex-agent/db/migrations/` source.
+ *   11. Postgres runtime dependencies are bundled into main, not left as
+ *      external ASAR node_modules imports.
  *
  * Exit non-zero on any violation.
  */
@@ -45,6 +47,16 @@ const distRendererHtml = path.join(root, "dist", "renderer", "index.html");
 const distRendererAssets = path.join(root, "dist", "renderer", "assets");
 const pkgJson = path.join(root, "package.json");
 
+const POSTGRES_RUNTIME_EXTERNALS = [
+  "pg",
+  "pg-types",
+  "postgres-array",
+  "postgres-bytea",
+  "postgres-date",
+  "postgres-interval",
+  "pgpass",
+];
+
 const RED = "\x1b[31m";
 const GREEN = "\x1b[32m";
 const RESET = "\x1b[0m";
@@ -60,6 +72,20 @@ function check(label, fn) {
     console.log(`  ${e.message}`);
     failures.push({ label, message: e.message });
   }
+}
+
+function walkFiles(dir, predicate) {
+  const found = [];
+  if (!existsSync(dir)) return found;
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, ent.name);
+    if (ent.isDirectory()) {
+      found.push(...walkFiles(full, predicate));
+    } else if (predicate(full)) {
+      found.push(full);
+    }
+  }
+  return found;
 }
 
 async function checkAsync(label, fn) {
@@ -265,6 +291,39 @@ check("main bundle — entrypoint exists + uses single-instance lock", () => {
   if (src.includes("environment that doesn't expose the `require` function")) {
     throw new Error(
       "main bundle contains a throwing __require shim — CJS deps are bundled into the ESM main without a Node platform setting. Set `rolldownOptions.platform = 'node'` in vite.main.config.ts."
+    );
+  }
+});
+
+// 5b. `pg` is pure JS and small enough to bundle. Leaving it external makes
+// packaged startup depend on electron-builder copying the full pnpm transitive
+// graph into app.asar/node_modules; v0.1.0 crashed on macOS when
+// `pg-types -> postgres-array` was missing there. Fail at postbuild if that
+// packaging risk comes back.
+check("main bundle — Postgres runtime deps are bundled, not external ASAR imports", () => {
+  const mainDir = path.join(root, "dist", "main");
+  const jsFiles = walkFiles(mainDir, (file) => file.endsWith(".js"));
+  if (jsFiles.length === 0) throw new Error(`no built main JS files in ${mainDir}`);
+
+  const violations = [];
+  for (const file of jsFiles) {
+    const rel = path.relative(root, file);
+    const src = readFileSync(file, "utf8");
+    for (const mod of POSTGRES_RUNTIME_EXTERNALS) {
+      const escaped = mod.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const patterns = [
+        new RegExp(`\\bfrom\\s+["']${escaped}["']`),
+        new RegExp(`\\bimport\\s*\\(\\s*["']${escaped}["']\\s*\\)`),
+      ];
+      if (patterns.some((pattern) => pattern.test(src))) {
+        violations.push(`${rel}: leaves ${mod} as a runtime module import`);
+      }
+    }
+  }
+
+  if (violations.length > 0) {
+    throw new Error(
+      `Postgres runtime deps must be bundled into dist/main to avoid ASAR node_modules drift:\n    ${violations.join("\n    ")}`
     );
   }
 });

@@ -78,7 +78,6 @@ export default defineConfig({
         "electron-log/main.js",
         "electron-updater",
         "@sentry/electron/main",
-        "pg",
       ],
       output: {
         format: "esm",
