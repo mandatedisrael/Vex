@@ -51,6 +51,7 @@ import {
   disableSentry,
   initSentryIfConsented,
 } from "./telemetry/sentry-lifecycle.js";
+import { runProductionEarlyBoot } from "./secrets/vault-reset-boot.js";
 
 /**
  * Remap Electron's userData onto CONFIG_DIR/.electron-state BEFORE any
@@ -131,15 +132,7 @@ app.on("will-quit", () => {
   void lockSecretSession();
 });
 
-app.whenReady().then(async () => {
-  log.info("[main] app.whenReady — initializing");
-
-  // Load NON-secret runtime config (.env) into process.env BEFORE IPC handlers
-  // and the compact worker read provider/model config. Managed secrets are
-  // skipped (they live in the encrypted vault, injected on unlock). Without this
-  // the engine never sees AGENT_MODEL/AGENT_PROVIDER → "Model not configured".
-  loadProviderDotenv();
-  log.info("[main] loaded non-secret runtime config from .env");
+async function initializeMainRuntime(): Promise<void> {
 
   // 4. Security: deny-all permission handlers
   installPermissionHandlers();
@@ -274,9 +267,27 @@ app.whenReady().then(async () => {
 
   // 7. Main window
   await createMainWindow();
+}
+
+let bootRuntimeInitialized = false;
+
+app.whenReady().then(async () => {
+  log.info("[main] app.whenReady — initializing");
+
+  const disposition = await runProductionEarlyBoot(
+    () => {
+      // Load NON-secret runtime config only after vault-reset recovery grants
+      // boot authority. Managed secrets remain in the encrypted vault.
+      loadProviderDotenv();
+      log.info("[main] loaded non-secret runtime config from .env");
+    },
+    initializeMainRuntime,
+  );
+  bootRuntimeInitialized = disposition === "continueBoot";
 });
 
 app.on("activate", async () => {
+  if (!bootRuntimeInitialized) return;
   // macOS: re-create window when dock icon clicked + no windows open
   const { BrowserWindow } = await import("electron");
   if (BrowserWindow.getAllWindows().length === 0) {

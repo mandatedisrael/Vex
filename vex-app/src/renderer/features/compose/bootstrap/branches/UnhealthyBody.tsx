@@ -9,6 +9,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { AlertCircleIcon, Refresh01Icon } from "@hugeicons/core-free-icons";
 import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
 import { PrimaryButton } from "../../../../components/onboarding/PrimaryButton.js";
+import { OpenLogsLink } from "../../../../components/common/OpenLogsLink.js";
 
 interface UnhealthyBodyProps {
   readonly message: string;
@@ -32,6 +33,7 @@ export function UnhealthyBody({
         warms up. Click Try again to re-probe the stack.
       </p>
       <PrimaryButton icon={Refresh01Icon} label="Try again" onClick={onRetry} />
+      <OpenLogsLink />
     </div>
   );
 }

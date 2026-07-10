@@ -50,6 +50,8 @@ describe("compose lifecycle façade surface", () => {
       composeOutPath: "/x/docker-compose.yml",
       installId: "abc",
       message: "ok",
+      previousInstallHoldingPorts: false,
+      conflictPorts: [],
       pgPort: 5432,
       embedPort: 27134,
       pgPasswordPath: "/x/secrets/pg_password",

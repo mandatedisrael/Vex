@@ -53,6 +53,7 @@ import {
   listRunningProjectContainers,
   stopContainers,
 } from "./down.js";
+import { findPreviousInstallContainersHoldingPorts } from "./orphan-stacks.js";
 
 export type ComposeUpKind =
   | "running"
@@ -66,6 +67,9 @@ export interface ComposeUpResult {
   readonly composeOutPath: string;
   readonly installId: string;
   readonly message: string;
+  readonly previousInstallHoldingPorts: boolean;
+  /** Main-only occupied ports used to reauthorize a previous-stack stop. */
+  readonly conflictPorts: ReadonlyArray<number>;
   /**
    * Port the published Postgres bound to on the loopback interface.
    * Always populated (even on failure paths) so the database handler
@@ -132,6 +136,8 @@ export async function composeUp(
       embedPort: rendered.embedPort,
       pgPasswordPath: rendered.pgPasswordComposePath,
       embeddingsReadiness: null,
+      previousInstallHoldingPorts: false,
+      conflictPorts: [],
     };
   }
 
@@ -151,6 +157,8 @@ export async function composeUp(
       embedPort: rendered.embedPort,
       pgPasswordPath: rendered.pgPasswordComposePath,
       embeddingsReadiness: null,
+      previousInstallHoldingPorts: false,
+      conflictPorts: [],
     };
   }
 
@@ -174,6 +182,8 @@ export async function composeUp(
       embedPort: rendered.embedPort,
       pgPasswordPath: rendered.pgPasswordComposePath,
       embeddingsReadiness: null,
+      previousInstallHoldingPorts: false,
+      conflictPorts: [],
     };
   }
 
@@ -245,6 +255,8 @@ export async function composeUp(
         embedPort: rendered.embedPort,
         pgPasswordPath: rendered.pgPasswordComposePath,
         embeddingsReadiness: embedReady?.kind ?? null,
+        previousInstallHoldingPorts: false,
+        conflictPorts: [],
       };
     }
     const conflicts: string[] = [];
@@ -261,17 +273,29 @@ export async function composeUp(
     // message honest (Settings → Advanced does not expose embedPort)
     // AND specific about which port(s) are actually conflicting.
     const lsofExample = occupiedPorts.map((p) => `-i :${p}`).join(" ");
+    const previousInstall =
+      await findPreviousInstallContainersHoldingPorts({
+        currentInstallId: rendered.installId,
+        conflictPorts: occupiedPorts,
+        ...(signal !== undefined ? { signal } : {}),
+      });
+    const previousInstallHoldingPorts =
+      previousInstall.ok && previousInstall.containerIds.length > 0;
     return {
       kind: "port_collision",
       composeOutPath: rendered.outPath,
       installId: rendered.installId,
-      message: `${conflicts.join(
-        " and "
-      )} occupied by a different process. Stop the conflicting service (e.g. \`docker ps\`, \`lsof ${lsofExample}\`) and retry.`,
+      message: previousInstallHoldingPorts
+        ? "Containers from a previous Vex installation are holding the required ports. Stop those previous Vex services and retry."
+        : `${conflicts.join(
+            " and ",
+          )} occupied by a different process. Stop the conflicting service (e.g. \`docker ps\`, \`lsof ${lsofExample}\`) and retry.`,
       pgPort,
       embedPort: rendered.embedPort,
       pgPasswordPath: rendered.pgPasswordComposePath,
       embeddingsReadiness: null,
+      previousInstallHoldingPorts,
+      conflictPorts: occupiedPorts,
     };
   }
 
@@ -301,6 +325,8 @@ export async function composeUp(
       embedPort: rendered.embedPort,
       pgPasswordPath: rendered.pgPasswordComposePath,
       embeddingsReadiness: null,
+      previousInstallHoldingPorts: false,
+      conflictPorts: [],
     };
   }
   if (pullResult.code !== 0) {
@@ -315,6 +341,8 @@ export async function composeUp(
       embedPort: rendered.embedPort,
       pgPasswordPath: rendered.pgPasswordComposePath,
       embeddingsReadiness: null,
+      previousInstallHoldingPorts: false,
+      conflictPorts: [],
     };
   }
 
@@ -371,6 +399,8 @@ export async function composeUp(
         embedPort: rendered.embedPort,
         pgPasswordPath: rendered.pgPasswordComposePath,
         embeddingsReadiness: null,
+        previousInstallHoldingPorts: false,
+        conflictPorts: [],
       };
     }
     renderedAfterRecovery = await renderCompose(deps, renderOptions);
@@ -394,6 +424,8 @@ export async function composeUp(
       embedPort: renderedAfterRecovery.embedPort,
       pgPasswordPath: renderedAfterRecovery.pgPasswordComposePath,
       embeddingsReadiness: null,
+      previousInstallHoldingPorts: false,
+      conflictPorts: [],
     };
   }
   if (upResult.code !== 0) {
@@ -408,6 +440,8 @@ export async function composeUp(
       embedPort: renderedAfterRecovery.embedPort,
       pgPasswordPath: renderedAfterRecovery.pgPasswordComposePath,
       embeddingsReadiness: null,
+      previousInstallHoldingPorts: false,
+      conflictPorts: [],
     };
   }
 
@@ -430,6 +464,8 @@ export async function composeUp(
       embedPort: renderedAfterRecovery.embedPort,
       pgPasswordPath: renderedAfterRecovery.pgPasswordComposePath,
       embeddingsReadiness: null,
+      previousInstallHoldingPorts: false,
+      conflictPorts: [],
     };
   }
 
@@ -452,6 +488,8 @@ export async function composeUp(
       embedPort: renderedAfterRecovery.embedPort,
       pgPasswordPath: renderedAfterRecovery.pgPasswordComposePath,
       embeddingsReadiness: embedReady.kind,
+      previousInstallHoldingPorts: false,
+      conflictPorts: [],
     };
   }
 
@@ -464,6 +502,8 @@ export async function composeUp(
     embedPort: renderedAfterRecovery.embedPort,
     pgPasswordPath: renderedAfterRecovery.pgPasswordComposePath,
     embeddingsReadiness: "ready",
+    previousInstallHoldingPorts: false,
+    conflictPorts: [],
   };
 }
 

@@ -35,6 +35,7 @@ export const healthReportSchema = z
   .object({
     os: osInfoSchema,
     network: networkProbeSchema,
+    translocated: z.boolean(),
     setupComplete: z.boolean(),
     /** Computed at probe time, for splash status display. */
     overall: z.enum(["ok", "degraded", "not_ready"]),

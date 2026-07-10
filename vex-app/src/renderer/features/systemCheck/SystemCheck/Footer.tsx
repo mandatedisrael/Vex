@@ -12,6 +12,7 @@
  */
 
 import { KeyButton } from "../../../components/onboarding/KeyButton.js";
+import { OpenLogsLink } from "../../../components/common/OpenLogsLink.js";
 
 interface FooterProps {
   /** Probes resolved so far (0–4) — drives the ATTESTING/ATTESTED line. */
@@ -62,6 +63,7 @@ export function Footer({
           ariaLabel="Continue to Docker bootstrap"
         />
       </div>
+      <OpenLogsLink className="mt-4" />
     </>
   );
 }

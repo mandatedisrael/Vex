@@ -19,11 +19,12 @@
  *                 per-platform copy (Linux shows `sudo systemctl start`
  *                 because the main process only attempts the user-mode
  *                 Docker Desktop unit, never sudo).
- *   C-desktop   — mac/win, engine missing → DesktopInstallBody (in-app
+ *   C-desktop   — mac/win, Docker CLI missing → DesktopInstallBody (in-app
  *                 installer download via LicenseNotice).
  *   C-linux     — linux, engine missing → LinuxInstallBody (auto-fetch
  *                 `linux_manual_instructions` IPC).
- *   D           — IPC/Result error OR endpoint rejected → FailureBody.
+ *   D           — IPC/Result error, endpoint rejected, or version probe
+ *                 failure → FailureBody.
  *
  * Recheck (footer, always visible non-A) calls `dockerStatus.refetch()`
  * so the user never has to restart the app after fixing Docker.
@@ -272,6 +273,9 @@ function decideBranch(
   if (!result.ok) return "D";
   const status = result.data;
   if (!status.endpoint.accepted) return "D";
+  if (!status.engine.present && status.engine.failure === "probe_error") {
+    return "D";
+  }
 
   // A — data wins when platform irrelevant; don't flicker to loading
   // while the health probe is pending (codex round 11 SHOULD-FIX #2).
@@ -289,4 +293,3 @@ function decideBranch(
   }
   return "D";
 }
-

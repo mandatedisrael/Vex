@@ -12,6 +12,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { AlertCircleIcon } from "@hugeicons/core-free-icons";
 import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
 import { DocsLink } from "../../../../components/onboarding/DocsLink.js";
+import { OpenLogsLink } from "../../../../components/common/OpenLogsLink.js";
 import { DOCKER_ENGINE_LINUX_URL } from "../constants.js";
 // Type-only import — `useDockerStatus` is referenced solely as
 // `typeof useDockerStatus` to derive the data shape. `verbatimModuleSyntax`
@@ -24,8 +25,15 @@ interface FailureBodyProps {
 }
 
 export function FailureBody({ status }: FailureBodyProps): JSX.Element {
+  const probeFailed =
+    status?.ok === true && status.data.engine.failure === "probe_error";
+  const title = probeFailed
+    ? "Docker probe failed"
+    : "Docker check did not complete";
   const message =
-    status?.ok === false
+    probeFailed
+      ? "Docker probe failed — open the logs folder for details."
+      : status?.ok === false
       ? status.error.message
       : status?.ok && !status.data.endpoint.accepted
         ? (status.data.endpoint.message ?? "Docker endpoint rejected.")
@@ -35,7 +43,7 @@ export function FailureBody({ status }: FailureBodyProps): JSX.Element {
       <StatusTile
         tone="danger"
         icon={<HugeiconsIcon icon={AlertCircleIcon} size={20} aria-hidden />}
-        title="Docker check did not complete"
+        title={title}
         detail={message}
       />
 
@@ -48,6 +56,7 @@ export function FailureBody({ status }: FailureBodyProps): JSX.Element {
       </ul>
 
       <DocsLink href={DOCKER_ENGINE_LINUX_URL} label="View Docker install docs" />
+      <OpenLogsLink />
     </div>
   );
 }

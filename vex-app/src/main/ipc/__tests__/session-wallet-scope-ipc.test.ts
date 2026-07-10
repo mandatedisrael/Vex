@@ -234,4 +234,15 @@ describe("setSessionWalletScope session wallet scope", () => {
     expect(result.error?.code).toBe("wallets.invalid_selection");
     expect(mocks.initializeSessionWalletScope).not.toHaveBeenCalled();
   });
+
+  it("post-reset stale wallet scope fails closed with wallets.invalid_selection", async () => {
+    const result = await call(CH.wallets.setSessionWalletScope, {
+      sessionId: SESSION,
+      evmWalletId: "wallet-from-pre-reset-inventory",
+      solanaWalletId: null,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("wallets.invalid_selection");
+    expect(mocks.initializeSessionWalletScope).not.toHaveBeenCalled();
+  });
 });

@@ -46,3 +46,12 @@ export const secretsLockResultSchema = z
 
 export type SecretsLockResult = z.infer<typeof secretsLockResultSchema>;
 
+export const resetToFreshVaultInputSchema = z
+  .object({ confirm: z.literal(true) })
+  .strict();
+export type ResetToFreshVaultInput = z.infer<typeof resetToFreshVaultInputSchema>;
+
+export const resetToFreshVaultResultSchema = z
+  .object({ scheduled: z.literal(true) })
+  .strict();
+export type ResetToFreshVaultResult = z.infer<typeof resetToFreshVaultResultSchema>;

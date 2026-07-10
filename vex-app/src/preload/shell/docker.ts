@@ -12,6 +12,7 @@ import { abortableInvoke, invokeWithSchema, subscribe } from "../_dispatch.js";
 const composeUpInputSchema = z
   .object({ pgPort: z.number().int().min(1).max(65535).optional() })
   .strict();
+const emptyInputSchema = z.object({}).strict();
 
 export const docker = {
   detect() {
@@ -40,6 +41,13 @@ export const docker = {
   },
   composeDown() {
     return invokeWithSchema(CH.docker.composeDown, {});
+  },
+  stopPreviousInstallStacks() {
+    return invokeWithSchema(
+      CH.docker.stopPreviousInstallStacks,
+      {},
+      emptyInputSchema,
+    );
   },
   onInstallProgress(cb) {
     return subscribe(EV.docker.installProgress, installProgressSchema, cb);

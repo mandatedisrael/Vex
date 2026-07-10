@@ -29,6 +29,7 @@ export const CH = {
     start: "vex:docker:start",
     composeUp: "vex:docker:composeUp",
     composeDown: "vex:docker:composeDown",
+    stopPreviousInstallStacks: "vex:docker:stopPreviousInstallStacks",
   },
 
   // Database — migrations + status (M6)
@@ -41,6 +42,7 @@ export const CH = {
     status: "vex:secrets:status",
     unlock: "vex:secrets:unlock",
     lock: "vex:secrets:lock",
+    resetToFreshVault: "vex:secrets:resetToFreshVault",
   },
 
   // Wallet — sudo-style ops on existing keystores (Phase 2 feature #6)

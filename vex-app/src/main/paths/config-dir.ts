@@ -90,3 +90,7 @@ export const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 export const COMPOSE_OUTPUT_DIR = path.join(CONFIG_DIR, "compose");
 export const SECRETS_DIR = path.join(CONFIG_DIR, "local-infra", "secrets");
 export const PG_PASSWORD_FILE = path.join(SECRETS_DIR, "pg_password");
+export const VAULT_RESET_JOURNAL_FILE = path.join(
+  CONFIG_DIR,
+  ".vault-reset-journal.json",
+);

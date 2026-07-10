@@ -130,6 +130,8 @@ function successResult(): {
   composeOutPath: string;
   installId: string;
   message: string;
+  previousInstallHoldingPorts: boolean;
+  conflictPorts: ReadonlyArray<number>;
   pgPort: number;
   embedPort: number;
   pgPasswordPath: string;
@@ -140,6 +142,8 @@ function successResult(): {
     composeOutPath: "/tmp/out/docker-compose.yml",
     installId: "fake-install-id",
     message: "Vex stack is running.",
+    previousInstallHoldingPorts: false,
+    conflictPorts: [],
     pgPort: 27432,
     embedPort: 27134,
     pgPasswordPath: "/tmp/secrets/pg_password",
@@ -197,8 +201,12 @@ describe("docker:composeUp — cancellation (PR3)", () => {
       requestId: UUID_INITIATOR,
       payload: {},
     });
-    // Yield so the handler's await is reached + IIFE started.
-    await new Promise((r) => setTimeout(r, 0));
+    // Deterministic: wait until the handler actually reached the mock body
+    // (release assigned) — a bare zero-yield races under machine load and
+    // `release!()` on null produced unhandled TypeErrors + timeouts.
+    await vi.waitFor(() => {
+      expect(release).not.toBeNull();
+    });
 
     const controller = getCancelController(UUID_INITIATOR);
     expect(controller).toBeDefined();
@@ -231,9 +239,12 @@ describe("docker:composeUp — cancellation (PR3)", () => {
       requestId: UUID_INITIATOR,
       payload: {},
     });
-    // Wait long enough for the initiator to register its in-flight
-    // and start awaiting the mock.
-    await new Promise((r) => setTimeout(r, 0));
+    // Deterministic: the initiator has registered its in-flight once the
+    // mock body ran (in-flight is set before lifecycle.composeUp is
+    // invoked) — a bare zero-yield let the joiner race ahead under load.
+    await vi.waitFor(() => {
+      expect(composeMock).toHaveBeenCalledTimes(1);
+    });
 
     const joinerPending = composeUpFn(trustedSender(), {
       requestId: UUID_JOINER_A,

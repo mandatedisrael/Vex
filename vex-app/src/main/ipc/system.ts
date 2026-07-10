@@ -19,6 +19,7 @@ import {
 } from "@shared/schemas/system.js";
 import { SETUP_COMPLETE_FILE } from "../paths/config-dir.js";
 import { registerHandler } from "./register-handler.js";
+import { isAppTranslocated } from "../system/translocation.js";
 
 const empty = z.object({}).strict();
 
@@ -129,7 +130,13 @@ export function registerSystemHandlers(): Array<() => void> {
             ? "ok"
             : "degraded"
           : "not_ready";
-        return ok({ os: osInfo, network, setupComplete, overall });
+        return ok({
+          os: osInfo,
+          network,
+          translocated: isAppTranslocated(process.execPath, process.platform),
+          setupComplete,
+          overall,
+        });
       },
     })
   );

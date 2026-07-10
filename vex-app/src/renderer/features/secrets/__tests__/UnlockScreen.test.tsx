@@ -21,13 +21,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import type { Result } from "@shared/ipc/result.js";
-import type { SecretsUnlockResult } from "@shared/schemas/secrets.js";
+import type {
+  ResetToFreshVaultResult,
+  SecretsUnlockResult,
+} from "@shared/schemas/secrets.js";
 
 type UnlockReturnView = "wizard" | "appShell";
 
 const mockUnlock =
   vi.fn<(input: { password: string }) => Promise<Result<SecretsUnlockResult>>>();
+const mockResetToFreshVault =
+  vi.fn<(input: { confirm: true }) => Promise<Result<ResetToFreshVaultResult>>>();
 const mockSetCurrentView = vi.fn();
+const mockOpenLogsFolder = vi.fn();
 let mockUnlockReturnView: UnlockReturnView = "appShell";
 
 vi.mock("../../../stores/uiStore.js", () => ({
@@ -50,6 +56,13 @@ function renderUnlockScreen(): ReturnType<typeof render> {
 }
 
 beforeEach(() => {
+  HTMLDialogElement.prototype.showModal = function showModal(): void {
+    this.setAttribute("open", "");
+  };
+  HTMLDialogElement.prototype.close = function close(): void {
+    this.removeAttribute("open");
+    this.dispatchEvent(new Event("close"));
+  };
   mockUnlock.mockReset();
   // Default to a generic "wrong password" Result so accidental calls don't
   // bubble out as Unhandled Rejection noise inside vitest. Each test that
@@ -67,13 +80,21 @@ beforeEach(() => {
     },
   });
   mockSetCurrentView.mockReset();
+  mockResetToFreshVault.mockReset();
+  mockResetToFreshVault.mockResolvedValue({ ok: true, data: { scheduled: true } });
+  mockOpenLogsFolder.mockReset().mockResolvedValue({
+    ok: true,
+    data: { opened: true },
+  });
   mockUnlockReturnView = "appShell";
   Object.defineProperty(window, "vex", {
     configurable: true,
     value: {
       secrets: {
         unlock: mockUnlock,
+        resetToFreshVault: mockResetToFreshVault,
       },
+      support: { openLogsFolder: mockOpenLogsFolder },
     },
   });
 });
@@ -85,6 +106,55 @@ afterEach(() => {
 });
 
 describe("UnlockScreen", () => {
+  it("gates the honest fresh-vault warning behind acknowledgement and enters restarting state", async () => {
+    const view = renderUnlockScreen();
+    fireEvent.click(view.getByRole("button", { name: /I forgot my password/i }));
+    expect(view.getByText(/wallets stay encrypted with the forgotten password/i)).toBeTruthy();
+    expect(view.getByText(/kept until you deliberately delete them/i)).toBeTruthy();
+    expect(view.getByText(/On-chain funds can be recovered only/i)).toBeTruthy();
+    expect(view.getByText(/Local history remains/i)).toBeTruthy();
+    expect(view.getByText(/mission work will be abandoned/i)).toBeTruthy();
+    const danger = view.getByRole("button", { name: "Set up new vault" }) as HTMLButtonElement;
+    expect(danger.disabled).toBe(true);
+    fireEvent.click(view.getByRole("checkbox"));
+    expect(danger.disabled).toBe(false);
+    fireEvent.click(danger);
+    await waitFor(() => expect(mockResetToFreshVault).toHaveBeenCalledWith({ confirm: true }));
+    expect(await view.findByText("Restarting Vex…")).toBeTruthy();
+  });
+
+  it("disables backdrop close and Escape cancels with focus-safe Cancel default", () => {
+    const view = renderUnlockScreen();
+    fireEvent.click(view.getByRole("button", { name: /I forgot my password/i }));
+    const dialog = view.getByRole("dialog") as HTMLDialogElement;
+    fireEvent.click(dialog);
+    expect(view.getByRole("dialog")).toBeTruthy();
+    fireEvent(dialog, new Event("cancel", { bubbles: false, cancelable: true }));
+    expect(view.queryByRole("dialog")).toBeNull();
+  });
+
+  it("offers logs when fresh-vault scheduling fails", async () => {
+    mockResetToFreshVault.mockResolvedValue({
+      ok: false,
+      error: {
+        code: "internal.unexpected",
+        domain: "wallet",
+        message: "Could not schedule the reset.",
+        retryable: true,
+        userActionable: true,
+        redacted: true,
+        correlationId: "reset-error",
+      },
+    });
+    const view = renderUnlockScreen();
+    fireEvent.click(view.getByRole("button", { name: /I forgot my password/i }));
+    fireEvent.click(view.getByRole("checkbox"));
+    fireEvent.click(view.getByRole("button", { name: "Set up new vault" }));
+    await view.findByText("Could not schedule the reset.");
+    fireEvent.click(view.getByRole("button", { name: "Open logs folder" }));
+    expect(mockOpenLogsFolder).toHaveBeenCalledTimes(1);
+  });
+
   it("renders the password input and submit button", () => {
     const { getByLabelText, getByRole } = renderUnlockScreen();
     expect(getByLabelText(/Master password/i)).toBeTruthy();
@@ -114,6 +184,9 @@ describe("UnlockScreen", () => {
 
     await view.findByText(/at least 8 characters/i);
     expect(mockUnlock).not.toHaveBeenCalled();
+    expect(
+      view.queryByRole("button", { name: "Open logs folder" }),
+    ).toBeNull();
   });
 
   it("calls window.vex.secrets.unlock with the entered password", async () => {
@@ -165,6 +238,8 @@ describe("UnlockScreen", () => {
     await view.findByText(/Master password is incorrect/i);
     expect(input.value).toBe("wrong-password-12");
     expect(mockSetCurrentView).not.toHaveBeenCalled();
+    fireEvent.click(view.getByRole("button", { name: "Open logs folder" }));
+    expect(mockOpenLogsFolder).toHaveBeenCalledTimes(1);
   });
 
   it("clears the password input and flips the view on a successful unlock", async () => {
@@ -215,6 +290,8 @@ describe("UnlockScreen", () => {
     const button = view.getByRole("button", { name: /Unlock/i }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     expect(input.disabled).toBe(true);
+    fireEvent.click(view.getByRole("button", { name: "Open logs folder" }));
+    expect(mockOpenLogsFolder).toHaveBeenCalledTimes(1);
   });
 
   it("re-enables the form once the throttle window elapses", async () => {

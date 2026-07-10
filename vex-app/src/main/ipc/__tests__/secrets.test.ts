@@ -25,6 +25,10 @@ const mockUnlockSecretSession = vi.fn();
 const mockCheckUnlockAllowed = vi.fn();
 const mockRecordUnlockFailure = vi.fn();
 const mockRecordUnlockSuccess = vi.fn();
+const mockShowMessageBox = vi.fn();
+const mockWriteVaultResetJournal = vi.fn();
+const mockRelaunch = vi.fn();
+const mockQuit = vi.fn();
 
 vi.mock("electron", () => ({
   ipcMain: {
@@ -35,7 +39,13 @@ vi.mock("electron", () => ({
       handlers.delete(channel);
     },
   },
-  app: { isPackaged: true },
+  app: { isPackaged: true, relaunch: mockRelaunch, quit: mockQuit },
+  BrowserWindow: { getFocusedWindow: vi.fn(() => null) },
+  dialog: { showMessageBox: (...args: unknown[]) => mockShowMessageBox(...args) },
+}));
+
+vi.mock("../../secrets/vault-reset-journal.js", () => ({
+  writeVaultResetJournal: (value: unknown) => mockWriteVaultResetJournal(value),
 }));
 
 vi.mock("../../secrets/session.js", () => ({
@@ -59,7 +69,7 @@ vi.mock("../../logger/index.js", () => ({
   },
 }));
 
-const { registerSecretsHandlers } = await import("../secrets.js");
+const { registerSecretsHandlers, __resetFreshVaultFlightForTests } = await import("../secrets.js");
 const { CH } = await import("@shared/ipc/channels.js");
 
 const trustedSender = createTrustedSender({ sender: createTestWebContents() });
@@ -72,6 +82,88 @@ beforeEach(() => {
   mockCheckUnlockAllowed.mockReset();
   mockRecordUnlockFailure.mockReset();
   mockRecordUnlockSuccess.mockReset();
+  mockShowMessageBox.mockReset();
+  mockWriteVaultResetJournal.mockReset();
+  mockRelaunch.mockReset();
+  mockQuit.mockReset();
+  mockLockSecretSession.mockResolvedValue(undefined);
+  mockWriteVaultResetJournal.mockResolvedValue(undefined);
+  __resetFreshVaultFlightForTests();
+});
+
+describe("vex.secrets.resetToFreshVault handler", () => {
+  it("requires strict confirm:true input", async () => {
+    registerSecretsHandlers();
+    const fn = handlers.get(CH.secrets.resetToFreshVault)!;
+    for (const payload of [{}, { confirm: false }, { confirm: true, path: "/tmp/x" }]) {
+      const result = await fn(trustedSender, { requestId: "bad", payload }) as { ok: boolean };
+      expect(result.ok).toBe(false);
+    }
+    expect(mockShowMessageBox).not.toHaveBeenCalled();
+  });
+
+  it("refuses while the secret session is unlocked", async () => {
+    mockGetSecretSessionStatus.mockReturnValue({ vaultConfigured: true, unlocked: true });
+    registerSecretsHandlers();
+    const result = await handlers.get(CH.secrets.resetToFreshVault)!(trustedSender, {
+      requestId: "locked-gate",
+      payload: { confirm: true },
+    }) as { ok: false; error: { code: string } };
+    expect(result.error.code).toBe("permissions.denied");
+    expect(mockShowMessageBox).not.toHaveBeenCalled();
+  });
+
+  it("requires native acknowledgement and includes every abandonment/durability warning", async () => {
+    mockGetSecretSessionStatus.mockReturnValue({ vaultConfigured: true, unlocked: false });
+    mockShowMessageBox.mockResolvedValue({ response: 1 });
+    registerSecretsHandlers();
+    const result = await handlers.get(CH.secrets.resetToFreshVault)!(trustedSender, {
+      requestId: "cancel",
+      payload: { confirm: true },
+    }) as { ok: false };
+    expect(result.ok).toBe(false);
+    // Options are the LAST argument: `showMessageBox(options)` when no window
+    // is focused, `showMessageBox(window, options)` otherwise.
+    const options = mockShowMessageBox.mock.calls[0]!.at(-1) as { detail: string; defaultId: number; cancelId: number };
+    expect(options.detail).toContain("in-progress or persisted mission work");
+    expect(options.detail).toContain("pending approvals will simply remain unanswered");
+    expect(options.detail).toContain("kept until you delete them from that backup folder");
+    expect(options.detail).toContain("encrypted with the forgotten password");
+    expect(options.defaultId).toBe(1);
+    expect(options.cancelId).toBe(1);
+    expect(mockWriteVaultResetJournal).not.toHaveBeenCalled();
+
+    mockShowMessageBox.mockResolvedValue({ response: 0 });
+    mockWriteVaultResetJournal.mockRejectedValueOnce(
+      new Error("journal unavailable"),
+    );
+    const retry = await handlers.get(CH.secrets.resetToFreshVault)!(trustedSender, {
+      requestId: "retry-after-cancel",
+      payload: { confirm: true },
+    }) as { ok: boolean };
+    expect(retry.ok).toBe(false);
+    expect(mockShowMessageBox).toHaveBeenCalledTimes(2);
+  });
+
+  it("single-flights journal/relaunch and resolves the response before relaunch", async () => {
+    mockGetSecretSessionStatus.mockReturnValue({ vaultConfigured: true, unlocked: false });
+    mockShowMessageBox.mockResolvedValue({ response: 0 });
+    registerSecretsHandlers();
+    const fn = handlers.get(CH.secrets.resetToFreshVault)!;
+    const [first, second] = await Promise.all([
+      fn(trustedSender, { requestId: "one", payload: { confirm: true } }),
+      fn(trustedSender, { requestId: "two", payload: { confirm: true } }),
+    ]);
+    expect(first).toEqual({ ok: true, data: { scheduled: true } });
+    expect(second).toEqual({ ok: true, data: { scheduled: true } });
+    expect(mockShowMessageBox).toHaveBeenCalledTimes(1);
+    expect(mockLockSecretSession).toHaveBeenCalledTimes(1);
+    expect(mockWriteVaultResetJournal).toHaveBeenCalledTimes(1);
+    expect(mockRelaunch).not.toHaveBeenCalled();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(mockRelaunch).toHaveBeenCalledTimes(1);
+    expect(mockQuit).toHaveBeenCalledTimes(1);
+  });
 });
 
 afterEach(() => {

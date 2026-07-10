@@ -19,6 +19,7 @@ import { PauseIcon, PlayIcon } from "@hugeicons/core-free-icons";
 import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
 import { PrimaryButton } from "../../../../components/onboarding/PrimaryButton.js";
 import { DocsLink } from "../../../../components/onboarding/DocsLink.js";
+import { OpenLogsLink } from "../../../../components/common/OpenLogsLink.js";
 import {
   DOCKER_DESKTOP_MAC_URL,
   DOCKER_DESKTOP_WIN_URL,
@@ -74,6 +75,7 @@ export function DaemonStoppedBody({
         ) : null}
 
         <DocsLink href={DOCKER_ENGINE_LINUX_URL} label="View Docker Engine docs" />
+        <OpenLogsLink />
       </div>
     );
   }
@@ -122,6 +124,7 @@ export function DaemonStoppedBody({
       ) : null}
 
       {docsUrl ? <DocsLink href={docsUrl} label="View Docker Desktop docs" /> : null}
+      <OpenLogsLink />
     </div>
   );
 }

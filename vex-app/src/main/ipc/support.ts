@@ -21,9 +21,7 @@
  *   - The renderer never sees a filesystem path — output is `{opened:true}`.
  */
 
-import { app, shell } from "electron";
-import path from "node:path";
-import { promises as fs } from "node:fs";
+import { shell } from "electron";
 import { CH } from "@shared/ipc/channels.js";
 import { ok, err, type Result, type VexError } from "@shared/ipc/result.js";
 import {
@@ -40,6 +38,7 @@ import {
 import { registerHandler, type HandlerContext } from "./register-handler.js";
 import { createBugReport } from "../support/bug-report-service.js";
 import { log } from "../logger/index.js";
+import { resolveContainedLogsDir } from "../support/logs-dir.js";
 
 function persistFailed(correlationId: string): VexError {
   return {
@@ -75,25 +74,6 @@ function openLogsFolderFailed(correlationId: string): VexError {
  * validation and open. Mirrors `resolveBackupDir` in
  * `onboarding/wallets/dialogs.ts`.
  */
-async function resolveContainedLogsDir(): Promise<string | null> {
-  try {
-    const userDataDir = app.getPath("userData");
-    const logsDir = path.join(userDataDir, "logs");
-    await fs.mkdir(logsDir, { recursive: true });
-    const baseReal = await fs.realpath(userDataDir);
-    const candidateReal = await fs.realpath(logsDir);
-    const stat = await fs.stat(candidateReal);
-    if (!stat.isDirectory()) return null;
-    // Strict containment: the logs dir must resolve INSIDE userData (never
-    // equal to it — the path is `${userData}/logs` by construction).
-    if (candidateReal.startsWith(baseReal + path.sep)) {
-      return candidateReal;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 function registerCreateBugReportHandler(): () => void {
   return registerHandler({

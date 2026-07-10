@@ -43,6 +43,7 @@ import {
   type WizardState,
 } from "@shared/schemas/wizard.js";
 import { Button } from "../../components/ui/button.js";
+import { OpenLogsLink } from "../../components/common/OpenLogsLink.js";
 import { DotmSquare3 } from "../../components/ui/dotm-square-3.js";
 import { cn } from "../../lib/utils.js";
 import { useUiStore } from "../../stores/uiStore.js";
@@ -288,6 +289,7 @@ export function WizardShell(): JSX.Element {
             Most setup-state failures are transient — retry once, then
             restart Vex if the problem persists.
           </p>
+          <OpenLogsLink />
           <div className="flex justify-end">
             <Button
               type="button"

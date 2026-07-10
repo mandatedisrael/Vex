@@ -5,7 +5,12 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { dockerStatusSchema, type DockerStatus } from "../docker.js";
+import {
+  composeUpResultSchema,
+  dockerStatusSchema,
+  stopPreviousInstallStacksResultSchema,
+  type DockerStatus,
+} from "../docker.js";
 
 const validStatus: DockerStatus = {
   endpoint: {
@@ -15,7 +20,12 @@ const validStatus: DockerStatus = {
     reason: null,
     message: null,
   },
-  engine: { present: true, version: "27.5.1", runtimeOK: true },
+  engine: {
+    present: true,
+    version: "27.5.1",
+    runtimeOK: true,
+    failure: null,
+  },
   compose: { present: true, version: "v2.32.4" },
   modelRunner: { present: true, status: "active", tcpReachable: true },
   daemon: { running: true, startable: true },
@@ -31,7 +41,12 @@ describe("dockerStatusSchema", () => {
   it("accepts null engine version when engine missing", () => {
     const status: DockerStatus = {
       ...validStatus,
-      engine: { present: false, version: null, runtimeOK: false },
+      engine: {
+        present: false,
+        version: null,
+        runtimeOK: false,
+        failure: "cli_not_found",
+      },
     };
     expect(dockerStatusSchema.safeParse(status).success).toBe(true);
   });
@@ -62,5 +77,45 @@ describe("dockerStatusSchema", () => {
       },
     });
     expect(result.success).toBe(false);
+  });
+
+  it("rejects unknown engine failure categories", () => {
+    const result = dockerStatusSchema.safeParse({
+      ...validStatus,
+      engine: { ...validStatus.engine, failure: "docker_broken" },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("compose previous-install contracts", () => {
+  const composeResult = {
+    kind: "port_collision",
+    composeOutPath: "/tmp/docker-compose.yml",
+    installId: "11111111-2222-4333-8444-555555555555",
+    message: "A required port is occupied.",
+    previousInstallHoldingPorts: true,
+  };
+
+  it("requires the previous-install collision boolean", () => {
+    expect(composeUpResultSchema.safeParse(composeResult).success).toBe(true);
+    const { previousInstallHoldingPorts: _removed, ...missing } = composeResult;
+    expect(composeUpResultSchema.safeParse(missing).success).toBe(false);
+  });
+
+  it("keeps stop output strict and identifier-free", () => {
+    expect(
+      stopPreviousInstallStacksResultSchema.safeParse({
+        stoppedCount: 2,
+        message: "Stopped previous Vex services.",
+      }).success,
+    ).toBe(true);
+    expect(
+      stopPreviousInstallStacksResultSchema.safeParse({
+        stoppedCount: 2,
+        message: "Stopped previous Vex services.",
+        containerIds: ["secret-internal-id"],
+      }).success,
+    ).toBe(false);
   });
 });

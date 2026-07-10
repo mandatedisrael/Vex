@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 
 // Crypto-heavy suite: vi.resetModules() re-imports the wallet graph and real
@@ -288,6 +288,43 @@ describe("wallet-backup", () => {
       expect(existsSync(join(dir2!, ".env"))).toBe(true);
     });
 
+    it("creates a durable-purpose vault-reset archive with the canonical shared name", async () => {
+      createEvmWalletEntry();
+      writeFileSync(testVaultFile, "encrypted-vault", "utf8");
+      const dir = await autoBackup({ purpose: "vault-reset" });
+      expect(dir).not.toBeNull();
+      expect(backupMod.isCanonicalVaultResetBackupName(dir!.split(/[\\/]/).at(-1)!)).toBe(true);
+      expect(basename(dir!)).not.toMatch(/[:.]/);
+      const manifest = readManifest(dir!) as { purpose: string };
+      expect(manifest.purpose).toBe("vault-reset");
+      expect(listAvailableBackups()).toContainEqual(
+        expect.objectContaining({
+          id: basename(dir!),
+          timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        }),
+      );
+    });
+
+    it("defaults missing V2 purpose to ordinary and lists using manifest.createdAt", async () => {
+      mkdirSync(join(testBackupsDir, "opaque-directory-id"), { recursive: true });
+      writeFileSync(
+        join(testBackupsDir, "opaque-directory-id", "manifest.json"),
+        JSON.stringify({
+          version: 2,
+          cliVersion: "test",
+          createdAt: "2025-04-03T02:01:00.000Z",
+          wallets: [],
+          files: [],
+        }),
+      );
+      const parsed = backupManifestSchema.parse(readManifest(join(testBackupsDir, "opaque-directory-id")));
+      expect(parsed.version === 2 && parsed.purpose).toBe("ordinary");
+      expect(listAvailableBackups()).toContainEqual(expect.objectContaining({
+        id: "opaque-directory-id",
+        timestamp: "2025-04-03T02:01:00.000Z",
+      }));
+    });
+
     it("returns null when there is genuinely nothing to back up", async () => {
       // Fresh empty config dir — no keystores, no vault, no .env, no config.
       const dir = await autoBackup();
@@ -363,6 +400,17 @@ describe("wallet-backup", () => {
         d.isDirectory(),
       );
       expect(remaining.length).toBeLessThanOrEqual(20);
+    });
+
+    it("ordinary retention never evicts a vault-reset archive", async () => {
+      createEvmWalletEntry();
+      const resetName = "vault-reset-2020-01-01T000000Z";
+      mkdirSync(join(testBackupsDir, resetName), { recursive: true });
+      for (let i = 0; i < 25; i += 1) {
+        mkdirSync(join(testBackupsDir, `ordinary-${String(i).padStart(2, "0")}`), { recursive: true });
+      }
+      await autoBackup();
+      expect(existsSync(join(testBackupsDir, resetName))).toBe(true);
     });
 
     it("listAvailableBackups returns metadata only, newest first", async () => {

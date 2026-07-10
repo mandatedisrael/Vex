@@ -50,6 +50,7 @@ import { PortCollisionBody } from "./bootstrap/branches/PortCollisionBody.js";
 import { UnhealthyBody } from "./bootstrap/branches/UnhealthyBody.js";
 import { FailedBody } from "./bootstrap/branches/FailedBody.js";
 import { CancelledBody } from "./bootstrap/branches/CancelledBody.js";
+import { useStopPreviousInstallStacks } from "../../lib/api/docker.js";
 
 export function ComposeBootstrap(): JSX.Element {
   const setCurrentView = useUiStore((s) => s.setCurrentView);
@@ -57,6 +58,7 @@ export function ComposeBootstrap(): JSX.Element {
   const [phase, setPhase] = useState<Phase>({ kind: "running" });
   const [retryToken, setRetryToken] = useState(0);
   const cancelRef = useRef<(() => void) | null>(null);
+  const stopPreviousInstall = useStopPreviousInstallStacks();
 
   useEffect(() => {
     let cancelled = false;
@@ -93,6 +95,8 @@ export function ComposeBootstrap(): JSX.Element {
             setPhase({
               kind: "error.port_collision",
               message: data.message,
+              previousInstallHoldingPorts:
+                data.previousInstallHoldingPorts,
             });
             return;
           case "unhealthy":
@@ -145,6 +149,14 @@ export function ComposeBootstrap(): JSX.Element {
     setRetryToken((n) => n + 1);
   }, []);
 
+  const handleStopPreviousInstall = useCallback((): void => {
+    stopPreviousInstall.mutate(undefined, {
+      onSuccess: (result) => {
+        if (result.ok) handleRetry();
+      },
+    });
+  }, [handleRetry, stopPreviousInstall]);
+
   const handleCancel = useCallback((): void => {
     const cancel = cancelRef.current;
     if (cancel === null) return;
@@ -181,7 +193,20 @@ export function ComposeBootstrap(): JSX.Element {
         ) : phase.kind === "ready" ? (
           <ReadyBody result={phase.result} celebrate={phase.celebrate} />
         ) : phase.kind === "error.port_collision" ? (
-          <PortCollisionBody message={phase.message} onRetry={handleRetry} />
+          <PortCollisionBody
+            message={phase.message}
+            previousInstallHoldingPorts={
+              phase.previousInstallHoldingPorts
+            }
+            stoppingPreviousInstall={stopPreviousInstall.isPending}
+            stopPreviousInstallError={
+              stopPreviousInstall.data?.ok === false
+                ? stopPreviousInstall.data.error.message
+                : (stopPreviousInstall.error?.message ?? null)
+            }
+            onStopPreviousInstall={handleStopPreviousInstall}
+            onRetry={handleRetry}
+          />
         ) : phase.kind === "error.unhealthy" ? (
           <UnhealthyBody message={phase.message} onRetry={handleRetry} />
         ) : phase.kind === "error.failed" ? (

@@ -47,6 +47,8 @@ type _M = import("@tools/wallet/backup.js").BackupManifest;
 type _Wallet = import("@tools/wallet/backup.js").BackupManifestWallet;
 type _Entry = import("@tools/wallet/backup.js").BackupFileEntry;
 type _Available = import("@tools/wallet/backup.js").AvailableBackup;
+type _Purpose = import("@tools/wallet/backup.js").BackupPurpose;
+type _Options = import("@tools/wallet/backup.js").AutoBackupOptions;
 
 type BackupMod = typeof import("@tools/wallet/backup.js");
 
@@ -61,7 +63,11 @@ describe("backup façade surface", () => {
       "backupManifestSchema",
       "backupManifestV1Schema",
       "backupManifestV2Schema",
+      "backupPurposeSchema",
+      "createBackupDirName",
       "enforceBackupRetention",
+      "formatBackupTimestamp",
+      "isCanonicalVaultResetBackupName",
       "listAvailableBackups",
       "readArchiveManifest",
     ]);
@@ -77,7 +83,7 @@ describe("backup façade surface", () => {
 
     // Keep the type-only imports referenced so they are not elided as unused.
     const _typeProbe: ReadonlyArray<
-      _Role | _V1 | _V2 | _M | _Wallet | _Entry | _Available
+      _Role | _V1 | _V2 | _M | _Wallet | _Entry | _Available | _Purpose | _Options
     > = [];
     void _typeProbe;
     // Import-bound: cold-transforming the heavy viem/solana module graph under

@@ -2,6 +2,7 @@ import { CH } from "../../shared/ipc/channels.js";
 import {
   secretsLockInputSchema,
   secretsUnlockInputSchema,
+  resetToFreshVaultInputSchema,
 } from "../../shared/schemas/secrets.js";
 import type { SecretsUnlockInput } from "../../shared/schemas/secrets.js";
 import type { SecretsBridge } from "../../shared/types/bridge/shell/secrets.js";
@@ -16,5 +17,12 @@ export const secrets = {
   },
   lock() {
     return invokeWithSchema(CH.secrets.lock, {}, secretsLockInputSchema);
+  },
+  resetToFreshVault(input) {
+    return invokeWithSchema(
+      CH.secrets.resetToFreshVault,
+      input,
+      resetToFreshVaultInputSchema,
+    );
   },
 } satisfies SecretsBridge;

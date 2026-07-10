@@ -9,6 +9,22 @@
 import { runSpawn, type SpawnRunnerResult } from "../docker/spawn-runner.js";
 import { composeArgs, projectName, projectLabelFilter } from "./project.js";
 
+export interface DockerContainerCommandOptions {
+  readonly signal?: AbortSignal;
+  readonly timeoutMs?: number;
+}
+
+export interface AllRunningComposeProjectsQuery {
+  readonly kind: "all-compose-projects";
+}
+
+function spawnOptions(
+  input?: AbortSignal | DockerContainerCommandOptions,
+): DockerContainerCommandOptions {
+  if (input === undefined) return {};
+  return input instanceof AbortSignal ? { signal: input } : input;
+}
+
 // Codex review turn 2 YELLOW #6: `compose stop` may fail with a
 // "no compose file" error if the YAML disappeared while the dir
 // still exists. In that case, fall through to the label-based path
@@ -43,20 +59,43 @@ export async function composeStop(
  */
 export async function listRunningProjectContainers(
   installId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+): Promise<SpawnRunnerResult>;
+export async function listRunningProjectContainers(
+  query: AllRunningComposeProjectsQuery,
+  options?: DockerContainerCommandOptions,
+): Promise<SpawnRunnerResult>;
+export async function listRunningProjectContainers(
+  installIdOrQuery: string | AllRunningComposeProjectsQuery,
+  signalOrOptions?: AbortSignal | DockerContainerCommandOptions,
 ): Promise<SpawnRunnerResult> {
+  const options = spawnOptions(signalOrOptions);
+  if (typeof installIdOrQuery !== "string") {
+    return runSpawn(
+      "docker",
+      [
+        "ps",
+        "--no-trunc",
+        "--filter",
+        "status=running",
+        "--format",
+        '{{.ID}}\t{{.Label "com.docker.compose.project"}}',
+      ],
+      options,
+    );
+  }
   return runSpawn(
     "docker",
     [
       "ps",
       "--filter",
-      projectLabelFilter(installId),
+      projectLabelFilter(installIdOrQuery),
       "--filter",
       "status=running",
       "--format",
       "{{.ID}}",
     ],
-    signal !== undefined ? { signal } : {}
+    options,
   );
 }
 
@@ -65,11 +104,11 @@ export async function listRunningProjectContainers(
  */
 export async function stopContainers(
   ids: readonly string[],
-  signal?: AbortSignal
+  signalOrOptions?: AbortSignal | DockerContainerCommandOptions,
 ): Promise<SpawnRunnerResult> {
   return runSpawn(
     "docker",
     ["stop", ...ids],
-    signal !== undefined ? { signal } : {}
+    spawnOptions(signalOrOptions),
   );
 }

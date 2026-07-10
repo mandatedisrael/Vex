@@ -11,6 +11,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { redact } from "../logger/redact.js";
+import { dockerSpawnEnv } from "./cli-env.js";
 
 export interface SpawnRunnerOptions {
   readonly cwd?: string;
@@ -90,6 +91,7 @@ export async function runSpawn(
     onStdoutLine,
     onStderrLine,
   } = options;
+  const spawnEnv = env ?? (command === "docker" ? dockerSpawnEnv() : undefined);
 
   return new Promise((resolve) => {
     let aborted = false;
@@ -140,7 +142,7 @@ export async function runSpawn(
 
     const child: ChildProcess = spawn(command, [...args], {
       cwd,
-      env,
+      env: spawnEnv,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -158,9 +160,14 @@ export async function runSpawn(
     child.stdout?.resume();
     child.stderr?.resume();
 
-    child.on("error", () => {
-      stderrAccum += stderrReader.flush(() => undefined);
-      stdoutAccum += stdoutReader.flush(() => undefined);
+    child.on("error", (err: Error) => {
+      stderrAccum += stderrReader.flush(emitStderrLine);
+      stdoutAccum += stdoutReader.flush(emitStdoutLine);
+      const code =
+        "code" in err && typeof err.code === "string" ? err.code : "unknown";
+      const spawnErrorLine = `[spawn error: ${code}]`;
+      stderrAccum += `${spawnErrorLine}\n`;
+      emitStderrLine(spawnErrorLine);
     });
 
     const waitForStreamClose = (

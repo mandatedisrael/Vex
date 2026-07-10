@@ -36,6 +36,7 @@ type ProgressCb = (payload: MigrateProgress) => void;
 const mockMigrate = vi.fn();
 const mockOnProgress = vi.fn();
 const mockOpenWizard = vi.fn();
+const mockOpenLogsFolder = vi.fn();
 let progressCb: ProgressCb | null = null;
 
 vi.mock("../../../stores/uiStore.js", () => ({
@@ -47,6 +48,10 @@ beforeEach(() => {
   mockMigrate.mockReset();
   mockOnProgress.mockReset();
   mockOpenWizard.mockReset();
+  mockOpenLogsFolder.mockReset().mockResolvedValue({
+    ok: true,
+    data: { opened: true },
+  });
   progressCb = null;
 
   mockOnProgress.mockImplementation((cb: ProgressCb) => {
@@ -63,6 +68,7 @@ beforeEach(() => {
       migrate: () => mockMigrate(),
       onProgress: (cb: ProgressCb) => mockOnProgress(cb),
     },
+    support: { openLogsFolder: mockOpenLogsFolder },
   };
 });
 
@@ -118,10 +124,12 @@ describe("Migrations component", () => {
         redacted: true,
       },
     });
-    const { findByText, queryByRole } = renderWithQuery(<Migrations />);
+    const { findByText, getByRole, queryByRole } = renderWithQuery(<Migrations />);
     await findByText(/Migration 007 failed/);
     expect(queryByRole("button", { name: /Retry/ })).toBeTruthy();
     expect(queryByRole("button", { name: /Continue/ })).toBeNull();
+    fireEvent.click(getByRole("button", { name: "Open logs folder" }));
+    expect(mockOpenLogsFolder).toHaveBeenCalledTimes(1);
   });
 
   it("renders live progress from the bus (preserved)", async () => {

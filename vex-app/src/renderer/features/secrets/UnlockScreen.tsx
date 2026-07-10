@@ -44,6 +44,16 @@ import { useUiStore } from "../../stores/uiStore.js";
 import { PASSWORD_MIN_LENGTH } from "@shared/schemas/secrets.js";
 import { getErrorCopy } from "../../lib/errors/error-copy.js";
 import { cn } from "../../lib/utils.js";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog.js";
+import { OpenLogsLink } from "../../components/common/OpenLogsLink.js";
 
 interface ThrottleState {
   readonly message: string;
@@ -53,9 +63,15 @@ interface ThrottleState {
 export function UnlockScreen(): JSX.Element {
   const passwordRef = useRef<HTMLInputElement | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorFromBridge, setErrorFromBridge] = useState(false);
   const [pending, setPending] = useState(false);
   const [throttle, setThrottle] = useState<ThrottleState | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetAcknowledged, setResetAcknowledged] = useState(false);
+  const [resetPending, setResetPending] = useState(false);
+  const [resetRestarting, setResetRestarting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   const returnView = useUiStore((s) => s.unlockReturnView);
   const setCurrentView = useUiStore((s) => s.setCurrentView);
 
@@ -97,11 +113,13 @@ export function UnlockScreen(): JSX.Element {
     const password = passwordRef.current?.value ?? "";
     if (password.length < PASSWORD_MIN_LENGTH) {
       setError(`Password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
+      setErrorFromBridge(false);
       return;
     }
 
     setPending(true);
     setError(null);
+    setErrorFromBridge(false);
     try {
       const result = await window.vex.secrets.unlock({ password });
       if (!result.ok) {
@@ -124,12 +142,40 @@ export function UnlockScreen(): JSX.Element {
           return;
         }
         setError(getErrorCopy(result.error).message);
+        setErrorFromBridge(true);
         return;
       }
       if (passwordRef.current) passwordRef.current.value = "";
       setCurrentView(returnView);
     } finally {
       setPending(false);
+    }
+  }
+
+  function setResetDialogOpen(open: boolean): void {
+    if (resetPending || resetRestarting) return;
+    setResetOpen(open);
+    if (!open) {
+      setResetAcknowledged(false);
+      setResetError(null);
+    }
+  }
+
+  async function requestFreshVault(): Promise<void> {
+    if (!resetAcknowledged || resetPending) return;
+    setResetPending(true);
+    setResetError(null);
+    try {
+      const result = await window.vex.secrets.resetToFreshVault({ confirm: true });
+      if (!result.ok) {
+        if (result.error.code !== "internal.cancelled") {
+          setResetError(getErrorCopy(result.error).message);
+        }
+        return;
+      }
+      setResetRestarting(true);
+    } finally {
+      setResetPending(false);
     }
   }
 
@@ -278,23 +324,29 @@ export function UnlockScreen(): JSX.Element {
           </div>
 
           {throttleActive ? (
-            <p
-              role="alert"
-              data-vex-unlock-throttle="active"
-              className="rounded-md border border-[color-mix(in_oklab,var(--color-warning)_35%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_10%,transparent)] px-3.5 py-2.5 text-[13px] text-[color-mix(in_oklab,var(--color-warning)_70%,white)]"
-            >
-              {throttle.message}{" "}
-              <span className="font-mono text-xs tabular-nums">
-                ({throttleRemainingSeconds}s)
-              </span>
-            </p>
+            <div className="flex flex-col gap-2">
+              <p
+                role="alert"
+                data-vex-unlock-throttle="active"
+                className="rounded-md border border-[color-mix(in_oklab,var(--color-warning)_35%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_10%,transparent)] px-3.5 py-2.5 text-[13px] text-[color-mix(in_oklab,var(--color-warning)_70%,white)]"
+              >
+                {throttle.message}{" "}
+                <span className="font-mono text-xs tabular-nums">
+                  ({throttleRemainingSeconds}s)
+                </span>
+              </p>
+              <OpenLogsLink />
+            </div>
           ) : error ? (
-            <p
-              role="alert"
-              className="rounded-md border border-[color-mix(in_oklab,var(--color-danger)_35%,transparent)] bg-[color-mix(in_oklab,var(--color-danger)_10%,transparent)] px-3.5 py-2.5 text-[13px] text-[color-mix(in_oklab,var(--color-danger)_70%,white)]"
-            >
-              {error}
-            </p>
+            <div className="flex flex-col gap-2">
+              <p
+                role="alert"
+                className="rounded-md border border-[color-mix(in_oklab,var(--color-danger)_35%,transparent)] bg-[color-mix(in_oklab,var(--color-danger)_10%,transparent)] px-3.5 py-2.5 text-[13px] text-[color-mix(in_oklab,var(--color-danger)_70%,white)]"
+              >
+                {error}
+              </p>
+              {errorFromBridge ? <OpenLogsLink /> : null}
+            </div>
           ) : null}
 
           <Button
@@ -314,6 +366,16 @@ export function UnlockScreen(): JSX.Element {
           </Button>
         </form>
 
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={inputsDisabled}
+          onClick={() => setResetDialogOpen(true)}
+          className="mt-4 w-full text-[var(--color-text-muted)]"
+        >
+          I forgot my password — set up a new vault
+        </Button>
+
         {/* SPEC LINE — hairline meta row, landing hero-meta grammar.
           Right side reads the real return route (wizard vs desk). */}
         <div className="mt-7 flex items-center justify-between border-t border-white/[0.06] pt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
@@ -321,6 +383,70 @@ export function UnlockScreen(): JSX.Element {
           <span>Resumes · {returnView === "wizard" ? "Setup" : "Desk"}</span>
         </div>
       </section>
+      <Dialog open={resetOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent closeOnBackdropClick={false}>
+          <DialogHeader>
+            <DialogTitle>Set up a new vault?</DialogTitle>
+            <DialogDescription>
+              This does not recover or decrypt the current vault.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            {resetRestarting ? (
+              <p role="status">Restarting Vex…</p>
+            ) : (
+              <>
+                <p>
+                  Your wallets stay encrypted with the forgotten password in the
+                  backup folder and are kept until you deliberately delete them.
+                  They remain unusable without that password.
+                </p>
+                <p>
+                  On-chain funds can be recovered only from an existing backup or
+                  seed phrase. Local history remains on this machine. Any
+                  in-progress or persisted mission work will be abandoned, and
+                  pending approvals will remain unanswered.
+                </p>
+                <label className="flex items-start gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={resetAcknowledged}
+                    onChange={(event) => setResetAcknowledged(event.currentTarget.checked)}
+                  />
+                  <span>I understand that the forgotten password cannot be recovered.</span>
+                </label>
+                {resetError ? (
+                  <div className="flex flex-col gap-2">
+                    <p role="alert">{resetError}</p>
+                    <OpenLogsLink />
+                  </div>
+                ) : null}
+              </>
+            )}
+          </DialogBody>
+          {!resetRestarting ? (
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                autoFocus
+                disabled={resetPending}
+                onClick={() => setResetDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={!resetAcknowledged || resetPending}
+                onClick={() => void requestFreshVault()}
+              >
+                {resetPending ? "Requesting…" : "Set up new vault"}
+              </Button>
+            </DialogFooter>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

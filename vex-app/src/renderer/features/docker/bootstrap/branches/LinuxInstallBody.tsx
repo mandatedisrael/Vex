@@ -21,6 +21,7 @@ import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
 import { DocsLink } from "../../../../components/onboarding/DocsLink.js";
 import { LinuxManualInstructions } from "../../LinuxManualInstructions.js";
 import { cn } from "../../../../lib/utils.js";
+import { OpenLogsLink } from "../../../../components/common/OpenLogsLink.js";
 import {
   DOCKER_ENGINE_LINUX_URL,
   DOCKER_ROOTLESS_URL,
@@ -94,6 +95,7 @@ export function LinuxInstallBody({
         href={DOCKER_ENGINE_LINUX_URL}
         label="View official Docker Engine docs"
       />
+      <OpenLogsLink />
     </div>
   );
 }

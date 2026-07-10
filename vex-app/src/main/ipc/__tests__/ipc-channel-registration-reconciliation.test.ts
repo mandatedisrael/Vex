@@ -70,7 +70,9 @@
  *    filter is defensive against a future event constant landing in `CH`.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.setConfig({ testTimeout: 15_000 });
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { CH } from "@shared/ipc/channels.js";

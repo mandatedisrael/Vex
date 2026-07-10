@@ -536,6 +536,7 @@ function makeHealthReport(overall: HealthReport["overall"]): HealthReport {
       latencyMs: 1,
       probedAt: new Date("2026-05-19T12:00:00.000Z").toISOString(),
     },
+    translocated: false,
     setupComplete: true,
     overall,
   };

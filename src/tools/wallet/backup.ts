@@ -29,8 +29,16 @@ export type {
   BackupManifestWallet,
   BackupFileEntry,
 } from "./backup/manifest.js";
+export { backupPurposeSchema } from "./backup/manifest.js";
+export type { BackupPurpose } from "./backup/naming.js";
+export {
+  createBackupDirName,
+  formatBackupTimestamp,
+  isCanonicalVaultResetBackupName,
+} from "./backup/naming.js";
 
 export { autoBackup } from "./backup/create.js";
+export type { AutoBackupOptions } from "./backup/create.js";
 export { enforceBackupRetention } from "./backup/retention.js";
 export { readArchiveManifest } from "./backup/read.js";
 export { listAvailableBackups } from "./backup/list.js";

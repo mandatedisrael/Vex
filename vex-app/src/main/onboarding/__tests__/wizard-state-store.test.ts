@@ -106,6 +106,21 @@ describe("WizardStateStore.load", () => {
 });
 
 describe("WizardStateStore.update", () => {
+  it("resetForFreshVault persists canonical defaults through the production write chain", async () => {
+    const store = new WizardStateStore({ filePath });
+    await store.update({
+      currentStepId: "review",
+      completedSteps: ["keystore", "wallets", "apiKeys", "embedding", "agentCore", "provider"],
+      completed: true,
+    });
+    const reset = await store.resetForFreshVault();
+    expect(reset.currentStepId).toBe("keystore");
+    expect(reset.completedSteps).toEqual([]);
+    expect(reset.completed).toBe(false);
+    expect(JSON.parse(await fs.readFile(filePath, "utf8"))).toEqual(reset);
+    expect(await store.peekCompleted()).toBe(false);
+  });
+
   it("merges currentStepId + completedSteps and persists atomically", async () => {
     const store = new WizardStateStore({ filePath });
     const next = await store.update({

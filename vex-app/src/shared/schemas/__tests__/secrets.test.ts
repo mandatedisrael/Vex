@@ -9,7 +9,22 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { PASSWORD_MIN_LENGTH, secretsUnlockInputSchema } from "../secrets.js";
+import {
+  PASSWORD_MIN_LENGTH,
+  resetToFreshVaultInputSchema,
+  resetToFreshVaultResultSchema,
+  secretsUnlockInputSchema,
+} from "../secrets.js";
+
+describe("resetToFreshVault schemas", () => {
+  it("accept only strict literal intent and scheduled output", () => {
+    expect(resetToFreshVaultInputSchema.safeParse({ confirm: true }).success).toBe(true);
+    expect(resetToFreshVaultInputSchema.safeParse({ confirm: false }).success).toBe(false);
+    expect(resetToFreshVaultInputSchema.safeParse({ confirm: true, path: "/tmp/x" }).success).toBe(false);
+    expect(resetToFreshVaultResultSchema.safeParse({ scheduled: true }).success).toBe(true);
+    expect(resetToFreshVaultResultSchema.safeParse({ scheduled: true, path: "/tmp/x" }).success).toBe(false);
+  });
+});
 import { walletExportPrivateKeyInputSchema } from "../wallets/export-private-key.js";
 
 describe("PASSWORD_MIN_LENGTH (unlock / export re-auth floor)", () => {

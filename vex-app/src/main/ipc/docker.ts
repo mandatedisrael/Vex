@@ -16,11 +16,13 @@ import {
   installMethodSchema,
   installResultSchema,
   startResultSchema,
+  stopPreviousInstallStacksResultSchema,
   type ComposeDownResult,
   type ComposeUpResult,
   type DockerStatus,
   type InstallResult,
   type StartResult,
+  type StopPreviousInstallStacksResult,
 } from "@shared/schemas/docker.js";
 import { probeDocker } from "../docker/probe.js";
 import { performInstall } from "../docker/install.js";
@@ -38,6 +40,7 @@ import { DEFAULT_PG_PORT } from "@shared/local-service-ports.js";
 import { setDbConnection } from "../database/connection-state.js";
 import { broadcastToAllWindows } from "../lifecycle/broadcast.js";
 import { CRITICAL_OP, trackCriticalOp } from "../updates/critical-ops.js";
+import { stopStacksHoldingPorts } from "../compose/orphan-stacks.js";
 import { registerHandler } from "./register-handler.js";
 import {
   cancelledError,
@@ -121,6 +124,10 @@ export function registerDockerHandlers(): Array<() => void> {
 
   let lastComposeOutPath: string | null = null;
   let lastInstallId: string | null = null;
+  let lastPreviousInstallConflict: {
+    readonly currentInstallId: string;
+    readonly conflictPorts: ReadonlyArray<number>;
+  } | null = null;
 
   // Single-flight deduplication for composeUp. React StrictMode dev
   // double-mount + HMR can fire `vex.docker.composeUp` twice in quick
@@ -142,6 +149,14 @@ export function registerDockerHandlers(): Array<() => void> {
   ): ComposeUpResult {
     lastComposeOutPath = internal.composeOutPath;
     lastInstallId = internal.installId;
+    lastPreviousInstallConflict =
+      internal.kind === "port_collision" &&
+      internal.previousInstallHoldingPorts
+        ? {
+            currentInstallId: internal.installId,
+            conflictPorts: internal.conflictPorts,
+          }
+        : null;
     // Persist DB connection only when the stack is actually usable.
     // Failure paths still carry pgPort/pgPasswordPath but consumers
     // (the migration runner) must NOT see a connection that points
@@ -157,6 +172,7 @@ export function registerDockerHandlers(): Array<() => void> {
       pgPasswordPath: _pgPasswordPath,
       embedPort: _embedPort,
       embeddingsReadiness: _embeddingsReadiness,
+      conflictPorts: _conflictPorts,
       ...publicResult
     } = internal;
     return publicResult;
@@ -257,6 +273,50 @@ export function registerDockerHandlers(): Array<() => void> {
       },
       ),
     })
+  );
+
+  teardowns.push(
+    registerHandler({
+      channel: CH.docker.stopPreviousInstallStacks,
+      domain: "docker",
+      inputSchema: empty,
+      outputSchema: stopPreviousInstallStacksResultSchema,
+      handle: trackCriticalOp(
+        CRITICAL_OP.dockerLifecycle,
+        async (_input, ctx): Promise<
+          Result<StopPreviousInstallStacksResult>
+        > => {
+          const conflict = lastPreviousInstallConflict;
+          if (conflict === null) {
+            return ok({
+              stoppedCount: 0,
+              message: "No previous Vex services are eligible to stop.",
+            });
+          }
+          const result = await stopStacksHoldingPorts({
+            currentInstallId: conflict.currentInstallId,
+            conflictPorts: conflict.conflictPorts,
+            signal: ctx.signal,
+          });
+          if (!result.ok) {
+            return err({
+              code: "services.compose_failed",
+              domain: "docker",
+              message: "Previous Vex services could not be stopped completely.",
+              retryable: true,
+              userActionable: true,
+              redacted: true,
+              correlationId: ctx.requestId,
+            });
+          }
+          lastPreviousInstallConflict = null;
+          return ok({
+            stoppedCount: result.stoppedCount,
+            message: result.message,
+          });
+        },
+      ),
+    }),
   );
 
   teardowns.push(

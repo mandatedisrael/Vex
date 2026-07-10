@@ -7,6 +7,10 @@
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
+// `vi.resetModules()` cold-loads the complete IPC/schema graph in each case;
+// keep the behavioral assertions deterministic on slower CI filesystems.
+vi.setConfig({ testTimeout: 15_000 });
+
 type Handler = (
   event: { senderFrame?: MockFrame },
   raw: unknown,

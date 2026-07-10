@@ -17,6 +17,7 @@ import type {
   InstallMethod,
   InstallResult,
   StartResult,
+  StopPreviousInstallStacksResult,
 } from "@shared/schemas/docker.js";
 import { dockerKeys } from "./queryKeys.js";
 
@@ -68,5 +69,15 @@ export function useComposeUp(): UseMutationResult<
   return useMutation({
     mutationFn: (input: { readonly pgPort?: number } = {}) =>
       window.vex.docker.composeUp(input),
+  });
+}
+
+export function useStopPreviousInstallStacks(): UseMutationResult<
+  Result<StopPreviousInstallStacksResult>,
+  Error,
+  void
+> {
+  return useMutation({
+    mutationFn: () => window.vex.docker.stopPreviousInstallStacks(),
   });
 }

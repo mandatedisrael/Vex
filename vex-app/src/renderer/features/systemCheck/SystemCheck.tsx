@@ -159,6 +159,16 @@ export function SystemCheck(): JSX.Element {
         />
       </div>
 
+      {health.data?.ok && health.data.data.translocated ? (
+        <div
+          role="alert"
+          className="mt-5 rounded-md border border-[color-mix(in_oklab,var(--color-danger)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-danger)_10%,transparent)] px-4 py-3 text-sm text-[var(--color-danger)]"
+        >
+          Vex is running from a quarantined location (App Translocation). Move
+          Vex.app to /Applications in Finder and relaunch.
+        </div>
+      ) : null}
+
       <Footer
         resolvedCount={resolvedCount}
         totalProbes={TOTAL_PROBES}

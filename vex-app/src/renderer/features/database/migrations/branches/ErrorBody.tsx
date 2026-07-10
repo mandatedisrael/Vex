@@ -13,6 +13,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { AlertCircleIcon, Refresh01Icon } from "@hugeicons/core-free-icons";
 import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
 import { PrimaryButton } from "../../../../components/onboarding/PrimaryButton.js";
+import { OpenLogsLink } from "../../../../components/common/OpenLogsLink.js";
 import type { FailedAt } from "../types.js";
 
 interface ErrorBodyProps {
@@ -68,6 +69,7 @@ export function ErrorBody({
       ) : null}
 
       <PrimaryButton icon={Refresh01Icon} label="Retry" onClick={onRetry} />
+      <OpenLogsLink />
     </div>
   );
 }

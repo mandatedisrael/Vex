@@ -13,6 +13,8 @@
 
 import { z } from "zod";
 
+export const backupPurposeSchema = z.enum(["ordinary", "vault-reset"]);
+
 // ── Manifest schemas / types ────────────────────────────────────────────────
 
 /** A file recorded in a V2 backup manifest. `role` tags how restore should treat it. */
@@ -71,6 +73,7 @@ export const backupManifestV2Schema = z.object({
   chainId: z.number().optional(),
   wallets: z.array(backupManifestWalletSchema),
   files: z.array(backupFileEntrySchema),
+  purpose: backupPurposeSchema.optional().default("ordinary"),
 });
 
 /**

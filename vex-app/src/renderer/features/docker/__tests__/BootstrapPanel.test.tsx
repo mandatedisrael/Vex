@@ -16,7 +16,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 
 const mockHooks = vi.hoisted(() => ({
   useDockerStatus: vi.fn(),
@@ -39,6 +39,7 @@ import { BootstrapPanel } from "../BootstrapPanel.js";
 function statusResult(opts: {
   enginePresent: boolean;
   daemonRunning: boolean;
+  failure?: "cli_not_found" | "probe_error" | null;
 }) {
   return {
     isPending: false,
@@ -57,6 +58,8 @@ function statusResult(opts: {
           present: opts.enginePresent,
           version: opts.enginePresent ? "27.5.1" : null,
           runtimeOK: opts.daemonRunning,
+          failure:
+            opts.failure ?? (opts.enginePresent ? null : "cli_not_found"),
         },
         compose: {
           present: opts.enginePresent,
@@ -125,6 +128,7 @@ function healthResult(platform: "linux" | "darwin" | "win32") {
           latencyMs: 1,
           probedAt: "2026-05-08T00:00:00Z",
         },
+        translocated: false,
         setupComplete: false,
         overall: "degraded" as const,
       },
@@ -141,11 +145,25 @@ const noopMutation = {
   isPending: false,
   data: undefined,
 };
+const openLogsFolder = vi.fn();
+
+function clickLogs(getByRole: ReturnType<typeof render>["getByRole"]): void {
+  fireEvent.click(getByRole("button", { name: "Open logs folder" }));
+  expect(openLogsFolder).toHaveBeenCalledTimes(1);
+}
 
 describe("BootstrapPanel branch matrix", () => {
   beforeEach(() => {
     mockHooks.useDockerInstall.mockReturnValue(noopMutation);
     mockHooks.useDockerStart.mockReturnValue(noopMutation);
+    openLogsFolder.mockReset().mockResolvedValue({
+      ok: true,
+      data: { opened: true },
+    });
+    Object.defineProperty(window, "vex", {
+      configurable: true,
+      value: { support: { openLogsFolder } },
+    });
   });
 
   afterEach(() => {
@@ -155,6 +173,7 @@ describe("BootstrapPanel branch matrix", () => {
     mockHooks.useDockerStart.mockReset();
     mockHooks.useSystemHealth.mockReset();
     noopMutation.mutate.mockReset();
+    Reflect.deleteProperty(window, "vex");
   });
 
   it.each<["linux" | "darwin" | "win32"]>([
@@ -193,6 +212,7 @@ describe("BootstrapPanel branch matrix", () => {
       mockHooks.useSystemHealth.mockReturnValue(healthResult(platform));
       const { getByRole } = render(<BootstrapPanel />);
       expect(getByRole("button", { name: /Start Docker/i })).toBeDefined();
+      clickLogs(getByRole);
     },
   );
 
@@ -206,6 +226,7 @@ describe("BootstrapPanel branch matrix", () => {
     expect(
       getByRole("button", { name: /Try Start Docker Desktop/i }),
     ).toBeDefined();
+    clickLogs(getByRole);
   });
 
   it("branch B + health pending: loading view (platform-conditional copy needs platform)", () => {
@@ -225,12 +246,33 @@ describe("BootstrapPanel branch matrix", () => {
         statusResult({ enginePresent: false, daemonRunning: false }),
       );
       mockHooks.useSystemHealth.mockReturnValue(healthResult(platform));
-      const { getByRole } = render(<BootstrapPanel />);
+      const { getByRole, getByText } = render(<BootstrapPanel />);
       expect(
         getByRole("button", { name: /Download installer/i }),
       ).toBeDefined();
+      expect(getByText(/Docker CLI not found/i)).toBeDefined();
+      expect(getByText(/CLI symlinks.*Settings.*Advanced/i)).toBeDefined();
+      clickLogs(getByRole);
     },
   );
+
+  it("branch D: version probe errors do not route to the install branch", () => {
+    mockHooks.useDockerStatus.mockReturnValue(
+      statusResult({
+        enginePresent: false,
+        daemonRunning: false,
+        failure: "probe_error",
+      }),
+    );
+    mockHooks.useSystemHealth.mockReturnValue(healthResult("darwin"));
+
+    const { getByText, getByRole, queryByRole } = render(<BootstrapPanel />);
+
+    expect(getByText(/^Docker probe failed$/i)).toBeDefined();
+    expect(getByText(/open the logs folder for details/i)).toBeDefined();
+    expect(queryByRole("button", { name: /Download installer/i })).toBeNull();
+    clickLogs(getByRole);
+  });
 
   it("branch C-no-engine + health pending: loading view (don't transiently show C)", () => {
     mockHooks.useDockerStatus.mockReturnValue(
@@ -265,12 +307,13 @@ describe("BootstrapPanel branch matrix", () => {
       }),
     };
     mockHooks.useDockerInstall.mockReturnValue(installCapture);
-    const { getByText } = render(<BootstrapPanel />);
+    const { getByText, getByRole } = render(<BootstrapPanel />);
     expect(installCapture.mutate).toHaveBeenCalledWith(
       { method: "linux_manual_instructions" },
       expect.anything(),
     );
     expect(getByText(/sudo apt-get install docker/)).toBeDefined();
+    clickLogs(getByRole);
   });
 
   it("branch C-linux: fetch error surfaces Retry instructions fetch button", () => {
@@ -290,6 +333,7 @@ describe("BootstrapPanel branch matrix", () => {
     expect(
       getByRole("button", { name: /Retry instructions fetch/i }),
     ).toBeDefined();
+    clickLogs(getByRole);
   });
 
   it("branch C-linux: clicking 'Retry instructions fetch' invokes the mutation again", () => {
@@ -335,6 +379,7 @@ describe("BootstrapPanel branch matrix", () => {
     const { getByText, getByRole } = render(<BootstrapPanel />);
     expect(getByText(/Docker check did not complete/i)).toBeDefined();
     expect(getByText(/Docker IPC probe rejected/)).toBeDefined();
+    clickLogs(getByRole);
     expect(getByRole("button", { name: /Recheck/i })).toBeDefined();
   });
 

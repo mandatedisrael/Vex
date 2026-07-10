@@ -8,6 +8,7 @@ import type {
   InstallProgress,
   InstallResult,
   StartResult,
+  StopPreviousInstallStacksResult,
 } from "../../../schemas/docker.js";
 import type { AbortableInvocation } from "../common.js";
 
@@ -36,6 +37,9 @@ export interface DockerBridge {
     readonly pgPort?: number;
   }) => AbortableInvocation<ComposeUpResult>;
   readonly composeDown: () => Promise<Result<ComposeDownResult>>;
+  readonly stopPreviousInstallStacks: () => Promise<
+    Result<StopPreviousInstallStacksResult>
+  >;
   /**
    * Subscribe to install progress events. Returns an idempotent
    * unsubscribe function — call it from the React effect cleanup

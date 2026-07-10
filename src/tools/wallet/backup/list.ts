@@ -47,21 +47,21 @@ export function listAvailableBackups(): AvailableBackup[] {
   }
 
   const out: AvailableBackup[] = [];
-  for (const timestamp of dirs) {
-    const dir = join(BACKUPS_DIR, timestamp);
+  for (const id of dirs) {
+    const dir = join(BACKUPS_DIR, id);
     let manifest: BackupManifest;
     try {
       manifest = readArchiveManifest(dir);
     } catch {
-      logger.warn(`Skipping backup ${timestamp}: missing or invalid manifest.`);
+      logger.warn(`Skipping backup ${id}: missing or invalid manifest.`);
       continue;
     }
 
     if (manifest.version === 2) {
       const addresses = manifest.wallets.map((w) => w.address);
       out.push({
-        id: timestamp,
-        timestamp,
+        id,
+        timestamp: manifest.createdAt,
         walletCount: manifest.wallets.length,
         addresses,
         vaultIncluded: manifest.files.some((f) => f.role === "vault"),
@@ -75,8 +75,8 @@ export function listAvailableBackups(): AvailableBackup[] {
     if (manifest.walletAddress) addresses.push(manifest.walletAddress);
     if (manifest.solanaWalletAddress) addresses.push(manifest.solanaWalletAddress);
     out.push({
-      id: timestamp,
-      timestamp,
+      id,
+      timestamp: manifest.createdAt ?? id,
       walletCount: addresses.length,
       addresses,
       vaultIncluded: false,

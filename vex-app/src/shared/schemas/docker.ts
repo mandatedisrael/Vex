@@ -88,9 +88,20 @@ export const composeUpResultSchema = z
     composeOutPath: z.string(),
     installId: z.string(),
     message: z.string(),
+    previousInstallHoldingPorts: z.boolean(),
   })
   .strict();
 export type ComposeUpResult = z.infer<typeof composeUpResultSchema>;
+
+export const stopPreviousInstallStacksResultSchema = z
+  .object({
+    stoppedCount: z.number().int().nonnegative(),
+    message: z.string(),
+  })
+  .strict();
+export type StopPreviousInstallStacksResult = z.infer<
+  typeof stopPreviousInstallStacksResultSchema
+>;
 
 export const composeDownKindSchema = z.enum(["stopped", "not_running", "failed"]);
 export type ComposeDownKind = z.infer<typeof composeDownKindSchema>;
@@ -143,6 +154,7 @@ export const dockerStatusSchema = z
         present: z.boolean(),
         version: z.string().nullable(),
         runtimeOK: z.boolean(),
+        failure: z.enum(["cli_not_found", "probe_error"]).nullable(),
       })
       .strict(),
     compose: z

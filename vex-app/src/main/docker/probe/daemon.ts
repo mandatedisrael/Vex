@@ -8,6 +8,8 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { log } from "../../logger/index.js";
+import { redact } from "../../logger/redact.js";
 
 import {
   parseDockerVersion,
@@ -18,6 +20,7 @@ import {
 } from "./parsers.js";
 import { isPortFree, isModelRunnerEndpointReachable } from "./ports.js";
 import { getAvailableDiskGB } from "./disk.js";
+import { dockerSpawnEnv } from "../cli-env.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -26,6 +29,7 @@ const MAX_BUFFER = 1024 * 1024;
 
 interface RunResult {
   readonly ok: boolean;
+  readonly notFound: boolean;
   readonly stdout: string;
   readonly stderr: string;
   readonly errorMessage: string | null;
@@ -47,10 +51,18 @@ async function runCmd(
       encoding: "utf8",
       maxBuffer: MAX_BUFFER,
       windowsHide: true,
+      env: dockerSpawnEnv(),
     });
-    return { ok: true, stdout, stderr, errorMessage: null };
+    return { ok: true, notFound: false, stdout, stderr, errorMessage: null };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    const code =
+      err &&
+      typeof err === "object" &&
+      "code" in err &&
+      typeof err.code === "string"
+        ? err.code
+        : null;
     const stdout =
       err && typeof err === "object" && "stdout" in err
         ? String((err as { stdout: unknown }).stdout ?? "")
@@ -59,7 +71,17 @@ async function runCmd(
       err && typeof err === "object" && "stderr" in err
         ? String((err as { stderr: unknown }).stderr ?? "")
         : "";
-    return { ok: false, stdout, stderr, errorMessage: message };
+    log.warn(
+      "[docker-probe] Docker CLI command failed",
+      redact({ args, code, message, stderr }),
+    );
+    return {
+      ok: false,
+      notFound: code === "ENOENT",
+      stdout,
+      stderr,
+      errorMessage: message,
+    };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", linkedAbort);
@@ -113,6 +135,11 @@ export async function probeDocker(opts: DockerProbeOpts): Promise<DockerStatus> 
       present: versionRes.ok,
       version: engineVersion,
       runtimeOK: versionRes.ok && endpoint.accepted && daemonRunning,
+      failure: versionRes.ok
+        ? null
+        : versionRes.notFound
+          ? "cli_not_found"
+          : "probe_error",
     },
     compose: {
       present: composeRes.ok,

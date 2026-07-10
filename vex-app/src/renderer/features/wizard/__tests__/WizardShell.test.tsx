@@ -6,7 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import {
   QueryClient,
   QueryClientProvider,
@@ -21,6 +21,7 @@ const mockSetCurrentView = vi.fn();
 const mockOpenUnlock = vi.fn();
 const mockSecretsStatus = vi.fn();
 const mockReviewStep = vi.fn();
+const mockOpenLogsFolder = vi.fn();
 let mockWizardEntryMode: "setup" | "reconfigure" = "setup";
 
 vi.mock("../../../lib/api/wizard.js", async () => {
@@ -111,6 +112,10 @@ beforeEach(() => {
     data: { vaultConfigured: true, unlocked: true },
   });
   mockReviewStep.mockReset();
+  mockOpenLogsFolder.mockReset().mockResolvedValue({
+    ok: true,
+    data: { opened: true },
+  });
   mockWizardEntryMode = "setup";
   Object.defineProperty(window, "vex", {
     configurable: true,
@@ -118,6 +123,7 @@ beforeEach(() => {
       secrets: {
         status: mockSecretsStatus,
       },
+      support: { openLogsFolder: mockOpenLogsFolder },
     },
   });
 });
@@ -485,9 +491,11 @@ describe("WizardShell", () => {
         { isSuccess: true }
       )
     );
-    const { findByText, queryByTestId } = renderWithQuery(<WizardShell />);
+    const { findByText, getByRole, queryByTestId } = renderWithQuery(<WizardShell />);
     await findByText(/Setup unavailable/);
     expect(queryByTestId("keystore-step")).toBeNull();
     expect(queryByTestId("review-step")).toBeNull();
+    fireEvent.click(getByRole("button", { name: "Open logs folder" }));
+    expect(mockOpenLogsFolder).toHaveBeenCalledTimes(1);
   });
 });

@@ -25,9 +25,14 @@ export function enforceBackupRetention(protectName?: string): void {
       .sort();
 
     const protectedExists = protectName !== undefined && all.includes(protectName);
-    const candidates = all.filter((name) => name !== protectName);
+    const isResetArchive = (name: string): boolean =>
+      name.startsWith("vault-reset-");
+    const ordinary = all.filter((name) => !isResetArchive(name));
+    const candidates = ordinary.filter((name) => name !== protectName);
     // If the protected dir is on disk it occupies one retention slot.
-    const keep = Math.max(0, MAX_BACKUPS - (protectedExists ? 1 : 0));
+    const protectedOrdinaryExists =
+      protectedExists && !isResetArchive(protectName);
+    const keep = Math.max(0, MAX_BACKUPS - (protectedOrdinaryExists ? 1 : 0));
 
     while (candidates.length > keep) {
       const oldest = candidates.shift()!;

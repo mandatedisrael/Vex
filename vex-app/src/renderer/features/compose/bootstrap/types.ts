@@ -18,7 +18,11 @@ export type Phase =
   | { kind: "running" }
   | { kind: "cancelling" }
   | { kind: "ready"; result: ComposeUpResult; celebrate: boolean }
-  | { kind: "error.port_collision"; message: string }
+  | {
+      kind: "error.port_collision";
+      message: string;
+      previousInstallHoldingPorts: boolean;
+    }
   | { kind: "error.unhealthy"; message: string }
   | { kind: "error.failed"; message: string }
   | { kind: "error.cancelled" };

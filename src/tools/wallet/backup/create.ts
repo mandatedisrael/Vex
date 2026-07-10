@@ -43,6 +43,14 @@ import type {
   BackupManifestWallet,
 } from "./manifest.js";
 import { enforceBackupRetention } from "./retention.js";
+import {
+  createBackupDirName,
+  type BackupPurpose,
+} from "./naming.js";
+
+export interface AutoBackupOptions {
+  readonly purpose?: BackupPurpose;
+}
 
 function getCLIVersion(): string {
   try {
@@ -76,7 +84,10 @@ function walletRole(family: InventoryFamily): BackupFileRole {
  * Returns the backup path, or null if there is genuinely nothing to back up.
  * Throws VexError(AUTO_BACKUP_FAILED) on write failure.
  */
-export async function autoBackup(): Promise<string | null> {
+export async function autoBackup(
+  options: AutoBackupOptions = {},
+): Promise<string | null> {
+  const purpose = options.purpose ?? "ordinary";
   const cfg = loadConfig();
 
   // Enumerate every inventory keystore the SAME way exportAllWallets does, so a
@@ -141,8 +152,8 @@ export async function autoBackup(): Promise<string | null> {
   try {
     mkdirSync(BACKUPS_DIR, { recursive: true });
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "");
-    const backupDir = join(BACKUPS_DIR, timestamp);
+    const backupDirName = createBackupDirName(purpose);
+    const backupDir = join(BACKUPS_DIR, backupDirName);
     mkdirSync(backupDir, { recursive: true });
 
     const files: BackupFileEntry[] = [];
@@ -177,6 +188,7 @@ export async function autoBackup(): Promise<string | null> {
       chainId: cfg.chain.chainId,
       wallets,
       files,
+      purpose,
     };
     // Write manifest LAST — after every copy above succeeded.
     writeFileSync(
@@ -188,9 +200,15 @@ export async function autoBackup(): Promise<string | null> {
     // Protect the snapshot we just created from being evicted by retention —
     // otherwise a pre-restore backup taken when already at MAX (or with
     // future-dated dirs on disk) could be pruned out from under the restore.
-    enforceBackupRetention(timestamp);
+    enforceBackupRetention(backupDirName);
 
-    logger.debug(`Auto-backup created at ${backupDir}`);
+    if (purpose === "vault-reset") {
+      logger.debug(
+        `Vault-reset backup created files=${files.length} wallets=${wallets.length}`,
+      );
+    } else {
+      logger.debug(`Auto-backup created at ${backupDir}`);
+    }
     return backupDir;
   } catch (err) {
     if (err instanceof VexError) throw err;

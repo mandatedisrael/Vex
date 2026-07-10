@@ -6,7 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, act } from "@testing-library/react";
+import { cleanup, render, act, fireEvent } from "@testing-library/react";
 
 const mockHooks = vi.hoisted(() => ({
   useSystemHealth: vi.fn(),
@@ -27,7 +27,9 @@ vi.mock("../../../lib/api/onboarding.js", () => ({
 import { SystemCheck } from "../SystemCheck.js";
 import { useUiStore } from "../../../stores/uiStore.js";
 
-function happyHealth() {
+const openLogsFolder = vi.fn();
+
+function happyHealth(translocated = false) {
   return {
     isPending: false,
     data: {
@@ -45,6 +47,7 @@ function happyHealth() {
           nodeVersion: "22.14.0",
         },
         network: { online: true, latencyMs: 24, probedAt: "2026-05-08T00:00:00Z" },
+        translocated,
         setupComplete: false,
         overall: "degraded",
       },
@@ -65,7 +68,12 @@ function happyDocker(modelStatus: "active" | "inactive" = "active") {
           reason: null,
           message: null,
         },
-        engine: { present: true, version: "27.5.1", runtimeOK: true },
+        engine: {
+          present: true,
+          version: "27.5.1",
+          runtimeOK: true,
+          failure: null,
+        },
         compose: { present: true, version: "v2.32.4" },
         modelRunner: { present: true, status: modelStatus, tcpReachable: modelStatus === "active" },
         daemon: { running: true, startable: true },
@@ -103,6 +111,14 @@ describe("SystemCheck", () => {
     mockHooks.useSystemHealth.mockReturnValue(happyHealth());
     mockHooks.useDockerStatus.mockReturnValue(happyDocker("active"));
     mockHooks.useEnvState.mockReturnValue(happyEnv());
+    openLogsFolder.mockReset().mockResolvedValue({
+      ok: true,
+      data: { opened: true },
+    });
+    Object.defineProperty(window, "vex", {
+      configurable: true,
+      value: { support: { openLogsFolder } },
+    });
   });
 
   afterEach(() => {
@@ -111,6 +127,7 @@ describe("SystemCheck", () => {
     mockHooks.useSystemHealth.mockReset();
     mockHooks.useDockerStatus.mockReset();
     mockHooks.useEnvState.mockReset();
+    Reflect.deleteProperty(window, "vex");
   });
 
   it("renders four step rows after the cascade timer expires", () => {
@@ -133,6 +150,24 @@ describe("SystemCheck", () => {
       button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(useUiStore.getState().currentView).toBe("dockerBootstrap");
+    fireEvent.click(getByRole("button", { name: "Open logs folder" }));
+    expect(openLogsFolder).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders an adjacent translocation warning without adding a probe or blocking Continue", () => {
+    mockHooks.useSystemHealth.mockReturnValue(happyHealth(true));
+    const { container, getByRole, getByText } = render(<SystemCheck />);
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(
+      getByText(
+        /Vex is running from a quarantined location \(App Translocation\).*Move Vex\.app to \/Applications in Finder and relaunch\./,
+      ),
+    ).toBeDefined();
+    expect(container.querySelectorAll("[data-step-status]")).toHaveLength(4);
+    expect(getByRole("button", { name: /continue/i }).getAttribute("disabled"))
+      .toBeNull();
   });
 
   it("disables Continue while any hook is pending", () => {

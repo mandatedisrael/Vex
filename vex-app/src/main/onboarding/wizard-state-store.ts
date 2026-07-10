@@ -290,6 +290,16 @@ export class WizardStateStore {
     });
   }
 
+  /** Production reset used only after a verified fresh-vault archive. */
+  resetForFreshVault(): Promise<WizardState> {
+    return this.enqueue(async () => {
+      await this.writeInner(defaultWizardState);
+      this.cacheProvenance = "persisted";
+      await this.clearRecoveryMarker();
+      return defaultWizardState;
+    });
+  }
+
   /** Test-only — production callers do not use this. */
   resetForTests(): void {
     this.cache = null;

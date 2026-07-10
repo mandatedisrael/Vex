@@ -61,6 +61,9 @@ export {
   backupManifestSchema,
   backupManifestV1Schema,
   backupManifestV2Schema,
+  backupPurposeSchema,
+  createBackupDirName,
+  isCanonicalVaultResetBackupName,
   type AvailableBackup,
   type BackupManifest,
   type BackupManifestV1,
@@ -68,6 +71,8 @@ export {
   type BackupManifestWallet,
   type BackupFileEntry,
   type BackupFileRole,
+  type BackupPurpose,
+  type AutoBackupOptions,
 } from "../tools/wallet/backup.js";
 
 export {

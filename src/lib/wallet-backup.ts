@@ -10,4 +10,12 @@
  * and `loadConfig`. No transitive winston pull.
  */
 
-export { autoBackup } from "../tools/wallet/backup.js";
+export {
+  autoBackup,
+  isCanonicalVaultResetBackupName,
+  readArchiveManifest,
+} from "../tools/wallet/backup.js";
+export type {
+  AutoBackupOptions,
+  BackupManifestV2,
+} from "../tools/wallet/backup.js";

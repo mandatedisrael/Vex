@@ -1,11 +1,12 @@
 /**
  * Primary CTA button used by branch bodies (Start Docker, Download
  * installer, Try Start Docker Desktop), restyled to the NOTARY key
- * language. Two variants:
+ * language. Three variants:
  *   - "primary"  — full-width key: 1px accent-mix hairline border,
  *                  accent text, transparent fill (the recommended path —
  *                  same voice as the armed Continue key)
  *   - "ghost"    — subordinate quiet key: white hairline, secondary text
+ *   - "danger"   — destructive key: danger hairline/text, transparent fill
  *
  * Continue + Recheck footer keys live in KeyButton / FooterButtons; this
  * primitive is only for body-level actions.
@@ -21,7 +22,7 @@ interface PrimaryButtonProps {
   readonly icon: HugeiconIcon;
   readonly label: string;
   readonly disabled?: boolean;
-  readonly variant?: "primary" | "ghost";
+  readonly variant?: "primary" | "ghost" | "danger";
   readonly onClick: () => void;
 }
 
@@ -51,6 +52,7 @@ export function PrimaryButton({
       </button>
     );
   }
+  const danger = variant === "danger";
   return (
     <button
       type="button"
@@ -58,8 +60,12 @@ export function PrimaryButton({
       disabled={disabled}
       className={cn(
         "inline-flex h-11 w-full items-center justify-center gap-2 rounded-full border bg-transparent font-mono text-xs uppercase tracking-[0.22em]",
-        "border-[color-mix(in_oklab,var(--vex-onboarding-accent)_55%,transparent)] text-[color-mix(in_oklab,var(--vex-onboarding-accent)_55%,white)]",
-        "hover:border-[color-mix(in_oklab,var(--vex-onboarding-accent)_85%,transparent)] hover:bg-[color-mix(in_oklab,var(--vex-onboarding-accent)_8%,transparent)]",
+        danger
+          ? "border-[color-mix(in_oklab,var(--color-danger)_55%,transparent)] text-[color-mix(in_oklab,var(--color-danger)_65%,white)]"
+          : "border-[color-mix(in_oklab,var(--vex-onboarding-accent)_55%,transparent)] text-[color-mix(in_oklab,var(--vex-onboarding-accent)_55%,white)]",
+        danger
+          ? "hover:border-[color-mix(in_oklab,var(--color-danger)_85%,transparent)] hover:bg-[color-mix(in_oklab,var(--color-danger)_10%,transparent)]"
+          : "hover:border-[color-mix(in_oklab,var(--vex-onboarding-accent)_85%,transparent)] hover:bg-[color-mix(in_oklab,var(--vex-onboarding-accent)_8%,transparent)]",
         "active:scale-[0.98]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--vex-onboarding-bg)]",
         "disabled:cursor-not-allowed disabled:opacity-60",

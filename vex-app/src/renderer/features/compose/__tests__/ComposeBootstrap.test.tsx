@@ -18,6 +18,17 @@ const mockCompose = vi.fn();
 const mockCancel = vi.fn();
 const mockOnComposeLog = vi.fn().mockReturnValue(() => {});
 const mockSetCurrentView = vi.fn();
+const mockStopPreviousMutate = vi.fn();
+const mockOpenLogsFolder = vi.fn();
+
+vi.mock("../../../lib/api/docker.js", () => ({
+  useStopPreviousInstallStacks: () => ({
+    mutate: mockStopPreviousMutate,
+    isPending: false,
+    data: undefined,
+    error: null,
+  }),
+}));
 
 vi.mock("../../../stores/uiStore.js", () => ({
   useUiStore: (selector: (s: { setCurrentView: (v: string) => void }) => unknown) =>
@@ -34,6 +45,7 @@ function arrangeBridge(): void {
         composeUpAbortable: mockCompose,
         onComposeLog: mockOnComposeLog,
       },
+      support: { openLogsFolder: mockOpenLogsFolder },
     },
   });
 }
@@ -42,6 +54,11 @@ beforeEach(() => {
   mockCompose.mockReset();
   mockCancel.mockReset();
   mockSetCurrentView.mockReset();
+  mockStopPreviousMutate.mockReset();
+  mockOpenLogsFolder.mockReset().mockResolvedValue({
+    ok: true,
+    data: { opened: true },
+  });
   arrangeBridge();
 });
 
@@ -132,6 +149,12 @@ describe("ComposeBootstrap — cancellation (PR3 contract)", () => {
 });
 
 describe("ComposeBootstrap — terminal kinds", () => {
+  function clickLogs(view: ReturnType<typeof render>): void {
+    fireEvent.click(
+      view.getByRole("button", { name: "Open logs folder" }),
+    );
+    expect(mockOpenLogsFolder).toHaveBeenCalledTimes(1);
+  }
   it("kind=running → 'All services ready' tile + Continue button (Continue advances to migrations)", async () => {
     mockCompose.mockReturnValue({
       promise: Promise.resolve({
@@ -141,6 +164,7 @@ describe("ComposeBootstrap — terminal kinds", () => {
           composeOutPath: "/tmp/compose.yml",
           installId: "vex-1031ec52-40c8-4951-8e94-b55702346ba6",
           message: "Vex stack is running (pg :27432, embeddings :27134, dim=768).",
+          previousInstallHoldingPorts: false,
         },
       }),
       cancel: mockCancel,
@@ -166,6 +190,7 @@ describe("ComposeBootstrap — terminal kinds", () => {
           composeOutPath: "/tmp/compose.yml",
           installId: "vex-1031ec52",
           message: "Existing compose project is healthy.",
+          previousInstallHoldingPorts: false,
         },
       }),
       cancel: mockCancel,
@@ -189,6 +214,7 @@ describe("ComposeBootstrap — terminal kinds", () => {
           composeOutPath: "/tmp/compose.yml",
           installId: "vex-1031ec52",
           message: "Port 27432 is already in use by another process.",
+          previousInstallHoldingPorts: false,
         },
       }),
       cancel: mockCancel,
@@ -202,6 +228,52 @@ describe("ComposeBootstrap — terminal kinds", () => {
       (b) => b.textContent?.includes("Retry") || b.textContent?.includes("Try again"),
     );
     expect(retry).toBeTruthy();
+    expect(view.container.textContent).not.toMatch(/Stop previous Vex services/);
+    clickLogs(view);
+  });
+
+  it("previous-install collision stops services and automatically retries composeUp", async () => {
+    mockCompose
+      .mockReturnValueOnce({
+        promise: Promise.resolve({
+          ok: true,
+          data: {
+            kind: "port_collision",
+            composeOutPath: "/tmp/compose.yml",
+            installId: "vex-current",
+            message: "Previous Vex services hold a required port.",
+            previousInstallHoldingPorts: true,
+          },
+        }),
+        cancel: mockCancel,
+      })
+      .mockReturnValueOnce({
+        promise: new Promise(() => {}),
+        cancel: mockCancel,
+      });
+    mockStopPreviousMutate.mockImplementation((_input, options) => {
+      options?.onSuccess?.({
+        ok: true,
+        data: { stoppedCount: 1, message: "Stopped previous Vex services." },
+      });
+    });
+
+    const view = render(<ComposeBootstrap />);
+    await waitFor(() => {
+      expect(view.container.textContent).toMatch(
+        /Containers from a previous Vex installation are holding the ports/,
+      );
+    });
+    clickLogs(view);
+    const stopButton = Array.from(
+      view.container.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("Stop previous Vex services"));
+    expect(stopButton).toBeTruthy();
+
+    fireEvent.click(stopButton!);
+
+    expect(mockStopPreviousMutate).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockCompose).toHaveBeenCalledTimes(2));
   });
 
   it("kind=unhealthy → unhealthy body + retry CTA", async () => {
@@ -213,6 +285,7 @@ describe("ComposeBootstrap — terminal kinds", () => {
           composeOutPath: "/tmp/compose.yml",
           installId: "vex-1031ec52",
           message: "Postgres started but failed pg_isready within 30s.",
+          previousInstallHoldingPorts: false,
         },
       }),
       cancel: mockCancel,
@@ -223,6 +296,7 @@ describe("ComposeBootstrap — terminal kinds", () => {
         /Service started but health probe failed/,
       );
     });
+    clickLogs(view);
   });
 
   it("kind=failed → failed body + 'Show recent logs' disclosure", async () => {
@@ -234,6 +308,7 @@ describe("ComposeBootstrap — terminal kinds", () => {
           composeOutPath: "/tmp/compose.yml",
           installId: "vex-1031ec52",
           message: "docker daemon stopped mid-run.",
+          previousInstallHoldingPorts: false,
         },
       }),
       cancel: mockCancel,
@@ -242,6 +317,7 @@ describe("ComposeBootstrap — terminal kinds", () => {
     await waitFor(() => {
       expect(view.container.textContent).toMatch(/Compose up failed/);
     });
+    clickLogs(view);
   });
 
   it("result.ok=false (non-cancelled IPC error) → failed body", async () => {
@@ -264,5 +340,6 @@ describe("ComposeBootstrap — terminal kinds", () => {
     await waitFor(() => {
       expect(view.container.textContent).toMatch(/Compose up failed/);
     });
+    clickLogs(view);
   });
 });
