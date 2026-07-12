@@ -25,6 +25,7 @@ import { getPendleClient } from "@tools/pendle/client.js";
 import { PENDLE_ROUTER } from "@tools/pendle/constants.js";
 import { getPendleEvmClients } from "@tools/pendle/evm-client.js";
 import { ensurePendleAllowanceExact } from "@tools/pendle/erc20.js";
+import { ensureErc20Balance } from "@tools/evm-chains/erc20-balance-guard.js";
 import { stripChainPrefix } from "@tools/pendle/validation.js";
 import type { PendleMarket } from "@tools/pendle/types.js";
 
@@ -221,6 +222,12 @@ async function executePendleYtSwap(
     // Approve EXACTLY the required input token (spender = the pinned Router).
     const { publicClient, walletClient } = getPendleEvmClients(chainId, signer.privateKey as Hex);
     if (!tokenIn.isNative) {
+      await ensureErc20Balance(publicClient, {
+        token: tokenIn.address,
+        owner: getAddress(signer.address),
+        required: amountWei,
+        decimals: tokenIn.decimals,
+      });
       await ensurePendleAllowanceExact(publicClient, walletClient, tokenIn.address, PENDLE_ROUTER, amountWei);
     }
 

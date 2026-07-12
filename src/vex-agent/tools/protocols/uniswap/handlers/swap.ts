@@ -26,6 +26,7 @@ import type { UniswapDeployment } from "@tools/uniswap/deployments.js";
 import type { UniswapToken, UniswapRoute } from "@tools/uniswap/types.js";
 import { getDexScreenerClient } from "@tools/dexscreener/client.js";
 import { getLocalChain } from "@tools/evm-chains/registry.js";
+import { ensureErc20Balance } from "@tools/evm-chains/erc20-balance-guard.js";
 import { pinTrackedToken } from "@vex-agent/db/repos/tracked-tokens.js";
 
 import type { ChainWallet } from "@tools/wallet/multi-auth.js";
@@ -242,8 +243,15 @@ async function executeUniswapSwap(
   const { publicClient, walletClient } = getUniswapEvmClients(deployment, signer.privateKey as Hex);
   const router = routerFor(deployment, quoted.route);
 
-  // EXACT-amount allowance to an allowlisted router (native input needs none).
+  // Guard the ERC-20 input balance before changing allowance or broadcasting.
   if (!tokenIn.isNative) {
+    await ensureErc20Balance(publicClient, {
+      token: tokenIn.address,
+      owner: getAddress(signer.address),
+      required: amountIn,
+      decimals: tokenIn.decimals,
+      label: tokenIn.symbol,
+    });
     await ensureUniswapAllowanceExact(publicClient, walletClient, tokenIn.address, router, amountIn);
   }
 
@@ -308,6 +316,8 @@ async function executeUniswapSwap(
         inputTokenAddress: tokenIn.address,
         outputTokenAddress: tokenOut.address,
         inputAmount: amountInRaw,
+        // Quote-derived output can overstate an FoT recipient amount; receipt-log
+        // or balance-delta settlement measurement is tracked separately.
         outputAmount: amountOutHuman,
         signature: txHash,
         walletAddress: signer.address,

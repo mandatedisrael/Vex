@@ -20,6 +20,7 @@ import {
 
 import { VexError, ErrorCodes } from "../../errors.js";
 import logger from "../../utils/logger.js";
+import { waitForSuccessfulReceipt } from "@tools/evm-chains/receipt-guard.js";
 import { UNISWAP_ERC20_ABI } from "./abis.js";
 import { UNISWAP_KNOWN_SPENDERS } from "./deployments.js";
 
@@ -104,8 +105,13 @@ export async function ensureUniswapAllowanceExact(
         functionName: "approve",
         args: [spender, 0n],
       });
-      await publicClient.waitForTransactionReceipt({ hash: resetTxHash });
+      await waitForSuccessfulReceipt(publicClient, resetTxHash, {
+        code: ErrorCodes.APPROVAL_FAILED,
+        what: "Allowance-reset transaction",
+        hint: "The existing allowance was not cleared, so the follow-up approve would be blocked. Check the transaction hash before retrying.",
+      });
     } catch (err) {
+      if (err instanceof VexError) throw err;
       throw new VexError(ErrorCodes.APPROVAL_FAILED, `Failed to reset allowance: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -119,9 +125,14 @@ export async function ensureUniswapAllowanceExact(
       functionName: "approve",
       args: [spender, requiredAmount],
     });
-    await publicClient.waitForTransactionReceipt({ hash: txHash });
+    await waitForSuccessfulReceipt(publicClient, txHash, {
+      code: ErrorCodes.APPROVAL_FAILED,
+      what: "Approval transaction",
+      hint: "The router was not granted an allowance. Check the transaction hash before retrying.",
+    });
     return resetTxHash ? { txHash, resetTxHash } : { txHash };
   } catch (err) {
+    if (err instanceof VexError) throw err;
     throw new VexError(ErrorCodes.APPROVAL_FAILED, `Failed to approve: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

@@ -28,6 +28,7 @@ import { getPendleClient } from "@tools/pendle/client.js";
 import { PENDLE_ROUTER, PENDLE_ERC20_ABI } from "@tools/pendle/constants.js";
 import { getPendleEvmClients, getPendlePublicClient } from "@tools/pendle/evm-client.js";
 import { ensurePendleAllowanceExact } from "@tools/pendle/erc20.js";
+import { ensureErc20Balance } from "@tools/evm-chains/erc20-balance-guard.js";
 import type { PendleMarket } from "@tools/pendle/types.js";
 
 import type { ChainWallet } from "@tools/wallet/multi-auth.js";
@@ -248,6 +249,12 @@ async function executePendleLpAdd(p: Record<string, unknown>, context: ProtocolE
     // Approve EXACTLY the input token (native rejected upstream). Spender = Router.
     const { publicClient, walletClient } = getPendleEvmClients(chainId, signer.privateKey as Hex);
     if (!tokenIn.isNative) {
+      await ensureErc20Balance(publicClient, {
+        token: tokenIn.address,
+        owner: getAddress(signer.address),
+        required: amountWei,
+        decimals: tokenIn.decimals,
+      });
       await ensurePendleAllowanceExact(publicClient, walletClient, tokenIn.address, PENDLE_ROUTER, amountWei);
     }
     const txHash = await walletClient.sendTransaction({

@@ -27,6 +27,7 @@ import { getPendleClient } from "@tools/pendle/client.js";
 import { PENDLE_ROUTER } from "@tools/pendle/constants.js";
 import { getPendleEvmClients } from "@tools/pendle/evm-client.js";
 import { ensurePendleAllowanceExact } from "@tools/pendle/erc20.js";
+import { ensureErc20Balance } from "@tools/evm-chains/erc20-balance-guard.js";
 import type { PendleConvertResponse, PendleTokenAmount } from "@tools/pendle/types.js";
 
 import type { ChainWallet } from "@tools/wallet/multi-auth.js";
@@ -265,6 +266,12 @@ async function executePendleMint(p: Record<string, unknown>, context: ProtocolEx
     // upstream anyway). Spender is the pinned Router.
     const { publicClient, walletClient } = getPendleEvmClients(chainId, signer.privateKey as Hex);
     if (!tokenIn.isNative) {
+      await ensureErc20Balance(publicClient, {
+        token: tokenIn.address,
+        owner: getAddress(signer.address),
+        required: amountWei,
+        decimals: tokenIn.decimals,
+      });
       await ensurePendleAllowanceExact(publicClient, walletClient, tokenIn.address, PENDLE_ROUTER, amountWei);
     }
     const txHash = await walletClient.sendTransaction({

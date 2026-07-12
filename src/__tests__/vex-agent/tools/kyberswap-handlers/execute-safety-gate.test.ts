@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ProtocolExecutionContext } from "@vex-agent/tools/protocols/types.js";
+import { ErrorCodes, VexError } from "../../../../errors.js";
 
 // ── Per-session wallet resolution mock (5D-protocols p1) ──────────
 // Handlers now resolve the session wallet via resolve.js (NOT the zero-arg
@@ -54,6 +55,8 @@ vi.mock("@tools/kyberswap/zaas/client.js", () => ({
 
 const mockExtractMintedNftId = vi.fn();
 const mockExtractErc1155Position = vi.fn();
+const mockEnsureKyberAllowance = vi.fn();
+const mockEnsureErc20Balance = vi.fn();
 
 // readErc20Metadata is used by resolveTokenMetadataStrict for address inputs
 // (the quote path is now strict/address-only, matching execute).
@@ -72,7 +75,7 @@ vi.mock("@tools/kyberswap/evm-utils.js", () => ({
     publicClient: {},
     walletClient: {},
   }),
-  ensureKyberAllowance: vi.fn().mockResolvedValue(undefined),
+  ensureKyberAllowance: (...args: unknown[]) => mockEnsureKyberAllowance(...args),
   ensureErc721Approval: vi.fn().mockResolvedValue(null),
   ensureErc1155ApprovalForAll: vi.fn().mockResolvedValue(null),
   sendKyberTransaction: vi.fn().mockResolvedValue("0xmockhash"),
@@ -84,6 +87,10 @@ vi.mock("@tools/kyberswap/evm-utils.js", () => ({
   extractErc1155Position: (...args: unknown[]) => mockExtractErc1155Position(...args),
   readErc20Metadata: (...args: [string, string]) => mockReadErc20Metadata(...args),
   verifyRouterAddress: vi.fn(),
+}));
+
+vi.mock("@tools/evm-chains/erc20-balance-guard.js", () => ({
+  ensureErc20Balance: (...args: unknown[]) => mockEnsureErc20Balance(...args),
 }));
 
 // Mock token API for safety gate + quote-time safety surfacing (Stage 6b).
@@ -152,6 +159,23 @@ describe("executeKyberSwap inline safety gate (FIX 1, broadcast path)", () => {
       address, symbol: "TKN", name: "Token", decimals: 18, isNative: false as const,
     }));
     mockLoggerWarn.mockClear();
+    mockEnsureKyberAllowance.mockReset();
+    mockEnsureKyberAllowance.mockResolvedValue(undefined);
+    mockEnsureErc20Balance.mockReset();
+    mockEnsureErc20Balance.mockResolvedValue(undefined);
+  });
+
+  it("an insufficient input balance aborts before allowance mutation or swap build", async () => {
+    mockEnsureErc20Balance.mockRejectedValue(new VexError(ErrorCodes.INSUFFICIENT_BALANCE, "short balance"));
+
+    await expect(
+      KYBERSWAP_HANDLERS["kyberswap.swap.sell"]!(
+        { chain: "ethereum", tokenIn: TOKEN_A, tokenOut: TOKEN_B, amountIn: "1" },
+        EXEC_CTX,
+      ),
+    ).rejects.toMatchObject({ code: ErrorCodes.INSUFFICIENT_BALANCE });
+
+    expect(mockEnsureKyberAllowance).not.toHaveBeenCalled();
   });
 
   it("a CONFIRMED honeypot tokenIn STILL aborts — never reaches the route step", async () => {

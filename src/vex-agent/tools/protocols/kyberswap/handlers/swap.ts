@@ -15,6 +15,7 @@ import {
   verifyRouterAddress,
 } from "@tools/kyberswap/evm-utils.js";
 import { META_AGGREGATION_ROUTER_V2, NATIVE_TOKEN_ADDRESS } from "@tools/kyberswap/constants.js";
+import { ensureErc20Balance } from "@tools/evm-chains/erc20-balance-guard.js";
 import { resolveTokenMetadataStrict, requireFeature, resolveChainWithId } from "@tools/kyberswap/helpers.js";
 import { formatRouteSummary } from "../helpers.js";
 import logger from "@utils/logger.js";
@@ -181,6 +182,13 @@ async function executeKyberSwap(p: Record<string, unknown>, side: "buy" | "sell"
 
   const { publicClient, walletClient } = getKyberEvmClients(slug, signer.privateKey);
   if (tokenIn.address.toLowerCase() !== NATIVE_TOKEN_ADDRESS.toLowerCase()) {
+    await ensureErc20Balance(publicClient, {
+      token: tokenIn.address,
+      owner: getAddress(signer.address),
+      required: amountIn,
+      decimals: tokenIn.decimals,
+      label: tokenIn.symbol,
+    });
     await ensureKyberAllowance(publicClient, walletClient, tokenIn.address, routerAddress, amountIn, p.approveExact === true);
   }
 

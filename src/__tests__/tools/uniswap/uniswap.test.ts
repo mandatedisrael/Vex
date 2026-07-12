@@ -173,11 +173,11 @@ const RECIP: Address = "0x1111111111111111111111111111111111111111";
 const DEADLINE = 1_900_000_000n;
 
 describe("V2 calldata builders", () => {
-  it("token→token → swapExactTokensForTokens, value 0", () => {
+  it("token→token → swapExactTokensForTokensSupportingFeeOnTransferTokens, value 0", () => {
     const tx = buildV2SwapTx({ deployment: ROBINHOOD, route: V2_ROUTE, amountIn: 1000n, minAmountOut: 995n, recipient: RECIP, deadline: DEADLINE, tokenInIsNative: false, tokenOutIsNative: false });
     expect(tx.value).toBe(0n);
     const dec = decodeFunctionData({ abi: UNISWAP_V2_ROUTER_ABI, data: tx.data });
-    expect(dec.functionName).toBe("swapExactTokensForTokens");
+    expect(dec.functionName).toBe("swapExactTokensForTokensSupportingFeeOnTransferTokens");
     expect(dec.args?.[0]).toBe(1000n);
     expect(dec.args?.[1]).toBe(995n);
     expect(dec.args?.[3]).toBe(RECIP);
@@ -190,10 +190,10 @@ describe("V2 calldata builders", () => {
     expect(dec.functionName).toBe("swapExactETHForTokens");
   });
 
-  it("native output → swapExactTokensForETH, value 0", () => {
+  it("native output → swapExactTokensForETHSupportingFeeOnTransferTokens, value 0", () => {
     const tx = buildV2SwapTx({ deployment: ROBINHOOD, route: V2_ROUTE, amountIn: 1000n, minAmountOut: 995n, recipient: RECIP, deadline: DEADLINE, tokenInIsNative: false, tokenOutIsNative: true });
     expect(tx.value).toBe(0n);
-    expect(decodeFunctionData({ abi: UNISWAP_V2_ROUTER_ABI, data: tx.data }).functionName).toBe("swapExactTokensForETH");
+    expect(decodeFunctionData({ abi: UNISWAP_V2_ROUTER_ABI, data: tx.data }).functionName).toBe("swapExactTokensForETHSupportingFeeOnTransferTokens");
   });
 });
 

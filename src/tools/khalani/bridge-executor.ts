@@ -6,6 +6,7 @@
 import { getAddress, type Address, type Hash, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { VexError, ErrorCodes } from "../../errors.js";
+import { waitForSuccessfulReceipt } from "@tools/evm-chains/receipt-guard.js";
 import { ERC20_ABI } from "../../constants/chain.js";
 import { getKhalaniClient } from "./client.js";
 import { getChainRpcUrl } from "./chains.js";
@@ -156,7 +157,11 @@ async function executeEvmApproval(
   });
 
   if (approval.waitForReceipt) {
-    await publicClient.waitForTransactionReceipt({ hash });
+    await waitForSuccessfulReceipt(publicClient, hash, {
+      code: ErrorCodes.APPROVAL_FAILED,
+      what: "Khalani approval transaction",
+      hint: "The approval did not complete. Check the transaction hash before retrying.",
+    });
   }
 
   return hash;
@@ -275,7 +280,11 @@ export async function executeTransferPlan(
         args: [getAddress(plan.depositAddress), BigInt(plan.amount)],
       });
 
-  await publicClient.waitForTransactionReceipt({ hash: txHash });
+  await waitForSuccessfulReceipt(publicClient, txHash, {
+    code: ErrorCodes.KHALANI_DEPOSIT_FAILED,
+    what: "Khalani deposit transaction",
+    hint: "The deposit was not confirmed. Check the transaction hash before contacting or retrying Khalani.",
+  });
 
   const submitted = await getKhalaniClient().submitDeposit({ quoteId, routeId, txHash });
   return { orderId: submitted.orderId, txHash: submitted.txHash };

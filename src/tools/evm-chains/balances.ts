@@ -26,7 +26,7 @@ import { getLocalPublicClient } from "./evm-client.js";
 import type { LocalChainConfig } from "./registry.js";
 import logger from "../../utils/logger.js";
 
-const ERC20_READ_ABI = [
+export const ERC20_READ_ABI = [
   {
     type: "function",
     name: "balanceOf",
