@@ -132,6 +132,32 @@ export const UNISWAP_V2_ROUTER_ABI = [
     ],
     outputs: [{ name: "amounts", type: "uint256[]" }],
   },
+  {
+    type: "function",
+    name: "swapExactTokensForTokensSupportingFeeOnTransferTokens",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "amountIn", type: "uint256" },
+      { name: "amountOutMin", type: "uint256" },
+      { name: "path", type: "address[]" },
+      { name: "to", type: "address" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "swapExactTokensForETHSupportingFeeOnTransferTokens",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "amountIn", type: "uint256" },
+      { name: "amountOutMin", type: "uint256" },
+      { name: "path", type: "address[]" },
+      { name: "to", type: "address" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [],
+  },
 ] as const;
 
 // ── Uniswap V3 ──────────────────────────────────────────────────────────────

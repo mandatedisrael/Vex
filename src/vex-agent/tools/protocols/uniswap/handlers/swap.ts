@@ -316,6 +316,8 @@ async function executeUniswapSwap(
         inputTokenAddress: tokenIn.address,
         outputTokenAddress: tokenOut.address,
         inputAmount: amountInRaw,
+        // Quote-derived output can overstate an FoT recipient amount; receipt-log
+        // or balance-delta settlement measurement is tracked separately.
         outputAmount: amountOutHuman,
         signature: txHash,
         walletAddress: signer.address,

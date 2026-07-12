@@ -85,13 +85,19 @@ export function buildV2SwapTx(args: BuildSwapArgs): BuiltSwapTx {
       }),
     };
   }
+
+  // Token-input V2 swaps use Router02's fee-on-transfer-supporting variants.
+  // For non-FoT tokens they preserve the equivalent token-transfer outcome and
+  // amountOutMin enforcement against the recipient's actual received balance.
+  // These variants return no amounts[] (unused in this repository) and differ
+  // slightly in gas. Callers must budget slippage for any FoT input transfer tax.
   if (tokenOutIsNative) {
     return {
       to: router,
       value: 0n,
       data: encodeFunctionData({
         abi: UNISWAP_V2_ROUTER_ABI,
-        functionName: "swapExactTokensForETH",
+        functionName: "swapExactTokensForETHSupportingFeeOnTransferTokens",
         args: [amountIn, minAmountOut, path, recipient, deadline],
       }),
     };
@@ -101,7 +107,7 @@ export function buildV2SwapTx(args: BuildSwapArgs): BuiltSwapTx {
     value: 0n,
     data: encodeFunctionData({
       abi: UNISWAP_V2_ROUTER_ABI,
-      functionName: "swapExactTokensForTokens",
+      functionName: "swapExactTokensForTokensSupportingFeeOnTransferTokens",
       args: [amountIn, minAmountOut, path, recipient, deadline],
     }),
   };
