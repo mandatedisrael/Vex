@@ -6,7 +6,7 @@
  * the .env keys — verify-then-persist atomicity (codex turn 2 RED #1).
  *
  * Safety contracts (all enforced):
- *   - SDK debug logging neutralised via NOOP_LOGGER. The SDK falls
+ *   - SDK debug logging neutralised via OPENROUTER_NOOP_LOGGER. The SDK falls
  *     back to `console` whenever no `debugLogger` is supplied AND
  *     `OPENROUTER_DEBUG` is truthy (`@openrouter/sdk/esm/lib/sdks.js:65`),
  *     which would leak the `Authorization` header. Passing this
@@ -41,34 +41,14 @@ import {
 import { extractCauseCode } from "@vex-lib/error-cause.js";
 import { err, ok, type Result, type VexError } from "@shared/ipc/result.js";
 import { log } from "../logger/index.js";
+import {
+  OPENROUTER_APP_TITLE,
+  OPENROUTER_APP_URL,
+  OPENROUTER_NOOP_LOGGER,
+} from "./openrouter-app-identity.js";
 
 const VERIFY_TIMEOUT_MS = 15_000;
 const VERIFY_MAX_OUTPUT_TOKENS = 16;
-
-/**
- * Mirror engine `src/vex-agent/inference/config.ts` so the wizard's
- * verify call carries the same app identity as the runtime — OpenRouter
- * analytics correlate the test ping with the same app context as actual
- * inference traffic. Codex turn 4 YELLOW.
- */
-const OPENROUTER_APP_URL = "https://vexlabs.ai";
-const OPENROUTER_APP_TITLE = "Vex Agent";
-
-/**
- * Console-shape superset. SDK calls `group/groupEnd/log` per
- * Speakeasy gen; we also stub the console-debug shape for safety.
- * Codex turn 3 confirmed: SDK fallback is `console` so a console-
- * compatible noop satisfies typecheck + every call path.
- */
-const NOOP_LOGGER = {
-  group: () => {},
-  groupEnd: () => {},
-  log: () => {},
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-};
 
 export interface OpenRouterVerifyInput {
   readonly apiKey: string;
@@ -95,7 +75,7 @@ export interface OpenRouterVerifyOptions {
 function defaultClientFactory(apiKey: string, timeoutMs: number) {
   return new OpenRouter({
     apiKey,
-    debugLogger: NOOP_LOGGER,
+    debugLogger: OPENROUTER_NOOP_LOGGER,
     retryConfig: { strategy: "none" },
     timeoutMs,
     httpReferer: OPENROUTER_APP_URL,
