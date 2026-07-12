@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import type { EnvState } from "@shared/schemas/onboarding.js";
 import type { WalletChain } from "@shared/schemas/wallets.js";
+import { AddressDisplay } from "../../../../../components/common/AddressDisplay.js";
 import { Button } from "../../../../../components/ui/button.js";
 import { SummaryCard } from "./SummaryCard.js";
 
@@ -22,12 +23,6 @@ export interface WalletsCardProps {
    * lifecycle to the parent (ReviewStep).
    */
   readonly onExport?: (chain: WalletChain) => void;
-}
-
-function shortAddr(addr: string | null): string {
-  if (!addr) return "—";
-  if (addr.length <= 12) return addr;
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
 export function WalletsCard({
@@ -66,7 +61,19 @@ export function WalletsCard({
     >
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
-          <span>EVM: {evmOk ? shortAddr(evmAddr) : "missing"}</span>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span>EVM:</span>
+            {evmOk && evmAddr !== null ? (
+              <AddressDisplay
+                address={evmAddr}
+                appearance="inline"
+                copyLabel="Copy EVM wallet address"
+                copiedLabel="Address copied"
+              />
+            ) : (
+              <span>{evmOk ? "—" : "missing"}</span>
+            )}
+          </div>
           {evmExportShown ? (
             <Button
               type="button"
@@ -82,7 +89,19 @@ export function WalletsCard({
           ) : null}
         </div>
         <div className="flex items-center justify-between gap-2">
-          <span>Solana: {solOk ? shortAddr(solAddr) : "missing"}</span>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span>Solana:</span>
+            {solOk && solAddr !== null ? (
+              <AddressDisplay
+                address={solAddr}
+                appearance="inline"
+                copyLabel="Copy Solana wallet address"
+                copiedLabel="Address copied"
+              />
+            ) : (
+              <span>{solOk ? "—" : "missing"}</span>
+            )}
+          </div>
           {solExportShown ? (
             <Button
               type="button"
