@@ -12,6 +12,7 @@ import {
   type Transport,
 } from "viem";
 import { VexError, ErrorCodes } from "../../../errors.js";
+import { waitForSuccessfulReceipt } from "@tools/evm-chains/receipt-guard.js";
 import logger from "../../../utils/logger.js";
 import { validateKyberSpender } from "./erc20.js";
 
@@ -96,9 +97,14 @@ export async function ensureErc721Approval(
       functionName: "approve",
       args: [spender, tokenId],
     });
-    await publicClient.waitForTransactionReceipt({ hash: txHash });
+    await waitForSuccessfulReceipt(publicClient, txHash, {
+      code: ErrorCodes.APPROVAL_FAILED,
+      what: "ERC-721 approval transaction",
+      hint: "The NFT was not approved. Check the transaction hash before retrying.",
+    });
     return txHash;
   } catch (err) {
+    if (err instanceof VexError) throw err;
     throw new VexError(ErrorCodes.APPROVAL_FAILED, `ERC-721 approve failed: ${err instanceof Error ? err.message : err}`);
   }
 }
@@ -160,9 +166,14 @@ export async function ensureErc1155ApprovalForAll(
       functionName: "setApprovalForAll",
       args: [operator, true],
     });
-    await publicClient.waitForTransactionReceipt({ hash: txHash });
+    await waitForSuccessfulReceipt(publicClient, txHash, {
+      code: ErrorCodes.APPROVAL_FAILED,
+      what: "ERC-1155 approval transaction",
+      hint: "The NFT collection was not approved. Check the transaction hash before retrying.",
+    });
     return txHash;
   } catch (err) {
+    if (err instanceof VexError) throw err;
     throw new VexError(ErrorCodes.APPROVAL_FAILED, `ERC-1155 setApprovalForAll failed: ${err instanceof Error ? err.message : err}`);
   }
 }

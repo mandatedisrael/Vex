@@ -19,7 +19,7 @@ function makeClients(currentAllowance: bigint) {
   const writeContract = vi.fn().mockResolvedValue("0xhash");
   const publicClient = {
     readContract: vi.fn().mockResolvedValue(currentAllowance),
-    waitForTransactionReceipt: vi.fn().mockResolvedValue({}),
+    waitForTransactionReceipt: vi.fn().mockResolvedValue({ status: "success" }),
   };
   const walletClient = { account: { address: OWNER }, chain: { id: 1 }, writeContract };
   return { publicClient, walletClient, writeContract };
@@ -86,5 +86,15 @@ describe("ensurePendleAllowanceExact — set-to-exact discipline", () => {
     } catch (err) {
       expect((err as { code?: string }).code).toBe(ErrorCodes.INVALID_SPENDER);
     }
+  });
+
+  it("does not send the exact approval after a reverted reset", async () => {
+    const { publicClient, walletClient, writeContract } = makeClients(1n);
+    publicClient.waitForTransactionReceipt.mockResolvedValue({ status: "reverted" });
+
+    await expect(
+      ensurePendleAllowanceExact(publicClient as never, walletClient as never, TOKEN, PENDLE_ROUTER, 100n),
+    ).rejects.toMatchObject({ code: ErrorCodes.APPROVAL_FAILED });
+    expect(writeContract).toHaveBeenCalledTimes(1);
   });
 });

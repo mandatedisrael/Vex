@@ -35,6 +35,9 @@ export const ErrorCodes = {
   INTENT_NOT_FOUND: "INTENT_NOT_FOUND",
   INTENT_EXPIRED: "INTENT_EXPIRED",
   CONFIRMATION_REQUIRED: "CONFIRMATION_REQUIRED",
+  // Broadcast completed but receipt confirmation failed or timed out. The
+  // transaction may still settle, so callers must not blindly retry it.
+  CONFIRMATION_UNKNOWN: "CONFIRMATION_UNKNOWN",
   INVALID_ADDRESS: "INVALID_ADDRESS",
   INVALID_AMOUNT: "INVALID_AMOUNT",
   CHAIN_MISMATCH: "CHAIN_MISMATCH",

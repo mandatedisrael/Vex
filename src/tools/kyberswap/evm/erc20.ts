@@ -14,6 +14,7 @@ import {
   type Transport,
 } from "viem";
 import { VexError, ErrorCodes } from "../../../errors.js";
+import { waitForSuccessfulReceipt } from "@tools/evm-chains/receipt-guard.js";
 import { KYBER_KNOWN_SPENDERS } from "../constants.js";
 import logger from "../../../utils/logger.js";
 import type { KyberChainSlug } from "../types.js";
@@ -162,8 +163,13 @@ export async function ensureKyberAllowance(
         functionName: "approve",
         args: [spender, 0n],
       });
-      await publicClient.waitForTransactionReceipt({ hash: resetTxHash });
+      await waitForSuccessfulReceipt(publicClient, resetTxHash, {
+        code: ErrorCodes.APPROVAL_FAILED,
+        what: "Allowance-reset transaction",
+        hint: "The existing allowance was not cleared, so the follow-up approve would be blocked. Check the transaction hash before retrying.",
+      });
     } catch (err) {
+      if (err instanceof VexError) throw err;
       throw new VexError(ErrorCodes.APPROVAL_FAILED, `Failed to reset allowance: ${err instanceof Error ? err.message : err}`);
     }
   }
@@ -179,9 +185,14 @@ export async function ensureKyberAllowance(
       functionName: "approve",
       args: [spender, approveAmount],
     });
-    await publicClient.waitForTransactionReceipt({ hash: txHash });
+    await waitForSuccessfulReceipt(publicClient, txHash, {
+      code: ErrorCodes.APPROVAL_FAILED,
+      what: "Approval transaction",
+      hint: "The router was not granted an allowance. Check the transaction hash before retrying.",
+    });
     return { txHash, resetTxHash };
   } catch (err) {
+    if (err instanceof VexError) throw err;
     throw new VexError(ErrorCodes.APPROVAL_FAILED, `Failed to approve: ${err instanceof Error ? err.message : err}`);
   }
 }
@@ -206,9 +217,14 @@ export async function sendKyberTransaction(
       value: params.value ?? 0n,
       chain: walletClient.chain,
     });
-    await publicClient.waitForTransactionReceipt({ hash: txHash });
+    await waitForSuccessfulReceipt(publicClient, txHash, {
+      code: ErrorCodes.SWAP_FAILED,
+      what: "Transaction",
+      hint: "No swap was confirmed. Check the transaction hash before retrying.",
+    });
     return txHash;
   } catch (err) {
+    if (err instanceof VexError) throw err;
     throw new VexError(ErrorCodes.SWAP_FAILED, `Transaction failed: ${err instanceof Error ? err.message : err}`);
   }
 }
@@ -230,7 +246,11 @@ export async function sendKyberTransactionWithReceipt(
       value: params.value ?? 0n,
       chain: walletClient.chain,
     });
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    const receipt = await waitForSuccessfulReceipt(publicClient, hash, {
+      code: ErrorCodes.SWAP_FAILED,
+      what: "Transaction",
+      hint: "No swap was confirmed. Check the transaction hash before retrying.",
+    });
     return {
       hash,
       receipt: {
@@ -242,6 +262,7 @@ export async function sendKyberTransactionWithReceipt(
       },
     };
   } catch (err) {
+    if (err instanceof VexError) throw err;
     throw new VexError(ErrorCodes.SWAP_FAILED, `Transaction failed: ${err instanceof Error ? err.message : err}`);
   }
 }

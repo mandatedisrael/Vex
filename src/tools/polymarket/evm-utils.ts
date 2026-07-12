@@ -18,6 +18,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { polygon } from "viem/chains";
 import { VexError, ErrorCodes } from "../../errors.js";
+import { waitForSuccessfulReceipt } from "@tools/evm-chains/receipt-guard.js";
 import { POLY_KNOWN_SPENDERS, POLYGON_RPC } from "./constants.js";
 import logger from "../../utils/logger.js";
 
@@ -112,7 +113,11 @@ export async function approveUsdce(
       functionName: "approve",
       args: [spender, 0n],
     });
-    await publicClient.waitForTransactionReceipt({ hash: resetHash });
+    await waitForSuccessfulReceipt(publicClient, resetHash, {
+      code: ErrorCodes.APPROVAL_FAILED,
+      what: "Allowance-reset transaction",
+      hint: "The existing allowance was not cleared, so the follow-up approve would be blocked. Check the transaction hash before retrying.",
+    });
   }
 
   const amount = approveExact ? requiredAmount : maxUint256;
@@ -125,6 +130,10 @@ export async function approveUsdce(
     functionName: "approve",
     args: [spender, amount],
   });
-  await publicClient.waitForTransactionReceipt({ hash: txHash });
+  await waitForSuccessfulReceipt(publicClient, txHash, {
+    code: ErrorCodes.APPROVAL_FAILED,
+    what: "Approval transaction",
+    hint: "The Polymarket contract was not granted an allowance. Check the transaction hash before retrying.",
+  });
   return txHash;
 }

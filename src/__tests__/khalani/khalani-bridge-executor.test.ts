@@ -110,6 +110,7 @@ describe("executeDepositPlan", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockWaitForTransactionReceipt.mockResolvedValue({ status: "success" });
     mockSubmitDeposit.mockResolvedValue({
       orderId: "order-123",
       txHash: "0xdeadbeef",
@@ -188,6 +189,37 @@ describe("executeDepositPlan", () => {
     expect(mockSubmitDeposit).toHaveBeenCalledWith(expect.objectContaining({
       txHash: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     }));
+  });
+
+  it("does not wait when Khalani marks an EVM approval broadcast-only", async () => {
+    const plan: ContractCallDepositPlan = {
+      kind: "CONTRACT_CALL",
+      approvals: [{
+        type: "eip1193_request",
+        request: {
+          method: "eth_sendTransaction",
+          params: [{ to: "0x2222222222222222222222222222222222222222", data: "0x", value: "0x0" }],
+        },
+        waitForReceipt: false,
+        deposit: true,
+      }],
+    };
+
+    await run(plan, ETH_CHAIN);
+    expect(mockWaitForTransactionReceipt).not.toHaveBeenCalled();
+  });
+
+  it("never submits a reverted EVM transfer deposit to Khalani", async () => {
+    mockWaitForTransactionReceipt.mockResolvedValue({ status: "reverted" });
+    const plan: TransferDepositPlan = {
+      kind: "TRANSFER",
+      token: "native",
+      amount: "1",
+      depositAddress: "0x2222222222222222222222222222222222222222",
+    };
+
+    await expect(run(plan, ETH_CHAIN)).rejects.toMatchObject({ code: ErrorCodes.KHALANI_DEPOSIT_FAILED });
+    expect(mockSubmitDeposit).not.toHaveBeenCalled();
   });
 
   it("routes Solana CONTRACT_CALL to executeSolanaContractCallPlan", async () => {

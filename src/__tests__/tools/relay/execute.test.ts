@@ -157,4 +157,20 @@ describe("executeRelayBridge — ordered broadcast (PHASE 2)", () => {
     expect(result.txHashes).toEqual(["0xaaa", "0xbbb"]);
     expect(result.finalStatus).toBe("pending"); // no requestId → no poll
   });
+
+  it("aborts before the next broadcast when a mined step reverted", async () => {
+    sendTransaction.mockResolvedValueOnce("0xaaa").mockResolvedValueOnce("0xbbb");
+    waitForTransactionReceipt.mockResolvedValueOnce({ status: "reverted" });
+    const quote = {
+      steps: [
+        step("approve", ORIGIN, APPROVE_TO, "0", "0x"),
+        step("deposit", DESTINATION, DEPOSIT_TO, "1000", "0xabcd"),
+      ],
+    } as unknown as RelayQuoteResponse;
+
+    await expect(
+      executeRelayBridge({ quote, signer, originChainId: ORIGIN, destinationChainId: DESTINATION }),
+    ).rejects.toMatchObject({ code: "RELAY_BRIDGE_FAILED" });
+    expect(sendTransaction).toHaveBeenCalledTimes(1);
+  });
 });

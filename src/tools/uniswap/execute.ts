@@ -26,6 +26,7 @@ import {
 } from "viem";
 
 import { VexError, ErrorCodes } from "../../errors.js";
+import { waitForSuccessfulReceipt } from "@tools/evm-chains/receipt-guard.js";
 import {
   UNISWAP_V2_ROUTER_ABI,
   UNISWAP_V3_SWAP_ROUTER_02_ABI,
@@ -187,9 +188,14 @@ export async function sendUniswapTransaction(
       data: tx.data,
       value: tx.value,
     });
-    await publicClient.waitForTransactionReceipt({ hash });
+    await waitForSuccessfulReceipt(publicClient, hash, {
+      code: ErrorCodes.SWAP_FAILED,
+      what: "Swap transaction",
+      hint: "No tokens were swapped. Check the transaction hash before re-quoting or retrying.",
+    });
     return hash;
   } catch (err) {
+    if (err instanceof VexError) throw err;
     throw new VexError(ErrorCodes.SWAP_FAILED, `Transaction failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

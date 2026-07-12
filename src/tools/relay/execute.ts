@@ -30,6 +30,7 @@ import {
 
 import { resolveInclusiveEvmChain } from "@tools/evm-chains/resolver.js";
 import { getLocalEvmClients } from "@tools/evm-chains/evm-client.js";
+import { waitForSuccessfulReceipt } from "@tools/evm-chains/receipt-guard.js";
 import {
   createDynamicPublicClient,
   createDynamicWalletClient,
@@ -208,7 +209,11 @@ export async function executeRelayBridge(args: RelayExecuteArgs): Promise<RelayE
       data: tx.data,
       value: tx.value,
     });
-    await publicClient.waitForTransactionReceipt({ hash });
+    await waitForSuccessfulReceipt(publicClient, hash, {
+      code: ErrorCodes.RELAY_BRIDGE_FAILED,
+      what: `Relay step "${tx.stepId}"`,
+      hint: "No further steps were broadcast. Check the transaction hash before re-quoting or retrying.",
+    });
     txHashes.push(hash);
     logger.info("relay.bridge.step_broadcast", { stepId: tx.stepId, chainId: tx.chainId });
   }
