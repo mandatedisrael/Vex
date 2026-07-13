@@ -32,6 +32,13 @@ export function resolveHyperliquidWorkspaceMode(sessionId: string): HyperliquidW
   return modesBySession.get(sessionId) ?? "normal";
 }
 
+/** Session ids currently eligible for Hypervexing-only main-process work. */
+export function listHypervexingSessionIds(): readonly string[] {
+  return [...modesBySession]
+    .filter(([, mode]) => mode === "hypervexing")
+    .map(([sessionId]) => sessionId);
+}
+
 /** Serialize requests so a slower preference read cannot reorder enter/exit. */
 export function requestHyperliquidWorkspaceMode(
   sessionId: string,

@@ -27,6 +27,7 @@ import { hyperliquidRiskProposalBus } from "@vex-agent/engine/events/hyperliquid
 import { hyperliquidBuilderConsentBus } from "@vex-agent/engine/events/hyperliquid-builder-bus.js";
 import { hyperliquidWorkspaceRequestBus, type HyperliquidWorkspaceMode } from "@vex-agent/engine/events/hyperliquid-workspace-bus.js";
 import { resolveHlWorkspaceMode } from "../../../../lib/hyperliquid-workspace-mode.js";
+import logger from "@utils/logger.js";
 
 const TIME_IN_FORCE: ReadonlySet<HyperliquidTimeInForce> = new Set(["Gtc", "Ioc", "Alo", "FrontendMarket"]);
 
@@ -210,18 +211,22 @@ async function openPerp(params: Record<string, unknown>, context: ProtocolExecut
       ? await consolidateConfirmedOpen(result, orderExchange, info, address, asset.asset, coin, stopPrice)
       : { state: "not_needed" as const, steps: [] as string[] };
   const unprotectedByChoice = !usedStop;
-  const capture = await capturePerp(info, address, coin, context, false, compensation.unprotected || unprotectedByChoice, {
+  const containmentFailed = compensation.unprotected || consolidation.state === "pending";
+  const capture = await capturePerpSafely(info, address, coin, context, false, containmentFailed || unprotectedByChoice, {
     synchronousConsolidation: consolidation.state,
+    ...(containmentFailed ? { protectionState: compensation.unprotected ? "unprotected" : "unknown" } : {}),
   });
-  const consolidationFailed = consolidation.state === "pending";
   return exchangeResult(result, {
     coin,
     side,
     usedStop,
     compensation: [...compensation.steps, ...consolidation.steps],
-    ...(consolidationFailed ? { actionableError: "Entry filled but full-position stop consolidation did not complete. Run perp.setTpsl before any other Hyperliquid action." } : {}),
+    ...(containmentFailed ? {
+      protectionState: compensation.unprotected ? "unprotected" : "unknown",
+      actionableError: "Entry may be filled while stop-loss protection is unknown or incomplete. Verify the position and run perp.setTpsl before any other Hyperliquid action.",
+    } : {}),
     _tradeCapture: capture,
-  }, compensation.unprotected || consolidationFailed);
+  }, containmentFailed);
 }
 
 export async function applyOpenLeverage(
@@ -275,28 +280,33 @@ export async function consolidateConfirmedOpen(
   if (child?.kind !== "accepted_resting" || child.oid === undefined) {
     return { state: "pending", steps: ["filled entry stop child could not be identified for consolidation"] };
   }
-  const [state, orders] = await Promise.all([info.clearinghouseState(address), info.frontendOpenOrders(address)]);
-  const snapshot = buildPositionProtectionSnapshot(state, orders, coin);
-  if (new Decimal(snapshot.positionSize).isZero()) return { state: "not_needed", steps: [] };
-  const replacement = await exchange.setPositionTpsl({
-    a: asset,
-    b: new Decimal(snapshot.positionSize).lt(0),
-    p: stopPrice,
-    s: absolutePositionSize(snapshot.positionSize),
-    r: true,
-    t: { trigger: { isMarket: true, triggerPx: stopPrice, tpsl: "sl" } },
-  });
-  if (!exchangeOk(replacement)) return { state: "pending", steps: ["full-position stop placement failed"] };
-  const [placedState, placedOrders] = await Promise.all([info.clearinghouseState(address), info.frontendOpenOrders(address)]);
-  if (buildPositionProtectionSnapshot(placedState, placedOrders, coin).fullPositionStops.length !== 1) {
-    return { state: "pending", steps: ["full-position stop was not confirmed before child cancellation"] };
+  try {
+    const [state, orders] = await Promise.all([info.clearinghouseState(address), info.frontendOpenOrders(address)]);
+    const snapshot = buildPositionProtectionSnapshot(state, orders, coin);
+    if (new Decimal(snapshot.positionSize).isZero()) return { state: "not_needed", steps: [] };
+    const replacement = await exchange.setPositionTpsl({
+      a: asset,
+      b: new Decimal(snapshot.positionSize).lt(0),
+      p: stopPrice,
+      s: absolutePositionSize(snapshot.positionSize),
+      r: true,
+      t: { trigger: { isMarket: true, triggerPx: stopPrice, tpsl: "sl" } },
+    });
+    if (!exchangeOk(replacement)) return { state: "pending", steps: ["full-position stop placement failed"] };
+    const [placedState, placedOrders] = await Promise.all([info.clearinghouseState(address), info.frontendOpenOrders(address)]);
+    if (buildPositionProtectionSnapshot(placedState, placedOrders, coin).fullPositionStops.length !== 1) {
+      return { state: "pending", steps: ["full-position stop was not confirmed before child cancellation"] };
+    }
+    const cancelled = await exchange.cancel({ cancels: [{ a: asset, o: child.oid }] });
+    if (!exchangeOk(cancelled)) return { state: "pending", steps: ["full-position stop placed; fixed-size child cancellation failed"] };
+    const [finalState, finalOrders] = await Promise.all([info.clearinghouseState(address), info.frontendOpenOrders(address)]);
+    return buildPositionProtectionSnapshot(finalState, finalOrders, coin).state === "PROTECTED"
+      ? { state: "complete", steps: ["full-position stop confirmed before fixed-size child cancellation"] }
+      : { state: "pending", steps: ["post-cancellation protection verification was not PROTECTED"] };
+  } catch (cause) {
+    logger.warn("hyperliquid.post_submit_containment_failed", { step: "open_stop_consolidation", cause });
+    return { state: "pending", steps: ["live protection verification failed during full-position stop consolidation"] };
   }
-  const cancelled = await exchange.cancel({ cancels: [{ a: asset, o: child.oid }] });
-  if (!exchangeOk(cancelled)) return { state: "pending", steps: ["full-position stop placed; fixed-size child cancellation failed"] };
-  const [finalState, finalOrders] = await Promise.all([info.clearinghouseState(address), info.frontendOpenOrders(address)]);
-  return buildPositionProtectionSnapshot(finalState, finalOrders, coin).state === "PROTECTED"
-    ? { state: "complete", steps: ["full-position stop confirmed before fixed-size child cancellation"] }
-    : { state: "pending", steps: ["post-cancellation protection verification was not PROTECTED"] };
 }
 
 async function closePerp(params: Record<string, unknown>, context: ProtocolExecutionContext) {
@@ -314,16 +324,38 @@ async function setTpsl(params: Record<string, unknown>, context: ProtocolExecuti
   const asset = (await meta.get()).perpsByCoin.get(coin); if (!asset) return fail(`Unknown Hyperliquid Core market "${coin}".`);
   const orderExchange = exchange.withBuilder(builderForOrders(info, exchange, address, context));
   const price = decimal(params, "slPrice"); const replacement = await orderExchange.setPositionTpsl({ a: asset.asset, b: new Decimal(snapshot.positionSize).lt(0), p: price, s: absolutePositionSize(snapshot.positionSize), r: true, t: { trigger: { isMarket: true, triggerPx: price, tpsl: "sl" } } });
-  const consolidation = await cancelStaleStopsAfterReplacement(replacement, orderExchange, asset.asset, snapshot);
-  const failureMeta = consolidation.consolidationPending
-    ? await consolidationFailureMeta(`hyperliquid:perp:${coin}:${address}`)
-    : {};
+  let consolidation = { staleStopsCancelled: false, consolidationPending: !exchangeOk(replacement) };
+  let containmentFailed = !exchangeOk(replacement);
+  try {
+    consolidation = await cancelStaleStopsAfterReplacement(replacement, orderExchange, asset.asset, snapshot);
+  } catch (cause) {
+    logger.warn("hyperliquid.post_submit_containment_failed", { step: "set_tpsl_stale_stop_cancellation", cause });
+    containmentFailed = true;
+    consolidation = { staleStopsCancelled: false, consolidationPending: true };
+  }
+  let failureMeta: Record<string, unknown> = {};
+  if (consolidation.consolidationPending) {
+    try {
+      failureMeta = await consolidationFailureMeta(`hyperliquid:perp:${coin}:${address}`);
+    } catch (cause) {
+      logger.warn("hyperliquid.post_submit_containment_failed", { step: "set_tpsl_failure_metadata", cause });
+      containmentFailed = true;
+    }
+  }
+  const capture = await capturePerpSafely(info, address, coin, context, false, containmentFailed || consolidation.consolidationPending, {
+    ...failureMeta,
+    ...(containmentFailed || consolidation.consolidationPending ? { protectionState: "unknown" } : {}),
+  });
   return exchangeResult(replacement, {
     coin,
     staleStopsCancelled: consolidation.staleStopsCancelled,
     consolidationPending: consolidation.consolidationPending,
-    _tradeCapture: await capturePerp(info, address, coin, context, false, false, failureMeta),
-  });
+    ...(containmentFailed || consolidation.consolidationPending ? {
+      protectionState: "unknown",
+      actionableError: "Stop-loss replacement outcome is not fully verified. Verify the position and run perp.setTpsl before any other Hyperliquid action.",
+    } : {}),
+    _tradeCapture: capture,
+  }, containmentFailed || consolidation.consolidationPending);
 }
 
 export async function cancelStaleStopsAfterReplacement(
@@ -551,7 +583,7 @@ export function builderForOrders(
   info: HyperliquidInfoClient,
   exchange: Pick<HyperliquidExchangeClient, "approveBuilderFee">,
   user: string,
-  context: Pick<ProtocolExecutionContext, "sessionId">,
+  context: Pick<ProtocolExecutionContext, "sessionId" | "hyperliquidPolicy">,
 ): { readonly b: Address; readonly f: 25 } | undefined {
   const builder = configuredBuilderAddress();
   // A Hyperliquid mutation can only reach this handler after the main-owned
@@ -561,12 +593,16 @@ export function builderForOrders(
   // unnecessarily untagged.
   if (builder === null || context.sessionId === undefined) return undefined;
   const scope = builderAllowanceScope(context.sessionId, user, builder);
+  if (context.hyperliquidPolicy?.kind === "available" && context.hyperliquidPolicy.snapshot.policy.builderFeeConsent.kind === "approved") {
+    rememberBuilderFeeAllowanceScope(scope);
+    return { b: builder, f: 25 };
+  }
   const confirmedAt = builderAllowanceByScope.get(scope);
   if (confirmedAt !== undefined && Date.now() - confirmedAt <= BUILDER_ALLOWANCE_CACHE_TTL_MS) {
     return { b: builder, f: 25 };
   }
   if (confirmedAt !== undefined) builderAllowanceByScope.delete(scope);
-  scheduleBuilderFeeAllowanceCheck(info, exchange, user, builder, scope);
+  scheduleBuilderFeeAllowanceCheck(info, exchange, user, builder, scope, context.sessionId);
   // Do not await a public-info read or a user-signed allowance action here.
   // The current order remains fully valid without a builder field; a later
   // order attaches it only after the venue confirms the allowance.
@@ -579,6 +615,7 @@ function scheduleBuilderFeeAllowanceCheck(
   user: string,
   builder: Address,
   scope: string,
+  sessionId: string,
 ): void {
   if (builderAllowanceInFlightByScope.has(scope)) return;
   const attempt = (async () => {
@@ -587,7 +624,21 @@ function scheduleBuilderFeeAllowanceCheck(
       hyperliquidBuilderConsentBus.emit("0.025%");
       return;
     }
+    const { createExecutionIntent, completeExecutionIntent } = await import("@vex-agent/db/repos/executions.js");
+    const intentId = await createExecutionIntent(
+      "hyperliquid.builder.approveFee", "hyperliquid", sessionId,
+      { builder, maxFeeRate: "0.025%", source: "background_builder_allowance" },
+    );
+    if (intentId <= 0) throw new Error("builder fee durable intent insert returned no execution id");
     const approval = await exchange.approveBuilderFee({ builder, maxFeeRate: "0.025%" });
+    await completeExecutionIntent(
+      intentId,
+      { builder, maxFeeRate: "0.025%", exchange: approval.kind },
+      exchangeOk(approval),
+      auditCapture("account", approval, user, { action: "approveBuilderFee", builder, maxFeeRate: "0.025%", source: "background_builder_allowance" }),
+      {},
+      0,
+    );
     if (!exchangeOk(approval)) return;
     // Approval submission can race venue indexing; only the follow-up read is
     // authority to attach `{ b, f:25 }` to a future order.
@@ -702,17 +753,22 @@ export interface OpenCompensationInfo {
 export async function compensateRejectedStop(result: HyperliquidExchangeResult, exchange: OpenCompensationExchange, info: OpenCompensationInfo, address: string, asset: number, coin: string, stopPrice: DecimalString): Promise<{ steps: string[]; unprotected: boolean }> {
   if (result.kind !== "orders" || result.statuses[1]?.kind !== "rejected") return { steps: [], unprotected: false };
   const entry = result.statuses[0]; const steps = ["atomic stop-loss child rejected"];
-  if (entry?.kind === "accepted_resting" && entry.oid !== undefined) { const cancelled = await exchange.cancel({ cancels: [{ a: asset, o: entry.oid }] }); steps.push(exchangeOk(cancelled) ? "resting entry cancelled" : "resting entry cancellation failed"); return { steps, unprotected: !exchangeOk(cancelled) }; }
-  if (entry?.kind !== "accepted_filled" && entry?.kind !== "partially_filled") return { steps, unprotected: false };
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const [state, orders] = await Promise.all([info.clearinghouseState(address), info.frontendOpenOrders(address)]);
-    const snapshot = buildPositionProtectionSnapshot(state, orders, coin);
-    const full = await exchange.setPositionTpsl({ a: asset, b: new Decimal(snapshot.positionSize).lt(0), p: stopPrice, s: absolutePositionSize(snapshot.positionSize), r: true, t: { trigger: { isMarket: true, triggerPx: stopPrice, tpsl: "sl" } } });
-    steps.push(exchangeOk(full) ? `full-position stop placed on retry ${attempt}` : `full-position stop retry ${attempt} failed`);
-    if (!exchangeOk(full)) continue;
-    const [verifiedState, verifiedOrders] = await Promise.all([info.clearinghouseState(address), info.frontendOpenOrders(address)]);
-    if (buildPositionProtectionSnapshot(verifiedState, verifiedOrders, coin).state === "PROTECTED") return { steps, unprotected: false };
-    steps.push(`full-position stop retry ${attempt} was not visible in live protection state`);
+  try {
+    if (entry?.kind === "accepted_resting" && entry.oid !== undefined) { const cancelled = await exchange.cancel({ cancels: [{ a: asset, o: entry.oid }] }); steps.push(exchangeOk(cancelled) ? "resting entry cancelled" : "resting entry cancellation failed"); return { steps, unprotected: !exchangeOk(cancelled) }; }
+    if (entry?.kind !== "accepted_filled" && entry?.kind !== "partially_filled") return { steps, unprotected: false };
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const [state, orders] = await Promise.all([info.clearinghouseState(address), info.frontendOpenOrders(address)]);
+      const snapshot = buildPositionProtectionSnapshot(state, orders, coin);
+      const full = await exchange.setPositionTpsl({ a: asset, b: new Decimal(snapshot.positionSize).lt(0), p: stopPrice, s: absolutePositionSize(snapshot.positionSize), r: true, t: { trigger: { isMarket: true, triggerPx: stopPrice, tpsl: "sl" } } });
+      steps.push(exchangeOk(full) ? `full-position stop placed on retry ${attempt}` : `full-position stop retry ${attempt} failed`);
+      if (!exchangeOk(full)) continue;
+      const [verifiedState, verifiedOrders] = await Promise.all([info.clearinghouseState(address), info.frontendOpenOrders(address)]);
+      if (buildPositionProtectionSnapshot(verifiedState, verifiedOrders, coin).state === "PROTECTED") return { steps, unprotected: false };
+      steps.push(`full-position stop retry ${attempt} was not visible in live protection state`);
+    }
+  } catch (cause) {
+    logger.warn("hyperliquid.post_submit_containment_failed", { step: "rejected_stop_compensation", cause });
+    steps.push("live recovery state could not be verified");
   }
   steps.push("UNPROTECTED: immediately propose a reduce-only close"); return { steps, unprotected: true };
 }
@@ -722,6 +778,19 @@ function absolutePositionSize(positionSize: string): DecimalString {
 async function capturePerp(info: HyperliquidInfoClient, address: string, coin: string, context: ProtocolExecutionContext, closedWhenFlat: boolean, forceUnprotected = false, extraMeta: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
   const [state, orders] = await Promise.all([info.clearinghouseState(address), info.frontendOpenOrders(address)]); const snapshot = buildPositionProtectionSnapshot(state, orders, coin); const position = positions(state).find((candidate) => string(candidate, "coin") === coin); const active = !new Decimal(snapshot.positionSize).isZero(); const value = positive(string(position, "positionValue")); const entry = positive(string(position, "entryPx"));
   return { type: "perps", chain: "hyperliquid", status: active ? "open" : closedWhenFlat ? "closed" : "pending", walletAddress: address, positionKey: `hyperliquid:perp:${coin}:${address}`, instrumentKey: `hyperliquid:perp:${coin}`, ...(value ? { inputValueUsd: value } : {}), ...(entry ? { unitPriceUsd: entry } : {}), valuationSource: value ? "hyperliquid_clearinghouse" : "none", settlementAssetKey: "USDC", meta: { coin, contracts: new Decimal(snapshot.positionSize).abs().toFixed(), entryPx: snapshot.entryPx, liquidationPx: snapshot.liquidationPx, protectionState: forceUnprotected ? "unprotected_by_user_choice" : snapshot.state, ...(context.hyperliquidPolicy?.kind === "available" ? { policyVersion: context.hyperliquidPolicy.snapshot.version, policyProvenance: context.hyperliquidPolicy.snapshot.provenance } : {}), ...extraMeta } };
+}
+export async function capturePerpSafely(info: HyperliquidInfoClient, address: string, coin: string, context: ProtocolExecutionContext, closedWhenFlat: boolean, forceUnprotected = false, extraMeta: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+  try {
+    return await capturePerp(info, address, coin, context, closedWhenFlat, forceUnprotected, extraMeta);
+  } catch (cause) {
+    logger.warn("hyperliquid.post_submit_containment_failed", { step: "perp_capture", cause });
+    return {
+      type: "perps", chain: "hyperliquid", status: "pending", walletAddress: address,
+      positionKey: `hyperliquid:perp:${coin}:${address}`, instrumentKey: `hyperliquid:perp:${coin}`,
+      valuationSource: "none", settlementAssetKey: "USDC",
+      meta: { coin, contracts: "0", protectionState: extraMeta["protectionState"] ?? (forceUnprotected ? "unprotected" : "unknown"), captureState: "live_state_unavailable", ...extraMeta },
+    };
+  }
 }
 async function consolidationFailureMeta(positionKey: string): Promise<Record<string, unknown>> {
   const { getByPositionKey } = await import("@vex-agent/db/repos/open-positions.js");

@@ -5,7 +5,18 @@ import {
 } from "@nktkas/hyperliquid";
 
 import { endpointsForNetwork, type HyperliquidNetwork } from "./constants.js";
+import { parseHyperliquidCandle, type HyperliquidCandle } from "./candles.js";
 import type { HyperliquidSubscriptionCallbacks } from "./types.js";
+
+export { parseHyperliquidCandle as parseHyperliquidCandleEvent } from "./candles.js";
+
+export interface HyperliquidCandleSubscriptionOptions {
+  readonly network?: HyperliquidNetwork;
+  readonly coin: string;
+  readonly interval: HyperliquidCandle["interval"];
+  readonly onCandle: (candle: HyperliquidCandle) => void | Promise<void>;
+  readonly onError?: (cause: unknown) => void;
+}
 
 export interface HyperliquidSubscriptionOptions {
   readonly network?: HyperliquidNetwork;
@@ -68,6 +79,57 @@ export class HyperliquidSubscriptions {
     this.transport = null;
     this.started = false;
     await Promise.allSettled(handles.map((handle) => handle.unsubscribe()));
+    transport?.close();
+  }
+}
+
+/** One candle channel with an explicit lifecycle owner. Invalid events are dropped locally. */
+export class HyperliquidCandleSubscriptions {
+  private transport: WebSocketTransport | null = null;
+  private handle: ISubscription | null = null;
+  private started = false;
+
+  constructor(private readonly options: HyperliquidCandleSubscriptionOptions) {}
+
+  async start(): Promise<void> {
+    if (this.started) return;
+    const network = this.options.network ?? "mainnet";
+    const transport = new WebSocketTransport({
+      isTestnet: network === "testnet",
+      url: endpointsForNetwork(network).websocket,
+      resubscribe: true,
+    });
+    const client = new SubscriptionClient({ transport });
+    const onError = (cause: unknown): void => this.options.onError?.(cause);
+    try {
+      const handle = await client.candle(
+        { coin: this.options.coin, interval: this.options.interval },
+        (event) => {
+          try {
+            const parsed = parseHyperliquidCandle(event);
+            void Promise.resolve(this.options.onCandle(parsed)).catch(onError);
+          } catch (cause) {
+            onError(cause);
+          }
+        },
+        { onError },
+      );
+      this.transport = transport;
+      this.handle = handle;
+      this.started = true;
+    } catch (cause) {
+      transport.close();
+      throw cause;
+    }
+  }
+
+  async stop(): Promise<void> {
+    const handle = this.handle;
+    const transport = this.transport;
+    this.handle = null;
+    this.transport = null;
+    this.started = false;
+    if (handle !== null) await handle.unsubscribe();
     transport?.close();
   }
 }

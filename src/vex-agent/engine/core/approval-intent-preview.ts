@@ -37,6 +37,7 @@ const PREVIEW_KEY_ALLOWLIST: ReadonlySet<string> = new Set([
   "recipientAddress",
   "destination",
   "amount",
+  "amountUsd",
   "amountIn",
   "amountUsdc",
   // Stage 9: swap money/safety leg now BOUND into the prequote identity (it
@@ -57,6 +58,13 @@ const PREVIEW_KEY_ALLOWLIST: ReadonlySet<string> = new Set([
   "conditionId",
   "outcome",
   "side",
+  "size",
+  "price",
+  "markPrice",
+  "minutes",
+  "randomize",
+  "ntli",
+  "toPerp",
   "orderId",
   "fromChain",
   "toChain",
@@ -145,9 +153,10 @@ export interface IntentPreviewExtras {
   termLock?: { maturityIso: string };
   /** Trusted Hyperliquid protection verdict from the runtime gate. */
   hyperliquid?: {
-    stopLossVerdict: "protected_required" | "unprotected_by_user_choice";
+    stopLossVerdict?: "protected_required" | "unprotected_by_user_choice";
     notionalUsd?: string;
     estLiquidationPx?: string;
+    destinationClass?: string;
   };
 }
 
@@ -244,11 +253,14 @@ export function buildIntentPreview(
     }
   }
   if (extras?.hyperliquid !== undefined) {
-    criticalArgs.stopLoss = extras.hyperliquid.stopLossVerdict === "unprotected_by_user_choice"
-      ? "UNPROTECTED — user disabled mandatory stop-loss policy"
-      : "required by policy";
+    if (extras.hyperliquid.stopLossVerdict !== undefined) {
+      criticalArgs.stopLoss = extras.hyperliquid.stopLossVerdict === "unprotected_by_user_choice"
+        ? "UNPROTECTED — user disabled mandatory stop-loss policy"
+        : "required by policy";
+    }
     if (extras.hyperliquid.notionalUsd !== undefined) criticalArgs.notionalUsd = extras.hyperliquid.notionalUsd;
     if (extras.hyperliquid.estLiquidationPx !== undefined) criticalArgs.estLiquidationPx = extras.hyperliquid.estLiquidationPx;
+    if (extras.hyperliquid.destinationClass !== undefined) criticalArgs.destinationClass = extras.hyperliquid.destinationClass;
   }
 
   // Derive namespace from dotted tool name (e.g. "kyberswap.swap.sell" → "kyberswap").

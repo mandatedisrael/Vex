@@ -12,6 +12,7 @@ vi.mock("../../lifecycle/broadcast.js", () => ({
 
 const {
   initializeHyperliquidWorkspaceModeProvider,
+  listHypervexingSessionIds,
   requestHyperliquidWorkspaceMode,
   resetHyperliquidWorkspaceModes,
 } = await import("../workspace-mode.js");
@@ -55,5 +56,15 @@ describe("main-owned Hypervexing workspace mode", () => {
     expect(repeated).toEqual(first);
     expect(broadcast).toHaveBeenCalledTimes(1);
     expect(resolveHlWorkspaceMode(SESSION_ID)).toBe("hypervexing");
+  });
+
+  it("lists only transiently Hypervexing sessions for main-owned background consumers", async () => {
+    const secondSessionId = "00000000-0000-4000-8000-000000000002";
+    loadPreferences.mockResolvedValue({ hyperliquid: { riskAcknowledgedAt: null } });
+
+    await requestHyperliquidWorkspaceMode(SESSION_ID, "hypervexing");
+    await requestHyperliquidWorkspaceMode(secondSessionId, "normal");
+
+    expect(listHypervexingSessionIds()).toEqual([SESSION_ID]);
   });
 });

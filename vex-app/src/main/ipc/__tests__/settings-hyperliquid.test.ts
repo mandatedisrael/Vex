@@ -13,6 +13,7 @@ vi.mock("electron", () => ({
     removeHandler: (channel: string) => handlers.delete(channel),
   },
   app: { isPackaged: true },
+  dialog: { showMessageBox: vi.fn(async () => ({ response: 0 })) },
 }));
 
 vi.mock("../../preferences/store.js", () => ({
@@ -37,10 +38,12 @@ vi.mock("../../logger/index.js", () => ({
 
 const { registerSettingsHandlers } = await import("../settings.js");
 const { CH } = await import("@shared/ipc/channels.js");
+const { dialog } = await import("electron");
 
 const sender = createTrustedSender({ sender: createTestWebContents() });
 
 beforeEach(() => {
+  vi.clearAllMocks();
   handlers.clear();
   state.preferences = structuredClone(defaultPreferences);
   registerSettingsHandlers();
@@ -59,12 +62,33 @@ async function call(payload: unknown): Promise<{ readonly ok: boolean; readonly 
 }
 
 describe("Hyperliquid settings IPC", () => {
-  it("persists only the user-owned global controls", async () => {
+  it("rejects a policy loosening when native confirmation is declined", async () => {
+    const result = await call({ policy: { requireStopLoss: false } });
+    expect(result.ok).toBe(false);
+    expect(state.preferences?.hyperliquid.policy.requireStopLoss).toBe(true);
+    expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
+  });
+
+  it("persists a policy loosening only after native confirmation", async () => {
+    vi.mocked(dialog.showMessageBox).mockResolvedValueOnce({ response: 1 } as never);
     const result = await call({ policy: { requireStopLoss: false, egressAlwaysApprove: false } });
     expect(result.ok).toBe(true);
     expect(result.data?.hyperliquid.policy.requireStopLoss).toBe(false);
     expect(result.data?.hyperliquid.policy.egressAlwaysApprove).toBe(false);
     expect(result.data?.hyperliquid.policy.builderFeeConsent).toEqual({ kind: "none" });
+  });
+
+  it("applies policy tightening without a native confirmation", async () => {
+    state.preferences = {
+      ...state.preferences!,
+      hyperliquid: {
+        ...state.preferences!.hyperliquid,
+        policy: { ...state.preferences!.hyperliquid.policy, requireStopLoss: false, egressAlwaysApprove: false, leverageCapDefault: 5 },
+      },
+    };
+    const result = await call({ policy: { requireStopLoss: true, egressAlwaysApprove: true, leverageCapDefault: 3 } });
+    expect(result.ok).toBe(true);
+    expect(dialog.showMessageBox).not.toHaveBeenCalled();
   });
 
   it("rejects builder fee consent through the generic settings path", async () => {

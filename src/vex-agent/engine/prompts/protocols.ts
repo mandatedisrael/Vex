@@ -9,26 +9,23 @@
 import {
   PROTOCOL_ADVERTISED_NAMESPACE_ALLOWLIST,
   PROTOCOL_TOOLS,
-  isProtocolToolAvailable,
-  getMissingEnvForNamespace,
 } from "@vex-agent/tools/protocols/catalog.js";
 import {
   getGroupedAdvertisedProtocolNavigation,
 } from "@vex-agent/tools/protocols/descriptions.js";
 import type { ProtocolNamespace, ProtocolToolManifest } from "@vex-agent/tools/protocols/types.js";
 import {
-  HYPERVEXING_ALIAS_NAMES,
-  HYPERVEXING_ALIAS_TARGETS,
+  getVisibleHypervexingAliasTools,
 } from "@vex-agent/tools/hypervexing-aliases.js";
 import { isHlWorkspaceModeActive } from "../../../lib/hyperliquid-workspace-mode.js";
+import { resolveHlPolicy, type HlPolicyScope } from "../../../lib/hyperliquid-policy.js";
+import type { ToolVisibilityContext } from "@vex-agent/tools/registry.js";
 
 // ── Auto-generation from manifests ──────────────────────────────
 
 interface NamespaceSummary {
   toolCount: number;
-  activeCount: number;
   hasMutating: boolean;
-  missingEnv: string[];
 }
 
 function groupByNamespace(
@@ -52,10 +49,7 @@ function buildNamespaceSummaries(): Map<ProtocolNamespace, NamespaceSummary> {
   for (const [ns, tools] of byNs) {
     summaries.set(ns, {
       toolCount: tools.length,
-      // env-aware: matches what discover_tools would return right now
-      activeCount: tools.filter((t) => isProtocolToolAvailable(t)).length,
       hasMutating: tools.some(t => t.mutating),
-      missingEnv: getMissingEnvForNamespace(ns),
     });
   }
 
@@ -68,38 +62,47 @@ function buildNamespaceSummaries(): Map<ProtocolNamespace, NamespaceSummary> {
 let cached: string | null = null;
 
 /**
- * Session-mode suffix deliberately stays outside the cached protocol prompt.
- * The main-owned workspace mode may change between turns, while the stable
- * namespace guidance remains safe to cache.
+ * Per-turn Hypervexing state. Its aliases come from the same session +
+ * pressure projection as the Tool Map, so prompt text never advertises a
+ * release-gated or pressure-filtered capability.
  */
-function buildHypervexingCompactIndex(): string {
-  const hotTargets: ReadonlySet<string> = new Set(Object.values(HYPERVEXING_ALIAS_TARGETS));
+export function buildHypervexingTurnStatePrompt(
+  visibility: ToolVisibilityContext,
+  policyScope: HlPolicyScope = {},
+): string {
+  if (!isHlWorkspaceModeActive(visibility.sessionId)) {
+    return "Hypervexing workspace: not active. Offer `hyperliquid_enter` when the user wants to trade Hyperliquid perps; do not push it otherwise.";
+  }
+
+  const aliases = getVisibleHypervexingAliasTools(
+    visibility.sessionId,
+    visibility.contextUsageBand,
+  );
   const lines = [
+    "Hypervexing workspace: ACTIVE for this session.",
+    "",
     "## Hypervexing compact Hyperliquid index",
     "",
-    `The focused workspace exposes these direct aliases: ${HYPERVEXING_ALIAS_NAMES.join(", ")}. For every other Hyperliquid capability, call execute_tool directly with its toolId; aliases do not bypass any gate. These aliases are for YOU, not the user — never list or tabulate them in a reply; after entering the workspace, orient the user in one sentence (account state or what you can now do) and ask what they want.`,
+    aliases.length > 0
+      ? `Currently callable direct aliases: ${aliases.map((tool) => tool.name).join(", ")}.`
+      : "No Hypervexing direct aliases are currently callable.",
+    "For any other Hyperliquid capability, discover with `discover_tools(namespace=\"hyperliquid\")` before execution. Aliases do not bypass any gate.",
+    "These aliases are for YOU, not the user — never list or tabulate them in a reply; after entering the workspace, orient the user in one sentence (account state or what you can now do) and ask what they want.",
   ];
-  for (const tool of PROTOCOL_TOOLS) {
-    if (tool.namespace !== "hyperliquid" || hotTargets.has(tool.toolId)) continue;
-    const required = tool.params.filter((param) => param.required).map((param) => param.key);
-    const optional = tool.params.filter((param) => !param.required).map((param) => param.key);
-    const keyParams = required.length === 0 && optional.length === 0
-      ? "no params"
-      : `required ${required.join(", ") || "none"}${optional.length > 0 ? `; optional ${optional.join(", ")}` : ""}`;
-    lines.push(`- ${tool.toolId} — ${tool.description} Key params: ${keyParams}.`);
+
+  const policy = resolveHlPolicy(policyScope);
+  if (policy.kind === "available") {
+    const { leverageCapDefault, requireStopLoss, perOrderNotionalPct, totalNotionalPct } = policy.snapshot.policy;
+    lines.push(
+      `Active Hyperliquid policy: leverage cap ${leverageCapDefault}x; requireStopLoss=${requireStopLoss}; per-order notional <=${perOrderNotionalPct}%; total notional <=${totalNotionalPct}%.`,
+    );
   }
+
   return lines.join("\n");
 }
 
-function withHypervexingIndex(base: string, sessionId: string | undefined): string {
-  if (isHlWorkspaceModeActive(sessionId)) {
-    return `${base}\n\nHypervexing workspace: ACTIVE for this session.\n\n${buildHypervexingCompactIndex()}`;
-  }
-  return `${base}\n\nHypervexing workspace: not active. Offer \`hyperliquid_enter\` when the user wants to trade Hyperliquid perps; do not push it otherwise.`;
-}
-
-export function buildProtocolsPrompt(sessionId?: string): string {
-  if (cached) return withHypervexingIndex(cached, sessionId);
+export function buildProtocolsPrompt(): string {
+  if (cached) return cached;
 
   const advertisedTools = PROTOCOL_TOOLS.filter((tool) =>
     PROTOCOL_ADVERTISED_NAMESPACE_ALLOWLIST.includes(tool.namespace),
@@ -129,12 +132,7 @@ export function buildProtocolsPrompt(sessionId?: string): string {
       if (metadata.preferInstead) {
         lines.push(`Use instead: ${metadata.preferInstead}`);
       }
-      lines.push(`Tools: ${summary.activeCount} active${summary.toolCount > summary.activeCount ? ` / ${summary.toolCount} total` : ""}`);
-      // Surface env requirement only when the namespace is fully gated —
-      // partial gating is silent (the count itself is correct).
-      if (summary.activeCount === 0 && summary.missingEnv.length > 0) {
-        lines.push(`Requires env: ${summary.missingEnv.join(", ")} to enable any tool in this namespace.`);
-      }
+      lines.push(`Tools: ${summary.toolCount} cataloged.`);
       if (summary.hasMutating) {
         lines.push("Contains mutating tools (may require approval).");
       }
@@ -213,7 +211,7 @@ export function buildProtocolsPrompt(sessionId?: string): string {
   lines.push("");
 
   cached = lines.join("\n");
-  return withHypervexingIndex(cached, sessionId);
+  return cached;
 }
 
 /** For testing — reset cached prompt. */

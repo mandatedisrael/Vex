@@ -268,6 +268,8 @@ export const CH = {
     getPositions: "vex:hyperliquid:getPositions",
     listRiskProposals: "vex:hyperliquid:listRiskProposals",
     confirmRiskProposal: "vex:hyperliquid:confirmRiskProposal",
+    setSessionRiskPolicy: "vex:hyperliquid:setSessionRiskPolicy",
+    getSessionRiskPolicy: "vex:hyperliquid:getSessionRiskPolicy",
     acknowledgeRisk: "vex:hyperliquid:acknowledgeRisk",
     getCandles: "vex:hyperliquid:getCandles",
     getMarkets: "vex:hyperliquid:getMarkets",

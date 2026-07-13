@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { parseDecimalString } from "@tools/hyperliquid/validation.js";
-import { applyOpenLeverage, consolidateConfirmedOpen, preflightConfigureAndSubmitPerpOpen } from "@vex-agent/tools/protocols/hyperliquid/handlers.js";
+import { applyOpenLeverage, capturePerpSafely, compensateRejectedStop, consolidateConfirmedOpen, preflightConfigureAndSubmitPerpOpen } from "@vex-agent/tools/protocols/hyperliquid/handlers.js";
 import { evaluateFlatOpenLiquidation } from "@vex-agent/tools/protocols/hyperliquid/protection-gate.js";
 
 const filled = {
@@ -42,6 +42,62 @@ describe("Hyperliquid synchronous open safety", () => {
     await expect(consolidateConfirmedOpen(filled, exchange, info, "0xabc", 0, "BTC", parseDecimalString("90")))
       .resolves.toMatchObject({ state: "pending" });
     expect(exchange.cancel).not.toHaveBeenCalled();
+  });
+
+  it("returns an unprotected verdict when rejected-stop recovery cannot read live state", async () => {
+    const rejectedChild = {
+      kind: "orders" as const,
+      raw: {},
+      statuses: [
+        { kind: "accepted_filled" as const, oid: 1, totalSz: parseDecimalString("1"), avgPx: parseDecimalString("100") },
+        { kind: "rejected" as const, message: "child rejected" },
+      ],
+    };
+    await expect(compensateRejectedStop(
+      rejectedChild,
+      { setPositionTpsl: vi.fn(), cancel: vi.fn() },
+      { clearinghouseState: vi.fn().mockRejectedValue(new Error("state unavailable")), frontendOpenOrders: vi.fn() },
+      "0xabc", 0, "BTC", parseDecimalString("90"),
+    )).resolves.toMatchObject({ unprotected: true });
+  });
+
+  it("returns a conservative pending verdict when final protection verification throws", async () => {
+    const exchange = {
+      setPositionTpsl: vi.fn(async () => accepted),
+      cancel: vi.fn(async () => accepted),
+    };
+    const info = {
+      clearinghouseState: vi.fn()
+        .mockResolvedValueOnce(state)
+        .mockResolvedValueOnce(state)
+        .mockRejectedValueOnce(new Error("final state unavailable")),
+      frontendOpenOrders: vi.fn()
+        .mockResolvedValueOnce([fixed])
+        .mockResolvedValueOnce([fixed, full])
+        .mockRejectedValueOnce(new Error("final orders unavailable")),
+    };
+    await expect(consolidateConfirmedOpen(filled, exchange, info, "0xabc", 0, "BTC", parseDecimalString("90")))
+      .resolves.toMatchObject({ state: "pending" });
+  });
+
+  it("still emits a conservative capture when post-submit live state is unavailable", async () => {
+    const capture = await capturePerpSafely(
+      {
+        clearinghouseState: vi.fn().mockRejectedValue(new Error("state unavailable")),
+        frontendOpenOrders: vi.fn().mockRejectedValue(new Error("orders unavailable")),
+      } as never,
+      "0xabc",
+      "BTC",
+      {} as never,
+      false,
+      true,
+      { protectionState: "unknown", actionableError: "verify protection" },
+    );
+    expect(capture).toMatchObject({
+      type: "perps",
+      walletAddress: "0xabc",
+      meta: { protectionState: "unknown", captureState: "live_state_unavailable" },
+    });
   });
 
   it("applies leverage/margin mode before entry and exposes rejection to the caller", async () => {

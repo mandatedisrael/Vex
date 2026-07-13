@@ -12,6 +12,9 @@ import type {
   HyperliquidBookReadInput,
   HyperliquidRiskProposalConfirmInput,
   HyperliquidRiskProposalDto,
+  HyperliquidSessionRiskPolicyDto,
+  HyperliquidSessionRiskPolicyReadInput,
+  HyperliquidSessionRiskPolicySetInput,
   HyperliquidRiskProposalsDto,
   HyperliquidRiskProposalsReadInput,
   HyperliquidWatchLiveInput,
@@ -48,6 +51,12 @@ export interface HyperliquidBridge {
   readonly confirmRiskProposal: (
     input: HyperliquidRiskProposalConfirmInput,
   ) => Promise<Result<HyperliquidRiskProposalDto>>;
+  readonly setSessionRiskPolicy: (
+    input: HyperliquidSessionRiskPolicySetInput,
+  ) => Promise<Result<HyperliquidRiskProposalDto>>;
+  readonly getSessionRiskPolicy: (
+    input: HyperliquidSessionRiskPolicyReadInput,
+  ) => Promise<Result<HyperliquidSessionRiskPolicyDto>>;
   readonly acknowledgeRisk: () => Promise<Result<Preferences>>;
   /** Manual control is exit-only; workspace entry has no renderer invoke. */
   readonly exitWorkspace: (

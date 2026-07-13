@@ -43,6 +43,7 @@ import { POLYMARKET_TOOLS } from "./polymarket/manifest.js";
 import { POLYMARKET_HANDLERS } from "./polymarket/handlers.js";
 import { HYPERLIQUID_TOOLS } from "./hyperliquid/manifest.js";
 import { HYPERLIQUID_HANDLERS } from "./hyperliquid/handlers.js";
+import { HYPERLIQUID_MARKET_ANALYSIS_HANDLERS } from "./hyperliquid/market-analysis-handlers.js";
 import { isHlMutationAvailable } from "../../../lib/hyperliquid-policy.js";
 import { isHyperliquidAtomicOpenEnabled } from "@tools/hyperliquid/constants.js";
 
@@ -93,7 +94,7 @@ export const NAMESPACE_MODULES: readonly NamespaceModule[] = [
   { namespace: "virtuals", manifests: VIRTUALS_TOOLS, handlers: VIRTUALS_HANDLERS },
   { namespace: "polymarket", manifests: POLYMARKET_TOOLS, handlers: POLYMARKET_HANDLERS },
   { namespace: "pendle", manifests: PENDLE_TOOLS, handlers: PENDLE_HANDLERS },
-  { namespace: "hyperliquid", manifests: HYPERLIQUID_TOOLS, handlers: HYPERLIQUID_HANDLERS },
+  { namespace: "hyperliquid", manifests: HYPERLIQUID_TOOLS, handlers: { ...HYPERLIQUID_HANDLERS, ...HYPERLIQUID_MARKET_ANALYSIS_HANDLERS } },
 ];
 
 // ── Indices (built eagerly at module load) ───────────────────────

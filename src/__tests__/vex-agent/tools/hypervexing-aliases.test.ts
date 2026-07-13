@@ -8,7 +8,11 @@ import {
   clearHlWorkspaceModeProvider,
   registerHlWorkspaceModeProvider,
 } from "../../../lib/hyperliquid-workspace-mode.js";
-import { buildProtocolsPrompt, resetProtocolsPromptCache } from "@vex-agent/engine/prompts/protocols.js";
+import {
+  buildHypervexingTurnStatePrompt,
+  buildProtocolsPrompt,
+  resetProtocolsPromptCache,
+} from "@vex-agent/engine/prompts/protocols.js";
 import { buildToolCatalogPrompt } from "@vex-agent/engine/prompts/tool-catalog.js";
 import { getAllTools, getVisibleToolDefs, defaultVisibilityContext } from "@vex-agent/tools/registry.js";
 import {
@@ -16,6 +20,7 @@ import {
   HYPERVEXING_ALIAS_TARGETS,
 } from "@vex-agent/tools/hypervexing-aliases.js";
 import { getProtocolManifest } from "@vex-agent/tools/protocols/catalog.js";
+import { PROTOCOL_TOOLS } from "@vex-agent/tools/protocols/catalog.js";
 import { HYPERLIQUID_INTERNAL_TOOLS } from "@vex-agent/tools/registry/hyperliquid.js";
 
 const SESSION_ID = "00000000-0000-4000-8000-000000000001";
@@ -61,18 +66,71 @@ describe("Hypervexing mode-scoped aliases", () => {
     expect(names).toContain("hl_set_stop");
   });
 
-  it("adds the tool-map category and compact index only in Hypervexing mode", () => {
+  it("keeps the static protocols layer mode-invariant and projects only visible aliases into turn state", () => {
     expect(buildToolCatalogPrompt(visibility())).toContain("Hypervexing Hyperliquid hot set");
     expect(buildToolCatalogPrompt(visibility("00000000-0000-4000-8000-000000000002")))
       .not.toContain("Hypervexing Hyperliquid hot set");
 
-    expect(buildProtocolsPrompt(SESSION_ID)).toContain("Hypervexing compact Hyperliquid index");
-    expect(buildProtocolsPrompt(SESSION_ID)).toContain("hyperliquid.perp.twap");
-    expect(buildProtocolsPrompt(SESSION_ID)).toContain("Hypervexing workspace: ACTIVE for this session.");
-    expect(buildProtocolsPrompt("00000000-0000-4000-8000-000000000002"))
-      .not.toContain("Hypervexing compact Hyperliquid index");
-    expect(buildProtocolsPrompt("00000000-0000-4000-8000-000000000002"))
-      .toContain("Hypervexing workspace: not active. Offer `hyperliquid_enter` when the user wants to trade Hyperliquid perps; do not push it otherwise.");
+    expect(buildProtocolsPrompt()).not.toContain("Hypervexing compact Hyperliquid index");
+
+    const active = buildHypervexingTurnStatePrompt(visibility(), { sessionId: SESSION_ID });
+    const inactive = buildHypervexingTurnStatePrompt(
+      visibility("00000000-0000-4000-8000-000000000002"),
+    );
+    expect(active).toContain("Hypervexing compact Hyperliquid index");
+    expect(active).toContain("Currently callable direct aliases: " + HYPERVEXING_ALIAS_NAMES.join(", "));
+    expect(active).toContain("discover with `discover_tools(namespace=\"hyperliquid\")`");
+    expect(active).toContain("Active Hyperliquid policy: leverage cap 3x; requireStopLoss=true; per-order notional <=20%; total notional <=100%.");
+    expect(active).not.toContain("hyperliquid.perp.twap");
+    expect(active).not.toContain("Key params:");
+    expect(inactive).toContain("Hypervexing workspace: not active.");
+    expect(inactive).not.toContain("Hypervexing compact Hyperliquid index");
+  });
+
+  it("drops pressure-filtered aliases from the compact index alongside the Tool Map", () => {
+    const barrier = visibility();
+    barrier.contextUsageBand = "barrier";
+
+    const mappedAliases = getVisibleToolDefs(barrier)
+      .map((tool) => tool.name)
+      .filter((name) => name.startsWith("hl_"));
+    const prompt = buildHypervexingTurnStatePrompt(barrier);
+
+    expect(prompt).toContain(`Currently callable direct aliases: ${mappedAliases.join(", ")}.`);
+    expect(prompt).not.toContain("hl_close");
+    expect(prompt).not.toContain("hl_open");
+    expect(prompt).toContain("hl_exit");
+  });
+
+  it("substantially shrinks the mode-on prompt versus the legacy full capability index", () => {
+    const legacyTargets = new Set(Object.values(HYPERVEXING_ALIAS_TARGETS));
+    const legacySuffix = [
+      "Hypervexing workspace: ACTIVE for this session.",
+      "",
+      "## Hypervexing compact Hyperliquid index",
+      "",
+      `The focused workspace exposes these direct aliases: ${HYPERVEXING_ALIAS_NAMES.join(", ")}. For every other Hyperliquid capability, call execute_tool directly with its toolId; aliases do not bypass any gate. These aliases are for YOU, not the user — never list or tabulate them in a reply; after entering the workspace, orient the user in one sentence (account state or what you can now do) and ask what they want.`,
+      ...PROTOCOL_TOOLS
+        .filter((tool) => tool.namespace === "hyperliquid" && !legacyTargets.has(tool.toolId))
+        .map((tool) => {
+          const required = tool.params.filter((param) => param.required).map((param) => param.key);
+          const optional = tool.params.filter((param) => !param.required).map((param) => param.key);
+          const keyParams = required.length === 0 && optional.length === 0
+            ? "no params"
+            : `required ${required.join(", ") || "none"}${optional.length > 0 ? `; optional ${optional.join(", ")}` : ""}`;
+          return `- ${tool.toolId} — ${tool.description} Key params: ${keyParams}.`;
+        }),
+    ].join("\n");
+    const currentSuffix = buildHypervexingTurnStatePrompt(visibility(), { sessionId: SESSION_ID });
+
+    expect({ legacyChars: legacySuffix.length, currentChars: currentSuffix.length }).toEqual({
+      legacyChars: 3721,
+      currentChars: 736,
+    });
+    expect(
+      currentSuffix.length,
+      `legacy=${legacySuffix.length} chars, current=${currentSuffix.length} chars`,
+    ).toBeLessThan(legacySuffix.length);
   });
 
   it("instructs same-turn entry for an explicit Hypervexing request", () => {

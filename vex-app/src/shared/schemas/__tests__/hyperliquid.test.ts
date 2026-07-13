@@ -11,6 +11,8 @@ import {
   hyperliquidWorkspaceModeDtoSchema,
   hyperliquidWorkspaceExitInputSchema,
   hyperliquidWorkspaceModeEventSchema,
+  hyperliquidSessionRiskPolicySetInputSchema,
+  hyperliquidSessionRiskPolicyDtoSchema,
 } from "../hyperliquid.js";
 import { hyperliquidPolicyTransportSchema } from "../hyperliquid.js";
 
@@ -141,5 +143,22 @@ describe("Hyperliquid shared schemas", () => {
       mode: "hypervexing",
       requestedBy: "agent",
     }).success).toBe(false);
+  });
+
+  it("accepts only bounded direct session-risk policy controls", () => {
+    const input = {
+      sessionId: "00000000-0000-4000-8000-000000000001",
+      leverageCapDefault: 3,
+      perOrderNotionalPct: 20,
+      totalNotionalPct: 100,
+    };
+    expect(hyperliquidSessionRiskPolicySetInputSchema.safeParse(input).success).toBe(true);
+    expect(hyperliquidSessionRiskPolicySetInputSchema.safeParse({ ...input, leverageCapDefault: 1.5 }).success).toBe(false);
+    expect(hyperliquidSessionRiskPolicySetInputSchema.safeParse({ ...input, perOrderNotionalPct: 51 }).success).toBe(false);
+    expect(hyperliquidSessionRiskPolicySetInputSchema.safeParse({ ...input, totalNotionalPct: 9 }).success).toBe(false);
+    expect(hyperliquidSessionRiskPolicyDtoSchema.safeParse({
+      policy: hyperliquidPolicyTransportSchema.parse({ leverageCapDefault: 3 }),
+      source: "user",
+    }).success).toBe(true);
   });
 });

@@ -117,10 +117,9 @@ export function getVisibleToolDefs(ctx: ToolVisibilityContext): readonly ToolDef
     .filter(t => passesVisibility(t.visibility, ctx))
     .filter(t => passesPressureSafety(t, ctx.contextUsageBand));
   // Hypervexing aliases are a session-mode projection, not permanent ToolDefs.
-  // Apply the same pressure filter after the main-owned mode lookup so the
-  // LLM-visible menu and dispatch hard-deny stay coherent.
-  const hotSet = getVisibleHypervexingAliasTools(ctx.sessionId)
-    .filter(t => passesPressureSafety(t, ctx.contextUsageBand));
+  // The alias projection receives this same band so it shares the catalog's
+  // release, policy, and pressure visibility rather than re-implementing it.
+  const hotSet = getVisibleHypervexingAliasTools(ctx.sessionId, ctx.contextUsageBand);
   return [...staticTools, ...hotSet];
 }
 

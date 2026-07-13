@@ -173,6 +173,8 @@ describe("preload bridge surface", () => {
       "CH.hyperliquid.getPositions",
       "CH.hyperliquid.listRiskProposals",
       "CH.hyperliquid.confirmRiskProposal",
+      "CH.hyperliquid.setSessionRiskPolicy",
+      "CH.hyperliquid.getSessionRiskPolicy",
       "CH.hyperliquid.acknowledgeRisk",
       "CH.hyperliquid.getCandles",
       "CH.hyperliquid.getMarkets",

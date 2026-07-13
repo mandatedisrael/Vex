@@ -70,7 +70,7 @@ export interface ToolDiscoveryMetadata {
 
 export interface ProtocolParamDef {
   key: string;
-  type: "string" | "number" | "boolean";
+  type: "string" | "number" | "boolean" | "object";
   required?: boolean;
   description: string;
 }

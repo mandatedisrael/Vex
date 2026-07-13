@@ -49,6 +49,7 @@ changed; the supervised user-wallet mainnet micro-quicktest occurs after M2.
 | Approval preview and user-owned SL opt-out indication | Implemented — Phase 2 | Typed gate DTO; UI display is Phase 4 |
 | Position snapshot capture, reconciliation, MTM, and external close/liquidation mapping | Implemented — Phase 3 | `src/vex-agent/sync/hyperliquid-reconciler.ts` via `hyperliquid_reconcile.position` synthetic captures |
 | Generic `loop_defer` mark-price watches and monotonic wake promotion | Implemented — Phase 3 | Generic wake registry plus `hyperliquid-market-watcher.ts`; the scheduler itself has no HL-specific branch |
+| Agent candle store, WebSocket watches, and technical scans | Implemented — Phase 9 | `hyperliquid_candles` + `hyperliquid_candle_watches`, `hyperliquid-market-watcher.ts`, and `hyperliquid.market.{watchCandles,candles,scan}` |
 | Offline-fill protection consolidation | Implemented — Phase 3, detection/wake only | Reconciler records `CONSOLIDATING` and wakes/notifies the owning mission; only the normal approval-gated `perp.setTpsl` path signs the replacement and cancels the child |
 | Durable session risk proposals and user-confirmed activation | Implemented — Phase 4a | Migration `037_hyperliquid_session_policies.sql`; immutable agent/user rows, one active session/wallet policy, main-side max-leverage validation, and main-owned policy cache |
 | Positions dashboard, live main-process push, and protection freshness states | Implemented — Phase 4a | Strict renderer DTOs only; positions derive protected/UNPROTECTED/consolidating/stale from `protectionState` and reconciler `confirmedAt` |
@@ -64,6 +65,10 @@ changed; the supervised user-wallet mainnet micro-quicktest occurs after M2.
 | `scheduleCancel` arming | Excluded by design | The action cancels every open order, including protective stops; client support is retained for auditability only |
 | Perp/spot deployer, validator, gossip, cSigner, multisig/abstraction, aqav2, HIP-3 liquidator actions | Excluded by design | Infrastructure/deployer surface or unacceptable risk |
 | Subaccounts and borrow/lend | Deferred | Separate product/security design |
+
+## Candle-analysis workflow
+
+Use `hyperliquid.market.watchCandles` to backfill and keep one `(coin, interval)` local history fresh, then use `hyperliquid.market.candles` for rows or `hyperliquid.market.scan` for compact signals. An unwatched read/scan makes one snapshot request without persistence; a later wake condition can reuse the scanner's pure candle evaluators instead of duplicating indicator logic.
 
 ## Boundary rules
 

@@ -112,6 +112,31 @@ describe("Hyperliquid policy hydration", () => {
     });
   });
 
+  it("resolves newly activated session caps on the next turn-state policy lookup", async () => {
+    mocks.loadActive.mockResolvedValue([]);
+    await initializeHyperliquidPolicyProvider();
+
+    await setActiveHyperliquidPolicyOverlay({
+      sessionId: SESSION_A,
+      walletAddress: WALLET_A,
+      proposalId: "user-policy",
+      policy: hyperliquidPolicySchema.parse({
+        leverageCapDefault: 2,
+        perOrderNotionalPct: 15,
+        totalNotionalPct: 60,
+      }),
+      expiresAt: null,
+    });
+
+    expect(resolveHlPolicy({ sessionId: SESSION_A, missionId: null, walletAddress: WALLET_A })).toMatchObject({
+      kind: "available",
+      snapshot: {
+        provenance: "session:user-policy",
+        policy: { leverageCapDefault: 2, perOrderNotionalPct: 15, totalNotionalPct: 60 },
+      },
+    });
+  });
+
   it("refreshes when the main database connection transitions from absent to available", async () => {
     mocks.loadActive.mockResolvedValue([]);
 

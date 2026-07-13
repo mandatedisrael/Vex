@@ -115,7 +115,15 @@ describe("Hyperliquid reconciler", () => {
         accountEquityUsd: "1000",
         accountWithdrawableUsd: "750",
         accountTotalUnrealizedPnlUsd: "18",
-        marketWatchlist: [expect.objectContaining({ coin: "BTC", midPx: "100", openInterestUsd: "100000", change24hPct: "25" })],
+        // Wave-1 F1: the strict metaAndAssetCtxs schema now ACCEPTS a null
+        // prevDayPx (aligned with the IPC parser), so the required-coin trio
+        // flows through with change24hPct null instead of being dropped.
+        marketWatchlist: [
+          expect.objectContaining({ coin: "BTC", midPx: "100", openInterestUsd: "100000", change24hPct: "25" }),
+          expect.objectContaining({ coin: "ETH", change24hPct: null }),
+          expect.objectContaining({ coin: "SOL", change24hPct: null }),
+          expect.objectContaining({ coin: "HYPE", change24hPct: null }),
+        ],
       },
     });
     expect(promotePendingWakeForSafety).toHaveBeenCalledWith("session-1", "run-1");

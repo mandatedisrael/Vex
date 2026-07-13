@@ -16,6 +16,10 @@ const mocks = vi.hoisted(() => ({
   listHyperliquidRiskProposals: vi.fn(),
   createAdjustedHyperliquidRiskProposal: vi.fn(),
   activateHyperliquidRiskProposal: vi.fn(),
+  setSessionRiskPolicy: vi.fn(),
+  getSessionRiskPolicy: vi.fn(),
+  setActivePolicyOverlay: vi.fn(),
+  broadcast: vi.fn(),
   preferencesLoad: vi.fn(),
   preferencesUpdate: vi.fn(),
   requestWorkspaceMode: vi.fn(),
@@ -56,6 +60,8 @@ vi.mock("../../database/hyperliquid-db.js", () => ({
   listHyperliquidRiskProposals: mocks.listHyperliquidRiskProposals,
   createAdjustedHyperliquidRiskProposal: mocks.createAdjustedHyperliquidRiskProposal,
   activateHyperliquidRiskProposal: mocks.activateHyperliquidRiskProposal,
+  setHyperliquidSessionRiskPolicy: mocks.setSessionRiskPolicy,
+  getHyperliquidSessionRiskPolicy: mocks.getSessionRiskPolicy,
 }));
 vi.mock("../../preferences/store.js", () => ({
   preferencesStore: {
@@ -64,7 +70,7 @@ vi.mock("../../preferences/store.js", () => ({
   },
 }));
 vi.mock("../../hyperliquid/policy-provider.js", () => ({
-  setActiveHyperliquidPolicyOverlay: vi.fn(),
+  setActiveHyperliquidPolicyOverlay: mocks.setActivePolicyOverlay,
 }));
 vi.mock("../../hyperliquid/workspace-mode.js", () => ({
   requestHyperliquidWorkspaceMode: mocks.requestWorkspaceMode,
@@ -74,7 +80,7 @@ vi.mock("../../market/hyperliquid-live-feed-service.js", () => ({
   getHyperliquidLiveFeed: mocks.getLiveFeed,
   setupHyperliquidLiveFeedService: vi.fn(),
 }));
-vi.mock("../../lifecycle/broadcast.js", () => ({ broadcastToAllWindows: vi.fn() }));
+vi.mock("../../lifecycle/broadcast.js", () => ({ broadcastToAllWindows: mocks.broadcast }));
 vi.mock("../../logger/index.js", () => ({
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -103,7 +109,12 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-07-12T12:00:00.000Z"));
   mocks.getSessionById.mockResolvedValue({ ok: true, data: { id: SESSION_ID } });
-  mocks.preferencesLoad.mockResolvedValue({ hyperliquid: { riskAcknowledgedAt: "2026-07-11T12:00:00.000Z" } });
+  mocks.preferencesLoad.mockResolvedValue({ hyperliquid: { riskAcknowledgedAt: "2026-07-11T12:00:00.000Z", policy: {} } });
+  mocks.getSessionWalletScope.mockResolvedValue({
+    ok: true,
+    data: { evm: { id: "wallet", address: "0x1111111111111111111111111111111111111111" }, solana: null },
+  });
+  mocks.meta.mockResolvedValue({ universe: [{ name: "BTC", maxLeverage: 50 }] });
   mocks.resolveWorkspaceMode.mockReturnValue("normal");
   mocks.candleSnapshot.mockResolvedValue([{ t: 1_700_000_000_000, o: "100", h: "110", l: "90", c: "105", v: "12" }]);
   mocks.getLiveFeed.mockReturnValue(liveController);
@@ -248,6 +259,128 @@ describe("Hyperliquid market-data IPC", () => {
     expect(mocks.metaAndAssetCtxs).not.toHaveBeenCalled();
     expect(mocks.l2Book).not.toHaveBeenCalled();
     expect(mocks.candleSnapshot).not.toHaveBeenCalled();
+  });
+});
+
+describe("Hyperliquid direct session-risk policy IPC", () => {
+  const policy = {
+    requireStopLoss: true,
+    leverageCapDefault: 3,
+    perOrderNotionalPct: 20,
+    totalNotionalPct: 100,
+    maxSlippageEstPct: 1,
+    maintenanceHeadroomFloor: 2,
+    egressAlwaysApprove: true,
+    marketMode: "all-core-perps" as const,
+    marketAllowlist: null,
+    builderFeeConsent: { kind: "none" as const },
+  };
+  const activeUserPolicy = {
+    proposalId: "00000000-0000-4000-8000-000000000012",
+    sessionId: SESSION_ID,
+    coin: "ALL",
+    policy,
+    proposedBy: "user" as const,
+    status: "active" as const,
+    confirmedAt: "2026-07-12T12:00:00.000Z",
+    expiresAt: null,
+    createdAt: "2026-07-12T12:00:00.000Z",
+  };
+
+  it("activates a user-originated overlay and broadcasts the existing policy update event", async () => {
+    mocks.setSessionRiskPolicy.mockResolvedValue({ ok: true, data: activeUserPolicy });
+
+    const result = await call(CH.hyperliquid.setSessionRiskPolicy, {
+      sessionId: SESSION_ID,
+      leverageCapDefault: 3,
+      perOrderNotionalPct: 20,
+      totalNotionalPct: 100,
+    });
+
+    expect(result).toEqual({ ok: true, data: expect.objectContaining({ status: "active", proposedBy: "user" }) });
+    expect(mocks.setSessionRiskPolicy).toHaveBeenCalledWith(SESSION_ID, {
+      leverageCapDefault: 3,
+      perOrderNotionalPct: 20,
+      totalNotionalPct: 100,
+    }, REQUEST_ID);
+    expect(mocks.setActivePolicyOverlay).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: SESSION_ID,
+      proposalId: activeUserPolicy.proposalId,
+    }));
+    expect(mocks.broadcast).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ proposalId: activeUserPolicy.proposalId }));
+  });
+
+  it("rejects values outside the session-risk contract before any policy write", async () => {
+    const result = await call(CH.hyperliquid.setSessionRiskPolicy, {
+      sessionId: SESSION_ID,
+      leverageCapDefault: 3,
+      perOrderNotionalPct: 51,
+      totalNotionalPct: 100,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation.invalid_input");
+    expect(mocks.setSessionRiskPolicy).not.toHaveBeenCalled();
+  });
+
+  it("bounds the cap by the HIGHEST live max leverage (per-asset clamp handles the rest)", async () => {
+    // Owner correction: a 2x micro-cap must NOT forbid a 3x session cap —
+    // the protection gate clamps per order to min(cap, assetMax), so the
+    // asset-agnostic bound is the universe MAXIMUM, not minimum.
+    mocks.meta.mockResolvedValue({
+      universe: [
+        { name: "BTC", maxLeverage: 50 },
+        { name: "ETH", maxLeverage: 2 },
+      ],
+    });
+
+    const withinMax = await call(CH.hyperliquid.setSessionRiskPolicy, {
+      sessionId: SESSION_ID,
+      leverageCapDefault: 3,
+      perOrderNotionalPct: 20,
+      totalNotionalPct: 100,
+    });
+    expect(withinMax.ok).toBe(true);
+
+    const aboveMax = await call(CH.hyperliquid.setSessionRiskPolicy, {
+      sessionId: SESSION_ID,
+      leverageCapDefault: 51,
+      perOrderNotionalPct: 20,
+      totalNotionalPct: 100,
+    });
+    expect(aboveMax.ok).toBe(false);
+    expect(aboveMax.error?.code).toBe("validation.invalid_input");
+  });
+
+  it("fails closed for a session that has no selected EVM wallet", async () => {
+    mocks.getSessionWalletScope.mockResolvedValueOnce({ ok: true, data: { evm: null, solana: null } });
+
+    const result = await call(CH.hyperliquid.setSessionRiskPolicy, {
+      sessionId: SESSION_ID,
+      leverageCapDefault: 3,
+      perOrderNotionalPct: 20,
+      totalNotionalPct: 100,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation.invalid_input");
+    expect(mocks.setSessionRiskPolicy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["user"],
+    ["proposal"],
+    ["defaults"],
+  ] as const)("returns the active policy source %s", async (source) => {
+    mocks.getSessionRiskPolicy.mockResolvedValueOnce({
+      ok: true,
+      data: { policy, source },
+    });
+
+    const result = await call(CH.hyperliquid.getSessionRiskPolicy, { sessionId: SESSION_ID });
+
+    expect(result).toEqual({ ok: true, data: expect.objectContaining({ source }) });
+    expect(mocks.getSessionRiskPolicy).toHaveBeenCalledWith(SESSION_ID, expect.anything(), REQUEST_ID);
   });
 });
 

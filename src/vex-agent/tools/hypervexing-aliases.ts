@@ -12,6 +12,7 @@
 
 import type { ToolDef } from "./types.js";
 import type { ProtocolToolManifest } from "./protocols/types.js";
+import type { ContextUsageBand } from "../engine/core/context-band.js";
 import { getProtocolManifest, isProtocolToolAvailable } from "./protocols/catalog.js";
 import { isHlWorkspaceModeActive } from "../../lib/hyperliquid-workspace-mode.js";
 
@@ -122,12 +123,22 @@ export function getHypervexingAliasToolDef(name: string): ToolDef | undefined {
  */
 export function getVisibleHypervexingAliasTools(
   sessionId: string | undefined,
+  contextUsageBand: ContextUsageBand = "normal",
 ): readonly ToolDef[] {
   if (!isHlWorkspaceModeActive(sessionId)) return [];
   return HYPERVEXING_ALIAS_NAMES
     .filter((name) => {
       const target = targetManifest(name);
-      return !target.mutating || isProtocolToolAvailable(target);
+      return isProtocolToolAvailable(target);
     })
-    .map((name) => aliasToolDefs()[name]);
+    .map((name) => aliasToolDefs()[name])
+    .filter((tool) => passesPressureSafety(tool, contextUsageBand));
+}
+
+/** Matches the registry's catalog-level pressure projection for aliases. */
+function passesPressureSafety(tool: ToolDef, band: ContextUsageBand): boolean {
+  const atBarrier = band === "barrier" || band === "critical";
+  if (atBarrier && tool.pressureSafety === "mutating") return false;
+  if (!atBarrier && tool.pressureSafety === "compact_only") return false;
+  return true;
 }

@@ -301,6 +301,30 @@ export const hyperliquidRiskAdjustmentSchema = z
   .strict();
 export type HyperliquidRiskAdjustment = z.infer<typeof hyperliquidRiskAdjustmentSchema>;
 
+/** Direct user control of the three session-scoped Hyperliquid risk caps. */
+export const hyperliquidSessionRiskPolicySetInputSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    leverageCapDefault: z.number().int().min(1),
+    perOrderNotionalPct: z.number().min(1).max(50),
+    totalNotionalPct: z.number().min(10).max(200),
+  })
+  .strict();
+export type HyperliquidSessionRiskPolicySetInput = z.infer<typeof hyperliquidSessionRiskPolicySetInputSchema>;
+
+export const hyperliquidSessionRiskPolicyReadInputSchema = z
+  .object({ sessionId: z.string().uuid() })
+  .strict();
+export type HyperliquidSessionRiskPolicyReadInput = z.infer<typeof hyperliquidSessionRiskPolicyReadInputSchema>;
+
+export const hyperliquidSessionRiskPolicyDtoSchema = z
+  .object({
+    policy: hyperliquidPolicyTransportSchema,
+    source: z.enum(["user", "proposal", "defaults"]),
+  })
+  .strict();
+export type HyperliquidSessionRiskPolicyDto = z.infer<typeof hyperliquidSessionRiskPolicyDtoSchema>;
+
 export const hyperliquidRiskProposalDtoSchema = z
   .object({
     proposalId: z.string().uuid(),

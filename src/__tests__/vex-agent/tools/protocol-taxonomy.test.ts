@@ -65,6 +65,7 @@ describe("ProtocolToolManifest taxonomy — mutating ↔ taxonomy invariant", ()
     const reviewedLocalWrites = new Set([
       "hyperliquid.workspace.enter",
       "hyperliquid.workspace.exit",
+      "hyperliquid.market.watchCandles",
     ]);
     const violations = PROTOCOL_TOOLS
       .filter((m) => !m.mutating && m.actionKind !== "read")

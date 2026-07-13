@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   parseHlMarkPriceWatchCondition,
+  reconcileHyperliquidCandleSubscriptions,
   registerHyperliquidMarkPriceWatchEvaluator,
   tickHyperliquidMarketWatcher,
 } from "../../../vex-agent/sync/hyperliquid-market-watcher.js";
@@ -59,5 +60,24 @@ describe("Hyperliquid mark-price watcher", () => {
     };
     await expect(tickHyperliquidMarketWatcher(deps)).resolves.toEqual({ checked: 0, promoted: 0 });
     expect(createInfoClient).not.toHaveBeenCalled();
+  });
+});
+
+describe("Hyperliquid candle subscription reconciliation", () => {
+  it("resubscribes persisted enabled pairs on boot and stops disabled pairs", async () => {
+    const starts = vi.fn(async () => undefined);
+    const stops = vi.fn(async () => undefined);
+    const subscriptions = new Map<string, { start: () => Promise<void>; stop: () => Promise<void> }>();
+    const listEnabledCandleWatches = vi.fn(async () => [{ coin: "BTC", interval: "1h" as const, enabled: true, updatedAt: "2026-07-12T00:00:00.000Z" }]);
+    const createCandleSubscriptions = vi.fn(() => ({ start: starts, stop: stops }));
+
+    await reconcileHyperliquidCandleSubscriptions({ listEnabledCandleWatches, createCandleSubscriptions } as never, subscriptions as never);
+    expect(createCandleSubscriptions).toHaveBeenCalledWith(expect.objectContaining({ coin: "BTC", interval: "1h" }));
+    expect(starts).toHaveBeenCalledTimes(1);
+
+    listEnabledCandleWatches.mockResolvedValue([]);
+    await reconcileHyperliquidCandleSubscriptions({ listEnabledCandleWatches, createCandleSubscriptions } as never, subscriptions as never);
+    expect(stops).toHaveBeenCalledTimes(1);
+    expect(subscriptions.size).toBe(0);
   });
 });

@@ -26,6 +26,9 @@ import {
   type HyperliquidPositionsDto,
   type HyperliquidRiskProposalDto,
   type HyperliquidRiskAdjustment,
+  hyperliquidSessionRiskPolicyDtoSchema,
+  type HyperliquidSessionRiskPolicyDto,
+  type HyperliquidSessionRiskPolicySetInput,
   type HyperliquidWatchlistItemDto,
 } from "@shared/schemas/hyperliquid.js";
 import { log } from "../logger/index.js";
@@ -666,6 +669,91 @@ export async function activateHyperliquidRiskProposal(
     } catch (cause) {
       await client.query("ROLLBACK").catch(() => undefined);
       return databaseError("activateHyperliquidRiskProposal failed", cause, correlationId);
+    }
+  }, correlationId);
+}
+
+/**
+ * Direct user-owned session caps. The policy table's active-row uniqueness is
+ * preserved by revoking the prior active row in the same transaction before
+ * inserting this immediately active user-originated row.
+ */
+export async function setHyperliquidSessionRiskPolicy(
+  sessionId: string,
+  input: Omit<HyperliquidSessionRiskPolicySetInput, "sessionId">,
+  correlationId = HYPERLIQUID_DB_CORRELATION_ID,
+): Promise<Result<HyperliquidRiskProposalDto, VexError>> {
+  const wallet = await selectedEvmWalletAddress(sessionId);
+  if (!wallet.ok) return wallet;
+  if (wallet.data === null) {
+    return err({
+      code: "validation.invalid_input",
+      domain: "hyperliquid",
+      message: "Select an EVM wallet for this session before setting Hyperliquid risk.",
+      retryable: false,
+      userActionable: true,
+      redacted: true,
+      correlationId,
+    });
+  }
+  const policy = hyperliquidPolicySchema.parse(input);
+  return withClient(async (client) => {
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `UPDATE hyperliquid_session_policies SET status = 'revoked'
+         WHERE session_id = $1 AND wallet_address = $2 AND status = 'active'`,
+        [sessionId, wallet.data],
+      );
+      const inserted = await client.query<HyperliquidPolicyRow>(
+        `INSERT INTO hyperliquid_session_policies
+           (session_id, wallet_address, coin, policy_json, policy_version, proposed_by, status, confirmed_at, expires_at)
+         VALUES ($1, $2, 'ALL', $3::jsonb, 1, 'user', 'active', NOW(), NULL)
+         RETURNING proposal_id, session_id, wallet_address, coin, policy_json,
+                   proposed_by, status, confirmed_at, expires_at, created_at`,
+        [sessionId, wallet.data, JSON.stringify(policy)],
+      );
+      await client.query("COMMIT");
+      const dto = inserted.rows[0] === undefined ? null : proposalDto(inserted.rows[0]);
+      return dto === null
+        ? databaseError("direct session risk policy did not validate", undefined, correlationId)
+        : ok(dto);
+    } catch (cause) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      return databaseError("setHyperliquidSessionRiskPolicy failed", cause, correlationId);
+    }
+  }, correlationId);
+}
+
+/** Resolve the panel snapshot from the trusted session wallet and active row. */
+export async function getHyperliquidSessionRiskPolicy(
+  sessionId: string,
+  defaults: HyperliquidPolicy,
+  correlationId = HYPERLIQUID_DB_CORRELATION_ID,
+): Promise<Result<HyperliquidSessionRiskPolicyDto, VexError>> {
+  const wallet = await selectedEvmWalletAddress(sessionId);
+  if (!wallet.ok) return wallet;
+  if (wallet.data === null) return ok(hyperliquidSessionRiskPolicyDtoSchema.parse({ policy: defaults, source: "defaults" }));
+  return withClient(async (client) => {
+    try {
+      const result = await client.query<HyperliquidPolicyRow>(
+        `SELECT proposal_id, session_id, wallet_address, coin, policy_json,
+                proposed_by, status, confirmed_at, expires_at, created_at
+         FROM hyperliquid_session_policies
+         WHERE session_id = $1 AND wallet_address = $2 AND status = 'active'
+           AND (expires_at IS NULL OR expires_at > NOW())
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [sessionId, wallet.data],
+      );
+      const active = result.rows[0] === undefined ? null : proposalDto(result.rows[0]);
+      if (active === null) return ok(hyperliquidSessionRiskPolicyDtoSchema.parse({ policy: defaults, source: "defaults" }));
+      return ok(hyperliquidSessionRiskPolicyDtoSchema.parse({
+        policy: active.policy,
+        source: active.proposedBy === "user" ? "user" : "proposal",
+      }));
+    } catch (cause) {
+      return databaseError("getHyperliquidSessionRiskPolicy failed", cause, correlationId);
     }
   }, correlationId);
 }

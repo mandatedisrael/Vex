@@ -9,13 +9,14 @@ import { Decimal } from "decimal.js";
 import { z } from "zod";
 
 import { HyperliquidInfoClient } from "@tools/hyperliquid/info.js";
-import { HyperliquidSubscriptions } from "@tools/hyperliquid/subscriptions.js";
+import { HyperliquidCandleSubscriptions, HyperliquidSubscriptions } from "@tools/hyperliquid/subscriptions.js";
 import { resolveHyperliquidNetwork } from "@tools/hyperliquid/constants.js";
 import { assertPositiveDecimal, normalizeProviderDecimal, parseDecimalString } from "@tools/hyperliquid/validation.js";
 import { getActiveHyperliquidPerpWallets } from "@vex-agent/db/repos/activity.js";
 import { getOpen } from "@vex-agent/db/repos/open-positions.js";
 import * as loopWakeRepo from "@vex-agent/db/repos/loop-wake.js";
 import * as syncRepo from "@vex-agent/db/repos/sync.js";
+import * as candleRepo from "@vex-agent/db/repos/hyperliquid-candles.js";
 import {
   isWakeWatchTriggered,
   registerWakeWatchEvaluator,
@@ -51,6 +52,8 @@ export interface HyperliquidMarketWatcherDeps {
   readonly promotePendingWake: typeof loopWakeRepo.promotePendingWake;
   readonly getTrackedWallets?: () => Promise<readonly string[]>;
   readonly createSubscriptions?: (walletAddress: `0x${string}`) => HyperliquidSubscriptions;
+  readonly listEnabledCandleWatches?: typeof candleRepo.listEnabledHyperliquidCandleWatches;
+  readonly createCandleSubscriptions?: (watch: Pick<candleRepo.HyperliquidCandleWatch, "coin" | "interval">) => HyperliquidCandleSubscriptions;
 }
 
 export interface HyperliquidMarketWatcherHandle {
@@ -82,6 +85,14 @@ function productionDeps(): HyperliquidMarketWatcherDeps {
         },
         onError: (error) => logger.warn("hyperliquid.market_watcher.subscription_error", { error: message(error) }),
       },
+    }),
+    listEnabledCandleWatches: candleRepo.listEnabledHyperliquidCandleWatches,
+    createCandleSubscriptions: (watch) => new HyperliquidCandleSubscriptions({
+      network: resolveHyperliquidNetwork(),
+      coin: watch.coin,
+      interval: watch.interval,
+      onCandle: async (candle) => { await candleRepo.upsertHyperliquidCandles([candle]); },
+      onError: (error) => logger.warn("hyperliquid.market_watcher.candle_event_dropped", { coin: watch.coin, interval: watch.interval, error: message(error) }),
     }),
   };
 }
@@ -179,41 +190,46 @@ export function startHyperliquidMarketWatcher(
   let timer: NodeJS.Timeout | null = null;
   let inFlight: Promise<void> | null = null;
   const subscriptions = new Map<string, HyperliquidSubscriptions>();
+  const candleSubscriptions = new Map<string, HyperliquidCandleSubscriptions>();
 
   const refreshSubscriptions = async (): Promise<void> => {
     const getTrackedWallets = deps.getTrackedWallets;
     const createSubscriptions = deps.createSubscriptions;
-    if (getTrackedWallets === undefined || createSubscriptions === undefined) return;
-    const trackedWallets = new Set(await getTrackedWallets());
-    await Promise.all([...subscriptions.entries()]
-      .filter(([walletAddress]) => !trackedWallets.has(walletAddress))
-      .map(async ([walletAddress, subscription]) => {
-        subscriptions.delete(walletAddress);
-        await subscription.stop();
-      }));
-    for (const walletAddress of trackedWallets) {
-      if (subscriptions.has(walletAddress) || !/^0x[0-9a-fA-F]{40}$/.test(walletAddress)) continue;
-      const subscription = createSubscriptions(walletAddress as `0x${string}`);
-      try {
-        await subscription.start();
-        subscriptions.set(walletAddress, subscription);
-      } catch (error) {
-        logger.warn("hyperliquid.market_watcher.subscription_start_failed", { error: message(error) });
-        await subscription.stop();
+    if (getTrackedWallets !== undefined && createSubscriptions !== undefined) {
+      const trackedWallets = new Set(await getTrackedWallets());
+      await Promise.all([...subscriptions.entries()]
+        .filter(([walletAddress]) => !trackedWallets.has(walletAddress))
+        .map(async ([walletAddress, subscription]) => {
+          subscriptions.delete(walletAddress);
+          await subscription.stop();
+        }));
+      for (const walletAddress of trackedWallets) {
+        if (subscriptions.has(walletAddress) || !/^0x[0-9a-fA-F]{40}$/.test(walletAddress)) continue;
+        const subscription = createSubscriptions(walletAddress as `0x${string}`);
+        try {
+          await subscription.start();
+          subscriptions.set(walletAddress, subscription);
+        } catch (error) {
+          logger.warn("hyperliquid.market_watcher.subscription_start_failed", { error: message(error) });
+          await subscription.stop();
+        }
       }
     }
+    await reconcileHyperliquidCandleSubscriptions(deps, candleSubscriptions);
   };
 
-  const schedule = (): void => {
+  const schedule = (delayMs = intervalMs): void => {
     if (stopped) return;
     timer = setTimeout(() => {
       inFlight = refreshSubscriptions()
         .then(async () => { await tickHyperliquidMarketWatcher(deps); })
         .catch((error: unknown) => { logger.warn("hyperliquid.market_watcher.tick_failed", { error: message(error) }); })
         .finally(() => { inFlight = null; schedule(); });
-    }, intervalMs);
+    }, delayMs);
   };
-  schedule();
+  // Restore persisted candle watches as soon as the long-lived runtime starts;
+  // later reconciliation keeps enable/disable changes bounded by intervalMs.
+  schedule(0);
   return {
     async stop(): Promise<void> {
       stopped = true;
@@ -221,8 +237,41 @@ export function startHyperliquidMarketWatcher(
       await inFlight;
       await Promise.allSettled([...subscriptions.values()].map((subscription) => subscription.stop()));
       subscriptions.clear();
+      await Promise.allSettled([...candleSubscriptions.values()].map((subscription) => subscription.stop()));
+      candleSubscriptions.clear();
     },
   };
+}
+
+/** Reconcile durable candle-watch rows with owned websocket subscriptions. */
+export async function reconcileHyperliquidCandleSubscriptions(
+  deps: Pick<HyperliquidMarketWatcherDeps, "listEnabledCandleWatches" | "createCandleSubscriptions">,
+  subscriptions: Map<string, Pick<HyperliquidCandleSubscriptions, "start" | "stop">>,
+): Promise<void> {
+  if (deps.listEnabledCandleWatches === undefined || deps.createCandleSubscriptions === undefined) return;
+  const watches = await deps.listEnabledCandleWatches();
+  const active = new Map(watches.map((watch) => [candleWatchKey(watch), watch]));
+  await Promise.all([...subscriptions.entries()]
+    .filter(([key]) => !active.has(key))
+    .map(async ([key, subscription]) => {
+      subscriptions.delete(key);
+      await subscription.stop();
+    }));
+  for (const [key, watch] of active) {
+    if (subscriptions.has(key)) continue;
+    const subscription = deps.createCandleSubscriptions(watch);
+    try {
+      await subscription.start();
+      subscriptions.set(key, subscription);
+    } catch (error) {
+      logger.warn("hyperliquid.market_watcher.candle_subscription_start_failed", { coin: watch.coin, interval: watch.interval, error: message(error) });
+      await subscription.stop();
+    }
+  }
+}
+
+function candleWatchKey(watch: Pick<candleRepo.HyperliquidCandleWatch, "coin" | "interval">): string {
+  return `${watch.coin}\u0000${watch.interval}`;
 }
 
 async function enqueueHyperliquidReconcile(): Promise<void> {

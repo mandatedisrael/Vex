@@ -135,9 +135,10 @@ export function evaluateApprovalGate(
   prequoteFotTax: number | undefined,
   prequoteTermLock: { readonly maturityIso: string } | undefined,
   hyperliquid?: {
-    readonly stopLossVerdict: "protected_required" | "unprotected_by_user_choice";
+    readonly stopLossVerdict?: "protected_required" | "unprotected_by_user_choice";
     readonly notionalUsd?: string;
     readonly estLiquidationPx?: string;
+    readonly destinationClass?: string;
   },
 ): ToolResult | undefined {
   const egress = classifyHyperliquidEgress(request.toolId, params, context);

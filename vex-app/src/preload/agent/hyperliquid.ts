@@ -9,6 +9,8 @@ import {
   hyperliquidBookReadInputSchema,
   hyperliquidRiskAcknowledgementInputSchema,
   hyperliquidRiskProposalConfirmInputSchema,
+  hyperliquidSessionRiskPolicySetInputSchema,
+  hyperliquidSessionRiskPolicyReadInputSchema,
   hyperliquidRiskProposalDtoSchema,
   hyperliquidRiskProposalsDtoSchema,
   hyperliquidRiskProposalsReadInputSchema,
@@ -22,6 +24,8 @@ import {
   type HyperliquidMarketsReadInput,
   type HyperliquidBookReadInput,
   type HyperliquidRiskProposalConfirmInput,
+  type HyperliquidSessionRiskPolicySetInput,
+  type HyperliquidSessionRiskPolicyReadInput,
   type HyperliquidRiskProposalsReadInput,
   type HyperliquidWatchLiveInput,
   type HyperliquidUnwatchLiveInput,
@@ -53,6 +57,12 @@ export const hyperliquid = {
   },
   confirmRiskProposal(input: HyperliquidRiskProposalConfirmInput) {
     return invokeWithSchema(CH.hyperliquid.confirmRiskProposal, input, hyperliquidRiskProposalConfirmInputSchema);
+  },
+  setSessionRiskPolicy(input: HyperliquidSessionRiskPolicySetInput) {
+    return invokeWithSchema(CH.hyperliquid.setSessionRiskPolicy, input, hyperliquidSessionRiskPolicySetInputSchema);
+  },
+  getSessionRiskPolicy(input: HyperliquidSessionRiskPolicyReadInput) {
+    return invokeWithSchema(CH.hyperliquid.getSessionRiskPolicy, input, hyperliquidSessionRiskPolicyReadInputSchema);
   },
   acknowledgeRisk() {
     return invokeWithSchema(CH.hyperliquid.acknowledgeRisk, { acknowledged: true }, hyperliquidRiskAcknowledgementInputSchema);

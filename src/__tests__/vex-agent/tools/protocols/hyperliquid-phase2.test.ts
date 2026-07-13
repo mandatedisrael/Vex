@@ -14,6 +14,7 @@ import { validateCaptureContract } from "@vex-agent/tools/protocols/capture-vali
 import { parseDecimalString } from "@tools/hyperliquid/validation.js";
 import { HYPERLIQUID_TOOLS } from "@vex-agent/tools/protocols/hyperliquid/manifest.js";
 import { HYPERLIQUID_HANDLERS } from "@vex-agent/tools/protocols/hyperliquid/handlers.js";
+import { HYPERLIQUID_MARKET_ANALYSIS_HANDLERS } from "@vex-agent/tools/protocols/hyperliquid/market-analysis-handlers.js";
 import { lintEmbeddingPassage } from "@vex-agent/tools/protocols/_embedding-lint.js";
 
 const longState = { assetPositions: [{ position: { coin: "BTC", szi: "2", entryPx: "100", liquidationPx: "50", positionValue: "200" } }], marginSummary: { accountValue: "1000", totalMarginUsed: "100" } };
@@ -116,7 +117,10 @@ describe("Hyperliquid capture contracts", () => {
 
 describe("Hyperliquid registration surface", () => {
   it("pairs every manifest with a handler and passes the embedding lint", () => {
-    expect(Object.keys(HYPERLIQUID_HANDLERS).sort()).toEqual(HYPERLIQUID_TOOLS.map((tool) => tool.toolId).sort());
+    // The catalog registers the MERGED handler maps (core + market-analysis);
+    // the invariant is every manifest has a handler at that registration point.
+    const registeredHandlerIds = Object.keys({ ...HYPERLIQUID_HANDLERS, ...HYPERLIQUID_MARKET_ANALYSIS_HANDLERS }).sort();
+    expect(registeredHandlerIds).toEqual(HYPERLIQUID_TOOLS.map((tool) => tool.toolId).sort());
     for (const tool of HYPERLIQUID_TOOLS) {
       expect(lintEmbeddingPassage(tool.toolId, tool.discovery?.embeddingText ?? "", tool.mutating)).toEqual([]);
     }

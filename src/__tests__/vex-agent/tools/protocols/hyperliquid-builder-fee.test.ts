@@ -5,6 +5,11 @@ import {
   resetBuilderFeeAllowanceMemoForTests,
 } from "@vex-agent/tools/protocols/hyperliquid/handlers.js";
 
+vi.mock("@vex-agent/db/repos/executions.js", () => ({
+  createExecutionIntent: vi.fn().mockResolvedValue(1),
+  completeExecutionIntent: vi.fn().mockResolvedValue(undefined),
+}));
+
 const BUILDER = "0x4cE6CD494E3586A8075A6fBBE4B214cb5B7Be020" as const;
 const USER = "0x0000000000000000000000000000000000000001";
 
@@ -14,10 +19,7 @@ afterEach(() => {
 });
 
 async function flushAllowanceTask(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let i = 0; i < 10; i += 1) await Promise.resolve();
 }
 
 describe("Hyperliquid builder fee order attachment", () => {
@@ -58,8 +60,7 @@ describe("Hyperliquid builder fee order attachment", () => {
 
     expect(builderForOrders(info, { approveBuilderFee } as never, USER, context)).toBeUndefined();
     expect(builderForOrders(info, { approveBuilderFee } as never, USER, context)).toBeUndefined();
-    await flushAllowanceTask();
-    expect(approveBuilderFee).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(approveBuilderFee).toHaveBeenCalledTimes(1));
     expect(approveBuilderFee).toHaveBeenCalledWith({ builder: BUILDER, maxFeeRate: "0.025%" });
 
     complete?.({ kind: "orders", statuses: [], raw: {} });
@@ -73,9 +74,19 @@ describe("Hyperliquid builder fee order attachment", () => {
     const context = { sessionId: "builder-retry" };
 
     expect(builderForOrders(info, { approveBuilderFee } as never, USER, context)).toBeUndefined();
-    await flushAllowanceTask();
+    await vi.waitFor(() => expect(approveBuilderFee).toHaveBeenCalledTimes(1));
     expect(builderForOrders(info, { approveBuilderFee } as never, USER, context)).toBeUndefined();
-    await flushAllowanceTask();
-    expect(approveBuilderFee).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(approveBuilderFee).toHaveBeenCalledTimes(2));
+  });
+
+  it("uses persisted builder-fee consent to skip a repeated allowance submission", () => {
+    process.env.VEX_HYPERLIQUID_BUILDER_ADDRESS = BUILDER;
+    const result = builderForOrders(
+      { maxBuilderFee: vi.fn() } as never,
+      { approveBuilderFee: vi.fn() } as never,
+      USER,
+      { sessionId: "builder-consented", hyperliquidPolicy: { kind: "available", snapshot: { policy: { builderFeeConsent: { kind: "approved", maxFeeRate: "0.025%" } } } } } as never,
+    );
+    expect(result).toEqual({ b: BUILDER, f: 25 });
   });
 });
