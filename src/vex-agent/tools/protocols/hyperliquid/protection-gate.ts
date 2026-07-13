@@ -3,8 +3,10 @@ import { Decimal } from "decimal.js";
 import { HyperliquidInfoClient } from "@tools/hyperliquid/info.js";
 import { HyperliquidMetaCache } from "@tools/hyperliquid/meta-cache.js";
 import { resolveHyperliquidNetwork } from "@tools/hyperliquid/constants.js";
-import { parseDecimalString } from "@tools/hyperliquid/validation.js";
+import { normalizeProviderDecimal, parseDecimalString } from "@tools/hyperliquid/validation.js";
+import logger from "@utils/logger.js";
 import type { HyperliquidPolicy } from "../../../../lib/hyperliquid-policy.js";
+import { getProtocolManifest } from "../catalog.js";
 import type { ProtocolExecutionContext } from "../types.js";
 import { buildPositionProtectionSnapshot, hasStandingFullPositionStop, isSoleProtectiveOrder, parseLiveProtectionState, stopIsBeyondLiquidation, type PositionProtectionSnapshot } from "./protection-snapshot.js";
 
@@ -23,6 +25,13 @@ export async function evaluateHyperliquidProtectionGate(
   context: ProtocolExecutionContext,
 ): Promise<ProtectionGateDecision | null> {
   if (!toolId.startsWith("hyperliquid.perp.")) return null;
+  // Reads (perp.positions, perp.orders, perp.fills, ...) need no protection or
+  // policy verification and must never be blocked by a transient live-state
+  // hiccup — the agent has to be able to list positions/orders even when the
+  // info API is degraded. Only mutating perp actions cross the safety gate
+  // below. Data-driven off the manifest so new read tools inherit this.
+  const manifest = getProtocolManifest(toolId);
+  if (manifest && !manifest.mutating) return null;
   if (context.hyperliquidPolicy?.kind !== "available") return { kind: "block", message: "Hyperliquid trading policy is unavailable." };
   const coin = stringParam(params, "coin");
   if (!coin) return { kind: "block", message: "Hyperliquid perp action requires a coin." };
@@ -32,11 +41,24 @@ export async function evaluateHyperliquidProtectionGate(
 
   try {
     const info = new HyperliquidInfoClient({ network: resolveHyperliquidNetwork() });
-    const [state, orders, metadata] = await Promise.all([
+    // Transient Hyperliquid info-API failures (a rate-limit or single blip after
+    // a burst of calls) were failing this gate closed and blocking legitimate
+    // opens. Retry the read block ONCE after a short pause; a second failure
+    // still falls through to the fail-closed catch below, so the conservative
+    // stance is preserved. Reads only — nothing here signs or mutates.
+    const readLiveState = () => Promise.all([
       info.clearinghouseState(address),
       info.frontendOpenOrders(address),
       new HyperliquidMetaCache(info).get(),
     ]);
+    let live: Awaited<ReturnType<typeof readLiveState>>;
+    try {
+      live = await readLiveState();
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      live = await readLiveState();
+    }
+    const [state, orders, metadata] = live;
     const asset = metadata.perpsByCoin.get(coin);
     if (!asset) return { kind: "block", message: `"${coin}" is not a validator-operated Hyperliquid core perp market.` };
     const snapshot = buildPositionProtectionSnapshot(state, orders, coin);
@@ -66,7 +88,14 @@ export async function evaluateHyperliquidProtectionGate(
         ? { estimatedLiquidationPx: flatRisk.estimatedLiquidationPx }
         : {}),
     };
-  } catch {
+  } catch (err) {
+    // Bounded diagnostics only — never log params, addresses, or amounts.
+    logger.warn("hyperliquid.protection_gate.error", {
+      toolId,
+      coin,
+      errorClass: err instanceof Error ? err.constructor.name : "unknown",
+      cause: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
+    });
     return { kind: "block", message: "Hyperliquid live protection and policy state could not be verified. Retry when account data is available." };
   }
 }
@@ -267,8 +296,11 @@ async function withMidPrice(params: Record<string, unknown>, info: HyperliquidIn
   const mids = asRecord(await info.allMids());
   const mid = stringParam(mids ?? {}, coin);
   if (mid === undefined) throw new Error("No Hyperliquid mid price for TWAP market.");
-  parseDecimalString(mid);
-  return { ...params, price: mid };
+  // Venue wire value: an allMids price legitimately carries trailing zeros
+  // ("20.0"). Normalize to canonical form here, because the price then flows
+  // into policy and slippage checks that DO require canonical model/user input.
+  // Passing the raw venue string onward would make those checks throw.
+  return { ...params, price: normalizeProviderDecimal(mid, "Hyperliquid mid price") };
 }
 
 export function estimateSlippagePct(book: unknown, size: string, referencePrice: string, side: "buy" | "sell"): Decimal | null {
@@ -276,17 +308,38 @@ export function estimateSlippagePct(book: unknown, size: string, referencePrice:
   if (levels === null || levels.length < 2) return null;
   const selected = side === "buy" ? levels[1] : levels[0];
   if (!Array.isArray(selected)) return null;
-  let remaining = new Decimal(parseDecimalString(size)); let paid = new Decimal(0);
+  // `size` and `referencePrice` are model/user params — they must be canonical.
+  const orderSize = new Decimal(parseDecimalString(size));
+  const reference = new Decimal(parseDecimalString(referencePrice));
+  let remaining = orderSize; let paid = new Decimal(0);
   for (const level of selected) {
     const record = asRecord(level); const px = stringParam(record ?? {}, "px"); const sz = stringParam(record ?? {}, "sz");
-    if (!px || !sz) continue;
-    const take = Decimal.min(remaining, new Decimal(parseDecimalString(sz)));
-    paid = paid.plus(take.mul(parseDecimalString(px))); remaining = remaining.minus(take);
+    // Book px/sz are VENUE wire values and legitimately carry trailing zeros
+    // (e.g. "1509.0" on a szDecimals=0 market like CASHCAT). Canonical-input
+    // parsing (parseDecimalString) rejects those, so applying it here threw on
+    // the first level and surfaced as the generic "live protection ... could not
+    // be verified" block that deterministically blocked real perp opens on
+    // 2026-07-13. Parse leniently and skip a malformed level instead of throwing.
+    const levelPx = venueNonNegativeDecimal(px); const levelSz = venueNonNegativeDecimal(sz);
+    if (levelPx === null || levelSz === null) continue;
+    const take = Decimal.min(remaining, levelSz);
+    paid = paid.plus(take.mul(levelPx)); remaining = remaining.minus(take);
     if (remaining.isZero()) break;
   }
   if (remaining.gt(0)) return null;
-  const average = paid.div(parseDecimalString(size));
-  return average.minus(parseDecimalString(referencePrice)).abs().div(parseDecimalString(referencePrice)).mul(100);
+  const average = paid.div(orderSize);
+  return average.minus(reference).abs().div(reference).mul(100);
+}
+
+/** Lenient parse for a single venue-emitted decimal (trailing zeros allowed); null when absent or malformed. */
+function venueNonNegativeDecimal(value: string | undefined): Decimal | null {
+  if (value === undefined) return null;
+  try {
+    const decimal = new Decimal(value);
+    return decimal.isFinite() && decimal.gte(0) ? decimal : null;
+  } catch {
+    return null;
+  }
 }
 
 function accountValueUsd(state: unknown): Decimal | null { const summary = asRecord(asRecord(state)?.marginSummary) ?? asRecord(asRecord(state)?.crossMarginSummary); const value = stringParam(summary ?? {}, "accountValue"); return value === undefined ? null : finiteNonNegativeRiskDecimal(value, "Account value"); }

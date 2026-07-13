@@ -81,10 +81,14 @@ describe("Hypervexing mode-scoped aliases", () => {
     expect(active).toContain("Currently callable direct aliases: " + HYPERVEXING_ALIAS_NAMES.join(", "));
     expect(active).toContain("discover with `discover_tools(namespace=\"hyperliquid\")`");
     expect(active).toContain("Active Hyperliquid policy: leverage cap 3x; requireStopLoss=true; per-order notional <=20%; total notional <=100%.");
+    // HL-first interpretation: a bare ticker in-workspace means the Hyperliquid
+    // perp, not a same-name spot token on another chain.
+    expect(active).toContain("means the HYPERLIQUID market by default");
     expect(active).not.toContain("hyperliquid.perp.twap");
     expect(active).not.toContain("Key params:");
     expect(inactive).toContain("Hypervexing workspace: not active.");
     expect(inactive).not.toContain("Hypervexing compact Hyperliquid index");
+    expect(inactive).not.toContain("means the HYPERLIQUID market by default");
   });
 
   it("drops pressure-filtered aliases from the compact index alongside the Tool Map", () => {
@@ -124,9 +128,11 @@ describe("Hypervexing mode-scoped aliases", () => {
     const currentSuffix = buildHypervexingTurnStatePrompt(visibility(), { sessionId: SESSION_ID });
 
     // Measured after the owner's gate removal + three market-analysis
-    // aliases joined the hot set (hl_watch/hl_candles/hl_scan): the exact
-    // sizes shifted, the ~80% reduction contract is what matters.
-    expect(currentSuffix.length).toBeLessThan(legacySuffix.length * 0.3);
+    // aliases joined the hot set (hl_watch/hl_candles/hl_scan), then the
+    // HL-first interpretation line was added: the exact sizes shifted, the
+    // major-reduction contract (compact index stays a fraction of the legacy
+    // full capability index) is what matters. Current ratio ~0.34.
+    expect(currentSuffix.length).toBeLessThan(legacySuffix.length * 0.4);
     expect(
       currentSuffix.length,
       `legacy=${legacySuffix.length} chars, current=${currentSuffix.length} chars`,

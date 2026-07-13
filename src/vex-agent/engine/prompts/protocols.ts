@@ -87,6 +87,7 @@ export function buildHypervexingTurnStatePrompt(
       ? `Currently callable direct aliases: ${aliases.map((tool) => tool.name).join(", ")}.`
       : "No Hypervexing direct aliases are currently callable.",
     "For any other Hyperliquid capability, discover with `discover_tools(namespace=\"hyperliquid\")` before execution. Aliases do not bypass any gate.",
+    "In this workspace a bare token or ticker mention (\"cashcat?\", \"co z BTC?\") means the HYPERLIQUID market by default — analyze the HL perp (book/candles/funding), not a same-name token on another chain or protocol; leave HL context only when the user explicitly names another chain, protocol, or spot venue.",
     "These aliases are for YOU, not the user — never list or tabulate them in a reply; after entering the workspace, orient the user in one sentence (account state or what you can now do) and ask what they want.",
   ];
 
