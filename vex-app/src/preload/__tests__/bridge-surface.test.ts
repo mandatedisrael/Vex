@@ -180,6 +180,7 @@ describe("preload bridge surface", () => {
       "CH.hyperliquid.getMarkets",
       "CH.hyperliquid.getBook",
       "CH.hyperliquid.getWorkspaceMode",
+      "CH.hyperliquid.enterWorkspace",
       "CH.hyperliquid.exitWorkspace",
       // Live WebSocket feed — session-gated watch control.
       "CH.hyperliquid.watchLive",
@@ -260,7 +261,7 @@ describe("preload bridge surface", () => {
     expect(corpus, "Manual Hyperliquid workspace exit not exposed").toContain(
       "exitWorkspace",
     );
-    expect(corpus, "Renderer must not receive a Hyperliquid workspace enter invoke").not.toContain(
+    expect(corpus, "Manual Hyperliquid workspace re-entry not exposed").toContain(
       "enterWorkspace",
     );
   });

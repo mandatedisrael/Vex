@@ -21,6 +21,8 @@ import type {
   HyperliquidWatchLiveDto,
   HyperliquidUnwatchLiveInput,
   HyperliquidUnwatchLiveDto,
+  HyperliquidWorkspaceEnterAccepted,
+  HyperliquidWorkspaceEnterInput,
   HyperliquidWorkspaceExitInput,
   HyperliquidWorkspaceModeDto,
   HyperliquidWorkspaceModeReadInput,
@@ -58,7 +60,11 @@ export interface HyperliquidBridge {
     input: HyperliquidSessionRiskPolicyReadInput,
   ) => Promise<Result<HyperliquidSessionRiskPolicyDto>>;
   readonly acknowledgeRisk: () => Promise<Result<Preferences>>;
-  /** Manual control is exit-only; workspace entry has no renderer invoke. */
+  /** Manual re-entry is main-gated by acknowledgement and prior entry. */
+  readonly enterWorkspace: (
+    input: HyperliquidWorkspaceEnterInput,
+  ) => Promise<Result<HyperliquidWorkspaceEnterAccepted>>;
+  /** Exit remains an always-manual, session-scoped action. */
   readonly exitWorkspace: (
     input: HyperliquidWorkspaceExitInput,
   ) => Promise<Result<HyperliquidWorkspaceModeEvent>>;

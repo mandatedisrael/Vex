@@ -283,10 +283,22 @@ export type HyperliquidWorkspaceModeReadInput = z.infer<typeof hyperliquidWorksp
 export const hyperliquidWorkspaceModeDtoSchema = z.object({
   mode: z.enum(["hypervexing", "normal"]),
   acknowledged: z.boolean(),
+  everEntered: z.boolean(),
 }).strict();
 export type HyperliquidWorkspaceModeDto = z.infer<typeof hyperliquidWorkspaceModeDtoSchema>;
 
-/** Manual workspace control intentionally exposes exit only. */
+/** Manual entry is main-gated to acknowledged sessions with prior entry. */
+export const hyperliquidWorkspaceEnterInputSchema = z.object({
+  sessionId: z.string().uuid(),
+}).strict();
+export type HyperliquidWorkspaceEnterInput = z.infer<typeof hyperliquidWorkspaceEnterInputSchema>;
+
+export const hyperliquidWorkspaceEnterAcceptedSchema = z.object({
+  accepted: z.literal(true),
+}).strict();
+export type HyperliquidWorkspaceEnterAccepted = z.infer<typeof hyperliquidWorkspaceEnterAcceptedSchema>;
+
+/** Manual exit remains available independently of manual-entry eligibility. */
 export const hyperliquidWorkspaceExitInputSchema = z.object({
   sessionId: z.string().uuid(),
 }).strict();

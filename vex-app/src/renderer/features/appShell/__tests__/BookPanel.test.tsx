@@ -31,6 +31,12 @@ vi.mock("../book/SessionBlock.js", () => ({
 vi.mock("../book/HyperliquidPositionsBlock.js", () => ({
   HyperliquidPositionsBlock: () => <div data-testid="hyperliquid-positions-block" />,
 }));
+// The zero-token re-entry door runs a react-query read — mocked out like
+// the other instrument blocks (its own gating has dedicated coverage).
+vi.mock("../workspace/HypervexingEnterButton.js", () => ({
+  HypervexingEnterButton: () => <div data-testid="hypervexing-enter-button" />,
+}));
+
 vi.mock("../book/HyperliquidRiskBlock.js", () => ({
   HyperliquidRiskBlock: () => <div data-testid="hyperliquid-risk-block" />,
 }));

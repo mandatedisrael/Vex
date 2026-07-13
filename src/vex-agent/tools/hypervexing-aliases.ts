@@ -28,6 +28,11 @@ export const HYPERVEXING_ALIAS_TARGETS = {
   hl_cancel_orders: "hyperliquid.perp.cancelOrders",
   hl_leverage: "hyperliquid.perp.setLeverage",
   hl_risk_setup: "hyperliquid.risk.proposeSetup",
+  // Market-analysis verbs (owner order after the live session: the in-mode
+  // loop — analyze, decide, act — must NEVER need discovery).
+  hl_watch: "hyperliquid.market.watchCandles",
+  hl_candles: "hyperliquid.market.candles",
+  hl_scan: "hyperliquid.market.scan",
   hl_exit: "hyperliquid.workspace.exit",
 } as const;
 

@@ -67,14 +67,3 @@ export const ARBITRUM_NATIVE_USDC_ADDRESS = "0xaf88d065e77c8cC2239327C5EDb3A4322
 export const HYPERLIQUID_BRIDGE2_MAINNET_ADDRESS = "0x2Df1c51E09aECF9cacB7bc98cB1742757f163dF7" as Address;
 export const HYPERLIQUID_BRIDGE2_MIN_DEPOSIT_USDC = "5";
 
-/**
- * Release capability unlocked only after the supervised §8.1 testnet matrix.
- * Absent/invalid values fail closed. Keep reads and risk-reduction tools live;
- * only a fresh atomic entry depends on the unverified parent/child matrix.
- */
-export const HYPERLIQUID_ATOMIC_OPEN_ENV = "VEX_HYPERLIQUID_ATOMIC_OPEN_ENABLED";
-export function isHyperliquidAtomicOpenEnabled(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): boolean {
-  return env[HYPERLIQUID_ATOMIC_OPEN_ENV]?.trim() === "1";
-}

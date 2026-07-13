@@ -275,6 +275,7 @@ export const CH = {
     getMarkets: "vex:hyperliquid:getMarkets",
     getBook: "vex:hyperliquid:getBook",
     getWorkspaceMode: "vex:hyperliquid:getWorkspaceMode",
+    enterWorkspace: "vex:hyperliquid:enterWorkspace",
     exitWorkspace: "vex:hyperliquid:exitWorkspace",
     // Live WebSocket feed — session-gated watch control over main's shared
     // SDK transport. Refcounted per (coin, interval); auto-released when the

@@ -42,14 +42,12 @@ function context(overrides: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
-  process.env.VEX_HYPERLIQUID_ATOMIC_OPEN_ENABLED = "1";
   registerHlPolicyProvider(() => ({ policy: {}, version: "v1", provenance: "preferences" }));
   registerHlWorkspaceModeProvider((sessionId) => sessionId === SESSION_ID ? "hypervexing" : "normal");
   protectionGate.mockReset();
 });
 
 afterEach(() => {
-  delete process.env.VEX_HYPERLIQUID_ATOMIC_OPEN_ENABLED;
   clearHlPolicyProvider();
   clearHlWorkspaceModeProvider();
 });

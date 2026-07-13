@@ -40,6 +40,7 @@ import { PositionBlock } from "./book/PositionBlock.js";
 import { SessionBlock } from "./book/SessionBlock.js";
 import { HyperliquidPositionsBlock } from "./book/HyperliquidPositionsBlock.js";
 import { HyperliquidRiskBlock } from "./book/HyperliquidRiskBlock.js";
+import { HypervexingEnterButton } from "./workspace/HypervexingEnterButton.js";
 import { SidebarIconButton } from "./SessionRows.js";
 
 export function BookPanel({
@@ -109,6 +110,10 @@ export function BookPanel({
                 <SessionRuntimeBar sessionId={activeSessionId} layout="stack" />
               </BookBlock>
               <SessionBlock sessionId={activeSessionId} />
+              {/* Zero-token door back into the room (owner feature): shows
+                  only for acknowledged sessions with mode history — main
+                  re-verifies both fail-closed on the invoke. */}
+              <HypervexingEnterButton sessionId={activeSessionId} />
             </>
           ) : (
             <>

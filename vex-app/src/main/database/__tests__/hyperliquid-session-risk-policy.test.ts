@@ -28,6 +28,7 @@ vi.mock("../../logger/index.js", () => ({ log: mocks.log }));
 
 const {
   getHyperliquidSessionRiskPolicy,
+  hasHyperliquidSessionPolicyHistory,
   setHyperliquidSessionRiskPolicy,
 } = await import("../hyperliquid-db.js");
 
@@ -58,6 +59,19 @@ beforeEach(() => {
 });
 
 describe("Hyperliquid direct session-risk policy repository", () => {
+  it("recognizes any policy row for the session without filtering wallet or status", async () => {
+    mocks.query.mockResolvedValueOnce({ rows: [{ exists: true }] });
+
+    expect(await hasHyperliquidSessionPolicyHistory(SESSION)).toBe(true);
+
+    const [sql, values] = mocks.query.mock.calls[0] as [string, readonly unknown[]];
+    expect(sql).toMatch(/SELECT EXISTS/);
+    expect(sql).toMatch(/FROM hyperliquid_session_policies/);
+    expect(sql).toMatch(/WHERE session_id = \$1/);
+    expect(sql).not.toMatch(/wallet_address|status/);
+    expect(values).toEqual([SESSION]);
+  });
+
   it("revokes the old active row before inserting the new user-originated active row", async () => {
     mocks.query
       .mockResolvedValueOnce({ rows: [] })

@@ -32,14 +32,12 @@ function visibility(sessionId = SESSION_ID) {
 beforeEach(() => {
   registerHlPolicyProvider(() => ({ policy: {}, version: "v1", provenance: "preferences" }));
   registerHlWorkspaceModeProvider((sessionId) => sessionId === SESSION_ID ? "hypervexing" : "normal");
-  process.env.VEX_HYPERLIQUID_ATOMIC_OPEN_ENABLED = "1";
   resetProtocolsPromptCache();
 });
 
 afterEach(() => {
   clearHlPolicyProvider();
   clearHlWorkspaceModeProvider();
-  delete process.env.VEX_HYPERLIQUID_ATOMIC_OPEN_ENABLED;
   resetProtocolsPromptCache();
 });
 
@@ -58,12 +56,14 @@ describe("Hypervexing mode-scoped aliases", () => {
       .some((tool) => tool.name.startsWith("hl_"))).toBe(false);
   });
 
-  it("removes hl_open when the atomic-open release capability is off", () => {
-    delete process.env.VEX_HYPERLIQUID_ATOMIC_OPEN_ENABLED;
+  it("hl_open is ALWAYS in the hot set (owner decision: no release gate — every HL tool is live in-mode)", () => {
     const names = getVisibleToolDefs(visibility()).map((tool) => tool.name);
-    expect(names).not.toContain("hl_open");
+    expect(names).toContain("hl_open");
     expect(names).toContain("hl_close");
     expect(names).toContain("hl_set_stop");
+    expect(names).toContain("hl_scan");
+    expect(names).toContain("hl_candles");
+    expect(names).toContain("hl_watch");
   });
 
   it("keeps the static protocols layer mode-invariant and projects only visible aliases into turn state", () => {
@@ -123,10 +123,10 @@ describe("Hypervexing mode-scoped aliases", () => {
     ].join("\n");
     const currentSuffix = buildHypervexingTurnStatePrompt(visibility(), { sessionId: SESSION_ID });
 
-    expect({ legacyChars: legacySuffix.length, currentChars: currentSuffix.length }).toEqual({
-      legacyChars: 3721,
-      currentChars: 736,
-    });
+    // Measured after the owner's gate removal + three market-analysis
+    // aliases joined the hot set (hl_watch/hl_candles/hl_scan): the exact
+    // sizes shifted, the ~80% reduction contract is what matters.
+    expect(currentSuffix.length).toBeLessThan(legacySuffix.length * 0.3);
     expect(
       currentSuffix.length,
       `legacy=${legacySuffix.length} chars, current=${currentSuffix.length} chars`,

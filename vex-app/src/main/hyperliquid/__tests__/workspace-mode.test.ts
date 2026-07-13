@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadPreferences = vi.fn();
 const broadcast = vi.fn();
+const hasPolicyHistory = vi.fn();
 
 vi.mock("../../preferences/store.js", () => ({
   preferencesStore: { load: (...args: unknown[]) => loadPreferences(...args) },
@@ -9,8 +10,12 @@ vi.mock("../../preferences/store.js", () => ({
 vi.mock("../../lifecycle/broadcast.js", () => ({
   broadcastToAllWindows: (...args: unknown[]) => broadcast(...args),
 }));
+vi.mock("../../database/hyperliquid-db.js", () => ({
+  hasHyperliquidSessionPolicyHistory: (...args: unknown[]) => hasPolicyHistory(...args),
+}));
 
 const {
+  hasSessionEverEnteredHypervexing,
   initializeHyperliquidWorkspaceModeProvider,
   listHypervexingSessionIds,
   requestHyperliquidWorkspaceMode,
@@ -25,6 +30,8 @@ describe("main-owned Hypervexing workspace mode", () => {
   beforeEach(() => {
     loadPreferences.mockReset();
     broadcast.mockReset();
+    hasPolicyHistory.mockReset();
+    hasPolicyHistory.mockResolvedValue(false);
     resetHyperliquidWorkspaceModes();
     initializeHyperliquidWorkspaceModeProvider();
   });
@@ -66,5 +73,22 @@ describe("main-owned Hypervexing workspace mode", () => {
     await requestHyperliquidWorkspaceMode(secondSessionId, "normal");
 
     expect(listHypervexingSessionIds()).toEqual([SESSION_ID]);
+  });
+
+  it("remembers a successful Hypervexing entry after manual exit for this process", async () => {
+    loadPreferences.mockResolvedValue({ hyperliquid: { riskAcknowledgedAt: null } });
+
+    await requestHyperliquidWorkspaceMode(SESSION_ID, "hypervexing");
+    await requestHyperliquidWorkspaceMode(SESSION_ID, "normal");
+
+    expect(await hasSessionEverEnteredHypervexing(SESSION_ID)).toBe(true);
+    expect(hasPolicyHistory).not.toHaveBeenCalled();
+  });
+
+  it("treats any persisted session policy row as prior Hypervexing entry after restart", async () => {
+    hasPolicyHistory.mockResolvedValueOnce(true);
+
+    expect(await hasSessionEverEnteredHypervexing(SESSION_ID)).toBe(true);
+    expect(hasPolicyHistory).toHaveBeenCalledWith(SESSION_ID);
   });
 });

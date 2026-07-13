@@ -725,6 +725,35 @@ export async function setHyperliquidSessionRiskPolicy(
   }, correlationId);
 }
 
+/**
+ * Process-restart fallback for manual Hypervexing re-entry. Any historical
+ * policy row counts; status and selected-wallet changes must not erase that
+ * session-level fact. Database failures collapse to false so callers fail
+ * closed.
+ */
+export async function hasHyperliquidSessionPolicyHistory(sessionId: string): Promise<boolean> {
+  const outcome = await withClient(async (client) => {
+    try {
+      const result = await client.query<{ exists: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1
+           FROM hyperliquid_session_policies
+           WHERE session_id = $1
+         ) AS exists`,
+        [sessionId],
+      );
+      return ok(result.rows[0]?.exists === true);
+    } catch (cause) {
+      return databaseError(
+        "hasHyperliquidSessionPolicyHistory query failed",
+        cause,
+        HYPERLIQUID_DB_CORRELATION_ID,
+      );
+    }
+  }, HYPERLIQUID_DB_CORRELATION_ID);
+  return outcome.ok && outcome.data;
+}
+
 /** Resolve the panel snapshot from the trusted session wallet and active row. */
 export async function getHyperliquidSessionRiskPolicy(
   sessionId: string,

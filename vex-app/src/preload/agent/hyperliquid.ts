@@ -16,6 +16,7 @@ import {
   hyperliquidRiskProposalsReadInputSchema,
   hyperliquidWatchLiveInputSchema,
   hyperliquidUnwatchLiveInputSchema,
+  hyperliquidWorkspaceEnterInputSchema,
   hyperliquidWorkspaceExitInputSchema,
   hyperliquidWorkspaceModeReadInputSchema,
   hyperliquidWorkspaceModeEventSchema,
@@ -29,6 +30,8 @@ import {
   type HyperliquidRiskProposalsReadInput,
   type HyperliquidWatchLiveInput,
   type HyperliquidUnwatchLiveInput,
+  type HyperliquidWorkspaceEnterAccepted,
+  type HyperliquidWorkspaceEnterInput,
   type HyperliquidWorkspaceExitInput,
   type HyperliquidWorkspaceModeReadInput,
   type HyperliquidWorkspaceModeEvent,
@@ -66,6 +69,9 @@ export const hyperliquid = {
   },
   acknowledgeRisk() {
     return invokeWithSchema(CH.hyperliquid.acknowledgeRisk, { acknowledged: true }, hyperliquidRiskAcknowledgementInputSchema);
+  },
+  enterWorkspace(input: HyperliquidWorkspaceEnterInput) {
+    return invokeWithSchema<HyperliquidWorkspaceEnterAccepted, HyperliquidWorkspaceEnterInput>(CH.hyperliquid.enterWorkspace, input, hyperliquidWorkspaceEnterInputSchema);
   },
   exitWorkspace(input: HyperliquidWorkspaceExitInput) {
     return invokeWithSchema<HyperliquidWorkspaceModeEvent, HyperliquidWorkspaceExitInput>(CH.hyperliquid.exitWorkspace, input, hyperliquidWorkspaceExitInputSchema);

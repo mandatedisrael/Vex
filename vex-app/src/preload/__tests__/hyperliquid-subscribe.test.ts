@@ -37,12 +37,13 @@ afterEach(() => {
 });
 
 describe("vex.hyperliquid subscriptions", () => {
-  it("exposes narrow validated methods for markets, book, and workspace reconciliation", async () => {
+  it("exposes narrow validated methods for markets, book, workspace reconciliation, and re-entry", async () => {
     invoke.mockResolvedValue({ ok: true, data: [] });
 
     await hyperliquid.getMarkets({ sessionId: SESSION });
     await hyperliquid.getBook({ sessionId: SESSION, coin: "BTC" });
     await hyperliquid.getWorkspaceMode({ sessionId: SESSION });
+    await hyperliquid.enterWorkspace({ sessionId: SESSION });
 
     expect(invoke).toHaveBeenNthCalledWith(1, CH.hyperliquid.getMarkets, expect.objectContaining({
       payload: { sessionId: SESSION },
@@ -51,6 +52,9 @@ describe("vex.hyperliquid subscriptions", () => {
       payload: { sessionId: SESSION, coin: "BTC" },
     }));
     expect(invoke).toHaveBeenNthCalledWith(3, CH.hyperliquid.getWorkspaceMode, expect.objectContaining({
+      payload: { sessionId: SESSION },
+    }));
+    expect(invoke).toHaveBeenNthCalledWith(4, CH.hyperliquid.enterWorkspace, expect.objectContaining({
       payload: { sessionId: SESSION },
     }));
   });

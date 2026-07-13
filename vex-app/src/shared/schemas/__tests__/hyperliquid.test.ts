@@ -9,6 +9,8 @@ import {
   hyperliquidMarketsDtoSchema,
   hyperliquidBookDtoSchema,
   hyperliquidWorkspaceModeDtoSchema,
+  hyperliquidWorkspaceEnterAcceptedSchema,
+  hyperliquidWorkspaceEnterInputSchema,
   hyperliquidWorkspaceExitInputSchema,
   hyperliquidWorkspaceModeEventSchema,
   hyperliquidSessionRiskPolicySetInputSchema,
@@ -118,15 +120,29 @@ describe("Hyperliquid shared schemas", () => {
       time: 1_700_000_000_000,
     }).success).toBe(true);
     expect(hyperliquidBookDtoSchema.safeParse({ levels: { bids: [], asks: [] }, time: -1 }).success).toBe(false);
-    expect(hyperliquidWorkspaceModeDtoSchema.safeParse({ mode: "normal", acknowledged: true }).success).toBe(true);
+    expect(hyperliquidWorkspaceModeDtoSchema.safeParse({
+      mode: "normal",
+      acknowledged: true,
+      everEntered: false,
+    }).success).toBe(true);
+    expect(hyperliquidWorkspaceModeDtoSchema.safeParse({ mode: "normal", acknowledged: true }).success).toBe(false);
   });
 
-  it("requires a session-scoped manual workspace exit request", () => {
+  it("requires strict session-scoped manual workspace enter and exit requests", () => {
+    expect(hyperliquidWorkspaceEnterInputSchema.safeParse({
+      sessionId: "00000000-0000-4000-8000-000000000001",
+    }).success).toBe(true);
+    expect(hyperliquidWorkspaceEnterInputSchema.safeParse({
+      sessionId: "00000000-0000-4000-8000-000000000001",
+      mode: "hypervexing",
+    }).success).toBe(false);
     expect(hyperliquidWorkspaceExitInputSchema.safeParse({
       sessionId: "00000000-0000-4000-8000-000000000001",
     }).success).toBe(true);
     expect(hyperliquidWorkspaceExitInputSchema.safeParse({}).success).toBe(false);
     expect(hyperliquidWorkspaceExitInputSchema.safeParse({ sessionId: "not-a-session" }).success).toBe(false);
+    expect(hyperliquidWorkspaceEnterAcceptedSchema.safeParse({ accepted: true }).success).toBe(true);
+    expect(hyperliquidWorkspaceEnterAcceptedSchema.safeParse({ accepted: false }).success).toBe(false);
   });
 
   it("retains idempotency in the strict workspace display-block contract", () => {

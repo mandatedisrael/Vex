@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   preferencesUpdate: vi.fn(),
   requestWorkspaceMode: vi.fn(),
   resolveWorkspaceMode: vi.fn(),
+  hasSessionEverEntered: vi.fn(),
   getLiveFeed: vi.fn(),
   liveWatch: vi.fn(),
   liveUnwatch: vi.fn(),
@@ -73,6 +74,7 @@ vi.mock("../../hyperliquid/policy-provider.js", () => ({
   setActiveHyperliquidPolicyOverlay: mocks.setActivePolicyOverlay,
 }));
 vi.mock("../../hyperliquid/workspace-mode.js", () => ({
+  hasSessionEverEnteredHypervexing: mocks.hasSessionEverEntered,
   requestHyperliquidWorkspaceMode: mocks.requestWorkspaceMode,
   resolveHyperliquidWorkspaceMode: mocks.resolveWorkspaceMode,
 }));
@@ -93,13 +95,13 @@ const REQUEST_ID = "00000000-0000-4000-8000-000000000111";
 const WATCH_ID = "00000000-0000-4000-8000-0000000000aa";
 const sender = createTrustedSender({ sender: createTestWebContents() });
 
-async function call(channel: string, payload: unknown): Promise<{ readonly ok: boolean; readonly data?: unknown; readonly error?: { readonly code: string } }> {
+async function call(channel: string, payload: unknown): Promise<{ readonly ok: boolean; readonly data?: unknown; readonly error?: { readonly code: string; readonly message?: string } }> {
   const handler = handlers.get(channel);
   if (handler === undefined) throw new Error(`Missing ${channel} handler.`);
   return await handler(sender, { requestId: REQUEST_ID, payload }) as {
     readonly ok: boolean;
     readonly data?: unknown;
-    readonly error?: { readonly code: string };
+    readonly error?: { readonly code: string; readonly message?: string };
   };
 }
 
@@ -116,6 +118,13 @@ beforeEach(() => {
   });
   mocks.meta.mockResolvedValue({ universe: [{ name: "BTC", maxLeverage: 50 }] });
   mocks.resolveWorkspaceMode.mockReturnValue("normal");
+  mocks.hasSessionEverEntered.mockResolvedValue(true);
+  mocks.requestWorkspaceMode.mockResolvedValue({
+    sessionId: SESSION_ID,
+    mode: "hypervexing",
+    requestedBy: "agent",
+    acknowledged: true,
+  });
   mocks.candleSnapshot.mockResolvedValue([{ t: 1_700_000_000_000, o: "100", h: "110", l: "90", c: "105", v: "12" }]);
   mocks.getLiveFeed.mockReturnValue(liveController);
   mocks.liveWatch.mockResolvedValue(WATCH_ID);
@@ -241,7 +250,10 @@ describe("Hyperliquid market-data IPC", () => {
 
     const result = await call(CH.hyperliquid.getWorkspaceMode, { sessionId: SESSION_ID });
 
-    expect(result).toEqual({ ok: true, data: { mode: "hypervexing", acknowledged: true } });
+    expect(result).toEqual({
+      ok: true,
+      data: { mode: "hypervexing", acknowledged: true, everEntered: true },
+    });
   });
 
   it.each([
@@ -259,6 +271,52 @@ describe("Hyperliquid market-data IPC", () => {
     expect(mocks.metaAndAssetCtxs).not.toHaveBeenCalled();
     expect(mocks.l2Book).not.toHaveBeenCalled();
     expect(mocks.candleSnapshot).not.toHaveBeenCalled();
+  });
+});
+
+describe("Hyperliquid manual workspace entry IPC", () => {
+  it("rejects manual entry without the global risk acknowledgement", async () => {
+    mocks.preferencesLoad.mockResolvedValueOnce({
+      hyperliquid: { riskAcknowledgedAt: null, policy: {} },
+    });
+
+    const result = await call(CH.hyperliquid.enterWorkspace, { sessionId: SESSION_ID });
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation.invalid_input");
+    expect(result.error?.message).toMatch(/agent/i);
+    expect(mocks.hasSessionEverEntered).not.toHaveBeenCalled();
+    expect(mocks.requestWorkspaceMode).not.toHaveBeenCalled();
+  });
+
+  it("rejects manual entry when the session has never entered Hypervexing", async () => {
+    mocks.hasSessionEverEntered.mockResolvedValueOnce(false);
+
+    const result = await call(CH.hyperliquid.enterWorkspace, { sessionId: SESSION_ID });
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation.invalid_input");
+    expect(result.error?.message).toMatch(/agent/i);
+    expect(mocks.requestWorkspaceMode).not.toHaveBeenCalled();
+  });
+
+  it("accepts manual re-entry when acknowledgement and prior entry are both present", async () => {
+    const result = await call(CH.hyperliquid.enterWorkspace, { sessionId: SESSION_ID });
+
+    expect(result).toEqual({ ok: true, data: { accepted: true } });
+    expect(mocks.requestWorkspaceMode).toHaveBeenCalledWith(SESSION_ID, "hypervexing");
+  });
+
+  it("checks the shared session precondition before manual-entry policy", async () => {
+    mocks.getSessionById.mockResolvedValueOnce({ ok: true, data: null });
+
+    const result = await call(CH.hyperliquid.enterWorkspace, { sessionId: SESSION_ID });
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation.invalid_input");
+    expect(mocks.preferencesLoad).not.toHaveBeenCalled();
+    expect(mocks.hasSessionEverEntered).not.toHaveBeenCalled();
+    expect(mocks.requestWorkspaceMode).not.toHaveBeenCalled();
   });
 });
 

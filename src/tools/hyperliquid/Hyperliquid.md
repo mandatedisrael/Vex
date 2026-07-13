@@ -40,8 +40,8 @@ changed; the supervised user-wallet mainnet micro-quicktest occurs after M2.
 | WebSocket user/order/asset subscriptions | Implemented client support — Phase 1 | `subscriptions.ts`; lifecycle owner is added with runtime integration |
 | Hyperliquid policy resolver, main-owned preferences provider, and first-entry acknowledgement gate | Implemented — Phase 4a | `src/lib/hyperliquid-policy.ts` remains canonical; Electron registers its fail-closed provider before engine startup and disables HL mutations until the user acknowledges the risk disclosure |
 | Core/spot reads, trading manifests, semantic discovery, and prompt guidance | Implemented — Phase 2 | `src/vex-agent/tools/protocols/hyperliquid/` |
-| Atomic perp-open release capability | Implemented — safety remediation | `hyperliquid.perp.open` is hidden and hard-blocked unless `VEX_HYPERLIQUID_ATOMIC_OPEN_ENABLED=1`; absent is fail-closed. The coordinator may set it only after the supervised §8.1 testnet matrix passes. Other tools remain available because close/setTpsl are risk-reduction paths and do not depend on normalTpsl parent/child acceptance |
-| §8.1 testnet atomicity evidence runner | Implemented — release gate | `pnpm hyperliquid:testnet-matrix` forces `api.hyperliquid-testnet.xyz`, uses only `VEX_HL_TESTNET_PK`, writes redacted evidence, and exits non-zero unless every parent/child, rejection, timeout/CLOID, and consolidation case passes |
+| Atomic perp-open availability | Implemented — owner decision 2026-07-13 | The release gate was REMOVED: `hyperliquid.perp.open` (and `hl_open`) is available whenever a Hyperliquid policy provider is active, like every other mutating tool. The §8.1 testnet matrix remains available as an optional validation harness |
+| §8.1 testnet atomicity evidence runner | Implemented — optional validation harness | `pnpm hyperliquid:testnet-matrix` forces `api.hyperliquid-testnet.xyz`, uses only `VEX_HL_TESTNET_PK`, writes redacted evidence, and exits non-zero unless every parent/child, rejection, timeout/CLOID, and consolidation case passes |
 | Protection invariant, SL consolidation, partial-response compensation | Implemented — Phase 2 | Runtime gate plus handlers; reconciler/watchdog confirmation is Phase 3 |
 | Synchronous filled-open consolidation | Implemented — safety remediation | A confirmed fill places and verifies one full-position `positionTpsl` before cancelling the identified fixed-size child, then verifies `PROTECTED`; unknown/offline outcomes remain reconciler-owned |
 | Deterministic order timeout recovery | Implemented — safety remediation | Every submitted order receives a CLOID; transport timeouts query `orderStatus` by CLOID and return per-order `confirmed` / `not_found` / `unknown` recovery outcomes |
@@ -79,7 +79,12 @@ mark at registration; the scheduled `after_ms`/`wake_at` remains their fallback.
 The signer resolves the selected wallet only for the signing operation and
 never logs or serializes private key material.
 
-## Atomic-open release gate
+## Atomic-open release gate (RETIRED — owner decision 2026-07-13)
+
+The capability flag and its catalog/runtime blocks were removed: every
+Hyperliquid tool is live in the workspace as soon as the policy provider is
+active. The testnet matrix below remains a supported OPTIONAL validation
+harness for signing/atomicity changes. Historical description follows.
 
 Run the supervised matrix with a funded, clean, **throwaway testnet** wallet:
 
@@ -187,7 +192,7 @@ set: `hl_markets`, `hl_positions`, `hl_orders`, `hl_book`, `hl_account`,
 `hl_open`, `hl_close`, `hl_set_stop`, `hl_cancel_orders`, `hl_leverage`,
 `hl_risk_setup`, and `hl_exit`. Each is only a lossless alias to the matching
 canonical tool ID; it invokes `executeProtocolTool`, never a special execution
-path. `hl_open` is absent until the atomic-open capability flag is enabled.
+path. All trading and market-analysis verbs (including `hl_open`, `hl_scan`, `hl_candles`, `hl_watch`) are hot aliases whenever the policy provider is active.
 The prompt also adds a compact index for every non-hot `hyperliquid.*` tool so
 the agent can call `execute_tool` without another discovery round. The static
 protocol prompt remains cacheable; this mode suffix is added per turn so entry
