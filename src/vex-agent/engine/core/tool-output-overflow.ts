@@ -104,7 +104,8 @@ export async function persistToolResultWithOverflow(
     `[tool_output_overflow blob_key=${blobKey} bytes=${bytes} shape=${shapeKind}` +
     formatHintsSuffix(hints) +
     ` preview=${JSON.stringify(preview)}]. ` +
-    `Call \`tool_output_read(blob_key="${blobKey}")\` to read bounded slices.`;
+    `Query it with tool_output_read, e.g. tool_output_read(blob_key="${blobKey}", search="cash") ` +
+    `or (path="meta.universe", where={field:"name",contains:"cash"}).`;
 
   let blobWritten = false;
   try {
