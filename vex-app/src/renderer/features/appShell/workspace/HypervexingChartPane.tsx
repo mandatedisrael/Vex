@@ -25,9 +25,7 @@ import { useUiStore } from "../../../stores/uiStore.js";
 import { useSubmitChat } from "../../../lib/api/chat.js";
 import { cn } from "../../../lib/utils.js";
 import { SelectMenu } from "../../../components/ui/select-menu.js";
-import { HyperliquidCoverageBadge } from "../book/HyperliquidCoverageBadge.js";
-import { HyperliquidPositionChart } from "../book/HyperliquidPositionChart.js";
-import { deriveHyperliquidCoverage } from "../book/HyperliquidPositionsBlock.js";
+import { deriveCandleChartState, HyperliquidPositionChart } from "../book/HyperliquidPositionChart.js";
 import {
   HypervexingMarketPicker,
   type HvMarketRow,
@@ -119,12 +117,13 @@ function HeaderStat({
 }): JSX.Element {
   return (
     <span className="flex flex-col leading-tight">
-      <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-[var(--vex-text-3)]">
+      <span className="font-mono text-[8px] uppercase tracking-[0.10em] text-[var(--vex-text-3)]">
         {label}
       </span>
       <span
+        title={value}
         className={cn(
-          "font-mono text-[12px] tabular-nums",
+          "min-w-0 truncate font-mono text-[10px] tabular-nums",
           toneClass ?? "text-[var(--vex-text-2)]",
         )}
       >
@@ -252,22 +251,25 @@ function PositionEconomicsStrip({
   const signedUsd = (value: number): string =>
     `${value >= 0 ? "+" : "−"}$${Math.abs(value).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
   return (
-    <div className="mb-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-lg bg-[var(--vex-surface-2)] px-3 py-1.5 font-mono text-[11px] tabular-nums">
+    <div className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-lg bg-[var(--vex-surface-2)] px-2 py-1 font-mono text-[10px] tabular-nums">
       <span
         className={cn(
-          "text-[10px] uppercase tracking-[0.14em]",
+          "shrink-0 text-[9px] uppercase tracking-[0.10em]",
           position.side === "long" ? "text-[var(--vex-long)]" : "text-[var(--vex-short)]",
         )}
       >
         {position.side} {position.size} @ {position.entryPx}
       </span>
-      <span className={cn("font-semibold", tone)}>
+      <span
+        title={economics === null ? "PnL unavailable" : `PnL ${signedUsd(economics.pnl)}${economics.roePct === null ? "" : `; ROE estimate ${economics.roePct >= 0 ? "+" : ""}${economics.roePct.toFixed(2)}%`}`}
+        className={cn("min-w-0 truncate text-[10px] font-semibold", tone)}
+      >
         {/* ROE is an initial-margin ESTIMATE (entry×size÷leverage) — true ROE
          * needs marginUsed, which the venue does not give us per position;
          * cross margin is shared and isolated margin is user-adjustable. */}
         {economics === null
           ? "PnL —"
-          : `PnL ${signedUsd(economics.pnl)}${economics.roePct === null ? "" : ` (${economics.roePct >= 0 ? "+" : ""}${economics.roePct.toFixed(2)}% est.)`}`}
+          : `PnL ${signedUsd(economics.pnl)}`}
       </span>
       <EditableTrigger label="SL" coin={position.coin} value={position.slPrice} sessionId={sessionId} kind="stop-loss" />
       <EditableTrigger label="TP" coin={position.coin} value={position.tpPrice} sessionId={sessionId} kind="take-profit" />
@@ -290,7 +292,7 @@ function MarketStatsStrip({
   const change = market.change24hPct === null ? null : Number(market.change24hPct);
   const funding = market.fundingRate8hPct === null ? null : Number(market.fundingRate8hPct);
   return (
-    <div className="flex items-center gap-4 border-l border-[var(--vex-line)] pl-4">
+    <div className="order-last grid w-full grid-cols-5 gap-x-2 border-t border-[var(--vex-line)] pt-1.5 xl:order-none xl:w-auto xl:border-l xl:border-t-0 xl:pl-2 xl:pt-0">
       <HeaderStat label="Mark" value={market.markPx} toneClass="text-[var(--vex-text)]" />
       <HeaderStat
         label="24h"
@@ -363,7 +365,7 @@ export function HypervexingChartPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col p-4">
-      <div className="relative mb-3 flex items-center gap-3">
+      <div className="relative mb-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => setPickerOpen((open) => !open)}
@@ -371,27 +373,23 @@ export function HypervexingChartPane({
           aria-haspopup="dialog"
           className="group flex items-center gap-2 rounded-md px-1.5 py-0.5 transition-colors duration-150 hover:bg-[var(--vex-accent-fill-8)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
         >
-          <span className="font-serif text-[26px] leading-none text-[var(--vex-text)]">
+          <span className="font-serif text-[20px] leading-none text-[var(--vex-text)]">
             {coin}
             <span className="text-[var(--vex-text-3)]">-USD</span>
           </span>
-          {/* Leverage chip — venue-fed (per-asset maxLeverage from markets, or
-           * the live position's leverage), optically CENTERED against the
-           * serif symbol (baseline alignment dropped the chip; owner fix) and
-           * carrying the app's sanctioned shimmer. */}
-          {position?.leverage != null ? (
-            <span className="vex-badge--shimmer self-center rounded-sm bg-[var(--vex-accent-fill-12)] px-1.5 py-0.5 font-mono text-[10px] leading-none tabular-nums text-[var(--vex-accent-text)]">
-              {position.leverage}x
-            </span>
-          ) : selectedMarket !== null ? (
-            <span className="vex-badge--shimmer self-center rounded-sm bg-[var(--vex-surface-2)] px-1.5 py-0.5 font-mono text-[10px] leading-none tabular-nums text-[var(--vex-text-2)]">
+          {/* Leverage chip — the MARKET's available max (per-asset maxLeverage),
+           * optically CENTERED against the serif symbol and carrying the app's
+           * sanctioned shimmer. The position's USED leverage lives in the
+           * positions row, not here (owner decision). */}
+          {selectedMarket !== null ? (
+            <span className="vex-badge--shimmer self-center rounded-sm bg-[var(--vex-surface-2)] px-1.5 py-0.5 font-mono text-[9px] leading-none tabular-nums text-[var(--vex-text-2)]">
               {selectedMarket.maxLeverage}x
             </span>
           ) : null}
           <span
             aria-hidden
             className={cn(
-              "font-mono text-[10px] text-[var(--vex-text-3)] transition-transform duration-150 group-hover:text-[var(--vex-text-2)]",
+              "font-mono text-[9px] text-[var(--vex-text-3)] transition-transform duration-150 group-hover:text-[var(--vex-text-2)]",
               pickerOpen && "rotate-180",
             )}
           >
@@ -410,7 +408,7 @@ export function HypervexingChartPane({
         ) : null}
 
         {headerLast !== null ? (
-          <span className="font-mono text-[18px] font-semibold tabular-nums leading-none text-[var(--vex-text)]">
+          <span className="min-w-0 truncate font-mono text-[15px] font-semibold tabular-nums leading-none text-[var(--vex-text)]" title={headerLast}>
             {headerLast}
           </span>
         ) : null}
@@ -423,9 +421,6 @@ export function HypervexingChartPane({
           </span>
         ) : null}
         {selectedMarket !== null ? <MarketStatsStrip market={selectedMarket} /> : null}
-        {position !== null ? (
-          <HyperliquidCoverageBadge label={deriveHyperliquidCoverage(position)} />
-        ) : null}
 
         {/* Interval as a compact dropdown (user-ordered): frees header room so
          * the stats strip text never clips at narrower chart widths. */}
@@ -454,11 +449,11 @@ export function HypervexingChartPane({
           </p>
         ) : (
           <HyperliquidPositionChart
-            sessionId={sessionId}
             coin={coin}
             interval={interval}
+            candles={candles}
+            state={deriveCandleChartState(candlesQuery.isLoading, candlesQuery.isError, candlesQuery.data)}
             position={position}
-            liveMid={liveMid}
             fill
           />
         )}

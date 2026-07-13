@@ -7,6 +7,7 @@ import {
   hyperliquidMarketsReadInputSchema,
   hyperliquidMidsUpdateEventSchema,
   hyperliquidBookReadInputSchema,
+  hyperliquidAccountReadInputSchema,
   hyperliquidRiskAcknowledgementInputSchema,
   hyperliquidRiskProposalConfirmInputSchema,
   hyperliquidSessionRiskPolicySetInputSchema,
@@ -24,6 +25,7 @@ import {
   type HyperliquidCandlesReadInput,
   type HyperliquidMarketsReadInput,
   type HyperliquidBookReadInput,
+  type HyperliquidAccountReadInput,
   type HyperliquidRiskProposalConfirmInput,
   type HyperliquidSessionRiskPolicySetInput,
   type HyperliquidSessionRiskPolicyReadInput,
@@ -54,6 +56,21 @@ export const hyperliquid = {
   },
   getWorkspaceMode(input: HyperliquidWorkspaceModeReadInput) {
     return invokeWithSchema(CH.hyperliquid.getWorkspaceMode, input, hyperliquidWorkspaceModeReadInputSchema);
+  },
+  getOpenOrders(input: HyperliquidAccountReadInput) {
+    return invokeWithSchema(CH.hyperliquid.getOpenOrders, input, hyperliquidAccountReadInputSchema);
+  },
+  getTwapHistory(input: HyperliquidAccountReadInput) {
+    return invokeWithSchema(CH.hyperliquid.getTwapHistory, input, hyperliquidAccountReadInputSchema);
+  },
+  getTradeHistory(input: HyperliquidAccountReadInput) {
+    return invokeWithSchema(CH.hyperliquid.getTradeHistory, input, hyperliquidAccountReadInputSchema);
+  },
+  getFundingHistory(input: HyperliquidAccountReadInput) {
+    return invokeWithSchema(CH.hyperliquid.getFundingHistory, input, hyperliquidAccountReadInputSchema);
+  },
+  getOrderHistory(input: HyperliquidAccountReadInput) {
+    return invokeWithSchema(CH.hyperliquid.getOrderHistory, input, hyperliquidAccountReadInputSchema);
   },
   listRiskProposals(input: HyperliquidRiskProposalsReadInput) {
     return invokeWithSchema(CH.hyperliquid.listRiskProposals, input, hyperliquidRiskProposalsReadInputSchema);

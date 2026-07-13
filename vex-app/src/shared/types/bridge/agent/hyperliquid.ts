@@ -10,6 +10,12 @@ import type {
   HyperliquidMidsUpdateEvent,
   HyperliquidBookDto,
   HyperliquidBookReadInput,
+  HyperliquidAccountReadInput,
+  HyperliquidOpenOrdersDto,
+  HyperliquidTwapHistoryDto,
+  HyperliquidTradeHistoryDto,
+  HyperliquidFundingHistoryDto,
+  HyperliquidOrderHistoryDto,
   HyperliquidRiskProposalConfirmInput,
   HyperliquidRiskProposalDto,
   HyperliquidSessionRiskPolicyDto,
@@ -47,6 +53,22 @@ export interface HyperliquidBridge {
   readonly getWorkspaceMode: (
     input: HyperliquidWorkspaceModeReadInput,
   ) => Promise<Result<HyperliquidWorkspaceModeDto>>;
+  /** Read-only account registers — main resolves the wallet; renderer sends only sessionId. */
+  readonly getOpenOrders: (
+    input: HyperliquidAccountReadInput,
+  ) => Promise<Result<HyperliquidOpenOrdersDto>>;
+  readonly getTwapHistory: (
+    input: HyperliquidAccountReadInput,
+  ) => Promise<Result<HyperliquidTwapHistoryDto>>;
+  readonly getTradeHistory: (
+    input: HyperliquidAccountReadInput,
+  ) => Promise<Result<HyperliquidTradeHistoryDto>>;
+  readonly getFundingHistory: (
+    input: HyperliquidAccountReadInput,
+  ) => Promise<Result<HyperliquidFundingHistoryDto>>;
+  readonly getOrderHistory: (
+    input: HyperliquidAccountReadInput,
+  ) => Promise<Result<HyperliquidOrderHistoryDto>>;
   readonly listRiskProposals: (
     input: HyperliquidRiskProposalsReadInput,
   ) => Promise<Result<HyperliquidRiskProposalsDto>>;

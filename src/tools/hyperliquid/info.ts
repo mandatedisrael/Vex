@@ -37,6 +37,8 @@ export class HyperliquidInfoClient {
   userFills(user: string, options?: HyperliquidRequestOptions): Promise<HyperliquidInfoResponse> { return this.request("userFills", { user }, options); }
   userFillsByTime(user: string, startTime: number, options?: HyperliquidRequestOptions): Promise<HyperliquidInfoResponse> { return this.request("userFillsByTime", { user, startTime }, options); }
   userFunding(user: string, options?: HyperliquidRequestOptions): Promise<HyperliquidInfoResponse> { return this.request("userFunding", { user }, options); }
+  userTwapSliceFills(user: string, options?: HyperliquidRequestOptions): Promise<HyperliquidInfoResponse> { return this.request("userTwapSliceFills", { user }, options); }
+  historicalOrders(user: string, options?: HyperliquidRequestOptions): Promise<HyperliquidInfoResponse> { return this.request("historicalOrders", { user }, options); }
   userFees(user: string, options?: HyperliquidRequestOptions): Promise<HyperliquidInfoResponse> { return this.request("userFees", { user }, options); }
   portfolio(user: string, options?: HyperliquidRequestOptions): Promise<HyperliquidInfoResponse> { return this.request("portfolio", { user }, options); }
   l2Book(coin: string, options?: HyperliquidRequestOptions): Promise<HyperliquidInfoResponse> { return this.request("l2Book", { coin }, options); }

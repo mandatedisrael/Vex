@@ -9,6 +9,7 @@ import {
 } from "@shared/schemas/hyperliquid.js";
 import { getHyperliquidPositions } from "../database/hyperliquid-db.js";
 import { registerHandler } from "./register-handler.js";
+import { registerHyperliquidAccountReadHandlers } from "./hyperliquid/account-reads.js";
 import { registerHyperliquidLiveFeedHandlers } from "./hyperliquid/live-feed.js";
 import { registerHyperliquidMarketReadHandlers } from "./hyperliquid/market-reads.js";
 import { registerHyperliquidRiskPolicyHandlers } from "./hyperliquid/risk-policy.js";
@@ -33,6 +34,7 @@ export function registerHyperliquidHandlers(): Array<() => void> {
   return [
     registerPositionsHandler(),
     ...registerHyperliquidMarketReadHandlers(),
+    ...registerHyperliquidAccountReadHandlers(),
     registerHyperliquidWorkspaceModeHandler(),
     ...registerHyperliquidRiskPolicyHandlers(),
     registerHyperliquidEnterWorkspaceHandler(),

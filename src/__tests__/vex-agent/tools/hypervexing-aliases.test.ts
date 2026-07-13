@@ -16,6 +16,8 @@ import {
 import { buildToolCatalogPrompt } from "@vex-agent/engine/prompts/tool-catalog.js";
 import { getAllTools, getVisibleToolDefs, defaultVisibilityContext } from "@vex-agent/tools/registry.js";
 import {
+  getHypervexingAliasToolDef,
+  resolveHypervexingAlias,
   HYPERVEXING_ALIAS_NAMES,
   HYPERVEXING_ALIAS_TARGETS,
 } from "@vex-agent/tools/hypervexing-aliases.js";
@@ -154,6 +156,16 @@ describe("Hypervexing mode-scoped aliases", () => {
       }),
     ]);
     expect(getAllTools().some((tool) => tool.name === "hyperliquid_enter")).toBe(true);
+  });
+
+  it("forwards the perp.markets search params through the hl_markets alias unchanged (W14)", () => {
+    const def = getHypervexingAliasToolDef("hl_markets");
+    expect(def?.parameters.properties).toHaveProperty("query");
+    expect(def?.parameters.properties).toHaveProperty("limit");
+    expect(resolveHypervexingAlias("hl_markets", { query: "cash", limit: 5 })).toEqual({
+      toolId: "hyperliquid.perp.markets",
+      params: { query: "cash", limit: 5 },
+    });
   });
 
   it("keeps aliases outside the permanent registry and manifest census", () => {

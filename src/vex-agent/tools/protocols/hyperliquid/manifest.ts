@@ -15,13 +15,16 @@ const localMarketWrite = (toolId: HyperliquidToolId, description: string, params
 const localPresentation = (toolId: HyperliquidToolId, description: string): ProtocolToolManifest => ({ toolId, namespace: "hyperliquid", lifecycle: "active", description, mutating: false, actionKind: "local_write", params: [], exampleParams: {}, discovery: HYPERLIQUID_DISCOVERY[toolId] });
 
 export const HYPERLIQUID_TOOLS: readonly ProtocolToolManifest[] = [
-  read("hyperliquid.perp.markets", "List Core perpetual markets, precision, leverage limits, and contexts."),
+  read("hyperliquid.perp.markets", "Search Core perpetual markets by ticker (query): precision, leverage limits, funding, and open interest. Returns a compact, bounded list.", [
+    string("query", "Case-insensitive substring filter on the coin ticker, e.g. 'cash' matches CASHCAT."),
+    number("limit", "Max markets returned (default 20, cap 50)."),
+  ], { query: "BTC", limit: 20 }),
   read("hyperliquid.perp.positions", "Show selected-wallet perpetual positions plus live stop-loss coverage."),
   read("hyperliquid.perp.orders", "List selected-wallet frontend open orders."),
-  read("hyperliquid.perp.fills", "List selected-wallet perpetual fills.", [number("startTime", "Optional epoch milliseconds lower bound.")]),
-  read("hyperliquid.perp.funding", "List selected-wallet funding payments."),
+  read("hyperliquid.perp.fills", "List selected-wallet perpetual fills, newest-first and bounded.", [number("startTime", "Optional epoch milliseconds lower bound."), number("limit", "Max fills returned (default 50, cap 200).")]),
+  read("hyperliquid.perp.funding", "List selected-wallet funding payments, newest-first and bounded.", [number("startTime", "Optional epoch milliseconds lower bound."), number("limit", "Max rows returned (default 50, cap 200).")]),
   read("hyperliquid.account.overview", "Show selected-wallet clearinghouse account state."),
-  read("hyperliquid.spot.markets", "List Hyperliquid spot markets and contexts."),
+  read("hyperliquid.spot.markets", "Search Hyperliquid spot markets by pair (query): price, mid, and daily volume. Returns a compact, bounded list.", [string("query", "Case-insensitive substring filter on the pair name, e.g. 'purr' matches PURR/USDC."), number("limit", "Max markets returned (default 20, cap 50).")], { query: "HYPE", limit: 20 }),
   read("hyperliquid.spot.balances", "Show selected-wallet spot-clearinghouse balances."),
   read("hyperliquid.market.book", "Show a Hyperliquid L2 order book.", [string("coin", "Market coin, e.g. BTC.", true)], { coin: "BTC" }),
   localMarketWrite("hyperliquid.market.watchCandles", "Enable or disable a local persisted candle watch; enabling backfills and then keeps the pair fresh by WebSocket.", [string("coin", "Market coin, e.g. BTC.", true), string("interval", "1m, 5m, 15m, 1h, 4h, or 1d.", true), boolean("enabled", "True starts the watch; false stops writes but retains stored rows.", true)], { coin: "BTC", interval: "1h", enabled: true }),

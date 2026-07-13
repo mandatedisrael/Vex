@@ -240,6 +240,95 @@ export const hyperliquidBookDtoSchema = z.object({
 export type HyperliquidBookDto = z.infer<typeof hyperliquidBookDtoSchema>;
 
 /**
+ * Read-only account registers (Open Orders / TWAP history / Trade History /
+ * Funding History / Order History). The renderer supplies ONLY the sessionId;
+ * main resolves the session's selected EVM wallet and validates every venue
+ * response before mapping. Rows are capped (documented truncation, newest
+ * first); financial values are canonical decimal strings.
+ */
+export const hyperliquidAccountReadInputSchema = z
+  .object({ sessionId: z.string().uuid() })
+  .strict();
+export type HyperliquidAccountReadInput = z.infer<typeof hyperliquidAccountReadInputSchema>;
+
+const HYPERLIQUID_REGISTER_ROW_CAP = 100;
+
+export const hyperliquidOpenOrderDtoSchema = z.object({
+  oid: z.number().int(),
+  coin: z.string().min(1).max(64),
+  side: z.enum(["buy", "sell"]),
+  limitPx: unsignedDecimal,
+  sz: unsignedDecimal,
+  origSz: unsignedDecimal.nullable(),
+  orderType: z.string().max(64).nullable(),
+  reduceOnly: z.boolean(),
+  isTrigger: z.boolean(),
+  triggerPx: unsignedDecimal.nullable(),
+  timestampMs: z.number().int().nonnegative(),
+}).strict();
+export type HyperliquidOpenOrderDto = z.infer<typeof hyperliquidOpenOrderDtoSchema>;
+export const hyperliquidOpenOrdersDtoSchema = z.array(hyperliquidOpenOrderDtoSchema).max(HYPERLIQUID_REGISTER_ROW_CAP);
+export type HyperliquidOpenOrdersDto = z.infer<typeof hyperliquidOpenOrdersDtoSchema>;
+
+export const hyperliquidTwapFillDtoSchema = z.object({
+  twapId: z.number().int(),
+  coin: z.string().min(1).max(64),
+  side: z.enum(["buy", "sell"]),
+  px: unsignedDecimal,
+  sz: unsignedDecimal,
+  closedPnl: signedDecimal,
+  fee: signedDecimal,
+  dir: z.string().max(64).nullable(),
+  timeMs: z.number().int().nonnegative(),
+}).strict();
+export type HyperliquidTwapFillDto = z.infer<typeof hyperliquidTwapFillDtoSchema>;
+export const hyperliquidTwapHistoryDtoSchema = z.array(hyperliquidTwapFillDtoSchema).max(HYPERLIQUID_REGISTER_ROW_CAP);
+export type HyperliquidTwapHistoryDto = z.infer<typeof hyperliquidTwapHistoryDtoSchema>;
+
+export const hyperliquidTradeFillDtoSchema = z.object({
+  oid: z.number().int(),
+  coin: z.string().min(1).max(64),
+  side: z.enum(["buy", "sell"]),
+  px: unsignedDecimal,
+  sz: unsignedDecimal,
+  closedPnl: signedDecimal,
+  fee: signedDecimal,
+  dir: z.string().max(64).nullable(),
+  timeMs: z.number().int().nonnegative(),
+}).strict();
+export type HyperliquidTradeFillDto = z.infer<typeof hyperliquidTradeFillDtoSchema>;
+export const hyperliquidTradeHistoryDtoSchema = z.array(hyperliquidTradeFillDtoSchema).max(HYPERLIQUID_REGISTER_ROW_CAP);
+export type HyperliquidTradeHistoryDto = z.infer<typeof hyperliquidTradeHistoryDtoSchema>;
+
+export const hyperliquidFundingEntryDtoSchema = z.object({
+  coin: z.string().min(1).max(64),
+  usdc: signedDecimal,
+  szi: signedDecimal,
+  /** Venue fundingRate as a raw fraction (not a percentage). */
+  fundingRate: signedDecimal,
+  timeMs: z.number().int().nonnegative(),
+}).strict();
+export type HyperliquidFundingEntryDto = z.infer<typeof hyperliquidFundingEntryDtoSchema>;
+export const hyperliquidFundingHistoryDtoSchema = z.array(hyperliquidFundingEntryDtoSchema).max(HYPERLIQUID_REGISTER_ROW_CAP);
+export type HyperliquidFundingHistoryDto = z.infer<typeof hyperliquidFundingHistoryDtoSchema>;
+
+export const hyperliquidOrderHistoryEntryDtoSchema = z.object({
+  oid: z.number().int(),
+  coin: z.string().min(1).max(64),
+  side: z.enum(["buy", "sell"]),
+  limitPx: unsignedDecimal.nullable(),
+  sz: unsignedDecimal,
+  orderType: z.string().max(64).nullable(),
+  reduceOnly: z.boolean(),
+  status: z.string().min(1).max(64),
+  timeMs: z.number().int().nonnegative(),
+  statusTimeMs: z.number().int().nonnegative(),
+}).strict();
+export type HyperliquidOrderHistoryEntryDto = z.infer<typeof hyperliquidOrderHistoryEntryDtoSchema>;
+export const hyperliquidOrderHistoryDtoSchema = z.array(hyperliquidOrderHistoryEntryDtoSchema).max(HYPERLIQUID_REGISTER_ROW_CAP);
+export type HyperliquidOrderHistoryDto = z.infer<typeof hyperliquidOrderHistoryDtoSchema>;
+
+/**
  * Settings may change only user-owned global controls. Market selection is a
  * fixed v1 product decision and builder-fee allowance is venue-reported after
  * the first-entry acknowledgement, so neither can be smuggled through generic

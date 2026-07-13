@@ -15,6 +15,11 @@ import type {
   HyperliquidCandlesDto,
   HyperliquidCandleInterval,
   HyperliquidMarketsDto,
+  HyperliquidOpenOrdersDto,
+  HyperliquidTwapHistoryDto,
+  HyperliquidTradeHistoryDto,
+  HyperliquidFundingHistoryDto,
+  HyperliquidOrderHistoryDto,
   HyperliquidRiskProposalConfirmInput,
   HyperliquidRiskProposalDto,
   HyperliquidRiskProposalsDto,
@@ -144,6 +149,76 @@ export function useHyperliquidLiveWatch(
   }, [coin]);
 
   return { liveMid };
+}
+
+/**
+ * Read-only account registers. Each pane mounts only while its tab is active,
+ * so the hook fetches only for the visible register; main's 15s per-(register,
+ * wallet) cache dedupes the 15s refetch. The renderer sends only the sessionId.
+ */
+export function useHyperliquidOpenOrders(
+  sessionId: string | null,
+): UseQueryResult<Result<HyperliquidOpenOrdersDto>> {
+  return useQuery({
+    queryKey: hyperliquidKeys.openOrders(sessionId ?? ""),
+    queryFn: () => window.vex.hyperliquid.getOpenOrders({ sessionId: sessionId ?? "" }),
+    enabled: sessionId !== null,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+    retry: 0,
+  });
+}
+
+export function useHyperliquidTwapHistory(
+  sessionId: string | null,
+): UseQueryResult<Result<HyperliquidTwapHistoryDto>> {
+  return useQuery({
+    queryKey: hyperliquidKeys.twapHistory(sessionId ?? ""),
+    queryFn: () => window.vex.hyperliquid.getTwapHistory({ sessionId: sessionId ?? "" }),
+    enabled: sessionId !== null,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+    retry: 0,
+  });
+}
+
+export function useHyperliquidTradeHistory(
+  sessionId: string | null,
+): UseQueryResult<Result<HyperliquidTradeHistoryDto>> {
+  return useQuery({
+    queryKey: hyperliquidKeys.tradeHistory(sessionId ?? ""),
+    queryFn: () => window.vex.hyperliquid.getTradeHistory({ sessionId: sessionId ?? "" }),
+    enabled: sessionId !== null,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+    retry: 0,
+  });
+}
+
+export function useHyperliquidFundingHistory(
+  sessionId: string | null,
+): UseQueryResult<Result<HyperliquidFundingHistoryDto>> {
+  return useQuery({
+    queryKey: hyperliquidKeys.fundingHistory(sessionId ?? ""),
+    queryFn: () => window.vex.hyperliquid.getFundingHistory({ sessionId: sessionId ?? "" }),
+    enabled: sessionId !== null,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+    retry: 0,
+  });
+}
+
+export function useHyperliquidOrderHistory(
+  sessionId: string | null,
+): UseQueryResult<Result<HyperliquidOrderHistoryDto>> {
+  return useQuery({
+    queryKey: hyperliquidKeys.orderHistory(sessionId ?? ""),
+    queryFn: () => window.vex.hyperliquid.getOrderHistory({ sessionId: sessionId ?? "" }),
+    enabled: sessionId !== null,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+    retry: 0,
+  });
 }
 
 /** Per-session workspace-mode reconciliation read (session-switch remount). */

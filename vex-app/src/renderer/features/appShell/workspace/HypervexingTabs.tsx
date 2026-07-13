@@ -8,14 +8,30 @@
  * action instead of fabricated rows.
  */
 
-import { useState, type JSX } from "react";
+import { useState, type JSX, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
-import type { HyperliquidAccountDto } from "@shared/schemas/hyperliquid.js";
+import type { Result } from "@shared/ipc/result.js";
+import type {
+  HyperliquidAccountDto,
+  HyperliquidFundingHistoryDto,
+  HyperliquidOpenOrdersDto,
+  HyperliquidOrderHistoryDto,
+  HyperliquidTradeHistoryDto,
+  HyperliquidTwapHistoryDto,
+} from "@shared/schemas/hyperliquid.js";
 import { HyperliquidPositionsBlock } from "../book/HyperliquidPositionsBlock.js";
 import { usePortfolio } from "../../../lib/api/portfolio.js";
+import {
+  useHyperliquidFundingHistory,
+  useHyperliquidOpenOrders,
+  useHyperliquidOrderHistory,
+  useHyperliquidTradeHistory,
+  useHyperliquidTwapHistory,
+} from "../../../lib/api/hyperliquid.js";
 import { useSubmitChat } from "../../../lib/api/chat.js";
 import { cn } from "../../../lib/utils.js";
+import type { UseQueryResult } from "@tanstack/react-query";
 
 type WorkspaceTab =
   | "balances"
@@ -50,8 +66,8 @@ const REGISTER_ASKS: Readonly<
     ask: "Show my Hyperliquid open orders.",
   },
   twap: {
-    caption: "No running TWAPs.",
-    ask: "Show my active Hyperliquid TWAP orders.",
+    caption: "No TWAP history yet.",
+    ask: "Show my Hyperliquid TWAP history.",
   },
   tradeHistory: {
     caption: "No fills yet.",
@@ -183,6 +199,326 @@ function PortfolioPane({ sessionId }: { readonly sessionId: string | null }): JS
   );
 }
 
+interface RegisterColumn {
+  readonly key: string;
+  readonly label: string;
+  readonly align?: "right";
+}
+
+interface RegisterRow {
+  readonly id: string;
+  readonly cells: Readonly<Record<string, ReactNode>>;
+}
+
+function gridTemplate(columns: readonly RegisterColumn[]): string {
+  return columns
+    .map((column) => (column.align === "right" ? "minmax(64px,auto)" : "minmax(56px,1fr)"))
+    .join(" ");
+}
+
+function RegisterTable({
+  columns,
+  rows,
+}: {
+  readonly columns: readonly RegisterColumn[];
+  readonly rows: readonly RegisterRow[];
+}): JSX.Element {
+  const template = gridTemplate(columns);
+  return (
+    <div className="min-h-0 overflow-x-auto">
+      <div role="table" className="min-w-[520px] font-mono text-[11px] tabular-nums">
+        <div role="row" className="grid gap-x-4 border-b border-[var(--vex-line)] pb-1" style={{ gridTemplateColumns: template }}>
+          {columns.map((column) => (
+            <span
+              key={column.key}
+              role="columnheader"
+              className={cn(
+                "text-[9px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]",
+                column.align === "right" && "text-right",
+              )}
+            >
+              {column.label}
+            </span>
+          ))}
+        </div>
+        {rows.map((row) => (
+          <div role="row" key={row.id} className="grid h-7 items-center gap-x-4" style={{ gridTemplateColumns: template }}>
+            {columns.map((column) => (
+              <span
+                key={column.key}
+                className={cn(
+                  "truncate",
+                  column.align === "right" ? "text-right text-[var(--vex-text-2)]" : "text-[var(--vex-text)]",
+                )}
+              >
+                {row.cells[column.key]}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TruncationNote({ count }: { readonly count: number }): JSX.Element | null {
+  if (count < 100) return null;
+  return <p className="mt-1 text-[9px] text-[var(--vex-text-3)]">Showing the latest 100 rows.</p>;
+}
+
+function fmtTime(ms: number): string {
+  return new Date(ms).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function sideCell(side: "buy" | "sell"): JSX.Element {
+  return (
+    <span className={side === "buy" ? "text-[var(--vex-buy-text,var(--vex-text))]" : "text-[var(--vex-sell-text,var(--vex-text-2))]"}>
+      {side === "buy" ? "Buy" : "Sell"}
+    </span>
+  );
+}
+
+/**
+ * Renders a register's data table, or the retained Ask Vex fallback for the
+ * loading / error / empty states. `render` runs only with an ok, non-empty DTO.
+ */
+function RegisterPane<T>({
+  query,
+  sessionId,
+  emptyKey,
+  render,
+}: {
+  readonly query: UseQueryResult<Result<readonly T[]>>;
+  readonly sessionId: string | null;
+  readonly emptyKey: keyof typeof REGISTER_ASKS;
+  readonly render: (rows: readonly T[]) => JSX.Element;
+}): JSX.Element {
+  const empty = REGISTER_ASKS[emptyKey];
+  if (query.isLoading) {
+    return <p className="text-[11px] text-[var(--vex-text-3)]">Loading…</p>;
+  }
+  const result = query.data;
+  if (result === undefined || !result.ok) {
+    return <AskVexEmpty caption={`${empty.caption.replace(/\.$/, "")} — unavailable right now.`} ask={empty.ask} sessionId={sessionId} />;
+  }
+  if (result.data.length === 0) {
+    return <AskVexEmpty caption={empty.caption} ask={empty.ask} sessionId={sessionId} />;
+  }
+  return render(result.data);
+}
+
+const OPEN_ORDER_COLUMNS: readonly RegisterColumn[] = [
+  { key: "coin", label: "Coin" },
+  { key: "side", label: "Side" },
+  { key: "sz", label: "Size", align: "right" },
+  { key: "limitPx", label: "Limit", align: "right" },
+  { key: "type", label: "Type" },
+  { key: "time", label: "Placed", align: "right" },
+];
+
+function OpenOrdersPane({ sessionId }: { readonly sessionId: string | null }): JSX.Element {
+  const query = useHyperliquidOpenOrders(sessionId);
+  return (
+    <RegisterPane<HyperliquidOpenOrdersDto[number]>
+      query={query}
+      sessionId={sessionId}
+      emptyKey="openOrders"
+      render={(rows) => (
+        <div className="flex min-h-0 flex-col">
+          <RegisterTable
+            columns={OPEN_ORDER_COLUMNS}
+            rows={rows.map((row, index) => ({
+              id: `${row.oid}:${index}`,
+              cells: {
+                coin: row.coin,
+                side: sideCell(row.side),
+                sz: row.sz,
+                limitPx: row.limitPx,
+                type: row.reduceOnly ? `${row.orderType ?? "—"} · reduce` : row.orderType ?? "—",
+                time: fmtTime(row.timestampMs),
+              },
+            }))}
+          />
+          <TruncationNote count={rows.length} />
+        </div>
+      )}
+    />
+  );
+}
+
+const FILL_COLUMNS: readonly RegisterColumn[] = [
+  { key: "coin", label: "Coin" },
+  { key: "side", label: "Side" },
+  { key: "px", label: "Price", align: "right" },
+  { key: "sz", label: "Size", align: "right" },
+  { key: "pnl", label: "PnL", align: "right" },
+  { key: "fee", label: "Fee", align: "right" },
+  { key: "time", label: "Time", align: "right" },
+];
+
+function TwapHistoryPane({ sessionId }: { readonly sessionId: string | null }): JSX.Element {
+  const query = useHyperliquidTwapHistory(sessionId);
+  return (
+    <RegisterPane<HyperliquidTwapHistoryDto[number]>
+      query={query}
+      sessionId={sessionId}
+      emptyKey="twap"
+      render={(rows) => (
+        <div className="flex min-h-0 flex-col gap-1.5">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--vex-text-3)]">
+            TWAP history — executed slices
+          </p>
+          <RegisterTable
+            columns={FILL_COLUMNS}
+            rows={rows.map((row, index) => ({
+              id: `${row.twapId}:${row.timeMs}:${index}`,
+              cells: {
+                coin: row.coin,
+                side: sideCell(row.side),
+                px: row.px,
+                sz: row.sz,
+                pnl: row.closedPnl,
+                fee: row.fee,
+                time: fmtTime(row.timeMs),
+              },
+            }))}
+          />
+          <TruncationNote count={rows.length} />
+        </div>
+      )}
+    />
+  );
+}
+
+function TradeHistoryPane({ sessionId }: { readonly sessionId: string | null }): JSX.Element {
+  const query = useHyperliquidTradeHistory(sessionId);
+  return (
+    <RegisterPane<HyperliquidTradeHistoryDto[number]>
+      query={query}
+      sessionId={sessionId}
+      emptyKey="tradeHistory"
+      render={(rows) => (
+        <div className="flex min-h-0 flex-col">
+          <RegisterTable
+            columns={FILL_COLUMNS}
+            rows={rows.map((row, index) => ({
+              id: `${row.oid}:${row.timeMs}:${index}`,
+              cells: {
+                coin: row.coin,
+                side: sideCell(row.side),
+                px: row.px,
+                sz: row.sz,
+                pnl: row.closedPnl,
+                fee: row.fee,
+                time: fmtTime(row.timeMs),
+              },
+            }))}
+          />
+          <TruncationNote count={rows.length} />
+        </div>
+      )}
+    />
+  );
+}
+
+const FUNDING_COLUMNS: readonly RegisterColumn[] = [
+  { key: "coin", label: "Coin" },
+  { key: "usdc", label: "Payment", align: "right" },
+  { key: "rate", label: "Rate", align: "right" },
+  { key: "szi", label: "Position", align: "right" },
+  { key: "time", label: "Time", align: "right" },
+];
+
+function FundingHistoryPane({ sessionId }: { readonly sessionId: string | null }): JSX.Element {
+  const query = useHyperliquidFundingHistory(sessionId);
+  return (
+    <RegisterPane<HyperliquidFundingHistoryDto[number]>
+      query={query}
+      sessionId={sessionId}
+      emptyKey="fundingHistory"
+      render={(rows) => (
+        <div className="flex min-h-0 flex-col">
+          <RegisterTable
+            columns={FUNDING_COLUMNS}
+            rows={rows.map((row, index) => ({
+              id: `${row.coin}:${row.timeMs}:${index}`,
+              cells: {
+                coin: row.coin,
+                usdc: row.usdc,
+                rate: row.fundingRate,
+                szi: row.szi,
+                time: fmtTime(row.timeMs),
+              },
+            }))}
+          />
+          <TruncationNote count={rows.length} />
+        </div>
+      )}
+    />
+  );
+}
+
+const ORDER_HISTORY_COLUMNS: readonly RegisterColumn[] = [
+  { key: "coin", label: "Coin" },
+  { key: "side", label: "Side" },
+  { key: "sz", label: "Size", align: "right" },
+  { key: "limitPx", label: "Limit", align: "right" },
+  { key: "status", label: "Status" },
+  { key: "time", label: "Updated", align: "right" },
+];
+
+function OrderHistoryPane({ sessionId }: { readonly sessionId: string | null }): JSX.Element {
+  const query = useHyperliquidOrderHistory(sessionId);
+  return (
+    <RegisterPane<HyperliquidOrderHistoryDto[number]>
+      query={query}
+      sessionId={sessionId}
+      emptyKey="orderHistory"
+      render={(rows) => (
+        <div className="flex min-h-0 flex-col">
+          <RegisterTable
+            columns={ORDER_HISTORY_COLUMNS}
+            rows={rows.map((row, index) => ({
+              id: `${row.oid}:${row.statusTimeMs}:${index}`,
+              cells: {
+                coin: row.coin,
+                side: sideCell(row.side),
+                sz: row.sz,
+                limitPx: row.limitPx ?? "—",
+                status: row.status,
+                time: fmtTime(row.statusTimeMs),
+              },
+            }))}
+          />
+          <TruncationNote count={rows.length} />
+        </div>
+      )}
+    />
+  );
+}
+
+function RegisterView({ tab, sessionId }: { readonly tab: WorkspaceTab; readonly sessionId: string | null }): JSX.Element {
+  switch (tab) {
+    case "openOrders":
+      return <OpenOrdersPane sessionId={sessionId} />;
+    case "twap":
+      return <TwapHistoryPane sessionId={sessionId} />;
+    case "tradeHistory":
+      return <TradeHistoryPane sessionId={sessionId} />;
+    case "fundingHistory":
+      return <FundingHistoryPane sessionId={sessionId} />;
+    case "orderHistory":
+      return <OrderHistoryPane sessionId={sessionId} />;
+    default:
+      return <AskVexEmpty caption="No data." ask="Show my Hyperliquid account." sessionId={sessionId} />;
+  }
+}
+
 export function HypervexingTabs({
   sessionId,
   positionCount,
@@ -249,11 +585,7 @@ export function HypervexingTabs({
             ) : active === "portfolio" ? (
               <PortfolioPane sessionId={sessionId} />
             ) : (
-              <AskVexEmpty
-                caption={REGISTER_ASKS[active].caption}
-                ask={REGISTER_ASKS[active].ask}
-                sessionId={sessionId}
-              />
+              <RegisterView tab={active} sessionId={sessionId} />
             )}
           </motion.div>
         </AnimatePresence>

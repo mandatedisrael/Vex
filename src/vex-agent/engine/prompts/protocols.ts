@@ -88,6 +88,7 @@ export function buildHypervexingTurnStatePrompt(
       : "No Hypervexing direct aliases are currently callable.",
     "For any other Hyperliquid capability, discover with `discover_tools(namespace=\"hyperliquid\")` before execution. Aliases do not bypass any gate.",
     "In this workspace a bare token or ticker mention (\"cashcat?\", \"co z BTC?\") means the HYPERLIQUID market by default — analyze the HL perp (book/candles/funding), not a same-name token on another chain or protocol; leave HL context only when the user explicitly names another chain, protocol, or spot venue.",
+    "To check one market, call `perp.markets` with `query=<ticker>` (or `hl_book`) — never conclude a market doesn't exist from a truncated full listing.",
     "These aliases are for YOU, not the user — never list or tabulate them in a reply; after entering the workspace, orient the user in one sentence (account state or what you can now do) and ask what they want.",
   ];
 
@@ -162,6 +163,7 @@ export function buildProtocolsPrompt(): string {
   lines.push("- On KyberSwap-supported EVM chains, prefer `kyberswap.*` (aggregated pricing plus honeypot/fee-on-transfer flags).");
   lines.push("- If KyberSwap fails or lacks the chain, fall back to `uniswap.*` (best route across Uniswap V2 and V3).");
   lines.push("- On Robinhood Chain (4663), `kyberswap.*` is primary (provisional aggregator support) with `uniswap.*` as the fallback — same rule as other KyberSwap chains. $VEX and other Virtuals agent tokens trade against VIRTUAL there, so route through VIRTUAL (or WETH) as the base pair.");
+  lines.push("- Robinhood caution: KyberSwap's indexed reserves can be stale on thin pairs there. A quote whose priceImpact is strongly NEGATIVE (output supposedly worth more than input) or an execute reverting with 'Return amount is not enough' means the quote overestimated the pool — do NOT retry with higher slippage; switch to the `uniswap.*` fallback immediately.");
   lines.push("- Quote and execute on the SAME venue: a `kyberswap` quote authorizes only a `kyberswap` execute, and a `uniswap` quote only a `uniswap` execute. The runtime enforces this.");
   lines.push("");
   lines.push("Bridge venue by chain:");

@@ -13,10 +13,11 @@ import type {
   DecimalString,
   HyperliquidExchangeResult,
 } from "@tools/hyperliquid/types.js";
-import { parseDecimalString } from "@tools/hyperliquid/validation.js";
+import { normalizeProviderDecimal, parseDecimalString } from "@tools/hyperliquid/validation.js";
 import type { ProtocolExecutionContext } from "../types.js";
 import type { ToolResult } from "../../types.js";
 import { buildPositionProtectionSnapshot } from "./protection-snapshot.js";
+import { redact } from "../../../../lib/diagnostics/text-redaction.js";
 import logger from "@utils/logger.js";
 
 export function infoClient(): HyperliquidInfoClient {
@@ -124,13 +125,41 @@ export function exchangeResult(
       ? protectionState
       : null,
   };
+  const venueError = venueErrorMessage(result);
   const response = {
     success,
     exchange: result.kind,
     ...data,
+    // A bounded, redacted venue error so a failure is diagnosable: "batch_error"
+    // alone is opaque and wastes agent calls (e.g. hl_leverage(cross) on an
+    // isolated-only market returns "Cannot switch margin mode"). Placed AFTER
+    // `data` so a handler-supplied field can never override the computed value.
+    ...(venueError === undefined ? {} : { venueError }),
     ...(display === undefined ? {} : { _displayBlock: display }),
   };
   return { success, output: JSON.stringify(response), data: response };
+}
+
+/** First 120 chars of a venue-supplied error, redacted, when the result carries one. */
+function venueErrorMessage(result: HyperliquidExchangeResult): string | undefined {
+  if (result.kind === "batch_error") return boundVenueError(result.message);
+  if (result.kind === "orders") {
+    for (const status of result.statuses) {
+      if (status.kind === "rejected") return boundVenueError(status.message);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The venue error is raw untrusted text: collapse control whitespace, run it
+ * through the shared secret/address redaction pipeline, THEN cap at 120 chars
+ * so keys, addresses, JWTs, and auth fragments never reach the transcript.
+ */
+function boundVenueError(message: string): string | undefined {
+  const collapsed = message.replace(/\s+/g, " ").trim();
+  if (collapsed.length === 0) return undefined;
+  return redact(collapsed).text.slice(0, 120);
 }
 
 export function auditCapture(
@@ -370,7 +399,15 @@ export function markForCoin(response: unknown, coin: string): DecimalString | un
   if (index < 0) return undefined;
   const context = record(contexts[index]);
   const value = string(context, "markPx");
-  return value === undefined ? undefined : parseDecimalString(value);
+  if (value === undefined) return undefined;
+  // markPx is OPTIONAL display data: the venue returns non-canonical decimals
+  // (e.g. a trailing-zero "62026.0"), so parse leniently and drop a malformed
+  // value rather than throwing — a bad mark must never fail the positions read.
+  try {
+    return normalizeProviderDecimal(value, `Hyperliquid mark price for ${coin}`);
+  } catch {
+    return undefined;
+  }
 }
 
 export function positive(value: string | undefined): string | undefined {

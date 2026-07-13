@@ -13,7 +13,7 @@
  * design); disabling it routes through main's native confirmation.
  */
 
-import { useEffect, useMemo, useState, type JSX } from "react";
+import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 
 import type { HyperliquidMarketDto } from "@shared/schemas/hyperliquid.js";
 import {
@@ -26,6 +26,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { hyperliquidKeys } from "../../../lib/api/queryKeys.js";
 import { cn } from "../../../lib/utils.js";
 
+/**
+ * A stepper whose value is also click-to-type: tapping the number turns it into
+ * a numeric input (select-all on focus). Enter/blur commits, Escape reverts.
+ * An out-of-range commit clamps to the field bound and flashes a transient
+ * "max/min accessible is …" note. The clamp is a UI affordance only —
+ * server-side risk-policy validation stays authoritative.
+ */
 function Stepper({
   label,
   value,
@@ -33,6 +40,7 @@ function Stepper({
   max,
   step = 1,
   suffix,
+  integer = false,
   onChange,
 }: {
   readonly label: string;
@@ -41,39 +49,122 @@ function Stepper({
   readonly max: number;
   readonly step?: number;
   readonly suffix: string;
+  /** Coerce a typed value to an integer. Only the leverage cap is integer in the shared schema; the percentage fields accept decimals. */
+  readonly integer?: boolean;
   readonly onChange: (next: number) => void;
 }): JSX.Element {
   const clamp = (candidate: number): number => Math.min(max, Math.max(min, candidate));
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (notice === null) return;
+    const timer = setTimeout(() => setNotice(null), 2_600);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
+
+  const beginEdit = (): void => {
+    setDraft(String(value));
+    setEditing(true);
+  };
+
+  const commit = (): void => {
+    setEditing(false);
+    const trimmed = draft.trim();
+    const parsed = Number(trimmed);
+    // Empty / non-numeric input reverts to the current value with no change.
+    if (trimmed === "" || !Number.isFinite(parsed)) return;
+    // Integer coercion applies ONLY to integer-typed fields (leverage). The
+    // percentage fields accept decimals in the shared schema, so 12.5 must stay
+    // 12.5 — silently rounding it would be an unrequested policy change.
+    const candidate = integer ? Math.round(parsed) : parsed;
+    const clamped = clamp(candidate);
+    if (clamped !== candidate) {
+      setNotice(candidate > max ? `max accessible is ${max}` : `min accessible is ${min}`);
+    }
+    if (clamped !== value) onChange(clamped);
+  };
+
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]">
-        {label}
-      </span>
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          aria-label={`Decrease ${label}`}
-          onClick={() => onChange(clamp(value - step))}
-          className="h-6 w-6 rounded-md border border-[var(--vex-line)] font-mono text-[12px] text-[var(--vex-text-2)] hover:border-[var(--vex-accent-border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-        >
-          −
-        </button>
-        <span className="min-w-[52px] text-center font-mono text-[12px] font-semibold tabular-nums text-[var(--vex-text)]">
-          {value}
-          {suffix}
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]">
+          {label}
         </span>
-        <button
-          type="button"
-          aria-label={`Increase ${label}`}
-          onClick={() => onChange(clamp(value + step))}
-          className="h-6 w-6 rounded-md border border-[var(--vex-line)] font-mono text-[12px] text-[var(--vex-text-2)] hover:border-[var(--vex-accent-border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-        >
-          +
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label={`Decrease ${label}`}
+            onClick={() => onChange(clamp(value - step))}
+            className="h-6 w-6 rounded-md border border-[var(--vex-line)] font-mono text-[12px] text-[var(--vex-text-2)] hover:border-[var(--vex-accent-border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+          >
+            −
+          </button>
+          {editing ? (
+            <input
+              ref={inputRef}
+              type="number"
+              inputMode="numeric"
+              aria-label={`${label} value`}
+              value={draft}
+              min={min}
+              max={max}
+              autoFocus
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => setDraft(event.target.value)}
+              onBlur={commit}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commit();
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  setEditing(false);
+                }
+              }}
+              className="h-6 w-[52px] rounded-md border border-[var(--vex-accent-border)] bg-[var(--vex-surface-down)] text-center font-mono text-[12px] font-semibold tabular-nums text-[var(--vex-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+            />
+          ) : (
+            <button
+              type="button"
+              aria-label={`Edit ${label}`}
+              onClick={beginEdit}
+              className="min-w-[52px] text-center font-mono text-[12px] font-semibold tabular-nums text-[var(--vex-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+            >
+              {value}
+              {suffix}
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label={`Increase ${label}`}
+            onClick={() => onChange(clamp(value + step))}
+            className="h-6 w-6 rounded-md border border-[var(--vex-line)] font-mono text-[12px] text-[var(--vex-text-2)] hover:border-[var(--vex-accent-border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+          >
+            +
+          </button>
+        </div>
       </div>
+      {notice !== null ? (
+        <p role="status" className="text-right font-mono text-[9px] uppercase tracking-[0.12em] text-[var(--vex-warn-text)]">
+          {notice}
+        </p>
+      ) : null}
     </div>
   );
 }
+
+// Mirrors HYPERLIQUID_MIN_NOTIONAL_USD (src/tools/hyperliquid/constants.ts).
+// Kept as a renderer-local literal on purpose: renderer/shared code must not
+// import the agent runtime across the Electron boundary. Update both together
+// if the venue minimum ever changes.
+const HYPERLIQUID_MIN_NOTIONAL_USD_DISPLAY = "10";
 
 function universeMaxLeverage(markets: readonly HyperliquidMarketDto[] | null): number {
   if (markets === null || markets.length === 0) return 50;
@@ -215,19 +306,21 @@ export function HypervexingRiskSetup({
             "Set by you" beats an agent proposal; the agent can suggest new
             limits, but only your confirmation activates them.
           </p>
+          <p className="text-[var(--vex-text-3)]">
+            {selectedMarket !== null
+              ? `${selectedMarket.coin} allows up to ${selectedMarket.maxLeverage}x — per-asset limits always clamp automatically.`
+              : "Per-asset limits always clamp automatically."}
+            {" "}The agent sees these caps in its instructions and the system blocks anything above them.
+          </p>
+          <p className="text-[var(--vex-text-3)]">
+            Venue minimum per order: {HYPERLIQUID_MIN_NOTIONAL_USD_DISPLAY} USDC notional.
+          </p>
         </div>
       ) : null}
 
-      <Stepper label="Leverage cap" value={leverage} min={1} max={maxLeverage} suffix="x" onChange={mark(setLeverage)} />
+      <Stepper label="Leverage cap" value={leverage} min={1} max={maxLeverage} suffix="x" integer onChange={mark(setLeverage)} />
       <Stepper label="Per order" value={perOrder} min={1} max={50} step={1} suffix="%" onChange={mark(setPerOrder)} />
       <Stepper label="Total notional" value={total} min={10} max={200} step={10} suffix="%" onChange={mark(setTotal)} />
-
-      <p className="text-[10px] leading-[1.5] text-[var(--vex-text-3)]">
-        {selectedMarket !== null
-          ? `${selectedMarket.coin} allows up to ${selectedMarket.maxLeverage}x — per-asset limits always clamp automatically.`
-          : "Per-asset limits always clamp automatically."}
-        {" "}The agent sees these caps in its instructions and the system blocks anything above them.
-      </p>
 
       <label className="flex items-center justify-between gap-2">
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]">

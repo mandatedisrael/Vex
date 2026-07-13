@@ -275,6 +275,13 @@ export const CH = {
     getMarkets: "vex:hyperliquid:getMarkets",
     getBook: "vex:hyperliquid:getBook",
     getWorkspaceMode: "vex:hyperliquid:getWorkspaceMode",
+    // Read-only account registers — main resolves the session's selected EVM
+    // wallet and validates every venue response before mapping to a DTO.
+    getOpenOrders: "vex:hyperliquid:getOpenOrders",
+    getTwapHistory: "vex:hyperliquid:getTwapHistory",
+    getTradeHistory: "vex:hyperliquid:getTradeHistory",
+    getFundingHistory: "vex:hyperliquid:getFundingHistory",
+    getOrderHistory: "vex:hyperliquid:getOrderHistory",
     enterWorkspace: "vex:hyperliquid:enterWorkspace",
     exitWorkspace: "vex:hyperliquid:exitWorkspace",
     // Live WebSocket feed — session-gated watch control over main's shared

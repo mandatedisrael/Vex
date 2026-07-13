@@ -72,6 +72,18 @@ function useWideRoom(): boolean {
 /** The room's default market before any selection or open position. */
 const DEFAULT_COIN = "BTC";
 
+/** Pure selection rule so initial hydration can never masquerade as a new fill. */
+export function nextPositionAutoFollow(
+  known: ReadonlySet<string> | null,
+  coins: readonly string[],
+  hasManualSelection: boolean,
+): { readonly known: ReadonlySet<string>; readonly follow: string | undefined } {
+  const current = new Set(coins);
+  if (known === null) return { known: current, follow: undefined };
+  const fresh = [...current].find((coin) => !known.has(coin));
+  return { known: current, follow: hasManualSelection ? undefined : fresh };
+}
+
 export function HypervexingWorkspace({
   onExit,
 }: {
@@ -92,19 +104,31 @@ export function HypervexingWorkspace({
   // Selection priority: explicit user pick → first open position → BTC.
   // The room never shows an empty "pick a market" void.
   const [selectedCoin, setSelectedCoin] = useState<string | null>(null);
+  const hasManualSelection = useRef(false);
   const effectiveCoin = selectedCoin ?? positions[0]?.coin ?? DEFAULT_COIN;
   const selectedPosition = findPositionByCoin(positions, effectiveCoin);
 
   // A NEWLY opened position pulls the chart to its market (owner order: a
   // HYPE position must not stream under a BTC chart) — once, on the coin's
   // first appearance; the user's later manual pick is never fought.
-  const knownPositionCoins = useRef<ReadonlySet<string>>(new Set());
+  const knownPositionCoins = useRef<ReadonlySet<string> | null>(null);
   useEffect(() => {
-    const current = new Set(positions.map((p) => p.coin));
-    const fresh = [...current].find((coin) => !knownPositionCoins.current.has(coin));
-    knownPositionCoins.current = current;
-    if (fresh !== undefined) setSelectedCoin(fresh);
+    // The first durable projection establishes the baseline. `effectiveCoin`
+    // already falls back to its first position, and this must never overwrite a
+    // picker choice made while the positions query was loading.
+    const next = nextPositionAutoFollow(
+      knownPositionCoins.current,
+      positions.map((position) => position.coin),
+      hasManualSelection.current,
+    );
+    knownPositionCoins.current = next.known;
+    if (next.follow !== undefined) setSelectedCoin(next.follow);
   }, [positions]);
+
+  const selectCoinManually = (coin: string): void => {
+    hasManualSelection.current = true;
+    setSelectedCoin(coin);
+  };
 
   // One uPnL derivation for the room: venue-confirmed account total first,
   // position-sum fallback (same rule the top bar applies).
@@ -149,7 +173,7 @@ export function HypervexingWorkspace({
           coin={effectiveCoin}
           position={selectedPosition}
           watchlist={watchlist}
-          onSelectCoin={setSelectedCoin}
+          onSelectCoin={selectCoinManually}
         />
       </HvZone>
       {wideRoom ? (

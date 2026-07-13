@@ -5,11 +5,7 @@ import { useHyperliquidPositions } from "../../../lib/api/hyperliquid.js";
 import { useSubmitChat } from "../../../lib/api/chat.js";
 import { cn } from "../../../lib/utils.js";
 import { BookBlock } from "./BookBlock.js";
-import {
-  HyperliquidCoverageBadge,
-  type CoverageLabel,
-} from "./HyperliquidCoverageBadge.js";
-import { HyperliquidPositionChart } from "./HyperliquidPositionChart.js";
+import type { CoverageLabel } from "./HyperliquidCoverageBadge.js";
 
 const STALE_AFTER_MS = 180_000;
 
@@ -56,7 +52,6 @@ function SetProtectionAction({
 }
 
 function PositionRow({ sessionId, position }: { readonly sessionId: string; readonly position: HyperliquidPositionDto }): JSX.Element {
-  const label = coverage(position);
   const isLong = position.side === "long";
   return (
     <li className="border-t border-[var(--vex-line)] py-2 first:border-t-0">
@@ -76,7 +71,6 @@ function PositionRow({ sessionId, position }: { readonly sessionId: string; read
             {position.size} {position.coin}
           </span>
         </span>
-        <HyperliquidCoverageBadge label={label} />
       </div>
       <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-[10px] tabular-nums text-[var(--vex-text-3)]">
         <span>mark {position.markPx}</span>
@@ -102,8 +96,15 @@ function PositionRow({ sessionId, position }: { readonly sessionId: string; read
           )}
         </span>
         <span>funding {position.fundingAccrued}</span>
+        <span>
+          lev{" "}
+          <span className="text-[var(--vex-text-2)]">
+            {position.leverage ?? "—"}
+            {position.leverage !== null ? "x" : ""}
+            {position.marginMode !== "unknown" ? ` ${position.marginMode}` : ""}
+          </span>
+        </span>
       </div>
-      <HyperliquidPositionChart sessionId={sessionId} coin={position.coin} position={position} />
     </li>
   );
 }

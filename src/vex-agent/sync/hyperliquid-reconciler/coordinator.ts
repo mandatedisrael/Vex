@@ -39,8 +39,10 @@ import {
   type HyperliquidUserFills,
 } from "./projections.js";
 import {
+  protectionNoticeSignal,
   wakeOrNotifyConsolidation,
   wakeOrNotifyUnprotected,
+  type ProtectionNoticeSignal,
 } from "./protection-notifier.js";
 import logger from "@utils/logger.js";
 
@@ -215,15 +217,23 @@ async function reconcileWallet(input: ReconcileWalletInput): Promise<void> {
       });
       const persisted = await captureIfChanged(capture, localPosition, input.deps, input.result);
       if (!persisted) continue;
-      if (snapshot.state === "CONSOLIDATING" && metaString(capture, "protectionEscalation") === "UNPROTECTED") {
+      const escalated = metaString(capture, "protectionEscalation") === "UNPROTECTED";
+      // Emit the chat notice only on a protection TRANSITION: compare the
+      // protection notice identity against the prior persisted state (from
+      // localPosition), never capture-row equality. The per-minute
+      // reconcileBucket rewrites the capture every pass, so row equality would
+      // spam once per minute; the safety wake below is unaffected either way.
+      const currentSignal = protectionNoticeSignal(snapshot.state, escalated);
+      const shouldNotify = currentSignal !== null && currentSignal !== priorProtectionNoticeSignal(localPosition);
+      if (snapshot.state === "CONSOLIDATING" && escalated) {
         input.result.unprotected += 1;
-        await wakeOrNotifyUnprotected(capture, input.deps);
+        await wakeOrNotifyUnprotected(capture, input.deps, shouldNotify);
       } else if (snapshot.state === "CONSOLIDATING") {
         input.result.consolidating += 1;
-        await wakeOrNotifyConsolidation(capture, input.deps);
+        await wakeOrNotifyConsolidation(capture, input.deps, shouldNotify);
       } else if (snapshot.state === "UNPROTECTED" || snapshot.state === "PARTIAL") {
         input.result.unprotected += 1;
-        await wakeOrNotifyUnprotected(capture, input.deps);
+        await wakeOrNotifyUnprotected(capture, input.deps, shouldNotify);
       }
       continue;
     }
@@ -271,6 +281,14 @@ async function captureIfChanged(
   return true;
 }
 
+
+/** The protection notice identity last written for this position, or null on first sighting. */
+function priorProtectionNoticeSignal(localPosition: openPositionsRepo.Position | null): ProtectionNoticeSignal | null {
+  if (localPosition === null) return null;
+  const priorState = stringField(localPosition.data, "protectionState");
+  const priorEscalated = stringField(localPosition.data, "protectionEscalation") === "UNPROTECTED";
+  return protectionNoticeSignal(priorState, priorEscalated);
+}
 
 function stringField(value: Record<string, unknown>, key: string): string | undefined {
   const candidate = value[key];

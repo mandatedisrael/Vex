@@ -42,3 +42,21 @@ describe("HyperliquidInfoClient candleSnapshot", () => {
     );
   });
 });
+
+describe("HyperliquidInfoClient account-history endpoints", () => {
+  it.each([
+    ["userTwapSliceFills", (c: HyperliquidInfoClient, user: string) => c.userTwapSliceFills(user)],
+    ["historicalOrders", (c: HyperliquidInfoClient, user: string) => c.historicalOrders(user)],
+  ] as const)("posts the %s info type with the user payload", async (type, call) => {
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify([]), { status: 200 }));
+    const client = new HyperliquidInfoClient({ fetchFn });
+    const user = "0x00000000000000000000000000000000000000ab";
+
+    await call(client, user);
+
+    expect(fetchFn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ body: JSON.stringify({ type, user }) }),
+    );
+  });
+});

@@ -1,11 +1,10 @@
 /**
- * Per-position Hyperliquid chart. lightweight-charts is used directly (no
- * React wrapper) because its lifecycle must be owned by this component.
- * Numeric conversion is a rendering adapter only; policy/signing and every
- * IPC boundary retain canonical decimal strings.
+ * Hyperliquid price chart. lightweight-charts is deliberately owned
+ * imperatively: live positions and candle snapshots must never rebuild its
+ * canvas or reset the user's viewport.
  */
 
-import { useEffect, useRef, type JSX } from "react";
+import { useEffect, useMemo, useRef, type JSX } from "react";
 import {
   CandlestickSeries,
   HistogramSeries,
@@ -15,10 +14,10 @@ import {
 } from "lightweight-charts";
 
 import type {
+  HyperliquidCandleDto,
   HyperliquidCandleInterval,
   HyperliquidPositionDto,
 } from "@shared/schemas/hyperliquid.js";
-import { useHyperliquidCandles } from "../../../lib/api/hyperliquid.js";
 
 export type CandleChartState = "loading" | "error" | "empty" | "ready";
 
@@ -32,21 +31,50 @@ export function deriveCandleChartState(
   return result?.ok && (result.data?.candles.length ?? 0) > 0 ? "ready" : "empty";
 }
 
-function renderNumber(value: string): number | null {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
+type TimeRange = { readonly from: UTCTimestamp; readonly to: UTCTimestamp };
+type CandleBar = { readonly time: UTCTimestamp; readonly open: number; readonly high: number; readonly low: number; readonly close: number };
+type VolumeBar = { readonly time: UTCTimestamp; readonly value: number };
+
+interface PriceLineHandle {
+  applyOptions(options: { readonly price: number }): void;
 }
 
-/**
- * lightweight-charts colors are JS options, not CSS, so the design tokens are
- * read at runtime from the shell scope (design spec §7) — NO hex literals in
- * this module; every color resolves from a --vex-* custom property. The
- * properties are defined CONCRETE (hex / rgba, never color-mix/var indirection)
- * in globals.css so the computed value survives the getComputedStyle read. This
- * runs only after the chart host is mounted inside the [data-vex-shell] scope,
- * where the cascade always resolves the tokens to non-empty values.
- */
-function readChartTokens(host: Element): {
+interface PriceLineSeries {
+  setData(data: readonly CandleBar[]): void;
+  update(bar: CandleBar): void;
+  createPriceLine(options: {
+    readonly price: number;
+    readonly title: string;
+    readonly color: string;
+    readonly lineWidth: 1;
+    readonly lineStyle: LineStyle;
+    readonly axisLabelVisible: boolean;
+  }): PriceLineHandle;
+  removePriceLine(line: PriceLineHandle): void;
+}
+
+interface VolumeSeries {
+  setData(data: readonly VolumeBar[]): void;
+  update(bar: VolumeBar): void;
+  priceScale(): { applyOptions(options: { readonly scaleMargins: { readonly top: number; readonly bottom: number } }): void };
+}
+
+interface ChartHandle {
+  addSeries(type: typeof CandlestickSeries, options: Record<string, unknown>): PriceLineSeries;
+  addSeries(type: typeof HistogramSeries, options: Record<string, unknown>): VolumeSeries;
+  timeScale(): {
+    fitContent(): void;
+    getVisibleRange(): TimeRange | null;
+    setVisibleRange(range: TimeRange): void;
+    scrollPosition(): number;
+    scrollToRealTime(): void;
+    subscribeVisibleTimeRangeChange(callback: (range: TimeRange | null) => void): void;
+  };
+  applyOptions(options: { readonly width?: number; readonly height?: number }): void;
+  remove(): void;
+}
+
+interface ChartTokens {
   readonly bg: string;
   readonly axis: string;
   readonly grid: string;
@@ -57,182 +85,247 @@ function readChartTokens(host: Element): {
   readonly entry: string;
   readonly sl: string;
   readonly liq: string;
-  readonly last: string;
-} {
+}
+
+interface PriceLineState {
+  readonly handle: PriceLineHandle;
+  readonly price: number;
+}
+
+const LIVE_EDGE_EPSILON = 0.5;
+
+function renderNumber(value: string): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+/** A semantic revision deliberately excludes `fetchedAt`. */
+export function candleRevision(candles: readonly HyperliquidCandleDto[] | null): string {
+  if (candles === null) return "";
+  return candles.map((candle) => [
+    candle.openTimeMs,
+    candle.open,
+    candle.high,
+    candle.low,
+    candle.close,
+    candle.volume,
+  ].join(":")) .join("|");
+}
+
+function marketKey(coin: string, interval: HyperliquidCandleInterval): string {
+  return `${coin}\u0000${interval}`;
+}
+
+function candleBars(candles: readonly HyperliquidCandleDto[]): { readonly candles: CandleBar[]; readonly volume: VolumeBar[] } {
+  const bars: CandleBar[] = [];
+  const volume: VolumeBar[] = [];
+  for (const candle of candles) {
+    const time = Math.floor(candle.openTimeMs / 1_000) as UTCTimestamp;
+    const open = Number(candle.open);
+    const high = Number(candle.high);
+    const low = Number(candle.low);
+    const close = Number(candle.close);
+    const value = Number(candle.volume);
+    if (![open, high, low, close, value].every(Number.isFinite)) continue;
+    bars.push({ time, open, high, low, close });
+    volume.push({ time, value });
+  }
+  return { candles: bars, volume };
+}
+
+/**
+ * lightweight-charts colors are JS options, not CSS, so the design tokens are
+ * read from the mounted shell. They are captured once because this component
+ * has no theme-version input; changing a live position must not recreate it.
+ */
+function readChartTokens(host: Element): ChartTokens {
   const style = getComputedStyle(host);
   const read = (name: string): string => style.getPropertyValue(name).trim();
   return {
-    bg: read("--vex-chart-bg"),
-    axis: read("--vex-chart-axis"),
-    grid: read("--vex-chart-grid"),
-    border: read("--vex-line-strong"),
-    long: read("--vex-long"),
-    short: read("--vex-short"),
-    volume: read("--vex-chart-volume"),
-    entry: read("--vex-chart-entry"),
-    sl: read("--vex-chart-sl"),
-    liq: read("--vex-chart-liq"),
-    last: read("--vex-chart-last"),
+    bg: read("--vex-chart-bg"), axis: read("--vex-chart-axis"), grid: read("--vex-chart-grid"),
+    border: read("--vex-line-strong"), long: read("--vex-long"), short: read("--vex-short"),
+    volume: read("--vex-chart-volume"), entry: read("--vex-chart-entry"), sl: read("--vex-chart-sl"), liq: read("--vex-chart-liq"),
   };
 }
 
 export function HyperliquidPositionChart({
-  sessionId,
   coin,
   interval = "1h",
+  candles,
+  state,
   position = null,
   fill = false,
-  liveMid = null,
 }: {
-  readonly sessionId: string;
-  /** Market driving the candles — a chart needs a coin, not a position. */
   readonly coin: string;
-  /** Candle interval; callers without an interval control keep the 1H default. */
   readonly interval?: HyperliquidCandleInterval;
-  /** Optional overlay: entry/SL/liq/mark lines render only when present. */
+  readonly candles: readonly HyperliquidCandleDto[] | null;
+  readonly state: CandleChartState;
   readonly position?: HyperliquidPositionDto | null;
-  /** Fill the host container's height instead of the compact 180px block. */
   readonly fill?: boolean;
-  /** Live mid from the WS watch — drives the MARK line between pushes. */
-  readonly liveMid?: string | null;
 }): JSX.Element {
   const host = useRef<HTMLDivElement | null>(null);
-  const query = useHyperliquidCandles(sessionId, coin, interval);
-  const candles = query.data?.ok ? query.data.data.candles : null;
-  const state = deriveCandleChartState(query.isLoading, query.isError, query.data);
-  // Imperative handles for the live layer: candle ticks and mid moves mutate
-  // the existing series in place — rebuilding the canvas per tick is banned.
-  const candleSeries = useRef<CandleUpdateSeries | null>(null);
-  const volumeSeries = useRef<CandleUpdateSeries | null>(null);
-  const markLine = useRef<PriceLineHandle | null>(null);
+  const chart = useRef<ChartHandle | null>(null);
+  const candleSeries = useRef<PriceLineSeries | null>(null);
+  const volumeSeries = useRef<VolumeSeries | null>(null);
+  const tokens = useRef<ChartTokens | null>(null);
+  const lines = useRef<Map<string, PriceLineState>>(new Map());
+  const savedTimeRange = useRef<TimeRange | null>(null);
+  const loadedMarket = useRef<string | null>(null);
+  const liveCandle = useRef<{ readonly market: string; readonly candle: HyperliquidCandleDto } | null>(null);
+  const candleSnapshot = useRef(candles);
+  candleSnapshot.current = candles;
+  const fillRef = useRef(fill);
+  fillRef.current = fill;
+  const revision = useMemo(() => candleRevision(candles), [candles]);
+  const overlayKey = `${position?.entryPx ?? ""}|${position?.slPrice ?? ""}|${position?.tpPrice ?? ""}|${position?.liquidationPx ?? ""}`;
 
+  // (a) Chart ownership: one canvas/series/observer for this mounted host.
   useEffect(() => {
     const element = host.current;
-    if (element === null || candles === null || candles.length === 0) return;
+    if (element === null) return;
     const token = readChartTokens(element);
-    const chart = createChart(element, {
+    const instance = createChart(element, {
       width: Math.max(element.clientWidth, 220),
-      height: fill ? Math.max(element.clientHeight, 220) : 180,
-      // Solid recessed floor (owner order: the transparent canvas blended the
-      // candles into the glass zone) — the plot reads as its own dark well.
+      height: fillRef.current ? Math.max(element.clientHeight, 220) : 180,
       layout: { background: { color: token.bg || "transparent" }, textColor: token.axis },
       grid: { vertLines: { color: token.grid }, horzLines: { color: token.grid } },
       rightPriceScale: { borderColor: token.border },
-      timeScale: { borderColor: token.border, timeVisible: true },
-    });
-    const series = chart.addSeries(CandlestickSeries, {
+      timeScale: {
+        borderColor: token.border,
+        timeVisible: true,
+        shiftVisibleRangeOnNewBar: true,
+        lockVisibleTimeRangeOnResize: true,
+        rightBarStaysOnScroll: false,
+      },
+    }) as unknown as ChartHandle;
+    const series = instance.addSeries(CandlestickSeries, {
       upColor: token.long, downColor: token.short, borderVisible: false,
       wickUpColor: token.long, wickDownColor: token.short,
     });
-    series.setData(candles.map((candle) => ({
-      // lightweight-charts brands epoch seconds as UTCTimestamp; the cast is
-      // the upstream-documented conversion for numeric epoch input.
-      time: Math.floor(candle.openTimeMs / 1_000) as UTCTimestamp,
-      open: Number(candle.open), high: Number(candle.high), low: Number(candle.low), close: Number(candle.close),
-    })));
-    const volume = chart.addSeries(HistogramSeries, {
-      priceScaleId: "volume",
-      priceFormat: { type: "volume" },
-      color: token.volume,
+    const volume = instance.addSeries(HistogramSeries, {
+      priceScaleId: "volume", priceFormat: { type: "volume" }, color: token.volume,
     });
     volume.priceScale().applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
-    volume.setData(candles.map((candle) => ({ time: Math.floor(candle.openTimeMs / 1_000) as UTCTimestamp, value: Number(candle.volume) })));
-
-    if (position !== null) {
-      addPriceLine(series, position.entryPx, "ENTRY", token.entry);
-      if (position.slPrice !== null) addPriceLine(series, position.slPrice, "SL", token.sl, LineStyle.Dashed);
-      if (position.tpPrice !== null) addPriceLine(series, position.tpPrice, "TP", token.long, LineStyle.Dashed);
-      if (position.liquidationPx !== null) addPriceLine(series, position.liquidationPx, "LIQ", token.liq, LineStyle.Dashed);
-      markLine.current = addPriceLine(series, position.markPx, "MARK", token.last, LineStyle.Dotted);
-    }
-    chart.timeScale().fitContent();
-    candleSeries.current = series;
-    volumeSeries.current = volume;
-
+    instance.timeScale().subscribeVisibleTimeRangeChange((range) => { savedTimeRange.current = range; });
     const resize = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width;
       const height = entries[0]?.contentRect.height;
       if (width !== undefined && width > 0) {
-        chart.applyOptions({ width, ...(fill && height !== undefined && height > 0 ? { height } : {}) });
+        instance.applyOptions({ width, ...(fillRef.current && height !== undefined && height > 0 ? { height } : {}) });
       }
     });
     resize.observe(element);
+    chart.current = instance;
+    candleSeries.current = series;
+    volumeSeries.current = volume;
+    tokens.current = token;
     return () => {
+      for (const line of lines.current.values()) series.removePriceLine(line.handle);
+      lines.current.clear();
       candleSeries.current = null;
       volumeSeries.current = null;
-      markLine.current = null;
+      chart.current = null;
+      tokens.current = null;
       resize.disconnect();
-      chart.remove();
+      instance.remove();
     };
-  }, [candles, coin, fill, position, position?.entryPx, position?.liquidationPx, position?.markPx, position?.slPrice, position?.tpPrice]);
+  }, []);
 
-  // LIVE LAYER 1 — per-tick candle updates from main's shared WS watch.
-  // `series.update` mutates the last bar (or appends a new one) in place.
+  // (b) Snapshot reconciliation: replace series data, never the chart. A
+  // time-range is stable when historical bars are inserted/replaced; logical
+  // indexes are not. `setVisibleRange` clamps unavailable endpoints itself.
   useEffect(() => {
-    return window.vex.hyperliquid.onCandleUpdate((event) => {
-      if (event.coin !== coin || event.interval !== interval) return;
-      const time = Math.floor(event.candle.openTimeMs / 1_000) as UTCTimestamp;
-      const open = Number(event.candle.open);
-      const high = Number(event.candle.high);
-      const low = Number(event.candle.low);
-      const close = Number(event.candle.close);
-      const volume = Number(event.candle.volume);
-      if (![open, high, low, close, volume].every(Number.isFinite)) return;
-      candleSeries.current?.update({ time, open, high, low, close });
-      volumeSeries.current?.update({ time, value: volume });
-    });
-  }, [coin, interval]);
+    const snapshot = candleSnapshot.current;
+    if (snapshot === null || snapshot.length === 0) return;
+    const instance = chart.current;
+    const series = candleSeries.current;
+    const volume = volumeSeries.current;
+    if (instance === null || series === null || volume === null) return;
+    const key = marketKey(coin, interval);
+    const previousRange = instance.timeScale().getVisibleRange() ?? savedTimeRange.current;
+    const atLiveEdge = instance.timeScale().scrollPosition() <= LIVE_EDGE_EPSILON;
+    const { candles: nextCandles, volume: nextVolume } = candleBars(snapshot);
+    const latest = liveCandle.current;
+    if (latest !== null && latest.market === key) {
+      const live = candleBars([latest.candle]);
+      const liveBar = live.candles[0];
+      const liveVolume = live.volume[0];
+      if (liveBar !== undefined && liveVolume !== undefined) {
+        const index = nextCandles.findIndex((bar) => bar.time === liveBar.time);
+        if (index >= 0) {
+          nextCandles[index] = liveBar;
+          nextVolume[index] = liveVolume;
+        } else if (nextCandles.length === 0 || nextCandles[nextCandles.length - 1]!.time < liveBar.time) {
+          nextCandles.push(liveBar);
+          nextVolume.push(liveVolume);
+        }
+      }
+    }
+    series.setData(nextCandles);
+    volume.setData(nextVolume);
+    if (loadedMarket.current !== key) {
+      savedTimeRange.current = null;
+      instance.timeScale().fitContent();
+      loadedMarket.current = key;
+    } else if (atLiveEdge) {
+      instance.timeScale().scrollToRealTime();
+    } else if (previousRange !== null) {
+      instance.timeScale().setVisibleRange(previousRange);
+    }
+  }, [coin, interval, revision]);
 
-  // LIVE LAYER 2 — the MARK overlay follows the live mid between position
-  // pushes, so an open position breathes with the market.
+  // (c) Live candles mutate the existing series. Keep the newest received bar
+  // so a delayed HTTP snapshot cannot regress it during reconciliation.
+  useEffect(() => window.vex.hyperliquid.onCandleUpdate((event) => {
+    if (event.coin !== coin || event.interval !== interval) return;
+    const converted = candleBars([event.candle]);
+    const candle = converted.candles[0];
+    const volume = converted.volume[0];
+    if (candle === undefined || volume === undefined) return;
+    candleSeries.current?.update(candle);
+    volumeSeries.current?.update(volume);
+    liveCandle.current = { market: marketKey(coin, interval), candle: event.candle };
+  }), [coin, interval]);
+
+  // (d) Position overlays are independent from price/PnL updates. Retain line
+  // handles and move a surviving line with applyOptions rather than recreating.
   useEffect(() => {
-    if (liveMid === null) return;
-    const price = Number(liveMid);
-    if (!Number.isFinite(price)) return;
-    markLine.current?.applyOptions({ price });
-  }, [liveMid]);
+    const series = candleSeries.current;
+    const token = tokens.current;
+    if (series === null || token === null) return;
+    const wanted = [
+      ["entry", position?.entryPx ?? null, "ENTRY", token.entry, LineStyle.Solid],
+      ["sl", position?.slPrice ?? null, "SL", token.sl, LineStyle.Dashed],
+      ["tp", position?.tpPrice ?? null, "TP", token.long, LineStyle.Dashed],
+      ["liq", position?.liquidationPx ?? null, "LIQ", token.liq, LineStyle.Dashed],
+    ] as const;
+    const desired = new Set<string>();
+    for (const [id, value, title, color, lineStyle] of wanted) {
+      if (value === null) continue;
+      const price = renderNumber(value);
+      if (price === null) continue;
+      desired.add(id);
+      const current = lines.current.get(id);
+      if (current === undefined) {
+        lines.current.set(id, {
+          handle: series.createPriceLine({ price, title, color, lineWidth: 1, lineStyle, axisLabelVisible: true }),
+          price,
+        });
+      } else if (current.price !== price) {
+        current.handle.applyOptions({ price });
+        lines.current.set(id, { ...current, price });
+      }
+    }
+    for (const [id, current] of lines.current) {
+      if (!desired.has(id)) {
+        series.removePriceLine(current.handle);
+        lines.current.delete(id);
+      }
+    }
+  }, [overlayKey]);
 
   if (state === "loading") return <p className="mt-2 text-[10px] text-[var(--vex-text-3)]">Loading chart…</p>;
   if (state === "error") return <p className="mt-2 text-[10px] text-[var(--vex-warn-text)]">Chart unavailable.</p>;
   if (state === "empty") return <p className="mt-2 text-[10px] text-[var(--vex-text-3)]">No candle history yet.</p>;
-  return (
-    <div
-      ref={host}
-      aria-label={`${coin} price chart`}
-      className={fill ? "h-full min-h-[220px] w-full" : "mt-2 h-[180px] w-full"}
-    />
-  );
-}
-
-/** The subset of lightweight-charts' IPriceLine the live layer needs. */
-interface PriceLineHandle {
-  applyOptions(options: { readonly price: number }): void;
-}
-
-/** The subset of ISeriesApi the live tick layer needs (candles + volume). */
-interface CandleUpdateSeries {
-  update(bar: { readonly time: UTCTimestamp } & Record<string, unknown>): void;
-}
-
-interface PriceLineSeries {
-  createPriceLine(options: {
-    readonly price: number;
-    readonly title: string;
-    readonly color: string;
-    readonly lineWidth: 1;
-    readonly lineStyle: LineStyle;
-    readonly axisLabelVisible: boolean;
-  }): PriceLineHandle;
-}
-
-function addPriceLine(
-  series: PriceLineSeries,
-  value: string,
-  title: string,
-  color: string,
-  lineStyle = LineStyle.Solid,
-): PriceLineHandle | null {
-  const price = renderNumber(value);
-  if (price === null) return null;
-  return series.createPriceLine({ price, title, color, lineWidth: 1, lineStyle, axisLabelVisible: true });
+  return <div ref={host} aria-label={`${coin} price chart`} className={fill ? "h-full min-h-[220px] w-full" : "mt-2 h-[180px] w-full"} />;
 }
