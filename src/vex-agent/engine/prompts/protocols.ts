@@ -160,13 +160,13 @@ export function buildProtocolsPrompt(): string {
   lines.push("Swap venue by chain:");
   lines.push("- On KyberSwap-supported EVM chains, prefer `kyberswap.*` (aggregated pricing plus honeypot/fee-on-transfer flags).");
   lines.push("- If KyberSwap fails or lacks the chain, fall back to `uniswap.*` (best route across Uniswap V2 and V3).");
-  lines.push("- On Robinhood Chain, `uniswap.*` is the ONLY venue. $VEX and other Virtuals agent tokens trade against VIRTUAL there, so route through VIRTUAL (or WETH) as the base pair.");
+  lines.push("- On Robinhood Chain (4663), `kyberswap.*` is primary (provisional aggregator support) with `uniswap.*` as the fallback — same rule as other KyberSwap chains. $VEX and other Virtuals agent tokens trade against VIRTUAL there, so route through VIRTUAL (or WETH) as the base pair.");
   lines.push("- Quote and execute on the SAME venue: a `kyberswap` quote authorizes only a `kyberswap` execute, and a `uniswap` quote only a `uniswap` execute. The runtime enforces this.");
   lines.push("");
   lines.push("Bridge venue by chain:");
   lines.push("- Between Khalani-supported chains, use `khalani.*`.");
   lines.push("- Khalani does NOT cover Robinhood Chain — to or from it, use `relay.*`.");
-  lines.push("- To fund Robinhood Chain, bridge ETH, USDG, or VIRTUAL in with `relay.*`, then swap on-chain with `uniswap.*`; reverse the flow to exit.");
+  lines.push("- To fund Robinhood Chain, bridge ETH, USDG, or VIRTUAL in with `relay.*`, then swap on-chain with `kyberswap.*` (fallback `uniswap.*`); reverse the flow to exit.");
   lines.push("- Quote and execute on the SAME bridge provider (`khalani` or `relay`). The runtime enforces this.");
   lines.push("");
   lines.push("Balance reads on Robinhood Chain: `wallet_balances` scans it direct-RPC (alias `robinhood` / id 4663). `khalani_tokens_balances` does NOT cover it.");

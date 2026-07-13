@@ -114,11 +114,11 @@ export const MARKET_PROTOCOL_NAVIGATION: readonly ProtocolNamespaceNavigation[] 
     advertised: true,
     groupId: "evm-trading",
     groupLabel: "EVM Trading",
-    summary: "Keyless on-chain Uniswap V2/V3 swaps (best route). The ONLY venue on Robinhood Chain (4663) — where $VEX and Virtuals agent tokens trade against VIRTUAL — and an all-EVM fallback for KyberSwap.",
+    summary: "Keyless on-chain Uniswap V2/V3 swaps (best route). An all-EVM fallback for KyberSwap, including on Robinhood Chain (4663) — where $VEX and Virtuals agent tokens trade against VIRTUAL.",
     whenToUse:
-      "Use for swaps on Robinhood Chain (the only venue there — quote/sell/buy against VIRTUAL/ETH), or as a fallback on any EVM chain when KyberSwap is unavailable. Pass token contract ADDRESSES (no symbol search).",
+      "Use as a fallback on any EVM chain when KyberSwap is unavailable or lacks a route, including Robinhood Chain (quote/sell/buy against VIRTUAL/ETH). Pass token contract ADDRESSES (no symbol search).",
     preferInstead:
-      "Prefer `kyberswap` on the chains it supports (aggregated pricing + token safety flags); use `uniswap` on Robinhood Chain or when Kyber lacks the chain/route.",
+      "Prefer `kyberswap` on the chains it supports (aggregated pricing + token safety flags), incl. Robinhood Chain; use `uniswap` when Kyber lacks the chain/route.",
     exampleQueries: [
       'discover_tools(query="swap on robinhood", namespace="uniswap")',
       'discover_tools(query="uniswap quote", namespace="uniswap")',
