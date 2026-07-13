@@ -157,14 +157,14 @@ describe("Hyperliquid protection gate — venue trailing-zero decimals (FIX 5)",
         [{ px: "0.1507", sz: "1509.0", n: 1 }],
       ],
     };
-    const estimate = estimateSlippagePct(book, "30", "0.1507", "buy");
+    const estimate = estimateSlippagePct(book, "30", "0.1507", "buy", "0.1507");
     expect(estimate).not.toBeNull();
     expect(estimate?.toFixed()).toBe("0");
   });
 
-  it("estimateSlippagePct skips a malformed level and returns null rather than crashing", () => {
+  it("estimateSlippagePct returns null on a malformed crossing level rather than crashing", () => {
     const book = { levels: [[{ px: "0.15", sz: "500.0" }], [{ px: "abc", sz: "1509.0" }]] };
-    expect(estimateSlippagePct(book, "30", "0.1507", "buy")).toBeNull();
+    expect(estimateSlippagePct(book, "30", "0.1507", "buy", "0.1507")).toBeNull();
   });
 
   it("allows a full open when live book sizes carry trailing zeros (end-to-end)", async () => {

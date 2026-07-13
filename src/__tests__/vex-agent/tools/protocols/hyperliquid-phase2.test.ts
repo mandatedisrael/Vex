@@ -99,7 +99,14 @@ describe("Hyperliquid policy and L2 exact arithmetic", () => {
 
   it("computes L2 slippage with Decimal rather than binary float", () => {
     const book = { levels: [[{ px: "99", sz: "5" }], [{ px: "100.1", sz: "1" }, { px: "100.2", sz: "1" }]] };
-    expect(estimateSlippagePct(book, "2", "100", "buy")?.toFixed()).toBe("0.15");
+    // Uncapped market sweep (TWAP semantics, limitPrice null): the fill average
+    // 100.15 is adverse to the 100 mid reference, so the directional measure
+    // matches the abs form here (avg > reference) with Decimal precision.
+    expect(estimateSlippagePct(book, "2", "100", "buy", null)?.toFixed()).toBe("0.15");
+    // Same book as a LIMIT order at 100 (hl_open): both asks are above the
+    // limit, so nothing crosses, the order rests, and adverse slippage is 0 —
+    // the abs form wrongly reported 0.15 here.
+    expect(estimateSlippagePct(book, "2", "100", "buy", "100")?.toFixed()).toBe("0");
   });
 });
 

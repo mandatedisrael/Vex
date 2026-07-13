@@ -287,7 +287,14 @@ async function validateL2Slippage(toolId: string, params: Record<string, unknown
   const expectedSides = toolId === "hyperliquid.perp.open" ? ["long", "short"] : ["buy", "sell"];
   if (!coin || !size || !price || !expectedSides.includes(side ?? "")) return { kind: "block", message: "Cannot estimate order-book slippage without coin, side, size, and price." };
   const book = await info.l2Book(coin);
-  const estimate = estimateSlippagePct(book, size, price, side === "long" || side === "buy" ? "buy" : "sell");
+  // hl_open submits a GTC LIMIT order at `price` (perp-handlers openPerp): its
+  // fills can never be worse than that limit, and depth priced beyond it simply
+  // rests, so the walk is capped at the limit. hl_twap is a MARKET sweep
+  // (twapOrder, no limit) whose `price` is only the mid reference synthesized by
+  // withMidPrice, so its walk is uncapped and slippage is measured against that
+  // mid. Passing null here selects the uncapped-sweep semantics.
+  const limitPrice = toolId === "hyperliquid.perp.open" ? price : null;
+  const estimate = estimateSlippagePct(book, size, price, side === "long" || side === "buy" ? "buy" : "sell", limitPrice);
   if (estimate === null) return { kind: "block", message: "Insufficient L2 liquidity to safely estimate this order's slippage." };
   return estimate.gt(maxSlippagePct) ? { kind: "block", message: `Estimated L2 slippage ${estimate.toFixed()}% exceeds the ${maxSlippagePct}% policy cap.` } : { kind: "allow" };
 }
@@ -303,32 +310,69 @@ async function withMidPrice(params: Record<string, unknown>, info: HyperliquidIn
   return { ...params, price: normalizeProviderDecimal(mid, "Hyperliquid mid price") };
 }
 
-export function estimateSlippagePct(book: unknown, size: string, referencePrice: string, side: "buy" | "sell"): Decimal | null {
+/**
+ * Adverse-only L2 slippage estimate for a perp order, in percent.
+ *
+ * Two order shapes flow through here, distinguished by `limitPrice`:
+ *  - LIMIT order (hl_open, `limitPrice` = the limit): a resting GTC limit can
+ *    never fill worse than its limit, and any depth priced beyond the limit
+ *    simply RESTS — it is not slippage. The walk therefore consumes only levels
+ *    at-or-better than the limit (buy: px <= limit; sell: px >= limit). If the
+ *    fillable depth is short of `size`, the remainder rests; if NOTHING is
+ *    fillable within the limit the whole order rests and slippage is 0. Because
+ *    every consumed level is at-or-better than the limit, the crossing average
+ *    is at-or-better than the reference and adverse slippage is 0 by
+ *    construction — the limit price itself is the protection.
+ *  - MARKET sweep (hl_twap, `limitPrice` = null): the sweep crosses the book,
+ *    so the walk is uncapped and the average is measured against `referencePrice`
+ *    (the mid synthesized by withMidPrice). This is where a genuine positive
+ *    estimate can arise and the policy cap still bites.
+ *
+ * Slippage is ADVERSE-ONLY and directional: buy => max(0, avg - reference),
+ * sell => max(0, reference - avg), each over `reference`. It is NOT an absolute
+ * deviation. The previous `abs()` form treated a favorable (price-improving)
+ * fill as slippage: in the 2026-07-13 CASHCAT incident a buy limit of 0.154
+ * into a book with best ask ~0.15063 was scored 2.1883% and blocked despite the
+ * fill being BETTER than the limit. That single flaw produced four consecutive
+ * false-positive blocks with non-monotonic readings (smaller orders scored as
+ * more slippage). Malformed/unreadable books still return null so the caller
+ * fails closed.
+ */
+export function estimateSlippagePct(book: unknown, size: string, referencePrice: string, side: "buy" | "sell", limitPrice: string | null): Decimal | null {
   const root = asRecord(book); const levels = Array.isArray(root?.levels) ? root.levels : null;
   if (levels === null || levels.length < 2) return null;
   const selected = side === "buy" ? levels[1] : levels[0];
   if (!Array.isArray(selected)) return null;
-  // `size` and `referencePrice` are model/user params — they must be canonical.
+  // `size`, `referencePrice`, and `limitPrice` are model/user params — canonical.
   const orderSize = new Decimal(parseDecimalString(size));
   const reference = new Decimal(parseDecimalString(referencePrice));
-  let remaining = orderSize; let paid = new Decimal(0);
+  const limit = limitPrice === null ? null : new Decimal(parseDecimalString(limitPrice));
+  let remaining = orderSize; let paid = new Decimal(0); let filled = new Decimal(0);
   for (const level of selected) {
-    const record = asRecord(level); const px = stringParam(record ?? {}, "px"); const sz = stringParam(record ?? {}, "sz");
+    const record = asRecord(level);
     // Book px/sz are VENUE wire values and legitimately carry trailing zeros
-    // (e.g. "1509.0" on a szDecimals=0 market like CASHCAT). Canonical-input
-    // parsing (parseDecimalString) rejects those, so applying it here threw on
-    // the first level and surfaced as the generic "live protection ... could not
-    // be verified" block that deterministically blocked real perp opens on
-    // 2026-07-13. Parse leniently and skip a malformed level instead of throwing.
-    const levelPx = venueNonNegativeDecimal(px); const levelSz = venueNonNegativeDecimal(sz);
-    if (levelPx === null || levelSz === null) continue;
+    // (e.g. "1509.0" on a szDecimals=0 market like CASHCAT), which canonical
+    // parsing rejects; parse them leniently. A level we would need to consume
+    // but cannot read is a malformed book — fail closed with null rather than
+    // silently under-reporting fillable depth.
+    const levelPx = venueNonNegativeDecimal(stringParam(record ?? {}, "px"));
+    const levelSz = venueNonNegativeDecimal(stringParam(record ?? {}, "sz"));
+    if (levelPx === null || levelSz === null) return null;
+    // Depth priced beyond a limit order's limit rests; stop the walk there.
+    if (limit !== null && (side === "buy" ? levelPx.gt(limit) : levelPx.lt(limit))) break;
     const take = Decimal.min(remaining, levelSz);
-    paid = paid.plus(take.mul(levelPx)); remaining = remaining.minus(take);
+    paid = paid.plus(take.mul(levelPx)); filled = filled.plus(take); remaining = remaining.minus(take);
     if (remaining.isZero()) break;
   }
-  if (remaining.gt(0)) return null;
-  const average = paid.div(orderSize);
-  return average.minus(reference).abs().div(reference).mul(100);
+  if (filled.isZero()) {
+    // Limit order with nothing fillable at-or-better than the limit: the whole
+    // order rests, no adverse fill, slippage 0. A market sweep against a book
+    // with no liquidity on the crossing side cannot be estimated — fail closed.
+    return limit === null ? null : new Decimal(0);
+  }
+  const average = paid.div(filled);
+  const adverse = side === "buy" ? average.minus(reference) : reference.minus(average);
+  return Decimal.max(0, adverse).div(reference).mul(100);
 }
 
 /** Lenient parse for a single venue-emitted decimal (trailing zeros allowed); null when absent or malformed. */
