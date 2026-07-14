@@ -114,6 +114,20 @@ export const ORDERS_HANDLERS: Record<string, ProtocolHandler> = {
       ...(result.tradeIDs?.length ? { tradeIDs: result.tradeIDs } : {}),
       ...(result.errorMsg ? { errorMsg: result.errorMsg } : {}),
     };
+
+    // The venue rejected the order (bad signature, insufficient balance,
+    // market closed, etc.). Fail the ToolResult and skip _tradeCapture — an
+    // order the CLOB never accepted must not be recorded as a resting/open
+    // order. Same class of bug as relay.bridge: venue truth must drive
+    // tool-result truth, not just ride along in the output text.
+    if (!result.success) {
+      return {
+        success: false,
+        output: JSON.stringify(buyOutput, null, 2),
+        data: { ...result, conditionId },
+      };
+    }
+
     return {
       success: true,
       output: JSON.stringify(buyOutput, null, 2),
@@ -212,6 +226,19 @@ export const ORDERS_HANDLERS: Record<string, ProtocolHandler> = {
       ...(result.tradeIDs?.length ? { tradeIDs: result.tradeIDs } : {}),
       ...(result.errorMsg ? { errorMsg: result.errorMsg } : {}),
     };
+
+    // Same rejection guard as clob.buy: the venue rejected the order, so the
+    // ToolResult must fail and no _tradeCapture goes out. Mirrors the repo's
+    // own clob.cancel precedent a few lines below ("reports success=false
+    // when the requested order lands in not_canceled").
+    if (!result.success) {
+      return {
+        success: false,
+        output: JSON.stringify(sellOutput, null, 2),
+        data: { ...result, conditionId },
+      };
+    }
+
     return {
       success: true,
       output: JSON.stringify(sellOutput, null, 2),
@@ -267,11 +294,28 @@ export const ORDERS_HANDLERS: Record<string, ProtocolHandler> = {
       return walletScopeErrorToResult(err);
     }
     const result = await getPolyClobClient().cancelOrders({ address }, ids);
+    // Same not_canceled correctness guard as clob.cancel, extended to N ids:
+    // the venue can return 200 while rejecting every requested cancellation.
+    // A total rejection (nothing cancelled, venue reported reasons) is a real
+    // failure — no _tradeCapture. A partial success keeps the ledger trace for
+    // the ids that DID cancel (captureItems only ever covers result.canceled).
+    if (result.canceled.length === 0 && Object.keys(result.not_canceled).length > 0) {
+      return { success: false, output: JSON.stringify(result, null, 2), data: { ...result } };
+    }
     const captureItems = result.canceled.map(oid => ({
       type: "order" as const, chain: "polygon" as const, status: "cancelled" as const,
       walletAddress: address, positionKey: oid, meta: { action: "cancel" },
     }));
-    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "order", chain: "polygon", status: "cancelled", walletAddress: address, meta: { action: "cancelOrders", count: result.canceled.length } }, _tradeCaptureItems: captureItems } };
+    return {
+      success: true,
+      output: JSON.stringify(result, null, 2),
+      data: {
+        ...result,
+        ...(result.canceled.length > 0
+          ? { _tradeCapture: { type: "order", chain: "polygon", status: "cancelled", walletAddress: address, meta: { action: "cancelOrders", count: result.canceled.length } }, _tradeCaptureItems: captureItems }
+          : {}),
+      },
+    };
   },
 
   "polymarket.clob.cancelAll": async (_p, ctx) => {
@@ -282,11 +326,27 @@ export const ORDERS_HANDLERS: Record<string, ProtocolHandler> = {
       return walletScopeErrorToResult(err);
     }
     const result = await getPolyClobClient().cancelAll({ address });
+    // Same not_canceled correctness guard as cancelOrders. "Nothing to cancel"
+    // (both canceled and not_canceled empty — no open orders) is a legitimate
+    // no-op success, not a failure; a total rejection (venue reported reasons,
+    // nothing cancelled) is.
+    if (result.canceled.length === 0 && Object.keys(result.not_canceled).length > 0) {
+      return { success: false, output: JSON.stringify(result, null, 2), data: { ...result } };
+    }
     const captureItems = result.canceled.map(oid => ({
       type: "order" as const, chain: "polygon" as const, status: "cancelled" as const,
       walletAddress: address, positionKey: oid, meta: { action: "cancel" },
     }));
-    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, _tradeCapture: { type: "order", chain: "polygon", status: "cancelled", walletAddress: address, meta: { action: "cancelAll", count: result.canceled.length } }, _tradeCaptureItems: captureItems.length > 0 ? captureItems : undefined } };
+    return {
+      success: true,
+      output: JSON.stringify(result, null, 2),
+      data: {
+        ...result,
+        ...(captureItems.length > 0
+          ? { _tradeCapture: { type: "order", chain: "polygon", status: "cancelled", walletAddress: address, meta: { action: "cancelAll", count: result.canceled.length } }, _tradeCaptureItems: captureItems }
+          : {}),
+      },
+    };
   },
 
   "polymarket.clob.cancelMarket": async (p, ctx) => {
@@ -299,11 +359,25 @@ export const ORDERS_HANDLERS: Record<string, ProtocolHandler> = {
       return walletScopeErrorToResult(err);
     }
     const result = await getPolyClobClient().cancelMarketOrders({ address }, market, assetId);
+    // Same not_canceled correctness guard as cancelOrders/cancelAll.
+    if (result.canceled.length === 0 && Object.keys(result.not_canceled).length > 0) {
+      return { success: false, output: JSON.stringify(result, null, 2), data: { ...result, conditionId: market } };
+    }
     const captureItems = result.canceled.map(oid => ({
       type: "order" as const, chain: "polygon" as const, status: "cancelled" as const,
       walletAddress: address, positionKey: oid, meta: { action: "cancelMarket", conditionId: market, assetId },
     }));
-    return { success: true, output: JSON.stringify(result, null, 2), data: { ...result, conditionId: market, _tradeCapture: { type: "order", chain: "polygon", status: "cancelled", walletAddress: address, meta: { action: "cancelMarket", conditionId: market, assetId } }, _tradeCaptureItems: captureItems.length > 0 ? captureItems : undefined } };
+    return {
+      success: true,
+      output: JSON.stringify(result, null, 2),
+      data: {
+        ...result,
+        conditionId: market,
+        ...(captureItems.length > 0
+          ? { _tradeCapture: { type: "order", chain: "polygon", status: "cancelled", walletAddress: address, meta: { action: "cancelMarket", conditionId: market, assetId } }, _tradeCaptureItems: captureItems }
+          : {}),
+      },
+    };
   },
 
   "polymarket.clob.orders": async (p, ctx) => {

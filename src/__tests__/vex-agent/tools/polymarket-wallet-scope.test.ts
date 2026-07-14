@@ -28,7 +28,7 @@ vi.mock("@vex-agent/tools/internal/wallet/resolve.js", () => ({
 
 const mockGetPrice = vi.fn().mockResolvedValue({ price: 0.5 });
 const mockGetFeeRate = vi.fn().mockResolvedValue({ base_fee: 0 });
-const mockPostOrder = vi.fn().mockResolvedValue({ status: "matched", orderID: "oid-1" });
+const mockPostOrder = vi.fn().mockResolvedValue({ success: true, status: "matched", orderID: "oid-1" });
 const mockCancelOrder = vi.fn().mockResolvedValue({ canceled: ["oid-1"], not_canceled: {} });
 const mockGetTrades = vi.fn().mockResolvedValue({ data: [], next_cursor: "" });
 vi.mock("@tools/polymarket/clob/client.js", () => ({
@@ -77,7 +77,7 @@ beforeEach(() => {
   mockResolveSelectedAddress.mockReturnValue(SEL);
   mockGetPrice.mockResolvedValue({ price: 0.5 });
   mockGetFeeRate.mockResolvedValue({ base_fee: 0 });
-  mockPostOrder.mockResolvedValue({ status: "matched", orderID: "oid-1" });
+  mockPostOrder.mockResolvedValue({ success: true, status: "matched", orderID: "oid-1" });
   mockCancelOrder.mockResolvedValue({ canceled: ["oid-1"], not_canceled: {} });
   mockGetTrades.mockResolvedValue({ data: [], next_cursor: "" });
   mockBuildClobOrder.mockReturnValue({ salt: "1", maker: SEL, signer: SEL });

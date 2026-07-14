@@ -12,6 +12,7 @@ import {
 import { resolveRouteBestIndex } from "@tools/khalani/helpers.js";
 import { prepareQuoteRequest } from "@tools/khalani/request.js";
 import { executeDepositPlan } from "@tools/khalani/bridge-executor.js";
+import { pollKhalaniOrderToTerminal } from "@tools/khalani/order-status.js";
 import type { DepositMethod, QuoteRoute } from "@tools/khalani/types.js";
 import type { ChainWallet } from "@tools/wallet/multi-auth.js";
 import { familyToInventory, walletAddressesEqual } from "@tools/wallet/inventory.js";
@@ -184,8 +185,13 @@ export const BRIDGE_HANDLERS: Record<string, ProtocolHandler> = {
       signer,
     });
 
-    // 9. Return result with trade capture data
-    const bridgeResult = {
+    // 9. Track the submitted order to a TERMINAL state (Khalani Integration
+    // Guide). The deposit tx mining does NOT mean the destination leg filled —
+    // the fill can still fail or refund. Bounded (5s × 24 ≈ 2 min) so a turn
+    // never blocks forever; mirrors relay.bridge's terminal-status handling.
+    const poll = await pollKhalaniOrderToTerminal(result.orderId);
+
+    const bridgeBase = {
       orderId: result.orderId,
       txHash: result.txHash,
       fromChain: fromChainId,
@@ -198,16 +204,82 @@ export const BRIDGE_HANDLERS: Record<string, ProtocolHandler> = {
       etaSeconds: selectedRoute.quote.expectedDurationSeconds,
     };
 
+    // Status could NOT be verified: EVERY getOrderById poll failed (Khalani status
+    // API unreachable for the whole window). Do NOT mask a total verification
+    // outage as a benign pending order — that would enqueue a projection for a
+    // status nobody observed. Fail closed, NO _tradeCapture, and surface the
+    // orderId + deposit tx hash so the user can verify the order manually.
+    if (poll.kind === "unavailable") {
+      logger.warn("khalani.bridge.status_unverifiable", {
+        fromChain: fromChainId,
+        toChain: toChainId,
+        orderId: result.orderId,
+      });
+      const message = `Khalani order status could NOT be verified — the Khalani status API was unreachable for the entire tracking window. The deposit was broadcast but delivery is UNCONFIRMED. Do NOT re-bridge; verify the order manually via orderId=${result.orderId} (deposit txHash=${result.txHash}).`;
+      return {
+        success: false,
+        output: JSON.stringify({ success: false, ...bridgeBase, status: "unverified", message }, null, 2),
+        data: { ...bridgeBase, status: "unverified" },
+      };
+    }
+
+    const finalStatus = poll.status;
+    const bridgeResult = { ...bridgeBase, status: finalStatus };
+
+    // Terminal failure/refund: the destination amount did NOT arrive. Fail the
+    // tool result and emit NO _tradeCapture — nothing arrived to record. Mirrors
+    // relay.bridge (PR #27): venue truth drives tool-result truth.
+    if (finalStatus === "failed" || finalStatus === "refunded") {
+      logger.warn("khalani.bridge.terminal_failure", {
+        fromChain: fromChainId,
+        toChain: toChainId,
+        finalStatus,
+        orderId: result.orderId,
+      });
+      const message = finalStatus === "refunded"
+        ? "Khalani reported this bridge as refunded: the destination amount did NOT arrive; funds were returned toward the refund address. Verify balances before any follow-up."
+        : "Khalani reported this bridge as failed: the destination amount did NOT arrive. Verify balances via the order id before retrying.";
+      return {
+        success: false,
+        output: JSON.stringify({ success: false, ...bridgeResult, message }, null, 2),
+        data: { ...bridgeResult },
+      };
+    }
+
+    logger.info("khalani.bridge.completed", {
+      fromChain: fromChainId,
+      toChain: toChainId,
+      finalStatus,
+      orderId: result.orderId,
+    });
+
+    // filled → confirmed delivery. Any NON-terminal status here means the bounded
+    // poll window closed while the order was still live (created/deposited/
+    // published/refund_pending) — keep the pending capture (the order is live and
+    // may still complete) BUT the output must never read as delivery. A
+    // refund_pending is called out explicitly: a refund is in flight, NOT yet
+    // delivered, and the destination amount did NOT arrive.
+    const captureStatus = finalStatus === "filled" ? "executed" : "pending";
+    const pendingMessage = finalStatus === "filled"
+      ? undefined
+      : finalStatus === "refund_pending"
+        ? 'Khalani has NOT confirmed this bridge — the last status was "refund_pending": a refund is IN FLIGHT but not yet delivered, and the destination amount did NOT arrive. Do NOT re-bridge; track the order id.'
+        : `Khalani has NOT confirmed this bridge yet — the last status after the poll window was "${finalStatus}". It may still complete; track the order id before any retry. Do NOT re-bridge.`;
+
     return {
       success: true,
-      output: JSON.stringify({ success: true, ...bridgeResult }, null, 2),
+      output: JSON.stringify({
+        success: true,
+        ...bridgeResult,
+        ...(pendingMessage ? { message: pendingMessage } : {}),
+      }, null, 2),
       data: {
         ...bridgeResult,
         // Trade capture hint — runtime uses this to auto-store
         _tradeCapture: {
           type: "bridge",
           chain: String(fromChainId),
-          status: "pending",
+          status: captureStatus,
           inputToken: fromToken,
           inputTokenAddress: fromToken,
           inputAmount: amount,
@@ -221,6 +293,7 @@ export const BRIDGE_HANDLERS: Record<string, ProtocolHandler> = {
             destChain: String(toChainId),
             routeId: selectedRoute.routeId,
             orderId: result.orderId,
+            finalStatus,
           },
         },
       },

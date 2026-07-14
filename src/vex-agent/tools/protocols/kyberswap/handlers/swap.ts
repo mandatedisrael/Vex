@@ -137,6 +137,29 @@ const VEX_INTEGRATOR_FEE_ROUTE_PARAMS = {
   feeReceiver: KYBERSWAP_FEE_RECEIVER,
 } as const;
 
+/**
+ * Classify the ECONOMIC direction of a swap from the native leg, independent of
+ * which tool (`kyberswap.swap.buy` vs `kyberswap.swap.sell`) was invoked. A
+ * token can legitimately be bought via the sell-tool (native-in) or sold via
+ * the buy-tool, so the tool name alone is not a reliable accounting label.
+ *
+ * Spending native to acquire a token is a BUY; selling a token back to native
+ * is a SELL. Token↔token has no native anchor, so we fall back to the tool's
+ * declared side. Used ONLY for what is recorded/reported — never for routing,
+ * quoting, or execution. Mirrors uniswap's `classifyEconomicSide` (same bug
+ * class, same fix shape; kept local per protocol per the repo's "3+ = extract"
+ * convention — two occurrences do not yet warrant a shared helper).
+ */
+export function classifyEconomicSide(args: {
+  readonly tokenInIsNative: boolean;
+  readonly tokenOutIsNative: boolean;
+  readonly side: "buy" | "sell";
+}): "buy" | "sell" {
+  if (args.tokenInIsNative) return "buy";
+  if (args.tokenOutIsNative) return "sell";
+  return args.side;
+}
+
 // ── Shared swap execution (sell + buy use same routing, differ in trade_side) ──
 
 async function executeKyberSwap(p: Record<string, unknown>, side: "buy" | "sell", context: ProtocolExecutionContext): Promise<ToolResult> {
@@ -188,8 +211,16 @@ async function executeKyberSwap(p: Record<string, unknown>, side: "buy" | "sell"
   const { routeSummary, routerAddress } = routeResp.data;
   verifyRouterAddress(routerAddress, META_AGGREGATION_ROUTER_V2);
 
+  // Economic direction for RECORDING/reporting — derived from the native leg,
+  // not the tool name (`side`). `side` still drives routing/execution below.
+  const economicSide = classifyEconomicSide({
+    tokenInIsNative: tokenIn.isNative,
+    tokenOutIsNative: tokenOut.isNative,
+    side,
+  });
+
   if (p.dryRun === true) {
-    return ok({ dryRun: true, side, chain: slug, routeSummary: formatRouteSummary(routeSummary), routerAddress });
+    return ok({ dryRun: true, side: economicSide, chain: slug, routeSummary: formatRouteSummary(routeSummary), routerAddress });
   }
 
   // Per-session signing wallet (puzzle 5 phase 5D-protocols) — resolved AFTER the
@@ -244,21 +275,21 @@ async function executeKyberSwap(p: Record<string, unknown>, side: "buy" | "sell"
 
   return {
     success: true,
-    output: JSON.stringify({ txHash, side, chain: slug, tokenIn: tokenIn.symbol, tokenOut: tokenOut.symbol, amountIn: buildResp.data.amountIn, amountOut: buildResp.data.amountOut, amountInUsd: buildResp.data.amountInUsd, amountOutUsd: buildResp.data.amountOutUsd }, null, 2),
+    output: JSON.stringify({ txHash, side: economicSide, chain: slug, tokenIn: tokenIn.symbol, tokenOut: tokenOut.symbol, amountIn: buildResp.data.amountIn, amountOut: buildResp.data.amountOut, amountInUsd: buildResp.data.amountInUsd, amountOutUsd: buildResp.data.amountOutUsd }, null, 2),
     data: { txHash, _tradeCapture: {
       type: "swap", chain: slug, status: "executed",
       inputToken: tokenIn.symbol, outputToken: tokenOut.symbol,
       inputTokenAddress: tokenIn.address, outputTokenAddress: tokenOut.address,
       inputAmount: buildResp.data.amountIn, outputAmount: buildResp.data.amountOut,
-      signature: txHash, walletAddress: signer.address, tradeSide: side,
-      instrumentKey: `${slug}:${side === "buy" ? tokenOut.address : tokenIn.address}`,
+      signature: txHash, walletAddress: signer.address, tradeSide: economicSide,
+      instrumentKey: `${slug}:${economicSide === "buy" ? tokenOut.address : tokenIn.address}`,
       inputValueUsd: buildResp.data.amountInUsd, outputValueUsd: buildResp.data.amountOutUsd,
       feeValueUsd: buildResp.data.gasUsd, valuationSource: "kyberswap_exact",
       benchmarkAssetKey: benchmarkAssetKey ?? undefined,
-      settlementAssetKey: side === "buy" ? tokenIn.symbol : tokenOut.symbol,
+      settlementAssetKey: economicSide === "buy" ? tokenIn.symbol : tokenOut.symbol,
       inputValueNative: inputIsNative ? formatUnits(amountIn, tokenIn.decimals) : undefined,
       outputValueNative: outputIsNative ? formatUnits(BigInt(buildResp.data.amountOut), tokenOut.decimals) : undefined,
-      meta: { dex: "kyberswap", side },
+      meta: { dex: "kyberswap", side: economicSide },
     } },
   };
 }

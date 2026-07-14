@@ -22,6 +22,13 @@ import {
 const REQUEST_TIMEOUT_MS = 30_000;
 const CHAINS_TTL_MS = 60 * 60 * 1000; // 1h
 
+/**
+ * Canonical Relay intent-status path. Single source of truth: used both to build
+ * the status request AND to validate a quote's step `check.endpoint` before we
+ * trust the requestId it carries (see relay/execute deriveRequestId).
+ */
+export const RELAY_INTENT_STATUS_PATH = "/intents/status/v3";
+
 function mapTransportError(err: unknown): never {
   if (err instanceof VexError && err.code === ErrorCodes.HTTP_TIMEOUT) {
     throw new VexError(ErrorCodes.RELAY_TIMEOUT, err.message, err.hint);
@@ -84,7 +91,7 @@ export class RelayClient {
   }
 
   getIntentStatus(requestId: string): Promise<RelayStatusResponse> {
-    return this.request("/intents/status/v3", (raw) => RelayStatusResponseSchema.parse(raw), {
+    return this.request(RELAY_INTENT_STATUS_PATH, (raw) => RelayStatusResponseSchema.parse(raw), {
       query: { requestId },
     });
   }

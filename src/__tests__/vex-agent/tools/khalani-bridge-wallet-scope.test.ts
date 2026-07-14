@@ -63,6 +63,12 @@ vi.mock("@tools/khalani/helpers.js", () => ({ resolveRouteBestIndex: () => 0 }))
 const mockExecuteDepositPlan = vi.fn(async () => ({ orderId: "o1", txHash: "0xhash" }));
 vi.mock("@tools/khalani/bridge-executor.js", () => ({ executeDepositPlan: (...a: unknown[]) => mockExecuteDepositPlan(...a) }));
 
+// Terminal-status polling is exercised in khalani-bridge-terminal-status.test.ts.
+// Here it is stubbed to a confirmed fill so the wallet-scope assertions stay fast
+// (no 5s poll delay) and focused on session scoping, not order tracking.
+const mockPollOrderToTerminal = vi.fn(async () => ({ kind: "terminal", status: "filled" }));
+vi.mock("@tools/khalani/order-status.js", () => ({ pollKhalaniOrderToTerminal: (...a: unknown[]) => mockPollOrderToTerminal(...a) }));
+
 const { BRIDGE_HANDLERS } = await import("@vex-agent/tools/protocols/khalani/handlers/bridge.js");
 
 const SESSION_CTX: ProtocolExecutionContext = {
@@ -88,6 +94,7 @@ beforeEach(() => {
   });
   mockBuildDeposit.mockResolvedValue({ kind: "CONTRACT_CALL", approvals: [] });
   mockExecuteDepositPlan.mockResolvedValue({ orderId: "o1", txHash: "0xhash" });
+  mockPollOrderToTerminal.mockResolvedValue({ kind: "terminal", status: "filled" });
 });
 
 describe("khalani.bridge session wallet scope", () => {

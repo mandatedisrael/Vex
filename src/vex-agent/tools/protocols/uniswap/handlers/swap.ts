@@ -53,6 +53,27 @@ function isNativeInput(input: string): boolean {
 }
 
 /**
+ * Classify the ECONOMIC direction of a swap from the native leg, independent of
+ * which tool (`uniswap.swap.buy` vs `uniswap.swap.sell`) was invoked. A token
+ * can legitimately be bought via the sell-tool (native-in) or sold via the
+ * buy-tool, so the tool name is not a reliable label for accounting.
+ *
+ * Spending native to acquire a token is a BUY; selling a token back to native
+ * is a SELL. Token↔token has no native anchor, so we fall back to the tool's
+ * declared side. This is used ONLY for what is recorded/reported — never for
+ * routing, quoting, or execution.
+ */
+export function classifyEconomicSide(args: {
+  readonly tokenInIsNative: boolean;
+  readonly tokenOutIsNative: boolean;
+  readonly side: "buy" | "sell";
+}): "buy" | "sell" {
+  if (args.tokenInIsNative) return "buy"; // spending native to acquire a token = BUY
+  if (args.tokenOutIsNative) return "sell"; // selling a token back to native = SELL
+  return args.side; // token↔token: fall back to the tool's side
+}
+
+/**
  * Resolve a token leg. Native ("eth"/"native"/sentinel) routes as WETH; a hex
  * address reads metadata on-chain; a bare symbol is rejected (address-only).
  */
@@ -219,11 +240,19 @@ async function executeUniswapSwap(
   const amountIn = parseUnits(amountInRaw, tokenIn.decimals);
   const slippageBps = num(p, "slippageBps") ?? DEFAULT_SLIPPAGE_BPS;
 
+  // Economic direction for RECORDING/reporting — derived from the native leg,
+  // not the tool name (`side`). `side` still drives routing/execution below.
+  const economicSide = classifyEconomicSide({
+    tokenInIsNative: tokenIn.isNative,
+    tokenOutIsNative: tokenOut.isNative,
+    side,
+  });
+
   const quoted = await computeQuote(deployment, tokenIn, tokenOut, amountIn, slippageBps);
 
   if (p.dryRun === true) {
     return ok({
-      dryRun: true, side, chain: deployment.key,
+      dryRun: true, side: economicSide, chain: deployment.key,
       route: { version: quoted.route.version, path: quoted.route.path, fees: quoted.route.fees ?? null },
       amountOut: formatUnits(quoted.amountOut, tokenOut.decimals),
       minAmountOut: formatUnits(quoted.minAmountOut, tokenOut.decimals),
@@ -300,7 +329,7 @@ async function executeUniswapSwap(
   return {
     success: true,
     output: JSON.stringify({
-      txHash, side, chain: deployment.key,
+      txHash, side: economicSide, chain: deployment.key,
       tokenIn: tokenIn.symbol, tokenOut: tokenOut.symbol,
       amountIn: amountInRaw, amountOut: amountOutHuman,
       route: { version: quoted.route.version, path: quoted.route.path },
@@ -321,11 +350,11 @@ async function executeUniswapSwap(
         outputAmount: amountOutHuman,
         signature: txHash,
         walletAddress: signer.address,
-        tradeSide: side,
-        instrumentKey: `${deployment.key}:${side === "buy" ? tokenOut.address : tokenIn.address}`,
+        tradeSide: economicSide,
+        instrumentKey: `${deployment.key}:${economicSide === "buy" ? tokenOut.address : tokenIn.address}`,
         valuationSource: "none",
-        settlementAssetKey: side === "buy" ? tokenIn.symbol : tokenOut.symbol,
-        meta: { dex: "uniswap", version: quoted.route.version, side },
+        settlementAssetKey: economicSide === "buy" ? tokenIn.symbol : tokenOut.symbol,
+        meta: { dex: "uniswap", version: quoted.route.version, side: economicSide },
       },
     },
   };

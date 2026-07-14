@@ -110,6 +110,7 @@ beforeEach(() => {
   mockExecuteRelayBridge.mockResolvedValue({
     requestId: "0xreq",
     finalStatus: "success",
+    statusObserved: true,
     txHashes: ["0xhash1"],
     // Per-hop records (origin Base) — the handler maps these to `_explorerRefs`.
     transactions: [{ chainId: 8453, hash: "0xhash1" }],
@@ -200,6 +201,7 @@ describe("relay.bridge explorer refs", () => {
     mockExecuteRelayBridge.mockResolvedValue({
       requestId: "0xreq",
       finalStatus: "success",
+      statusObserved: true,
       txHashes: ["0xorigin", "0xdest"],
       transactions: [
         { chainId: 8453, hash: "0xorigin" },
@@ -218,6 +220,7 @@ describe("relay.bridge explorer refs", () => {
     mockExecuteRelayBridge.mockResolvedValue({
       requestId: "0xreq",
       finalStatus: "success",
+      statusObserved: true,
       txHashes: ["0xorigin", "0xdest"],
       transactions: [
         { chainId: 8453, hash: "0xorigin" },

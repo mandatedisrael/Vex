@@ -38,8 +38,9 @@ import {
 import type { ChainWallet } from "@tools/wallet/multi-auth.js";
 import { VexError, ErrorCodes } from "../../errors.js";
 import logger from "../../utils/logger.js";
-import { getRelayClient } from "./client.js";
+import { getRelayClient, RELAY_INTENT_STATUS_PATH } from "./client.js";
 import { RELAY_TERMINAL_STATUSES, type RelayQuoteResponse } from "./types.js";
+import { loadConfig } from "../../config/store.js";
 
 interface EvmClients {
   publicClient: PublicClient<Transport, Chain>;
@@ -66,30 +67,44 @@ function delay(ms: number): Promise<void> {
 
 // Bounded status-poll budget: relay soft-confirms fast, but we never block a turn
 // indefinitely. On timeout we return the last non-terminal status (the capture
-// records it as pending — the intent is still live on Relay).
+// records it as pending — the intent is still live on Relay). Relay's docs
+// recommend polling the status endpoint ~once per second; a constant 1s interval
+// within the 60s budget makes the final poll land right at window close (the old
+// 2s→8s backoff left the last poll near t=54s, missing late terminal flips).
 const POLL_MAX_MS = 60_000;
-const POLL_INITIAL_MS = 2_000;
-const POLL_MAX_INTERVAL_MS = 8_000;
+const POLL_INTERVAL_MS = 1_000;
 
-async function pollToTerminal(requestId: string): Promise<string> {
+/**
+ * Result of the bounded status poll. `observed` is true iff at least one
+ * `getIntentStatus` call actually returned a status — it distinguishes a REAL
+ * last-seen non-terminal status from a poll window where EVERY request threw
+ * (Relay status API unreachable). The caller must not mask the latter as a
+ * benign pending intent.
+ */
+interface RelayPollResult {
+  readonly status: string;
+  readonly observed: boolean;
+}
+
+async function pollToTerminal(requestId: string): Promise<RelayPollResult> {
   const client = getRelayClient();
   const started = Date.now();
-  let interval = POLL_INITIAL_MS;
   let status = "pending";
+  let observed = false;
   while (Date.now() - started < POLL_MAX_MS) {
-    await delay(interval);
+    await delay(POLL_INTERVAL_MS);
     try {
       const res = await client.getIntentStatus(requestId);
       status = res.status;
-      if (RELAY_TERMINAL_STATUSES.has(status)) return status;
+      observed = true;
+      if (RELAY_TERMINAL_STATUSES.has(status)) return { status, observed };
     } catch (err) {
       logger.warn("relay.bridge.status_poll_failed", {
         reason: err instanceof VexError ? err.code : "unknown",
       });
     }
-    interval = Math.min(interval * 2, POLL_MAX_INTERVAL_MS);
   }
-  return status;
+  return { status, observed };
 }
 
 export interface RelayExecuteArgs {
@@ -116,6 +131,14 @@ export interface RelayExecuteResult {
   transactions: RelayTransaction[];
   requestId: string | null;
   finalStatus: string;
+  /**
+   * True iff the intent status was actually OBSERVED (a `getIntentStatus` call
+   * succeeded) OR a terminal state was reached. False when there was no
+   * requestId to track, or every status poll threw — i.e. delivery is UNKNOWN,
+   * not benignly pending. The handler fails closed on `false` rather than
+   * emitting a phantom pending capture.
+   */
+  statusObserved: boolean;
 }
 
 /**
@@ -133,24 +156,84 @@ interface PlannedRelayTx {
 }
 
 /**
+ * The intent request id is the ONLY handle to a bridge's terminal status. Relay
+ * exposes it two ways (per docs.relay.link step-execution): directly on
+ * `step.requestId`, and inside a step item's `check.endpoint` — the status URL
+ * (`/intents/status/v3?requestId=<id>`) the wallet is told to poll. The id can
+ * be present on the check endpoint even when the step omits `requestId`, so we
+ * parse it out as a fallback rather than falsely treating the bridge as
+ * untrackable.
+ *
+ * `check.endpoint` is UNTRUSTED external input, so we accept its `requestId`
+ * ONLY when the endpoint is genuinely the Relay status endpoint: the pathname
+ * must equal the documented status path EXACTLY (`RELAY_INTENT_STATUS_PATH`,
+ * shared with the client so a version bump updates both), and — for absolute
+ * URLs — the host must equal the configured Relay API host (`allowedBaseUrl`,
+ * the SAME value the client polls; never a hardcoded second copy). A relative
+ * endpoint resolves against that host so the exact-path check still applies.
+ * Anything else (wrong host, wrong path, empty/absent id, malformed URL) → null,
+ * which the caller treats as "no id" and fails closed before broadcast.
+ */
+export function parseRequestIdFromCheckEndpoint(endpoint: string, allowedBaseUrl: string): string | null {
+  let base: URL;
+  try {
+    base = new URL(allowedBaseUrl);
+  } catch {
+    return null;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(endpoint, base);
+  } catch {
+    return null;
+  }
+  // An endpoint on a different host, or not the exact status path, is NOT a
+  // trustworthy status source — do not associate its requestId with this bridge.
+  if (parsed.host !== base.host) return null;
+  if (parsed.pathname !== RELAY_INTENT_STATUS_PATH) return null;
+  const requestId = parsed.searchParams.get("requestId");
+  return requestId && requestId.length > 0 ? requestId : null;
+}
+
+/**
+ * step.requestId (any step) → parsed from a step item's check.endpoint. The
+ * allowed host is read from the SAME config the client polls, so the endpoint
+ * check can never diverge from where status is actually fetched.
+ */
+function deriveRequestId(quote: RelayQuoteResponse): string | null {
+  for (const step of quote.steps) {
+    if (step.requestId) return step.requestId;
+  }
+  const allowedBaseUrl = loadConfig().services.relayApiUrl;
+  for (const step of quote.steps) {
+    for (const item of step.items) {
+      const endpoint = item.check?.endpoint;
+      const derived = endpoint ? parseRequestIdFromCheckEndpoint(endpoint, allowedBaseUrl) : null;
+      if (derived) return derived;
+    }
+  }
+  return null;
+}
+
+/**
  * PHASE 1 — pre-validate EVERY step of the quote with ZERO broadcasts. Returns
  * the ordered list of transactions to broadcast plus the intent requestId. Any
  * invalid step (unsupported kind, chainId outside {origin, destination}, sender
  * mismatch, malformed calldata) THROWS here, so the caller never broadcasts a
- * partially-valid quote.
+ * partially-valid quote. A quote with NO trackable request id (neither on a step
+ * nor derivable from a check endpoint) ALSO throws here — failing BEFORE any
+ * broadcast is strictly safer than moving funds we could never verify.
  */
 function planRelayBridge(
   quote: RelayQuoteResponse,
   expectedFrom: `0x${string}`,
   originChainId: number,
   destinationChainId: number,
-): { planned: PlannedRelayTx[]; requestId: string | null } {
+): { planned: PlannedRelayTx[]; requestId: string } {
   const allowedChains = new Set([originChainId, destinationChainId]);
   const planned: PlannedRelayTx[] = [];
-  let requestId: string | null = null;
 
   for (const step of quote.steps) {
-    if (step.requestId && !requestId) requestId = step.requestId;
     if (step.kind !== "transaction") {
       throw new VexError(
         ErrorCodes.RELAY_UNSUPPORTED_STEP,
@@ -189,6 +272,19 @@ function planRelayBridge(
       }
       planned.push({ stepId: step.id, chainId: data.chainId, to, data: data.data as Hex, value });
     }
+  }
+
+  // Fail closed BEFORE any broadcast when the intent is untrackable: without a
+  // request id there is no way to ever confirm delivery, so moving funds would
+  // leave an unverifiable bridge. Real Relay quotes always carry the id (step or
+  // check endpoint); this guards a degenerate/idless quote.
+  const requestId = deriveRequestId(quote);
+  if (!requestId) {
+    throw new VexError(
+      ErrorCodes.RELAY_BRIDGE_FAILED,
+      "Relay quote carries no request id (neither on a step nor a check endpoint) — the bridge status could never be verified. Refusing to broadcast an untrackable bridge.",
+      "Re-quote before retrying.",
+    );
   }
 
   return { planned, requestId };
@@ -233,6 +329,17 @@ export async function executeRelayBridge(args: RelayExecuteArgs): Promise<RelayE
     logger.info("relay.bridge.step_broadcast", { stepId: tx.stepId, chainId: tx.chainId });
   }
 
-  const finalStatus = requestId ? await pollToTerminal(requestId) : "pending";
-  return { txHashes: transactions.map((t) => t.hash), transactions, requestId, finalStatus };
+  // requestId is guaranteed non-null here (planRelayBridge fails closed
+  // otherwise). Poll to a terminal state; `observed` distinguishes a real
+  // last-seen status from a window where EVERY status request threw (status API
+  // unreachable) — the handler fails closed on the latter rather than emitting a
+  // phantom pending capture.
+  const poll = await pollToTerminal(requestId);
+  return {
+    txHashes: transactions.map((t) => t.hash),
+    transactions,
+    requestId,
+    finalStatus: poll.status,
+    statusObserved: poll.observed,
+  };
 }
