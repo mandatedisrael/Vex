@@ -54,6 +54,10 @@ export function SessionCreator({
   onOpenChange,
 }: SessionCreatorProps): JSX.Element {
   const setActiveSessionId = useUiStore((s) => s.setActiveSessionId);
+  // The sidebar's active mode filter (all/agent/mission). When the operator is
+  // already filtered to Mission and opens "New session", default the dialog to
+  // Mission mode so they don't have to flip it by hand.
+  const sessionModeFilter = useUiStore((s) => s.sessionModeFilter);
   const createSessionInitialMessage = useUiStore(
     (s) => s.createSessionInitialMessage,
   );
@@ -82,13 +86,13 @@ export function SessionCreator({
           ? deriveSessionName(createSessionInitialMessage)
           : "",
       );
-      setMode("agent");
+      setMode(sessionModeFilter === "mission" ? "mission" : "agent");
       setPermission("restricted");
       setSelectedEvmWalletId(null);
       setSelectedSolanaWalletId(null);
       setSubmitError(null);
     }
-  }, [open, createSessionInitialMessage]);
+  }, [open, createSessionInitialMessage, sessionModeFilter]);
 
   // Focus the Name input first when the dialog opens — it is the only
   // text field in this modal. Mission goal capture happens in chat.
