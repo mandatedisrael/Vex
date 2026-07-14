@@ -55,6 +55,14 @@ export type WizardEntryMode = "setup" | "reconfigure";
 export type UnlockReturnView = "wizard" | "appShell";
 export type SessionModeFilter = "all" | "agent" | "mission";
 /**
+ * Which mission review dialog is open (mission contract / plan). Mutually
+ * exclusive by construction (one enum field — opening one closes the other).
+ * Lives in the store rather than `MissionRail` local state so surfaces outside
+ * the rail (the `MissionControls` "Review & accept contract" bar) can open the
+ * contract modal. UI-ephemeral: NOT persisted (see partialize).
+ */
+export type ReviewModal = "none" | "mission" | "plan";
+/**
  * Sub-view of the app shell panel area. `session` is the default chat/
  * welcome panel; `sessionsLibrary` is the dedicated "browse all sessions"
  * screen; `memory` is the read-only long-term + session-memory panel.
@@ -119,6 +127,8 @@ interface UiState {
    */
   readonly activeSessionId: string | null;
   readonly appShellView: AppShellView;
+  /** Open mission review dialog (contract/plan). NOT persisted. */
+  readonly reviewModal: ReviewModal;
   /**
    * New-session modal state + the first message typed in the welcome
    * composer that should seed creation. NOT persisted (see partialize).
@@ -158,6 +168,7 @@ interface UiState {
   readonly openUnlock: (returnView: UnlockReturnView) => void;
   readonly setActiveSessionId: (value: string | null) => void;
   readonly setAppShellView: (value: AppShellView) => void;
+  readonly setReviewModal: (value: ReviewModal) => void;
   /** Open the new-session modal, optionally seeding the first message. */
   readonly openCreateSession: (initialMessage?: string | null) => void;
   /** Close the modal + clear its draft. Does NOT touch pendingFirstMessage. */
@@ -188,6 +199,7 @@ export const useUiStore = create<UiState>()(
       sessionModeFilter: "all",
       activeSessionId: null,
       appShellView: "session",
+      reviewModal: "none",
       createSessionOpen: false,
       createSessionInitialMessage: null,
       pendingFirstMessage: null,
@@ -209,6 +221,7 @@ export const useUiStore = create<UiState>()(
         set({ currentView: "unlock", unlockReturnView }),
       setActiveSessionId: (activeSessionId) => set({ activeSessionId }),
       setAppShellView: (appShellView) => set({ appShellView }),
+      setReviewModal: (reviewModal) => set({ reviewModal }),
       openCreateSession: (initialMessage = null) => {
         const trimmed =
           typeof initialMessage === "string" ? initialMessage.trim() : "";

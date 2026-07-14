@@ -11,6 +11,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
 
 import { MissionControls } from "../MissionControls.js";
+import { CHAT_SUBMIT_MUTATION_KEY } from "../../../lib/api/chat.js";
+import { useUiStore } from "../../../stores/uiStore.js";
 
 const SESSION = "00000000-0000-4000-8000-0000000000d1";
 const MISSION = "mission-1";
@@ -30,12 +32,23 @@ const editMock = vi.fn();
 const stopMock = vi.fn();
 const renewMock = vi.fn();
 
+/** Captures the live-sync subscriber so tests can fire transcript appends. */
+let transcriptAppendCb: ((event: { sessionId: string }) => void) | null = null;
+
 function setVex(): void {
   Object.defineProperty(window, "vex", {
     configurable: true,
     writable: true,
     value: {
       runtime: { getState: getStateMock },
+      engine: {
+        onTranscriptAppend: (cb: (event: { sessionId: string }) => void) => {
+          transcriptAppendCb = cb;
+          return () => {
+            transcriptAppendCb = null;
+          };
+        },
+      },
       mission: {
         getDraft: getDraftMock,
         getDiff: getDiffMock,
@@ -90,21 +103,47 @@ function freshClient(): QueryClient {
   });
 }
 
-function Wrapper({ children }: { readonly children: ReactNode }) {
-  return createElement(QueryClientProvider, { client: freshClient() }, children);
-}
-
 function renderControls() {
   setVex();
-  return render(createElement(MissionControls, { sessionId: SESSION }), {
-    wrapper: Wrapper,
+  // One client per render, shared with the test body — the live-turn gate
+  // reads the chat-submit mutation cache, so tests need the same instance.
+  const client = freshClient();
+  function Wrapper({ children }: { readonly children: ReactNode }) {
+    return createElement(QueryClientProvider, { client }, children);
+  }
+  return {
+    ...render(createElement(MissionControls, { sessionId: SESSION }), {
+      wrapper: Wrapper,
+    }),
+    client,
+  };
+}
+
+/**
+ * Register a pending `chat.submit` mutation for the session on the client's
+ * shared mutation cache — what `useIsChatSubmitting` observes for the whole
+ * turn (streams AND quiet tool-execution gaps). Returns the settle handle.
+ */
+function startChatTurn(client: QueryClient): () => void {
+  let finish!: () => void;
+  const turn = new Promise<Record<string, never>>((resolve) => {
+    finish = () => resolve({});
   });
+  const mutation = client.getMutationCache().build(client, {
+    mutationKey: CHAT_SUBMIT_MUTATION_KEY,
+    mutationFn: () => turn,
+  });
+  void mutation.execute({ sessionId: SESSION });
+  return finish;
 }
 
 beforeEach(() => {
   // Default: no renewable source. The hook fires for every render (active or
   // not), so give it a safe value; renew-specific tests override it.
   getRenewableMock.mockResolvedValue(ok(null));
+  // Module-global store: reset the review-modal enum so a click in one test
+  // never leaks an open dialog into the next.
+  useUiStore.setState({ reviewModal: "none" });
 });
 
 afterEach(() => {
@@ -141,9 +180,75 @@ describe("MissionControls", () => {
     await waitFor(() => expect(getDiffMock).toHaveBeenCalled());
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByRole("button", { name: "Start mission" })).toBeNull();
-    // Standing acceptance-pending notice: the runtime gate blocks every
-    // on-chain broadcast pre-acceptance, and the user must SEE that.
-    await screen.findByText(/on-chain actions .* are blocked until you accept/i);
+    // A ready-but-unaccepted contract surfaces the review bar — the
+    // discoverable path to the accept modal (the rail badge reads as status).
+    await screen.findByRole("button", {
+      name: "Review and accept mission contract",
+    });
+    // ONE next-step surface at a time: the bar replaces the warn notice
+    // (stacking both would restate the same fact in a scarier voice).
+    expect(screen.queryByText(/Mission contract not accepted/i)).toBeNull();
+  });
+
+  it("holds the review bar for the WHOLE chat turn (incl. tool-call gaps), reveals it on settle", async () => {
+    getStateMock.mockResolvedValue(runtimeState({ hasActiveRun: false }));
+    getDraftMock.mockResolvedValue(draftReady());
+    getDiffMock.mockResolvedValue(diffAccepted(false));
+    const { client } = renderControls();
+    // The draft flips `ready` on the tool-call commit, MID-turn — the bar must
+    // wait for the turn to settle, not beat the agent's closing message. The
+    // chat-submit mutation is the only signal that also covers the quiet gaps
+    // between provider streams while a tool executes (the stream preview
+    // clears on every intermediate assistant append and would flash the bar).
+    const finishTurn = startChatTurn(client);
+
+    await screen.findByText(/Mission contract not accepted/i);
+    expect(
+      screen.queryByRole("button", {
+        name: "Review and accept mission contract",
+      }),
+    ).toBeNull();
+
+    // Turn settles (closing message delivered) → bar appears, notice retires.
+    finishTurn();
+    await screen.findByRole("button", {
+      name: "Review and accept mission contract",
+    });
+    expect(screen.queryByText(/Mission contract not accepted/i)).toBeNull();
+  });
+
+  it("refetches the draft on a transcript append for this session (agent-side draft writes)", async () => {
+    getStateMock.mockResolvedValue(runtimeState({ hasActiveRun: false }));
+    getDraftMock.mockResolvedValue(ok({ missionId: MISSION, status: "draft" }));
+    getDiffMock.mockResolvedValue(diffAccepted(false));
+    renderControls();
+
+    await screen.findByText(/Mission contract not accepted/i);
+    const callsBefore = getDraftMock.mock.calls.length;
+    // The agent finishing `mission_draft_update` lands as a transcript append —
+    // the live-sync hook must invalidate so the bar appears without a remount.
+    getDraftMock.mockResolvedValue(draftReady());
+    transcriptAppendCb?.({ sessionId: SESSION });
+    await waitFor(() =>
+      expect(getDraftMock.mock.calls.length).toBeGreaterThan(callsBefore),
+    );
+    await screen.findByRole("button", {
+      name: "Review and accept mission contract",
+    });
+  });
+
+  it("Review & accept contract opens the contract modal via the uiStore", async () => {
+    getStateMock.mockResolvedValue(runtimeState({ hasActiveRun: false }));
+    getDraftMock.mockResolvedValue(draftReady());
+    getDiffMock.mockResolvedValue(diffAccepted(false));
+    renderControls();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Review and accept mission contract",
+      }),
+    );
+    expect(useUiStore.getState().reviewModal).toBe("mission");
   });
 
   it("shows the standing acceptance-pending notice while the draft is still in setup", async () => {
@@ -154,6 +259,13 @@ describe("MissionControls", () => {
 
     await screen.findByText(/Mission contract not accepted/i);
     expect(screen.queryByRole("button", { name: "Start mission" })).toBeNull();
+    // Still in setup → nothing to review yet, so no review bar (the modal
+    // could only say "add a goal…").
+    expect(
+      screen.queryByRole("button", {
+        name: "Review and accept mission contract",
+      }),
+    ).toBeNull();
   });
 
   it("running: Stop + Edit enabled, Continue + Recover disabled", async () => {

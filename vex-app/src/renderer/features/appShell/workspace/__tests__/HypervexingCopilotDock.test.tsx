@@ -71,13 +71,11 @@ const SESSION = "00000000-0000-4000-8000-00000000dc01";
 const MISSION = "mission-1";
 const HASH = "a".repeat(64);
 
-let activeSessionId: string | null = SESSION;
-vi.mock("../../../../stores/uiStore.js", () => ({
-  useUiStore: (selector: (s: { activeSessionId: string | null }) => unknown) =>
-    selector({ activeSessionId }),
-}));
-
+// The REAL uiStore (plain Zustand) — MissionRail now reads/writes its
+// `reviewModal` enum reactively, which a static selector fake can't do.
+// Tests drive `activeSessionId` via `useUiStore.setState` instead.
 const { HypervexingCopilotDock } = await import("../HypervexingCopilotDock.js");
+const { useUiStore } = await import("../../../../stores/uiStore.js");
 
 function ok<T>(data: T): Result<T> {
   return { ok: true, data };
@@ -166,7 +164,9 @@ function runtime(hasActiveRun = false) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  activeSessionId = SESSION;
+  // Module-global store: pin the active session and reset the modal-open enum
+  // so a badge click in one test can never leak an open dialog into the next.
+  useUiStore.setState({ activeSessionId: SESSION, reviewModal: "none" });
   mockUseSession.mockReturnValue({ data: ok(sessionRow()) });
   mockUseMissionDraft.mockReturnValue({ data: ok(null) });
   mockUseMissionDiff.mockReturnValue({ data: undefined });
@@ -223,7 +223,7 @@ describe("HypervexingCopilotDock mission rail", () => {
   });
 
   it("passes a null active session straight through (rail render-gates off)", () => {
-    activeSessionId = null;
+    useUiStore.setState({ activeSessionId: null });
     mockUseSession.mockReturnValue({ data: undefined });
 
     const { container } = render(<HypervexingCopilotDock />);

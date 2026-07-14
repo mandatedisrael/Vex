@@ -14,6 +14,7 @@
  * `useMissionDraft`.
  */
 
+import { useEffect } from "react";
 import {
   queryOptions,
   useMutation,
@@ -94,6 +95,33 @@ export function useMissionDiff(
     sessionId: sessionId ?? "",
     missionId: missionId ?? "",
   }));
+}
+
+/**
+ * Live sync for the mission contract surfaces. The AGENT mutates the draft
+ * from the main process (`mission_draft_update` & co. tool calls), which no
+ * renderer mutation observes — without this, the draft/diff queries idle at
+ * staleTime until a focus/remount, so the rail badge and the "Review & accept
+ * contract" bar trail the agent's "contract is ready" message by seconds.
+ * Mirrors `useTranscriptLiveSync`: every committed transcript append for the
+ * session (each tool call / message is one) invalidates the draft + diff keys
+ * so every observer refetches immediately. Mount once per active mission
+ * session (`MissionControls`). Pure side effect — no render output.
+ */
+export function useMissionLiveSync(sessionId: string | null): void {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (sessionId === null || sessionId.length === 0) return;
+    return window.vex.engine.onTranscriptAppend((event) => {
+      if (event.sessionId !== sessionId) return;
+      void queryClient.invalidateQueries({
+        queryKey: missionKeys.draft(sessionId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: missionKeys.diffsForSession(sessionId),
+      });
+    });
+  }, [sessionId, queryClient]);
 }
 
 /**

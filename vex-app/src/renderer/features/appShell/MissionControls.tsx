@@ -42,6 +42,7 @@ import {
   useMissionContinue,
   useMissionDiff,
   useMissionDraft,
+  useMissionLiveSync,
   useMissionRenew,
   useMissionRetry,
   useMissionStart,
@@ -49,6 +50,8 @@ import {
   useRenewableMissionSource,
 } from "../../lib/api/mission.js";
 import { useRuntimeState } from "../../lib/api/runtime.js";
+import { useIsChatSubmitting } from "../../lib/api/chat.js";
+import { useUiStore } from "../../stores/uiStore.js";
 import { cn } from "../../lib/utils.js";
 
 /**
@@ -58,6 +61,16 @@ import { cn } from "../../lib/utils.js";
  */
 const PRIMARY_KEY =
   "flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[var(--vex-accent)] font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--vex-accent-contrast)] transition-colors hover:bg-[var(--vex-accent-hover)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50";
+
+/**
+ * Pre-accept review action — same geometry as PRIMARY_KEY but accent-OUTLINED,
+ * not filled: the solid accent fill stays reserved for the one commitment
+ * action of each stage (Start/Renew here, Accept inside the modal). The
+ * outlined→solid progression is deliberate feedback that accepting advanced
+ * the mission a stage.
+ */
+const REVIEW_KEY =
+  "flex h-10 w-full items-center justify-center gap-2 rounded-full border border-[var(--vex-accent)] font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--vex-accent-text)] transition-colors hover:bg-[color-mix(in_oklab,var(--vex-accent)_12%,transparent)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 export interface MissionControlsProps {
   readonly sessionId: string;
@@ -175,6 +188,10 @@ function readRenewable(
 export function MissionControls({
   sessionId,
 }: MissionControlsProps): JSX.Element | null {
+  // Keep the draft/diff fresh against MAIN-process (agent tool) writes — the
+  // review bar must appear the moment the agent finishes the draft, not a
+  // staleTime later.
+  useMissionLiveSync(sessionId);
   const runtimeQuery = useRuntimeState(sessionId);
   const draftQuery = useMissionDraft(sessionId);
   const draft = readDraft(draftQuery.data);
@@ -189,6 +206,18 @@ export function MissionControls({
   const renew = useMissionRenew();
 
   const [notice, setNotice] = useState<ControlNotice>(null);
+  // Opens the contract review dialog owned by MissionRail (shared uiStore
+  // enum — see MissionRail's mutual-exclusion note).
+  const setReviewModal = useUiStore((s) => s.setReviewModal);
+  // Live-turn gate for the review bar: the draft flips `ready` on the TOOL
+  // CALL commit, mid-turn — revealing the bar there beats the agent's own
+  // closing summary (and the contract could still change before the turn
+  // ends). `useIsChatSubmitting` spans the ENTIRE turn IPC — provider streams,
+  // the quiet tool-execution gaps between them, and the closing message. The
+  // stream preview is NOT a substitute: it clears on every intermediate
+  // assistant append, so the bar would flash during tool calls. A cancelled/
+  // failed turn settles the mutation, so the bar can never wedge shut.
+  const turnActive = useIsChatSubmitting(sessionId);
 
   const run = useCallback(
     async <T extends { readonly outcome: string }>(
@@ -333,12 +362,31 @@ export function MissionControls({
     );
   }
 
-  // Contract pending acceptance with nothing else to show → the standing
-  // notice alone, so the block is visible for the whole setup phase.
-  if (pendingAcceptance) {
+  // Contract pending acceptance → ONE next-step surface, never both. Once the
+  // draft is reviewable (status `ready` with a computed diff) the outlined
+  // "Review & accept contract" bar IS the message — it opens the contract
+  // modal, and stacking the warn notice on top of it would just restate the
+  // same fact in a scarier voice. While the draft is still in setup (nothing
+  // to review yet — the modal would only say "add a goal…") the standing
+  // notice carries the why-am-I-blocked signal alone.
+  if (draft !== null && pendingAcceptance) {
+    const reviewable =
+      draft.status === "ready" && diff !== null && !turnActive;
     return (
       <div data-vex-area="mission-controls" className="mt-3">
-        <AcceptancePendingNotice />
+        {reviewable ? (
+          <button
+            type="button"
+            onClick={() => setReviewModal("mission")}
+            aria-label="Review and accept mission contract"
+            data-vex-action="review-contract"
+            className={REVIEW_KEY}
+          >
+            Review &amp; accept contract
+          </button>
+        ) : (
+          <AcceptancePendingNotice />
+        )}
       </div>
     );
   }

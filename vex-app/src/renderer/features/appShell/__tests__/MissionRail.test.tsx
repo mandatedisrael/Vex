@@ -65,6 +65,7 @@ vi.mock("../PlanDisplayModal.js", () => ({
 }));
 
 const { MissionRail } = await import("../MissionRail.js");
+const { useUiStore } = await import("../../../stores/uiStore.js");
 
 const SESSION = "00000000-0000-4000-8000-00000000dd01";
 const MISSION = "mission-1";
@@ -163,6 +164,9 @@ function renewable(missionId: string | null = null) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The modal-open enum lives in the module-global uiStore now — reset it so
+  // a badge click in one test can never leak an open dialog into the next.
+  useUiStore.setState({ reviewModal: "none" });
   // Sensible defaults: no draft/diff/plan; tests override per case.
   mockUseSession.mockReturnValue({ data: ok(sessionRow()) });
   mockUseMissionDraft.mockReturnValue({ data: ok(null) });
