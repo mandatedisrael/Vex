@@ -110,13 +110,23 @@ function HeaderStat({
   label,
   value,
   toneClass,
+  caption,
 }: {
   readonly label: string;
   readonly value: string;
   readonly toneClass?: string;
+  /** Renders above `label`, e.g. a ticking countdown — kept fixed-width
+   * (`5ch` fits "MM:SS") so a per-second tick never changes the stat's
+   * footprint or reflows the header. */
+  readonly caption?: string;
 }): JSX.Element {
   return (
     <span className="flex flex-col leading-tight">
+      {caption !== undefined ? (
+        <span className="inline-block w-[5ch] font-mono text-[8px] tabular-nums text-[var(--vex-text-3)]">
+          {caption}
+        </span>
+      ) : null}
       <span className="font-mono text-[8px] uppercase tracking-[0.10em] text-[var(--vex-text-3)]">
         {label}
       </span>
@@ -283,7 +293,7 @@ function PositionEconomicsStrip({
 }
 
 /** Venue cockpit strip: 24h Δ · 24h Vol · OI · Funding + hourly countdown. */
-function MarketStatsStrip({
+export function MarketStatsStrip({
   market,
 }: {
   readonly market: HyperliquidMarketDto;
@@ -292,7 +302,14 @@ function MarketStatsStrip({
   const change = market.change24hPct === null ? null : Number(market.change24hPct);
   const funding = market.fundingRate8hPct === null ? null : Number(market.fundingRate8hPct);
   return (
-    <div className="order-last grid w-full grid-cols-5 gap-x-2 border-t border-[var(--vex-line)] pt-1.5 xl:order-none xl:w-auto xl:border-l xl:border-t-0 xl:pl-2 xl:pt-0">
+    // Always its own full-width row, ordered after every other header item:
+    // `xl:` viewport breakpoints do not track this PANE's actual width in a
+    // multi-pane layout, so a purely responsive (viewport-based) inline mode
+    // let the timeframe selector and this strip compete for the same row at
+    // panes narrower than the viewport suggests. Reserving a dedicated row
+    // makes the header's shape independent of pane width (regression: the
+    // selector overlapping the funding block at narrower panes).
+    <div className="order-last grid w-full grid-cols-5 gap-x-2 border-t border-[var(--vex-line)] pt-1.5">
       <HeaderStat label="Mark" value={market.markPx} toneClass="text-[var(--vex-text)]" />
       <HeaderStat
         label="24h"
@@ -312,7 +329,8 @@ function MarketStatsStrip({
       <HeaderStat label="24h Vol" value={compactUsd(market.dayNtlVlmUsd)} />
       <HeaderStat label="OI" value={compactUsd(market.openInterestUsd)} />
       <HeaderStat
-        label={`Funding · ${countdown}`}
+        label="Funding"
+        caption={countdown}
         value={
           funding === null || !Number.isFinite(funding)
             ? "—"

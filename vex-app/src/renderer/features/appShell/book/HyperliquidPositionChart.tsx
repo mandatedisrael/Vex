@@ -51,6 +51,8 @@ interface PriceLineSeries {
     readonly axisLabelVisible: boolean;
   }): PriceLineHandle;
   removePriceLine(line: PriceLineHandle): void;
+  applyOptions(options: { readonly priceFormat: PriceFormat }): void;
+  priceScale(): { applyOptions(options: { readonly autoScale: boolean }): void };
 }
 
 interface VolumeSeries {
@@ -94,9 +96,32 @@ interface PriceLineState {
 
 const LIVE_EDGE_EPSILON = 0.5;
 
+type PriceFormat = { readonly type: "price"; readonly precision: number; readonly minMove: number };
+
 function renderNumber(value: string): number | null {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+/**
+ * A $64k asset and a $0.19 asset cannot share the chart's default 2-decimal
+ * price format: at 2 decimals a sub-dollar coin's candles round to a handful
+ * of distinct values and the price axis has nothing meaningful to scale
+ * against. Venue candle strings already carry the asset's native decimal
+ * precision (e.g. "0.19310"), so the widest decimal count seen in the
+ * snapshot is the venue-provided precision — no separate market/szDecimals
+ * lookup needed. Never go BELOW 2 decimals so ordinary assets keep their
+ * existing look; cap at 8 (the venue's spot price-decimal ceiling) so a
+ * malformed string cannot blow up tick rendering.
+ */
+function derivePriceFormat(snapshot: readonly HyperliquidCandleDto[]): PriceFormat {
+  let decimals = 0;
+  for (const candle of snapshot) {
+    const dot = candle.close.indexOf(".");
+    if (dot >= 0) decimals = Math.max(decimals, candle.close.length - dot - 1);
+  }
+  const precision = Math.min(Math.max(decimals, 2), 8);
+  return { type: "price", precision, minMove: 10 ** -precision };
 }
 
 /** A semantic revision deliberately excludes `fetchedAt`. */
@@ -264,7 +289,15 @@ export function HyperliquidPositionChart({
     series.setData(nextCandles);
     volume.setData(nextVolume);
     if (loadedMarket.current !== key) {
+      // A new market is a new chart context, not a data update: the
+      // previous asset's price scale must not leak into this one. Re-arm
+      // autoScale and re-derive precision from THIS asset's own candles
+      // before fitting, so a small-price asset never inherits a large-price
+      // asset's stale range (regression: CASHCAT rendering with a -200..500
+      // axis and a flat 0.19 candle line after viewing BTC/ETH).
       savedTimeRange.current = null;
+      series.applyOptions({ priceFormat: derivePriceFormat(snapshot) });
+      series.priceScale().applyOptions({ autoScale: true });
       instance.timeScale().fitContent();
       loadedMarket.current = key;
     } else if (atLiveEdge) {

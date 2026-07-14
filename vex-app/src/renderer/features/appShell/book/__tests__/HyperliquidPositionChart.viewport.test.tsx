@@ -21,6 +21,8 @@ const spies = vi.hoisted(() => ({
   volumeUpdate: vi.fn(),
   createPriceLine: vi.fn(),
   removePriceLine: vi.fn(),
+  seriesApplyOptions: vi.fn(),
+  seriesAutoScaleApplyOptions: vi.fn(),
 }));
 
 let rangeCallback: ((range: { from: number; to: number } | null) => void) | null = null;
@@ -71,6 +73,8 @@ beforeEach(() => {
     update: spies.candleUpdate,
     createPriceLine: spies.createPriceLine,
     removePriceLine: spies.removePriceLine,
+    applyOptions: spies.seriesApplyOptions,
+    priceScale: () => ({ applyOptions: spies.seriesAutoScaleApplyOptions }),
   };
   const volumeSeries = {
     setData: spies.volumeSetData,
@@ -166,6 +170,38 @@ describe("HyperliquidPositionChart W15 lifecycle", () => {
     view.rerender(chart({ coin: "ETH", interval: "5m", candles: candles({ close: "2" }) }));
     expect(spies.candleSetData).toHaveBeenCalledTimes(1);
     expect(spies.fitContent).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression: switching from a large-price asset (BTC ~64k) to a
+  // small-price asset (e.g. CASHCAT ~0.19) previously left the price scale
+  // pinned to the old asset's range and the default 2-decimal price format,
+  // so the new candles rendered as a flat line under a grid that had nothing
+  // to do with the asset on screen.
+  it("re-arms autoscale and adapts price precision to the new asset on a coin switch", () => {
+    const view = render(chart({ candles: candles({ close: "64123.50" }) }));
+    spies.seriesApplyOptions.mockClear(); spies.seriesAutoScaleApplyOptions.mockClear();
+    view.rerender(chart({ coin: "CASHCAT", candles: candles({ close: "0.19310" }) }));
+    expect(spies.seriesApplyOptions).toHaveBeenCalledWith({
+      priceFormat: { type: "price", precision: 5, minMove: 0.00001 },
+    });
+    expect(spies.seriesAutoScaleApplyOptions).toHaveBeenCalledWith({ autoScale: true });
+  });
+
+  it("keeps a floor of 2-decimal precision for an ordinary integer-priced asset", () => {
+    const view = render(chart({ candles: candles({ close: "1" }) }));
+    spies.seriesApplyOptions.mockClear();
+    view.rerender(chart({ coin: "ETH", candles: candles({ close: "1800" }) }));
+    expect(spies.seriesApplyOptions).toHaveBeenCalledWith({
+      priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+    });
+  });
+
+  it("does not re-touch the price format or autoscale for a same-market data update", () => {
+    const view = render(chart());
+    spies.seriesApplyOptions.mockClear(); spies.seriesAutoScaleApplyOptions.mockClear();
+    view.rerender(chart({ candles: candles({ close: "1.6" }) }));
+    expect(spies.seriesApplyOptions).not.toHaveBeenCalled();
+    expect(spies.seriesAutoScaleApplyOptions).not.toHaveBeenCalled();
   });
 
   it("resizes without recreating the chart or changing the saved time range", () => {
