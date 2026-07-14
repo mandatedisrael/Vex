@@ -178,4 +178,18 @@ describe("HyperliquidPositionChart W15 lifecycle", () => {
     expect(spies.fitContent).not.toHaveBeenCalled();
     expect(spies.setVisibleRange).not.toHaveBeenCalled();
   });
+
+  // Regression: on real entry into Hypervexing the candles query is still
+  // "loading" on the very first render, so the chart host must be mounted
+  // (and the chart created) BEFORE the first candle snapshot arrives — a
+  // chart born only in the "ready" render never gets created at all.
+  it("creates the chart while candles are still loading, then renders the first snapshot on ready", () => {
+    const view = render(chart({ state: "loading", candles: null }));
+    expect(spies.createChart).toHaveBeenCalledTimes(1);
+    expect(spies.candleSetData).not.toHaveBeenCalled();
+    view.rerender(chart({ state: "ready", candles: candles() }));
+    expect(spies.createChart).toHaveBeenCalledTimes(1);
+    expect(spies.candleSetData).toHaveBeenCalledTimes(1);
+    expect(spies.fitContent).toHaveBeenCalledTimes(1);
+  });
 });

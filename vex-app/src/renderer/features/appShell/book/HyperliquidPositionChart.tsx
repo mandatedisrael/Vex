@@ -324,8 +324,25 @@ export function HyperliquidPositionChart({
     }
   }, [overlayKey]);
 
-  if (state === "loading") return <p className="mt-2 text-[10px] text-[var(--vex-text-3)]">Loading chart…</p>;
-  if (state === "error") return <p className="mt-2 text-[10px] text-[var(--vex-warn-text)]">Chart unavailable.</p>;
-  if (state === "empty") return <p className="mt-2 text-[10px] text-[var(--vex-text-3)]">No candle history yet.</p>;
-  return <div ref={host} aria-label={`${coin} price chart`} className={fill ? "h-full min-h-[220px] w-full" : "mt-2 h-[180px] w-full"} />;
+  // The host must stay mounted across every state so effect (a) — which owns
+  // the chart for the lifetime of this component and runs only once — can
+  // find it on the FIRST render. On real entry the candles query is still
+  // "loading" on that first render; a host that only mounts once state
+  // becomes "ready" never gets a chart created at all (regression: blank
+  // chart pane on Hypervexing entry). The status text overlays the host
+  // instead of replacing it.
+  return (
+    <div className={fill ? "relative h-full min-h-[220px] w-full" : "relative mt-2 h-[180px] w-full"}>
+      <div ref={host} aria-label={`${coin} price chart`} className="h-full w-full" />
+      {state === "loading" ? (
+        <p className="absolute inset-0 flex items-center justify-center text-[10px] text-[var(--vex-text-3)]">Loading chart…</p>
+      ) : null}
+      {state === "error" ? (
+        <p className="absolute inset-0 flex items-center justify-center text-[10px] text-[var(--vex-warn-text)]">Chart unavailable.</p>
+      ) : null}
+      {state === "empty" ? (
+        <p className="absolute inset-0 flex items-center justify-center text-[10px] text-[var(--vex-text-3)]">No candle history yet.</p>
+      ) : null}
+    </div>
+  );
 }
