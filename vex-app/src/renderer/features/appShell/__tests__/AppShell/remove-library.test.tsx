@@ -25,6 +25,8 @@ vi.mock("@hugeicons/react", () => ({
 vi.mock("@hugeicons/core-free-icons", () => ({
   Add01Icon: "Add01Icon",
   AnalyticsUpIcon: "AnalyticsUpIcon",
+  CheckmarkCircle02Icon: "CheckmarkCircle02Icon",
+  Download01Icon: "Download01Icon",
   AiChat01Icon: "AiChat01Icon",
   // S5 act ledger — ToolLedger/toolGlyph.ts imports these four.
   AiWebBrowsingIcon: "AiWebBrowsingIcon",

@@ -32,6 +32,8 @@ vi.mock("@hugeicons/react", () => ({
 
 vi.mock("@hugeicons/core-free-icons", () => ({
   Add01Icon: "Add01Icon",
+  CheckmarkCircle02Icon: "CheckmarkCircle02Icon",
+  Download01Icon: "Download01Icon",
   ArrowDown01Icon: "ArrowDown01Icon",
   ArrowUp01Icon: "ArrowUp01Icon",
   MapPinIcon: "MapPinIcon",
