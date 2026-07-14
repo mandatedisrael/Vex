@@ -36,6 +36,8 @@ import {
   type MissionRunContractSnapshot,
   resolveMissionPromptContext,
 } from "../../mission/run-contract.js";
+import { resolveFrozenDeadlineMs } from "../../mission/mission-deadline.js";
+import { captureMissionStart } from "../../mission/mission-results-capture.js";
 import type { PromptStackOptions } from "../../prompts/index.js";
 import { getOpenAITools, type ToolVisibilityBase } from "@vex-agent/tools/registry.js";
 import {
@@ -65,6 +67,11 @@ type Provider = NonNullable<Awaited<ReturnType<typeof resolveProvider>>>;
 type ProviderConfig = NonNullable<
   Awaited<ReturnType<Provider["loadConfig"]>>
 >;
+
+/** Epoch ms -> ISO string for the agent-facing Runtime Clock, or null. */
+function deadlineMsToIso(deadlineMs: number | null | undefined): string | null {
+  return deadlineMs != null ? new Date(deadlineMs).toISOString() : null;
+}
 
 // ── runPreparedMissionStart ─────────────────────────────────────
 
@@ -103,6 +110,13 @@ export async function runPreparedMissionStart(
 ): Promise<TurnResult> {
   const controller = registerMissionRunAbortController(prepared.runId);
   try {
+    // Open the mission results ledger row (per-wallet #N + start bankroll
+    // snapshot). Fail-soft inside — never blocks the run.
+    await captureMissionStart({
+      missionId: prepared.missionId,
+      runId: prepared.runId,
+      sessionId: prepared.sessionId,
+    });
     await addMissionActivationMessage({
       sessionId: prepared.sessionId,
       missionId: prepared.missionId,
@@ -142,6 +156,12 @@ export async function runPreparedMissionStart(
       ...DEFAULT_LOOP_CONFIG,
       contextLimit: prepared.config.contextLimit,
       baseVisibility,
+      // Deadline from FROZEN inputs (run started_at + snapshot durationMinutes),
+      // never the live mission row — see mission-deadline.ts.
+      missionDeadlineMs: resolveFrozenDeadlineMs(
+        hydrated.context.missionRunStartedAt,
+        prepared.contractSnapshot,
+      ),
     };
 
     const result = await runTurnLoop(
@@ -149,6 +169,7 @@ export async function runPreparedMissionStart(
         ...hydrated.context,
         missionRunId: prepared.runId,
         sessionKind: "mission",
+        missionDeadline: deadlineMsToIso(loopConfig.missionDeadlineMs) ?? hydrated.context.missionDeadline ?? null,
       },
       hydrated.messages,
       hydrated.summary,
@@ -261,6 +282,13 @@ export async function resumePreparedMissionRun(
       ...DEFAULT_LOOP_CONFIG,
       contextLimit: prepared.config.contextLimit,
       baseVisibility,
+      // Deadline from FROZEN inputs (run started_at + the SAME snapshot the run
+      // was committed with), so a wake/resume re-derives the identical box —
+      // never the live mission row. See mission-deadline.ts.
+      missionDeadlineMs: resolveFrozenDeadlineMs(
+        hydrated.context.missionRunStartedAt,
+        prepared.run.contractSnapshotJson,
+      ),
     };
 
     const result = await runTurnLoop(
@@ -268,6 +296,7 @@ export async function resumePreparedMissionRun(
         ...hydrated.context,
         missionRunId: prepared.runId,
         sessionKind: "mission",
+        missionDeadline: deadlineMsToIso(loopConfig.missionDeadlineMs) ?? hydrated.context.missionDeadline ?? null,
       },
       hydrated.messages,
       hydrated.summary,

@@ -45,6 +45,7 @@ import { SessionPanel } from "./SessionPanel.js";
 import { SessionsLibrary } from "./SessionsLibrary.js";
 import { SessionsList } from "./SessionsList.js";
 import { MemoryPanel } from "./MemoryPanel.js";
+import { MissionHistory } from "./MissionHistory.js";
 import { GlobalApprovals } from "./GlobalApprovals.js";
 import { SignalSky } from "./SignalSky.js";
 import { HypervexingWorkspace } from "./workspace/HypervexingWorkspace.js";
@@ -198,6 +199,8 @@ function NormalShell({
             <SessionsLibrary />
           ) : appShellView === "memory" ? (
             <MemoryPanel />
+          ) : appShellView === "missionHistory" ? (
+            <MissionHistory />
           ) : (
             <SessionPanel />
           )}

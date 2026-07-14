@@ -42,6 +42,7 @@ const MissionDraftUpdateArgs = z
     successCriteria: z.array(z.string().trim().min(1).max(MAX_ARRAY_ITEM_LENGTH)).max(MAX_ARRAY_ITEMS).nullable().optional(),
     stopConditions: z.array(z.string().trim().min(1).max(MAX_ARRAY_ITEM_LENGTH)).max(MAX_ARRAY_ITEMS).nullable().optional(),
     deadline: z.string().trim().min(1).max(MAX_STRING_LENGTH).nullable().optional(),
+    durationMinutes: z.number().int().positive().max(1440).nullable().optional(),
     hyperliquidRisk: hyperliquidMissionRiskSchema.nullable().optional(),
   })
   .strict()

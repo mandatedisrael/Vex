@@ -126,10 +126,12 @@ describe("engine types", () => {
         successCriteria: null,
         stopConditions: null,
         deadline: null,
+        durationMinutes: null,
       };
       // Puzzle 04 removed `stopConditionsAccepted` from MissionDraft —
       // acceptance is host-only via `missions.accepted_contract_hash`.
-      expect(Object.keys(draft)).toHaveLength(11);
+      // WP-I1 added `durationMinutes` (hard time-box, minutes).
+      expect(Object.keys(draft)).toHaveLength(12);
     });
 
     it("accepts populated values", () => {
@@ -145,6 +147,7 @@ describe("engine types", () => {
         successCriteria: ["Accumulated 10 SOL"],
         stopConditions: ["capital_depleted", "deadline_reached"],
         deadline: "2026-04-04",
+        durationMinutes: 60,
       };
       expect(draft.title).toBe("SOL DCA Strategy");
       expect(draft.allowedChains).toEqual(["solana"]);
@@ -158,6 +161,10 @@ describe("engine types", () => {
 
     it("does not include deadline (optional)", () => {
       expect(MISSION_DRAFT_REQUIRED_FIELDS).not.toContain("deadline");
+    });
+
+    it("does not include durationMinutes (optional — env/default fallback)", () => {
+      expect(MISSION_DRAFT_REQUIRED_FIELDS).not.toContain("durationMinutes");
     });
 
     it("includes all business-critical fields", () => {

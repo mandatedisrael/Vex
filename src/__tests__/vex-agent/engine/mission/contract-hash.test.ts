@@ -22,6 +22,7 @@ function makeDraft(overrides: Partial<MissionDraft> = {}): MissionDraft {
     successCriteria: ["Accumulated 10 SOL"],
     stopConditions: ["capital_depleted", "deadline_reached"],
     deadline: "2026-04-04",
+    durationMinutes: null,
     ...overrides,
   };
 }

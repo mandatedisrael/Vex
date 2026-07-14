@@ -98,6 +98,9 @@ export function buildRuntimeClockPrompt(snapshot: RuntimeClockSnapshot): string 
   lines.push("- You do not observe time while deferred; a wake means the executor resumed you after real time passed.");
   lines.push("- To wait when `loop_defer` is available in your current mode, call `loop_defer(after_ms, reason)` for relative waits or `loop_defer(wake_at, reason)` for an exact ISO time.");
   lines.push("- Before using deadline_reached or scheduling another wake, compare live state against this Runtime Clock.");
+  if (snapshot.missionDeadline) {
+    lines.push("- The mission auto-finalizes when this deadline passes. Any positions still open at that point are reported as unresolved, not closed automatically.");
+  }
 
   return lines.join("\n");
 }

@@ -312,6 +312,77 @@ describe("runner", () => {
       expect(result.missionStatus).toBe("running");
     });
 
+    // WP-I1: the hard deadline holds ACROSS resumes — it is recomputed from
+    // the same immutable `missionRunStartedAt` each time, not reset to "now".
+    // (No `contractSnapshotJson` on the run -> frozen duration null -> 60min.)
+    it("threads the hard mission deadline into loopConfig and context on resume", async () => {
+      mockGetRun.mockResolvedValueOnce({
+        id: "run-1", missionId: "mission-1", sessionId: "session-1",
+        status: "running", iterationCount: 5,
+      });
+      mockGetMission.mockResolvedValueOnce({
+        id: "mission-1", rootSessionId: "session-1", status: "running",
+        title: "SOL DCA", goal: "Accumulate", capitalSourceJson: {},
+        allowedWallets: ["sol"], allowedChains: ["sol"], allowedProtocols: ["sol"],
+        riskProfile: "conservative", successCriteriaJson: [], stopConditionsJson: [],
+        constraintsJson: {}, createdAt: "", updatedAt: "", approvedAt: "",
+      });
+      mockHydrate.mockResolvedValueOnce(makeHydratedSession({
+        sessionKind: "mission", missionId: "mission-1", missionRunId: "run-1",
+        missionRunStartedAt: "2026-01-01T00:00:00.000Z",
+      }));
+      mockRunTurnLoop.mockResolvedValueOnce({
+        text: "Resumed", toolCallsMade: 0, pendingApprovals: [], stopReason: null,
+      });
+
+      await resumeMissionRun("run-1");
+
+      const [context, , , , , , , loopConfig] = mockRunTurnLoop.mock.calls[0]!;
+      const expectedMs = Date.parse("2026-01-01T00:00:00.000Z") + 60 * 60_000;
+      expect((loopConfig as { missionDeadlineMs: number }).missionDeadlineMs).toBe(expectedMs);
+      expect((context as { missionDeadline: string }).missionDeadline).toBe(
+        new Date(expectedMs).toISOString(),
+      );
+    });
+
+    // WP-I1 freeze (Codex review Q1): a post-start mutation of the LIVE mission
+    // row's durationMinutes must NOT move the enforced deadline on resume. The
+    // box is re-derived from the run's FROZEN contract snapshot + immutable
+    // started_at, so a wake/resume always yields the ORIGINAL deadline.
+    it("uses the FROZEN snapshot durationMinutes on resume, ignoring a post-start mutation of the live mission row", async () => {
+      mockGetRun.mockResolvedValueOnce({
+        id: "run-1", missionId: "mission-1", sessionId: "session-1",
+        status: "running", iterationCount: 5,
+        // Committed with a 5-minute box.
+        contractSnapshotJson: { frozenMission: { draft: { durationMinutes: 5 } } },
+      });
+      // Live mission row was edited to a 999-minute box AFTER the run started —
+      // must be ignored by the deadline enforcer.
+      mockGetMission.mockResolvedValueOnce({
+        id: "mission-1", rootSessionId: "session-1", status: "running",
+        title: "SOL DCA", goal: "Accumulate", capitalSourceJson: {},
+        allowedWallets: ["sol"], allowedChains: ["sol"], allowedProtocols: ["sol"],
+        riskProfile: "conservative", successCriteriaJson: [], stopConditionsJson: [],
+        constraintsJson: { durationMinutes: 999 }, createdAt: "", updatedAt: "", approvedAt: "",
+      });
+      mockHydrate.mockResolvedValueOnce(makeHydratedSession({
+        sessionKind: "mission", missionId: "mission-1", missionRunId: "run-1",
+        missionRunStartedAt: "2026-01-01T00:00:00.000Z",
+      }));
+      mockRunTurnLoop.mockResolvedValueOnce({
+        text: "Resumed", toolCallsMade: 0, pendingApprovals: [], stopReason: null,
+      });
+
+      await resumeMissionRun("run-1");
+
+      const [context, , , , , , , loopConfig] = mockRunTurnLoop.mock.calls[0]!;
+      const expectedMs = Date.parse("2026-01-01T00:00:00.000Z") + 5 * 60_000; // frozen 5, NOT live 999
+      expect((loopConfig as { missionDeadlineMs: number }).missionDeadlineMs).toBe(expectedMs);
+      expect((context as { missionDeadline: string }).missionDeadline).toBe(
+        new Date(expectedMs).toISOString(),
+      );
+    });
+
     it("pauses the run with evidence when resume throws inside the loop", async () => {
       mockGetRun.mockResolvedValueOnce({
         id: "run-1", missionId: "mission-1", sessionId: "session-1",

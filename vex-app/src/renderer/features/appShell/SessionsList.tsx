@@ -20,6 +20,7 @@ import {
 import { useUiStore } from "../../stores/uiStore.js";
 import { SessionDeleteDialog } from "./SessionDeleteDialog.js";
 import { MemoryButton } from "./MemoryButton.js";
+import { MissionsButton } from "./MissionsButton.js";
 import { RuntimeLedger } from "./RuntimeLedger.js";
 import { SettingsButton } from "./SettingsButton.js";
 import { SidebarHomeSigil } from "./SidebarHomeSigil.js";
@@ -378,6 +379,7 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
         )}
       >
         <MemoryButton compact={!sidebarOpen} />
+        <MissionsButton compact={!sidebarOpen} />
         <SettingsButton compact={!sidebarOpen} />
         {/* Report issue intentionally hidden for now; ReportIssueButton/Dialog retained for re-enable. */}
         <RuntimeLedger sidebarOpen={sidebarOpen} />

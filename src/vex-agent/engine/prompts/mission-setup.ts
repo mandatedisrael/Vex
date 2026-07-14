@@ -59,6 +59,7 @@ export function buildMissionSetupPrompt(
   lines.push("- **successCriteria** — how to know the mission succeeded");
   lines.push("- **stopConditions** — proposed/user-owned non-success stop conditions. Final acceptance happens via the host Accept contract step (mission.acceptContract), not by chat agreement. Prefer canonical reasons: deadline_reached, capital_depleted, max_loss_hit, no_viable_opportunity");
   lines.push("- **deadline** (optional) — time limit for the mission");
+  lines.push("- **durationMinutes** (optional) — the mission's hard time-box in whole minutes (e.g. 5, 60), set from the goal's stated duration. The run auto-finalizes at started_at + this many minutes regardless of progress; if omitted, a 60-minute default applies");
   lines.push("");
   lines.push("## Stop Condition Semantics");
   lines.push("- goal_reached is not a stopCondition; it is success and is covered by successCriteria");

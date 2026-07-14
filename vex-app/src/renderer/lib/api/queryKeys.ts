@@ -146,6 +146,12 @@ export const missionKeys = {
    */
   renewableSource: (sessionId: string) =>
     ["mission", "renewableSource", sessionId] as const,
+  /** WP-J — per-wallet mission results ledger history, newest first. */
+  results: (walletAddress: string) =>
+    ["mission", "results", walletAddress] as const,
+  /** WP-J — single-run ledger read (e.g. the post-mission summary card). */
+  resultForRun: (missionRunId: string, walletAddress: string) =>
+    ["mission", "resultForRun", missionRunId, walletAddress] as const,
 };
 
 export const approvalsKeys = {

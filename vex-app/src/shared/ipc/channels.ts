@@ -150,6 +150,8 @@ export const CH = {
     stop: "vex:mission:stop",
     getRenewableSource: "vex:mission:getRenewableSource",
     setAutoRetry: "vex:mission:setAutoRetry",
+    listResults: "vex:mission:listResults",
+    getResultForRun: "vex:mission:getResultForRun",
   },
 
   // Approvals — queue browsing + decisions. Pending/get/history are

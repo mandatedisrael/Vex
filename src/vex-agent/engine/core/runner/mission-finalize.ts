@@ -20,6 +20,7 @@ import * as missionsRepo from "@vex-agent/db/repos/missions.js";
 import * as missionRunsRepo from "@vex-agent/db/repos/mission-runs.js";
 import logger from "@utils/logger.js";
 import { consumeMissionRunAbortIntent } from "./abort.js";
+import { captureMissionFinal } from "../../mission/mission-results-capture.js";
 import {
   isContinuableRuntimeStop,
   scheduleRuntimeContinuation,
@@ -88,6 +89,7 @@ export async function finalizeMissionRunStatus(
       await missionsRepo.clearApprovedAt(missionId);
       await missionsRepo.setStatus(missionId, "draft");
       await emitFinalizeControlState(sessionId, runId);
+      await captureMissionFinal({ missionId, runId, sessionId, outcome: "stopped", stopReason });
       return "draft";
     }
 
@@ -99,6 +101,7 @@ export async function finalizeMissionRunStatus(
     await missionsRepo.setStatus(missionId, status);
     await missionRunsRepo.updateStatus(runId, status, stopReason, stopPayload);
     await emitFinalizeControlState(sessionId, runId);
+    await captureMissionFinal({ missionId, runId, sessionId, outcome: status, stopReason });
     return status;
   }
 
@@ -123,6 +126,7 @@ export async function finalizeMissionRunStatus(
     await missionsRepo.setStatus(missionId, "failed");
     await missionRunsRepo.updateStatus(runId, "failed", stopReason);
     await emitFinalizeControlState(sessionId, runId);
+    await captureMissionFinal({ missionId, runId, sessionId, outcome: "failed", stopReason });
     // Phase 2 BUG-REPORTING emit (puzzle 03): terminal `system_error`
     // is a hard failure surface — record the mission state. Fail-
     // closed so a sink outage cannot mask the terminal flip.
