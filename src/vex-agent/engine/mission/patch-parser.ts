@@ -28,9 +28,19 @@ const ALLOWED_ARRAY_KEYS = new Set<keyof MissionDraft>([
   "successCriteria", "stopConditions",
 ]);
 
+/**
+ * `durationMinutes` is model-set NUMERIC data (a whole-minute time-box), not
+ * a string — it must not go through `ALLOWED_STRING_KEYS`/`sanitizeString`,
+ * which rejects any non-string typeof and would silently drop every numeric
+ * value (the run then falls back to the 60-minute default with no signal to
+ * the model or the operator).
+ */
+const ALLOWED_NUMBER_KEYS = new Set<keyof MissionDraft>(["durationMinutes"]);
+
 const ALL_ALLOWED_KEYS = new Set<string>([
   ...ALLOWED_STRING_KEYS,
   ...ALLOWED_ARRAY_KEYS,
+  ...ALLOWED_NUMBER_KEYS,
   "hyperliquidRisk",
 ]);
 
@@ -40,6 +50,8 @@ const MAX_STRING_LENGTH = 2000;
 const MAX_ARRAY_ITEMS = 50;
 /** Max string length per array item. */
 const MAX_ARRAY_ITEM_LENGTH = 500;
+/** Ceiling for `durationMinutes` — mirrors the 24h hard-deadline clamp. */
+const MAX_DURATION_MINUTES = 1440;
 
 // ── Extract ─────────────────────────────────────────────────────
 
@@ -87,6 +99,11 @@ export function sanitizePatch(patch: MissionPatch): Partial<MissionDraft> {
       if (sanitized !== undefined) {
         (result as Record<string, unknown>)[key] = sanitized;
       }
+    } else if (ALLOWED_NUMBER_KEYS.has(key as keyof MissionDraft)) {
+      const sanitized = sanitizeDurationMinutes(value);
+      if (sanitized !== undefined) {
+        (result as Record<string, unknown>)[key] = sanitized;
+      }
     } else if (key === "hyperliquidRisk") {
       const parsed = value === null
         ? { success: true as const, data: null }
@@ -106,6 +123,22 @@ function sanitizeString(value: unknown): string | null | undefined {
   const trimmed = value.trim();
   if (trimmed.length === 0) return null;
   return trimmed.slice(0, MAX_STRING_LENGTH);
+}
+
+/**
+ * Sanitize the mission's `durationMinutes` time-box: a positive whole-number
+ * minute count, clamped to `MAX_DURATION_MINUTES`. Rejects the wrong type
+ * (including numeric strings — the model must send a JSON number) and
+ * non-positive/non-finite values so a bad value falls through to the
+ * env/60-minute default instead of persisting garbage.
+ */
+function sanitizeDurationMinutes(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  if (value <= 0) return undefined;
+  const wholeMinutes = Math.trunc(value);
+  if (wholeMinutes < 1) return undefined;
+  return Math.min(wholeMinutes, MAX_DURATION_MINUTES);
 }
 
 // ── Model output parser ─────────────────────────────────────────

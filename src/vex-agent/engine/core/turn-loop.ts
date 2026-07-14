@@ -28,6 +28,7 @@ import type { EngineContext, StopReason } from "../types.js";
 import type { InferenceProvider, InferenceConfig, ToolDefinition } from "@vex-agent/inference/types.js";
 import type { Message } from "@vex-agent/db/repos/messages.js";
 import type { PromptStackOptions } from "../prompts/index.js";
+import logger from "@utils/logger.js";
 import { executeTurn, saveAssistantMessage } from "./turn.js";
 import type { TurnLoopConfig, TurnLoopResult } from "./turn-loop/state.js";
 export type { TurnLoopConfig, TurnLoopResult } from "./turn-loop/state.js";
@@ -129,6 +130,24 @@ export async function runTurnLoop(
   }
 
   for (let iteration = 0; iteration < loopConfig.maxIterations; iteration++) {
+    // Hard mission deadline — the agent-independent time-box. Checked FIRST
+    // each iteration, before any other guard or inference call, so an
+    // expired run stops with `deadline_reached` no matter what the agent is
+    // doing. finalizeMissionRunStatus maps it to the existing terminal
+    // status taxonomy (no new status) via the standard business-stop path.
+    if (
+      loopConfig.missionDeadlineMs != null &&
+      Date.now() >= loopConfig.missionDeadlineMs
+    ) {
+      logger.info("engine.mission.deadline_enforced", {
+        missionRunId: context.missionRunId ?? null,
+        deadlineMs: loopConfig.missionDeadlineMs,
+        iteration,
+      });
+      stopReason = "deadline_reached";
+      break;
+    }
+
     // Iteration entry: abort → observe-control → runtime-stop, in that order.
     // Helper returns the outcome; caller emits + sets stopReason + breaks.
     const entry = await runIterationEntryGuards({

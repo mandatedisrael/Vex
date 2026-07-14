@@ -1,7 +1,8 @@
 /**
  * Mission schemas barrel — splits the original monolith into
- * `mission/draft.ts` (read-only DTO + acceptance projection) and
- * `mission/commands.ts` (9 per-command discriminated unions).
+ * `mission/draft.ts` (read-only DTO + acceptance projection),
+ * `mission/commands.ts` (9 per-command discriminated unions), and
+ * `mission/results.ts` (WP-J: the read-only mission results ledger DTO).
  *
  * The split keeps each file under the project's 350-LOC budget per
  * the puzzle-04 phase-6 codex review.
@@ -14,3 +15,4 @@
 
 export * from "./mission/draft.js";
 export * from "./mission/commands.js";
+export * from "./mission/results.js";

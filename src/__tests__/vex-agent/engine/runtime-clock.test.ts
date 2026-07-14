@@ -46,4 +46,35 @@ describe("runtime-clock", () => {
     expect(snapshot.missionDeadlineState).toBe("overdue by 19m 18s");
     expect(buildRuntimeClockPrompt(snapshot)).toContain("overdue by 19m 18s");
   });
+
+  // WP-I1: the deadline prompt line is NEUTRAL timebox awareness only — the
+  // mission auto-finalizes and open positions are reported as unresolved.
+  // It must never instruct the agent to sell/close/flatten a position; that
+  // is the deferred, approval-gated WP-I2 (prepared-flatten) surface.
+  it("adds a neutral timebox-awareness line when a mission deadline is present", () => {
+    const snapshot = buildRuntimeClockSnapshot({
+      now: new Date("2026-05-03T08:39:18.126Z"),
+      timezone: "UTC",
+      missionDeadline: "2026-05-03T14:10:00.000Z",
+    });
+    const prompt = buildRuntimeClockPrompt(snapshot);
+
+    expect(prompt).toContain("auto-finalizes");
+    expect(prompt).toContain("reported as unresolved");
+    // "not closed automatically" is a NEUTRAL description of what does NOT
+    // happen — it must not be confused with an instruction to act, so this
+    // checks for imperative trade verbs, not the word "close" in isolation.
+    for (const tradeInstruction of ["sell", "flatten", "liquidate", "exit the position", "close the position", "close all positions"]) {
+      expect(prompt.toLowerCase()).not.toContain(tradeInstruction);
+    }
+  });
+
+  it("omits the timebox-awareness line when there is no mission deadline", () => {
+    const snapshot = buildRuntimeClockSnapshot({
+      now: new Date("2026-05-03T08:39:18.126Z"),
+      timezone: "UTC",
+    });
+
+    expect(buildRuntimeClockPrompt(snapshot)).not.toContain("auto-finalizes");
+  });
 });

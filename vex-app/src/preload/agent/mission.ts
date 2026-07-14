@@ -16,6 +16,8 @@ import {
   missionGetDiffInputSchema,
   missionGetDraftInputSchema,
   missionGetRenewableSourceInputSchema,
+  missionGetResultForRunInputSchema,
+  missionListResultsInputSchema,
   missionRecoverInputSchema,
   missionRenewInputSchema,
   missionEditInputSchema,
@@ -31,6 +33,8 @@ import type {
   MissionGetDiffInput,
   MissionGetDraftInput,
   MissionGetRenewableSourceInput,
+  MissionGetResultForRunInput,
+  MissionListResultsInput,
   MissionRecoverInput,
   MissionRenewInput,
   MissionEditInput,
@@ -133,6 +137,20 @@ export const mission = {
       CH.mission.setAutoRetry,
       input,
       missionSetAutoRetryInputSchema,
+    );
+  },
+  listResults(input: MissionListResultsInput) {
+    return invokeWithSchema(
+      CH.mission.listResults,
+      input,
+      missionListResultsInputSchema,
+    );
+  },
+  getResultForRun(input: MissionGetResultForRunInput) {
+    return invokeWithSchema(
+      CH.mission.getResultForRun,
+      input,
+      missionGetResultForRunInputSchema,
     );
   },
 } satisfies MissionBridge;

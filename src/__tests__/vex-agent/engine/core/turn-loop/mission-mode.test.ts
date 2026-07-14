@@ -328,6 +328,49 @@ describe("turn-loop", () => {
       expect(mockIncrementIterations).toHaveBeenCalledWith("run-1");
     });
 
+    // WP-I1: the hard mission deadline is enforced at the turn-loop boundary,
+    // independent of the agent — checked BEFORE any other guard or inference
+    // call each iteration.
+    it("enforces the hard deadline — a past missionDeadlineMs stops with deadline_reached before any turn runs", async () => {
+      const provider = makeProvider([{ content: "should never run" }]);
+
+      const result = await runTurnLoop(
+        makeContext({ sessionKind: "mission", missionRunId: "run-1" }),
+        [], null, 0, provider as any, makeConfig() as any, [],
+        { ...defaultLoopConfig, maxIterations: 5, missionDeadlineMs: Date.now() - 1_000 },
+      );
+
+      expect(result.stopReason).toBe("deadline_reached");
+      // The check is the first thing each iteration — no inference is spent.
+      expect(provider.chatCompletion).not.toHaveBeenCalled();
+    });
+
+    it("does not false-stop when the deadline is still in the future", async () => {
+      const provider = makeProvider([{ content: "Working..." }]);
+
+      const result = await runTurnLoop(
+        makeContext({ sessionKind: "mission", missionRunId: "run-1" }),
+        [], null, 0, provider as any, makeConfig() as any, [],
+        { ...defaultLoopConfig, maxIterations: 1, missionDeadlineMs: Date.now() + 60_000 },
+      );
+
+      expect(result.stopReason).not.toBe("deadline_reached");
+      expect(provider.chatCompletion).toHaveBeenCalled();
+    });
+
+    it("does not stop early when missionDeadlineMs is null/undefined (no box)", async () => {
+      const provider = makeProvider([{ content: "Working..." }]);
+
+      const result = await runTurnLoop(
+        makeContext({ sessionKind: "mission", missionRunId: "run-1" }),
+        [], null, 0, provider as any, makeConfig() as any, [],
+        { ...defaultLoopConfig, maxIterations: 1, missionDeadlineMs: null },
+      );
+
+      expect(result.stopReason).not.toBe("deadline_reached");
+      expect(provider.chatCompletion).toHaveBeenCalled();
+    });
+
     it("merges operator instructions before the next autonomous iteration", async () => {
       const provider = makeProvider([
         { content: "Working..." },

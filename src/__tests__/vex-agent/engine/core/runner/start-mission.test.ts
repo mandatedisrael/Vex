@@ -310,6 +310,78 @@ describe("runner", () => {
       expect(result.missionStatus).toBe("running");
     });
 
+    // WP-I1: the hard deadline is computed from the run's immutable
+    // `missionRunStartedAt` (+ FROZEN snapshot duration -> env -> 60min
+    // default) and threaded into both `loopConfig.missionDeadlineMs`
+    // (enforcement) and `context.missionDeadline` (the agent-facing Runtime
+    // Clock). The default commit snapshot has no `durationMinutes` -> 60.
+    it("threads the hard mission deadline into loopConfig and context", async () => {
+      mockGetMission.mockResolvedValueOnce(makeReadyMission());
+      mockHydrate.mockResolvedValueOnce(makeHydratedSession({
+        sessionKind: "mission",
+        missionRunStartedAt: "2026-01-01T00:00:00.000Z",
+      }));
+      mockRunTurnLoop.mockResolvedValueOnce({
+        text: "Starting mission...", toolCallsMade: 0, pendingApprovals: [], stopReason: null,
+      });
+
+      await startMission("mission-1");
+
+      expect(mockRunTurnLoop).toHaveBeenCalled();
+      const [context, , , , , , , loopConfig] = mockRunTurnLoop.mock.calls[0]!;
+      const expectedMs = Date.parse("2026-01-01T00:00:00.000Z") + 60 * 60_000;
+      expect((loopConfig as { missionDeadlineMs: number }).missionDeadlineMs).toBe(expectedMs);
+      expect((context as { missionDeadline: string }).missionDeadline).toBe(
+        new Date(expectedMs).toISOString(),
+      );
+    });
+
+    it("resolves no deadline (fail-open) when the run has no started_at", async () => {
+      mockGetMission.mockResolvedValueOnce(makeReadyMission());
+      mockHydrate.mockResolvedValueOnce(makeHydratedSession({ sessionKind: "mission" }));
+      mockRunTurnLoop.mockResolvedValueOnce({
+        text: "Starting mission...", toolCallsMade: 0, pendingApprovals: [], stopReason: null,
+      });
+
+      await startMission("mission-1");
+
+      const [, , , , , , , loopConfig] = mockRunTurnLoop.mock.calls[0]!;
+      expect((loopConfig as { missionDeadlineMs: number | null }).missionDeadlineMs).toBeNull();
+    });
+
+    // WP-I1 freeze: the box is resolved from the FROZEN contract snapshot's
+    // `durationMinutes`, never the live mission row — so a per-mission box is
+    // pinned at commit time.
+    it("freezes the deadline from the contract snapshot's durationMinutes, not the live mission row", async () => {
+      mockCommitMissionStart.mockImplementationOnce(async (input: { missionId: string; runId: string }) => ({
+        outcome: "committed" as const,
+        // Live row claims a 999-min box; the frozen snapshot says 5 — the
+        // enforcer must use the frozen 5.
+        mission: makeReadyMission({ constraintsJson: { durationMinutes: 999 } }),
+        runId: input.runId,
+        contractSnapshot: {
+          version: 1,
+          capturedAt: "2026-05-22T11:00:00.000Z",
+          missionPromptContext: "# Mission",
+          frozenMission: { draft: { durationMinutes: 5 } },
+        },
+      }));
+      mockGetMission.mockResolvedValueOnce(makeReadyMission({ constraintsJson: { durationMinutes: 999 } }));
+      mockHydrate.mockResolvedValueOnce(makeHydratedSession({
+        sessionKind: "mission",
+        missionRunStartedAt: "2026-01-01T00:00:00.000Z",
+      }));
+      mockRunTurnLoop.mockResolvedValueOnce({
+        text: "Starting mission...", toolCallsMade: 0, pendingApprovals: [], stopReason: null,
+      });
+
+      await startMission("mission-1");
+
+      const [, , , , , , , loopConfig] = mockRunTurnLoop.mock.calls[0]!;
+      const expectedMs = Date.parse("2026-01-01T00:00:00.000Z") + 5 * 60_000;
+      expect((loopConfig as { missionDeadlineMs: number }).missionDeadlineMs).toBe(expectedMs);
+    });
+
     it("marks only goal_reached as completed", async () => {
       mockGetMission.mockResolvedValueOnce(makeReadyMission());
       mockHydrate.mockResolvedValueOnce(makeHydratedSession({ sessionKind: "mission" }));

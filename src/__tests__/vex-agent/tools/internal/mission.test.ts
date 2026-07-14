@@ -102,6 +102,38 @@ describe("mission_draft_update tool", () => {
     });
   });
 
+  it("passes a numeric durationMinutes through the setup boundary", async () => {
+    // Regression: durationMinutes is model-set NUMERIC data (a whole-minute
+    // time-box). It must reach applyMissionPatch as a number, not be dropped
+    // by a string-only sanitizer (see patch-parser.ts).
+    mockApplyMissionPatch.mockResolvedValueOnce({
+      missionId: "mission-1",
+      status: "ready",
+      currentDraft: { durationMinutes: 30 },
+      missingFields: [],
+      ready: true,
+    });
+
+    const result = await handleMissionDraftUpdate(
+      { durationMinutes: 30 },
+      { ...baseContext, missionRunId: null },
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockApplyMissionPatch).toHaveBeenCalledWith("mission-1", {
+      durationMinutes: 30,
+    });
+  });
+
+  it("rejects a non-numeric durationMinutes", async () => {
+    const result = await handleMissionDraftUpdate(
+      { durationMinutes: "30 minutes" },
+      { ...baseContext, missionRunId: null },
+    );
+    expect(result.success).toBe(false);
+    expect(mockApplyMissionPatch).not.toHaveBeenCalled();
+  });
+
   it("returns the continue-button hint when a prior run exists", async () => {
     mockApplyMissionPatch.mockResolvedValueOnce({
       missionId: "mission-1",

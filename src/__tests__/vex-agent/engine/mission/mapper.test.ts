@@ -62,6 +62,21 @@ describe("mission mapper", () => {
       expect(draft.startingCapital).toBeNull();
       expect(draft.allowedChains).toBeNull();
       expect(draft.deadline).toBeNull();
+      expect(draft.durationMinutes).toBeNull();
+    });
+
+    it("reads a numeric durationMinutes from constraints", () => {
+      const draft = missionToDraft(makeMission({
+        constraintsJson: { deadline: "2026-04-04", durationMinutes: 30 },
+      }));
+      expect(draft.durationMinutes).toBe(30);
+    });
+
+    it("ignores a non-numeric durationMinutes on legacy/malformed rows", () => {
+      const draft = missionToDraft(makeMission({
+        constraintsJson: { durationMinutes: "30" },
+      }));
+      expect(draft.durationMinutes).toBeNull();
     });
 
     it("ignores legacy constraints_json.stopConditionsAccepted on old rows", () => {
@@ -105,6 +120,11 @@ describe("mission mapper", () => {
     it("converts deadline to constraints_json", () => {
       const row = domainToRow({ deadline: "2026-04-04" });
       expect(row.constraints_json).toEqual({ deadline: "2026-04-04" });
+    });
+
+    it("converts durationMinutes to constraints_json", () => {
+      const row = domainToRow({ deadline: "2026-04-04", durationMinutes: 30 });
+      expect(row.constraints_json).toEqual({ deadline: "2026-04-04", durationMinutes: 30 });
     });
 
     it("does not write a stopConditionsAccepted key", () => {
@@ -172,6 +192,13 @@ describe("mission mapper", () => {
       expect(ctx).toContain("solana");
       expect(ctx).toContain("Accumulated 10 SOL");
       expect(ctx).toContain("2026-04-04");
+    });
+
+    it("includes the time-box when durationMinutes is set", () => {
+      const ctx = draftToPromptContext(makeMission({
+        constraintsJson: { deadline: "2026-04-04", durationMinutes: 30 },
+      }));
+      expect(ctx).toContain("30 min");
     });
 
     it("handles empty mission gracefully", () => {

@@ -212,6 +212,13 @@ export interface MissionDraft {
   stopConditions: string[] | null;
   /** Optional — mission may have no deadline. */
   deadline: string | null;
+  /**
+   * Optional hard time-box in whole minutes. The turn-loop deadline
+   * enforcer stops the run at `started_at + this` (see
+   * `engine/mission/mission-deadline.ts`). Absent -> env override -> 60min
+   * default. Distinct from `deadline` (free-text, informational only).
+   */
+  durationMinutes: number | null;
   /** Optional, host-accepted Hyperliquid envelope for an autonomous mission. */
   hyperliquidRisk?: import("../../lib/hyperliquid-policy.js").HyperliquidMissionRisk | null;
 }

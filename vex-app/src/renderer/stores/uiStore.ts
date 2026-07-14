@@ -65,7 +65,9 @@ export type AppShellView =
   | "session"
   | "sessionsLibrary"
   // Read-only long-term + session-memory panel (stage 7-2a, S9 rewire).
-  | "memory";
+  | "memory"
+  // Read-only mission results ledger (WP-J).
+  | "missionHistory";
 
 export interface UiLogEntry {
   readonly id: string;
