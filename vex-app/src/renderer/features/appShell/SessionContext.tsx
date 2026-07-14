@@ -12,7 +12,7 @@
  * desk rule stays a single quiet title line.
  */
 
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import { DotmHex3 } from "../../components/ui/dotm-hex-3.js";
 import { Stamp } from "./SessionRows/Stamp.js";
@@ -23,6 +23,14 @@ export interface SessionContextProps {
   readonly activeSessionId: string | null;
   readonly loading: boolean;
   readonly error: string | null;
+  /**
+   * Optional content-agnostic slot rendered at the trailing (right) edge of the
+   * active-session title row. Content-agnostic on purpose: the header stays
+   * unaware of what it hosts, so a caller can attach context (e.g. the mission
+   * badge cluster in the Hypervexing dock) without this shared component gaining
+   * a second reason to change. Absent by default → the shell row is unchanged.
+   */
+  readonly trailing?: ReactNode;
 }
 
 export function SessionContext({
@@ -30,6 +38,7 @@ export function SessionContext({
   activeSessionId,
   loading,
   error,
+  trailing,
 }: SessionContextProps): JSX.Element | null {
   if (loading) {
     return (
@@ -79,6 +88,11 @@ export function SessionContext({
         {/* Mission identity now reads from the MISSION RAIL's Mission badge —
             the small header "mission" stamp was removed to avoid double-
             signalling. The `restricted` exception stamp stays. */}
+        {/* Trailing slot — right-edge context host (see prop doc). The title
+            keeps `flex-1 min-w-0 truncate` so it yields space to the slot and
+            still truncates; a slot whose content renders null adds no box, so
+            the row reserves no ghost space when empty. */}
+        {trailing}
       </div>
     );
   }

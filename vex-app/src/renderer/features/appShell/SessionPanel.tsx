@@ -31,7 +31,7 @@
  */
 
 import { useMemo } from "react";
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import {
   flattenTranscriptPages,
@@ -52,7 +52,19 @@ import { SessionContext } from "./SessionContext.js";
 import { SessionTranscript } from "./SessionTranscript.js";
 import { SessionWelcomeHero } from "./SessionWelcomeHero.js";
 
-export function SessionPanel(): JSX.Element {
+export interface SessionPanelProps {
+  /**
+   * Optional content-agnostic slot forwarded to the active-session header's
+   * trailing edge (see `SessionContext.trailing`). The normal shell mounts
+   * `<SessionPanel />` with no slot, so its header is unchanged; the Hypervexing
+   * dock passes the mission badge cluster here so the panel stays mode-unaware.
+   */
+  readonly headerTrailing?: ReactNode;
+}
+
+export function SessionPanel({
+  headerTrailing,
+}: SessionPanelProps = {}): JSX.Element {
   const activeSessionId = useUiStore((s) => s.activeSessionId);
   // In the Hypervexing dock the composer is ALWAYS bottom-pinned (user
   // decree): the welcome/idle stage's vertical centering never applies there.
@@ -174,6 +186,7 @@ export function SessionPanel(): JSX.Element {
                 activeSessionId={activeSessionId}
                 loading={detailQuery.isLoading}
                 error={detailError}
+                trailing={headerTrailing}
               />
               {/* The mission contract + action plan no longer render inline:
                   the two tall cards used to push MissionControls + the Accept

@@ -69,6 +69,27 @@ describe("SessionContext header (slice C)", () => {
     expect(screen.queryByText("restricted")).toBeNull();
   });
 
+  it("renders the trailing slot content inside the active-session header row", () => {
+    const { container } = renderCtx({
+      trailing: createElement("span", { "data-testid": "trailing-slot" }, "X"),
+    });
+    const header = container.querySelector('[data-vex-area="session-header"]');
+    expect(header).not.toBeNull();
+    // The slot content lives inside the title row, not floated elsewhere.
+    expect(header?.querySelector('[data-testid="trailing-slot"]')).not.toBeNull();
+  });
+
+  it("reserves no slot box when no trailing content is supplied", () => {
+    const { container } = renderCtx();
+    expect(
+      container.querySelector('[data-testid="trailing-slot"]'),
+    ).toBeNull();
+    // Header still renders normally with just title + stamp.
+    expect(
+      container.querySelector('[data-vex-area="session-header"]'),
+    ).not.toBeNull();
+  });
+
   it("does not render the header in the loading or not-found states", () => {
     const loading = renderCtx({ loading: true });
     expect(
