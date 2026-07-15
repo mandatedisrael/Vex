@@ -62,14 +62,26 @@ function isNativeInput(input: string): boolean {
  * is a SELL. Token↔token has no native anchor, so we fall back to the tool's
  * declared side. This is used ONLY for what is recorded/reported — never for
  * routing, quoting, or execution.
+ *
+ * A leg counts as native either when it is the `eth`/`native` sentinel
+ * (`isNative`) OR when the caller funded it with the chain's wrapped-native
+ * (WETH) ERC-20 address directly — the manifest documents `tokenIn` as
+ * "CONTRACT ADDRESS or native ETH", so a WETH-funded buy arrives as a plain
+ * ERC-20 leg with `isNative:false`. Spending WETH is economically identical to
+ * spending ETH, so both forms must classify the same way; otherwise a
+ * WETH→TOKEN buy routed via `uniswap.swap.sell` is recorded as a sell and the
+ * buy-side veto is skipped. The address compare is case-insensitive.
  */
 export function classifyEconomicSide(args: {
-  readonly tokenInIsNative: boolean;
-  readonly tokenOutIsNative: boolean;
+  readonly tokenIn: { readonly address: string; readonly isNative: boolean };
+  readonly tokenOut: { readonly address: string; readonly isNative: boolean };
+  readonly wrappedNative: string;
   readonly side: "buy" | "sell";
 }): "buy" | "sell" {
-  if (args.tokenInIsNative) return "buy"; // spending native to acquire a token = BUY
-  if (args.tokenOutIsNative) return "sell"; // selling a token back to native = SELL
+  const isNativeLeg = (leg: { address: string; isNative: boolean }) =>
+    leg.isNative || leg.address.toLowerCase() === args.wrappedNative.toLowerCase();
+  if (isNativeLeg(args.tokenIn)) return "buy"; // spending native/WETH to acquire a token = BUY
+  if (isNativeLeg(args.tokenOut)) return "sell"; // selling a token back to native/WETH = SELL
   return args.side; // token↔token: fall back to the tool's side
 }
 
@@ -243,8 +255,9 @@ async function executeUniswapSwap(
   // Economic direction for RECORDING/reporting — derived from the native leg,
   // not the tool name (`side`). `side` still drives routing/execution below.
   const economicSide = classifyEconomicSide({
-    tokenInIsNative: tokenIn.isNative,
-    tokenOutIsNative: tokenOut.isNative,
+    tokenIn: { address: tokenIn.address, isNative: tokenIn.isNative },
+    tokenOut: { address: tokenOut.address, isNative: tokenOut.isNative },
+    wrappedNative: deployment.weth,
     side,
   });
 
