@@ -231,35 +231,42 @@ export function MissionControls({
     const canRecover = status === "paused_error";
     const canEdit = status !== "paused_approval";
     return (
-      <div
-        data-vex-area="mission-controls"
-        role="group"
-        aria-label="Mission controls"
-        className="mt-3 flex flex-wrap items-center gap-2"
-      >
-        <ControlButton
-          label="Continue"
-          disabled={disabled || !canContinue}
-          onClick={() => void run(() => cont.mutateAsync({ sessionId }))}
-        />
-        <ControlButton
-          label="Recover"
-          disabled={disabled || !canRecover}
-          onClick={() => void run(() => recover.mutateAsync({ sessionId }))}
-        />
-        <ControlButton
-          label="Edit"
-          disabled={disabled || !canEdit}
-          onClick={() => void run(() => edit.mutateAsync({ sessionId }))}
-        />
-        <ControlButton
-          label="Stop"
-          tone="danger"
-          disabled={disabled}
-          onClick={() => void run(() => stop.mutateAsync({ sessionId }))}
-        />
-        {notice !== null ? <ControlNoticeLine text={notice.text} /> : null}
-      </div>
+      <>
+        {canRecover ? (
+          <MissionErrorAlert stopReason={runtime.stopReason} />
+        ) : null}
+        <div
+          data-vex-area="mission-controls"
+          role="group"
+          aria-label="Mission controls"
+          className="mt-3 flex flex-wrap items-center gap-2"
+        >
+          <ControlButton
+            label="Continue"
+            disabled={disabled || !canContinue}
+            onClick={() => void run(() => cont.mutateAsync({ sessionId }))}
+          />
+          <ControlButton
+            label={recover.isPending ? "Recovering…" : "Recover"}
+            ariaLabel="Recover mission"
+            ariaBusy={recover.isPending}
+            disabled={disabled || !canRecover}
+            onClick={() => void run(() => recover.mutateAsync({ sessionId }))}
+          />
+          <ControlButton
+            label="Edit"
+            disabled={disabled || !canEdit}
+            onClick={() => void run(() => edit.mutateAsync({ sessionId }))}
+          />
+          <ControlButton
+            label="Stop"
+            tone="danger"
+            disabled={disabled}
+            onClick={() => void run(() => stop.mutateAsync({ sessionId }))}
+          />
+          {notice !== null ? <ControlNoticeLine text={notice.text} /> : null}
+        </div>
+      </>
     );
   }
 
@@ -365,23 +372,70 @@ function AcceptancePendingNotice(): JSX.Element {
   );
 }
 
+/**
+ * Standing paused_error alert (issue #42): while the recover-eligible pause
+ * persists, the mission is silently NOT monitoring the market or positions —
+ * that has to be visible, not inferred from an agent reply. Persistent,
+ * state-driven UI: no timers, no dismissal. If a recovery settles and the
+ * refetched runtime is still paused_error, this simply stays/reappears — the
+ * visible-failure signal the operator needs.
+ */
+function MissionErrorAlert({
+  stopReason,
+}: {
+  readonly stopReason: string | null;
+}): JSX.Element {
+  // `provider_error` names the stop reason, not the cause — it covers both
+  // inference and runtime errors, so the copy must not claim a connection
+  // failure. The state is recoverable via the Recover button, so never say
+  // "unrecoverable".
+  const body =
+    stopReason === "provider_error"
+      ? "The mission paused after an inference or runtime error."
+      : "The mission paused after an unexpected error.";
+  return (
+    <div
+      role="alert"
+      data-vex-area="mission-error-alert"
+      className="mb-2 w-full rounded-lg border border-[color-mix(in_oklab,var(--color-destructive)_40%,transparent)] bg-destructive/10 px-3 py-2"
+    >
+      <p className="font-mono text-[10px] font-medium uppercase tracking-[0.26em] text-destructive">
+        Mission paused — error
+      </p>
+      <p className="mt-1 text-xs text-destructive">{body}</p>
+      <p className="mt-1 text-xs text-destructive">
+        The mission is not monitoring the market or your positions until you
+        recover it.
+      </p>
+    </div>
+  );
+}
+
 function ControlButton({
   label,
   onClick,
   disabled,
   tone,
+  ariaLabel,
+  ariaBusy,
 }: {
   readonly label: string;
   readonly onClick: () => void;
   readonly disabled: boolean;
   readonly tone?: "danger";
+  /** Overrides the derived `${label} mission` accessible name — used where
+   * the visible label changes (e.g. "Recovering…") but the accessible name
+   * must stay stable for assistive tech and tests. */
+  readonly ariaLabel?: string;
+  readonly ariaBusy?: boolean;
 }): JSX.Element {
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      aria-label={`${label} mission`}
+      aria-label={ariaLabel ?? `${label} mission`}
+      aria-busy={ariaBusy}
       className={cn(
         // Toolbar keys: quiet mono-uppercase hairline pills; Stop keeps the
         // destructive tone with the one sanctioned danger fill (/10).
