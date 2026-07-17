@@ -19,7 +19,7 @@ import {
   RUNTIME_STATE_FALLBACK_POLL_MS,
   useControlStateLiveSync,
 } from "../runtime.js";
-import { approvalsKeys, runtimeKeys } from "../queryKeys.js";
+import { approvalsKeys, missionKeys, runtimeKeys } from "../queryKeys.js";
 import {
   CONTROL_STATE_EVENT_TYPE,
   type ControlStateEvent,
@@ -123,6 +123,23 @@ describe("useControlStateLiveSync", () => {
 
     expect(hasKey(spy, runtimeKeys.state(SESSION_A))).toBe(true);
     expect(hasKey(spy, approvalsKeys.pending(SESSION_A))).toBe(true);
+  });
+
+  // WP3 (issue #41): a main-side draft→ready promotion fires a
+  // `controlState` event without any renderer mutation — the badge only
+  // refreshes if this push path also invalidates the mission draft/diff
+  // queries.
+  it("invalidates the mission draft and diff queries on a matching event", () => {
+    const client = freshClient();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    renderHook(() => useControlStateLiveSync(SESSION_A), {
+      wrapper: makeWrapper(client),
+    });
+
+    controlCb?.(controlEvent(SESSION_A));
+
+    expect(hasKey(spy, missionKeys.draft(SESSION_A))).toBe(true);
+    expect(hasKey(spy, ["mission", "diff", SESSION_A])).toBe(true);
   });
 
   it("ignores a foreign-session event", () => {

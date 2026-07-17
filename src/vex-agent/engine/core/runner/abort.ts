@@ -38,6 +38,7 @@ import * as missionsRepo from "@vex-agent/db/repos/missions.js";
 import * as loopWakeRepo from "@vex-agent/db/repos/loop-wake.js";
 import logger from "@utils/logger.js";
 import { rejectPendingApprovalsForSession } from "./approvals-cleanup.js";
+import { reconcileDraftReadiness } from "../../mission/draft-readiness.js";
 
 // ── In-process AbortController registry ─────────────────────────
 
@@ -214,11 +215,19 @@ export async function stopMissionRunForEdit(
   );
   await missionsRepo.clearApprovedAt(run.missionId);
   await missionsRepo.setStatus(run.missionId, "draft");
+  // A draft that was already complete before the stop-for-edit (e.g. the
+  // operator just wanted to re-review, not change anything) would otherwise
+  // sit at 'draft' forever — no model patch is coming to promote it.
+  const reconciled = await reconcileDraftReadiness(run.missionId);
   logger.info("engine.mission.edit_finalized", {
     runId,
     sessionId: run.sessionId,
     previousStatus: run.status,
   });
 
-  return { stopped: true, finalStatus: "draft", rejectedApprovals };
+  return {
+    stopped: true,
+    finalStatus: reconciled.promoted ? "ready" : "draft",
+    rejectedApprovals,
+  };
 }

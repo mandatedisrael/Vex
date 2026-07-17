@@ -38,12 +38,19 @@ export function registerRuntimeCancelWakeHandler(): () => void {
         const { enqueueRequest } = await import(
           "@vex-agent/db/repos/runtime-control-requests.js"
         );
+        // The wake cancellation above already ran synchronously — this row
+        // is audit-only. Nothing ever observes/clears a `cancel_wake` row
+        // (the checkpoint observer only matches pause_after_step/
+        // stop_terminal), so inserting it `pending` would strand it forever
+        // and the kind-agnostic `pending_control_kind` lookup would then
+        // treat the whole session as permanently busy.
         await enqueueRequest({
           sessionId: input.sessionId,
           kind: "cancel_wake",
           requestedBy: "user",
           correlationId: ctx.requestId,
           reason: `cancelled=${cancelledCount}`,
+          initialStatus: "cleared",
         });
         await emitControlStateAfterChange(input.sessionId, ctx.requestId);
         if (cancelledCount === 0) {

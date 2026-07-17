@@ -378,3 +378,153 @@ describe("MissionControls", () => {
     expect(screen.queryByRole("button", { name: "Renew mission" })).toBeNull();
   });
 });
+
+describe("MissionControls — paused_error standing alert (issue #42)", () => {
+  it("renders the alert with the eyebrow, provider_error copy, and the warning line", async () => {
+    getStateMock.mockResolvedValue(
+      runtimeState({
+        hasActiveRun: true,
+        status: "paused_error",
+        missionRunId: "r1",
+        stopReason: "provider_error",
+      }),
+    );
+    getDraftMock.mockResolvedValue(draftReady());
+    getDiffMock.mockResolvedValue(diffAccepted(true));
+    renderControls();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.getAttribute("data-vex-area")).toBe("mission-error-alert");
+    expect(alert.textContent).toMatch(/Mission paused — error/i);
+    expect(alert.textContent).toMatch(
+      /The mission paused after an inference or runtime error\./,
+    );
+    expect(alert.textContent).toMatch(
+      /The mission is not monitoring the market or your positions until you recover it\./,
+    );
+  });
+
+  it("falls back to generic copy for a non-provider_error stopReason", async () => {
+    getStateMock.mockResolvedValue(
+      runtimeState({
+        hasActiveRun: true,
+        status: "paused_error",
+        missionRunId: "r1",
+        stopReason: "unexpected_exception",
+      }),
+    );
+    getDraftMock.mockResolvedValue(draftReady());
+    getDiffMock.mockResolvedValue(diffAccepted(true));
+    renderControls();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(
+      /The mission paused after an unexpected error\./,
+    );
+    expect(alert.textContent).not.toMatch(/inference or runtime error/);
+  });
+
+  it("does not render the alert for running / paused_wake / paused_approval", async () => {
+    const activeCases = [
+      { hasActiveRun: true, status: "running", missionRunId: "r1" },
+      { hasActiveRun: true, status: "paused_wake", missionRunId: "r1" },
+      { hasActiveRun: true, status: "paused_approval", missionRunId: "r1" },
+    ];
+    for (const over of activeCases) {
+      getStateMock.mockResolvedValue(runtimeState(over));
+      getDraftMock.mockResolvedValue(draftReady());
+      getDiffMock.mockResolvedValue(diffAccepted(true));
+      const { unmount } = renderControls();
+      await screen.findByRole("group", { name: "Mission controls" });
+      expect(
+        document.querySelector('[data-vex-area="mission-error-alert"]'),
+      ).toBeNull();
+      unmount();
+    }
+  });
+
+  it("does not render the alert when there is no active run", async () => {
+    getStateMock.mockResolvedValue(runtimeState({ hasActiveRun: false }));
+    getDraftMock.mockResolvedValue(ok(null));
+    getRenewableMock.mockResolvedValue(ok(null));
+    renderControls();
+
+    await waitFor(() => expect(getRenewableMock).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(
+      document.querySelector('[data-vex-area="mission-error-alert"]'),
+    ).toBeNull();
+  });
+
+  it("shows a visible 'Recovering…' label while pending but keeps the accessible name stable, with aria-busy set", async () => {
+    getStateMock.mockResolvedValue(
+      runtimeState({
+        hasActiveRun: true,
+        status: "paused_error",
+        missionRunId: "r1",
+        stopReason: "provider_error",
+      }),
+    );
+    getDraftMock.mockResolvedValue(draftReady());
+    getDiffMock.mockResolvedValue(diffAccepted(true));
+    let resolveRetry: (value: unknown) => void = () => {};
+    retryMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRetry = resolve;
+        }),
+    );
+    renderControls();
+
+    const recoverBtn = await screen.findByRole("button", {
+      name: "Recover mission",
+    });
+    fireEvent.click(recoverBtn);
+
+    await waitFor(() => expect(recoverBtn.textContent).toBe("Recovering…"));
+    expect(recoverBtn.getAttribute("aria-label")).toBe("Recover mission");
+    expect(recoverBtn.getAttribute("aria-busy")).toBe("true");
+    // Accessible name (role+name query) stays stable while the visible label
+    // changes — the same element is found by its stable name.
+    expect(
+      screen.getByRole("button", { name: "Recover mission" }),
+    ).toBe(recoverBtn);
+
+    resolveRetry(ok({ outcome: "resumed", runId: "r1" }));
+    await waitFor(() => expect(recoverBtn.textContent).toBe("Recover"));
+    expect(recoverBtn.getAttribute("aria-busy")).toBe("false");
+  });
+
+  it("persists the alert when a recover mutation settles and the refetched state is still paused_error", async () => {
+    getStateMock.mockResolvedValue(
+      runtimeState({
+        hasActiveRun: true,
+        status: "paused_error",
+        missionRunId: "r1",
+        stopReason: "provider_error",
+      }),
+    );
+    getDraftMock.mockResolvedValue(draftReady());
+    getDiffMock.mockResolvedValue(diffAccepted(true));
+    // The mutation itself reports success, but the mission re-parks (or the
+    // recovery never actually cleared the pause) — the refetched runtime
+    // state getState keeps returning is still paused_error throughout.
+    retryMock.mockResolvedValue(ok({ outcome: "resumed", runId: "r1" }));
+    renderControls();
+
+    const recoverBtn = await screen.findByRole("button", {
+      name: "Recover mission",
+    });
+    await screen.findByRole("alert");
+    fireEvent.click(recoverBtn);
+
+    await waitFor(() => expect(retryMock).toHaveBeenCalledTimes(1));
+    // No failure notice (the mutation "succeeded"), yet the standing alert is
+    // state-driven off runtime.status — it stays visible because the
+    // refetched status is still paused_error.
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(
+      document.querySelector('[data-vex-area="mission-error-alert"]'),
+    ).not.toBeNull();
+  });
+});

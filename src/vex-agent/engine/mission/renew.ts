@@ -50,6 +50,7 @@ import {
 } from "../../db/repos/missions.js";
 import * as missionRunsRepo from "../../db/repos/mission-runs.js";
 import { cloneMissionAsDraft } from "./renew-internals.js";
+import { reconcileDraftReadiness } from "./draft-readiness.js";
 import { CONTRACT_HASH_VERSION, LEGACY_CONTRACT_HASH_VERSION, computeContractHash } from "./contract-hash.js";
 import { missionToDraft } from "./mapper.js";
 
@@ -201,6 +202,11 @@ export async function renewMission(
     //      - stamps renewed_from_mission_id = source.id
     const newId = `mission-${Date.now()}-${randomUUID().slice(0, 8)}`;
     await cloneMissionAsDraft(client, source.id, newId, input.sessionId);
+
+    // A cloned source that was already complete would otherwise sit at
+    // 'draft' forever (issue #41) — no model patch is coming to promote it.
+    // Same tx client: the promotion commits atomically with the clone.
+    await reconcileDraftReadiness(newId, client);
 
     return {
       outcome: "renewed",

@@ -44,8 +44,13 @@ function lockedRow(over: Record<string, unknown> = {}) {
   };
 }
 
+// WP1 (deliberate test update): the classifier no longer parses `err.message`
+// — `mission-error-classifier.ts` now classifies exclusively from the
+// `status`/`statusCode`/`causeCode` own-properties, so this fixture must
+// carry a real `status` own-property instead of a "returned NNN" message.
 const transientErr = (() => {
   const e = new Error("Provider returned 503");
+  Object.assign(e, { status: 503 });
   return e;
 })();
 
@@ -118,6 +123,38 @@ describe("persistErrorPauseWithMaybeAutoRetry", () => {
     incrementErrorRetryCount.mockResolvedValueOnce(3);
     const decision = await call(transientErr);
     expect(decision.scheduled).toEqual({ attempt: 3, dueAt: new Date(8000).toISOString() });
+  });
+
+  it("evidence carries classified/statusCode/causeCode from the reader, and NEVER errorName", async () => {
+    queryOneWith.mockResolvedValueOnce(lockedRow());
+    const transportErr = Object.assign(new Error("connection reset"), {
+      causeCode: "ECONNRESET",
+    });
+    await call(transportErr);
+    const [, , , payload] = updateStatus.mock.calls[0];
+    const evidence = (payload as { evidence: Record<string, unknown> }).evidence;
+    expect(evidence.classified).toBe("transient");
+    expect(evidence.statusCode).toBeNull();
+    expect(evidence.causeCode).toBe("ECONNRESET");
+    // fix-wave BLOCKER 1: `errorName` (arbitrary `err.name` text) must never
+    // reach persisted evidence — dropped in favor of the bounded
+    // `errorClass` (`err.constructor.name`) evidenceBase already carries.
+    expect(evidence).not.toHaveProperty("errorName");
+    // stop_reason vocabulary is unchanged — claim-auto-retry.ts hard-gates on it.
+    const [, status, reason] = updateStatus.mock.calls[0];
+    expect(status).toBe("paused_error");
+    expect(reason).toBe("provider_error");
+  });
+
+  it("evidence for a permanent 401 carries statusCode and a null causeCode", async () => {
+    queryOneWith.mockResolvedValueOnce(lockedRow());
+    const authErr = Object.assign(new Error("invalid key"), { status: 401 });
+    await call(authErr);
+    const [, , , payload] = updateStatus.mock.calls[0];
+    const evidence = (payload as { evidence: Record<string, unknown> }).evidence;
+    expect(evidence.classified).toBe("permanent");
+    expect(evidence.statusCode).toBe(401);
+    expect(evidence.causeCode).toBeNull();
   });
 });
 

@@ -23,6 +23,7 @@ import type { PoolClient } from "pg";
 import * as missionRunsRepo from "../../../db/repos/mission-runs.js";
 import * as loopWakeRepo from "../../../db/repos/loop-wake.js";
 import { classifyMissionRunError } from "./mission-error-classifier.js";
+import { readMissionErrorSignal } from "./mission-error-signal.js";
 import {
   AUTO_RETRY_WAKE_TRIGGER,
   MAX_AUTO_RETRIES,
@@ -64,6 +65,7 @@ export async function persistErrorPauseWithMaybeAutoRetry(
   nowMs: number,
 ): Promise<ErrorPauseDecision> {
   const classified = classifyMissionRunError(input.err);
+  const signal = readMissionErrorSignal(input.err);
   return withTransaction(async (client: PoolClient) => {
     const row = await queryOneWith<LockedRunRow>(
       client,
@@ -84,7 +86,20 @@ export async function persistErrorPauseWithMaybeAutoRetry(
       row.permission === "full" &&
       snapshotAutoRetryEnabled(row.contract_snapshot_json);
 
-    const evidence: Record<string, unknown> = { ...input.evidenceBase };
+    // Error-diagnostics phase (D-RUNTIME): stamp the classification + the
+    // reader's own-property signals on every paused_error row's evidence, so
+    // a human recovering the run (or a later dashboard) can see WHY the
+    // auto-retry decision went the way it did without re-deriving it.
+    // `errorName` (raw `err.name`) is deliberately NOT persisted here — it is
+    // arbitrary caller-controlled text, unlike the bounded `errorClass`
+    // (`err.constructor.name`) evidenceBase already carries upstream and the
+    // shape-validated `causeCode` below.
+    const evidence: Record<string, unknown> = {
+      ...input.evidenceBase,
+      classified,
+      statusCode: signal.status,
+      causeCode: signal.causeCode,
+    };
     let scheduled: { attempt: number; dueAt: string } | null = null;
 
     if (eligible) {

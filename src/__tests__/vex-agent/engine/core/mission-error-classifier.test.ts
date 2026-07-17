@@ -17,12 +17,17 @@ function err(
 
 describe("classifyMissionRunError", () => {
   describe("transient", () => {
-    it("429 via message", () => {
-      expect(classifyMissionRunError(err("Provider returned 429 rate limited"))).toBe("transient");
+    // fix #2 (deliberate test update): the classifier no longer parses
+    // `err.message` at all — every status-carrying error must classify from
+    // the `status`/`statusCode` own-property. These two tests used to build
+    // their fixtures from a "returned NNN" message string (the regex this
+    // change removes); rewritten to set the status own-property instead.
+    it("429 via status own-property (message parsing removed)", () => {
+      expect(classifyMissionRunError(err("Provider rate limited", { status: 429 }))).toBe("transient");
     });
-    it("5xx via message (502/503/504/500)", () => {
+    it("5xx via status own-property (502/503/504/500) (message parsing removed)", () => {
       for (const s of [500, 502, 503, 504]) {
-        expect(classifyMissionRunError(err(`upstream returned ${s}`))).toBe("transient");
+        expect(classifyMissionRunError(err("upstream failure", { status: s }))).toBe("transient");
       }
     });
     it("status field 429/503", () => {
@@ -33,6 +38,20 @@ describe("classifyMissionRunError", () => {
       for (const code of ["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "EPIPE"]) {
         expect(classifyMissionRunError(err("net", { code }))).toBe("transient");
       }
+    });
+    it("causeCode transient allow-list (own-property, no message parsing)", () => {
+      for (const causeCode of [
+        "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "EPIPE",
+        "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT", "UND_ERR_SOCKET",
+      ]) {
+        expect(classifyMissionRunError(err("transport failure", { causeCode }))).toBe("transient");
+      }
+    });
+    it("normalized-shaped error with causeCode:'ECONNRESET' (no status) is transient", () => {
+      const normalized = err("OpenRouter streaming chat completion failed: unknown error", {
+        causeCode: "ECONNRESET",
+      });
+      expect(classifyMissionRunError(normalized)).toBe("transient");
     });
     it("HTTP_TIMEOUT vex code (even when surfaced as AbortError)", () => {
       expect(classifyMissionRunError(err("timed out", { code: "HTTP_TIMEOUT", name: "AbortError" }))).toBe("transient");
@@ -118,6 +137,27 @@ describe("classifyMissionRunError", () => {
       expect(classifyMissionRunError(err("x", { retryable: true, status: 404 }))).toBe("permanent");
       // …but a 503 with retryable:true is still transient (consistent).
       expect(classifyMissionRunError(err("x", { retryable: true, status: 503 }))).toBe("transient");
+    });
+
+    it("causeCode hard-exclusions (incl. ABORT_ERR) always classify permanent", () => {
+      for (const causeCode of [
+        "ABORT_ERR", "UND_ERR_ABORTED", "ENOTFOUND", "UND_ERR_CLOSED",
+        "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+      ]) {
+        expect(classifyMissionRunError(err("x", { causeCode }))).toBe("permanent");
+      }
+    });
+
+    it("an unknown errno-shaped causeCode stays permanent (not on any allow-list)", () => {
+      expect(classifyMissionRunError(err("x", { causeCode: "SOME_UNKNOWN_ERRNO" }))).toBe("permanent");
+    });
+
+    it("a hard-exclusion causeCode beats a contradictory retryable:true (the operator-abort loophole)", () => {
+      // If some other mapper wrongly stamped retryable:true on a normalized
+      // abort, the hard-exclusion must still win — this is the ONLY defense
+      // against auto-retrying an operator stop once `err.name` is erased.
+      expect(classifyMissionRunError(err("x", { retryable: true, causeCode: "ABORT_ERR" }))).toBe("permanent");
+      expect(classifyMissionRunError(err("x", { retryable: true, causeCode: "ENOTFOUND" }))).toBe("permanent");
     });
   });
 });

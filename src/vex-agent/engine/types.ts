@@ -102,6 +102,35 @@ export const ACTIVE_OR_PAUSED_RUN_STATUSES: ReadonlySet<MissionRunStatus> = new 
 ]);
 
 /**
+ * Read a validated own-property off an unvalidated thrown value — the same
+ * "own-properties only, never `.cause`" idiom as
+ * `core/runner/mission-error-signal.ts` / `inference/openrouter/errors.ts`,
+ * duplicated locally (not imported) so this foundational, DB/inference-free
+ * types file never depends on the runner layer.
+ */
+function ownProperty(value: unknown, key: string): unknown {
+  if (typeof value !== "object" || value === null) return undefined;
+  if (!Object.prototype.hasOwnProperty.call(value, key)) return undefined;
+  return (value as Record<string, unknown>)[key];
+}
+
+/** Errno-shaped code guard — mirrors `lib/error-cause.ts` (not exported there; duplicated). */
+const ERRNO_SHAPE = /^[A-Z][A-Z0-9_]{2,59}$/;
+
+function validatedStatusCode(cause: unknown): number | null {
+  for (const key of ["status", "statusCode"]) {
+    const v = ownProperty(cause, key);
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+function validatedCauseCode(cause: unknown): string | null {
+  const v = ownProperty(cause, "causeCode");
+  return typeof v === "string" && ERRNO_SHAPE.test(v) ? v : null;
+}
+
+/**
  * Recoverable failure surfaced by `startMission` / `resumeMissionRun` when a
  * provider call (or the surrounding hydrate / status update / prompt prep)
  * throws. The run is persisted in `paused_error` first, then this error is
@@ -114,6 +143,16 @@ export class MissionRunPausedError extends Error {
   readonly runId: string;
   readonly missionId: string;
   readonly sessionId: string;
+  /**
+   * Lean, validated signals copied from `cause` (never the cause object
+   * itself) so a shell action wrapper that only sees THIS error — not the
+   * original normalized provider error — can still branch on transport/HTTP
+   * shape (e.g. the chat IPC error mapper mapping 401/429/5xx to a specific
+   * user-facing code). `null` when `cause` carries no matching validated
+   * own-property. Never exposes anything else from `cause`.
+   */
+  readonly statusCode: number | null;
+  readonly causeCode: string | null;
   constructor(args: {
     runId: string;
     missionId: string;
@@ -127,6 +166,8 @@ export class MissionRunPausedError extends Error {
     this.runId = args.runId;
     this.missionId = args.missionId;
     this.sessionId = args.sessionId;
+    this.statusCode = validatedStatusCode(args.cause);
+    this.causeCode = validatedCauseCode(args.cause);
   }
 }
 

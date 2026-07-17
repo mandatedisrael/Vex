@@ -112,6 +112,38 @@ describe("mission.renew", () => {
       newMissionId: "mission-2",
     });
   });
+
+  // WP3 (issue #41): the engine may promote the new draft straight to
+  // 'ready' (reconcileDraftReadiness) — the handler emits a control-state
+  // refresh so the renderer badge picks it up without a remount.
+  it("emits a control-state refresh on a successful renew", async () => {
+    mockRenewMission.mockResolvedValueOnce({
+      outcome: "renewed",
+      newMissionId: "mission-2",
+      sourceMissionId: MISSION,
+    });
+    await call(CH.mission.renew, {
+      sessionId: SESSION,
+      previousMissionId: MISSION,
+    });
+    expect(mockEmitControlStateAfterChange).toHaveBeenCalledWith(
+      SESSION,
+      "11111111-1111-4111-8111-111111111111",
+    );
+  });
+
+  it("does NOT emit a control-state refresh for a non-renewed outcome", async () => {
+    mockRenewMission.mockResolvedValueOnce({
+      outcome: "not_accepted",
+      sourceMissionId: MISSION,
+    });
+    const result = await call(CH.mission.renew, {
+      sessionId: SESSION,
+      previousMissionId: MISSION,
+    });
+    expect(result.data).toMatchObject({ outcome: "not_accepted" });
+    expect(mockEmitControlStateAfterChange).not.toHaveBeenCalled();
+  });
 });
 
 describe("mission.getRenewableSource", () => {

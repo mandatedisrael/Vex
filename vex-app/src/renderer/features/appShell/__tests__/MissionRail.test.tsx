@@ -137,14 +137,16 @@ function plan(over: Partial<PlanGetResult> = {}): PlanGetResult {
   } as PlanGetResult;
 }
 
-// Minimal runtime Result — the rail only reads `hasActiveRun`. Defaults to no
-// active run (agent-mode shape); pass `hasActiveRun: true` for a running mission.
-function runtime(hasActiveRun = false) {
+// Minimal runtime Result — the rail reads `hasActiveRun` and `status`.
+// Defaults to no active run, no status (agent-mode shape); pass
+// `hasActiveRun: true` for a running mission and `status` for a specific
+// mission-run state (e.g. "paused_error" for the badge-override test).
+function runtime(hasActiveRun = false, status: string | null = null) {
   return ok({
     sessionId: SESSION,
     hasActiveRun,
     missionRunId: null,
-    status: null,
+    status,
     stopReason: null,
     lastCheckpointAt: null,
     startedAt: null,
@@ -348,6 +350,33 @@ describe("MissionRail badge derivation", () => {
     const btn = screen.getByRole("button", { name: /Plan ready/i });
     expect(btn.getAttribute("data-vex-state")).toBe("ready");
     expect(btn.classList.contains("vex-badge--shimmer")).toBe(true);
+  });
+
+  it("Mission badge is Error when an active run's status is paused_error (issue #42)", () => {
+    mockUseSession.mockReturnValue({ data: ok(sessionRow({ mode: "mission" })) });
+    mockUseMissionDraft.mockReturnValue({ data: ok(null) });
+    mockUseRuntimeState.mockReturnValue({
+      data: runtime(true, "paused_error"),
+    });
+    rail();
+    expect(
+      screen.getByRole("button", { name: /Mission/i }).getAttribute("data-vex-state"),
+    ).toBe("error");
+  });
+
+  it("Mission badge is NOT Error when status is paused_error but hasActiveRun is false (defensive inconsistent state)", () => {
+    // Guards against overriding on status alone: a stale/inconsistent
+    // status without a confirmed active run must not paint the badge red.
+    mockUseSession.mockReturnValue({ data: ok(sessionRow({ mode: "mission" })) });
+    mockUseMissionDraft.mockReturnValue({ data: ok(READY_DRAFT) });
+    mockUseMissionDiff.mockReturnValue({ data: ok(diff()) });
+    mockUseRuntimeState.mockReturnValue({
+      data: runtime(false, "paused_error"),
+    });
+    rail();
+    expect(
+      screen.getByRole("button", { name: /Mission/i }).getAttribute("data-vex-state"),
+    ).not.toBe("error");
   });
 });
 

@@ -31,7 +31,7 @@ import type {
   RuntimeRequestStopResult,
   RuntimeStateDto,
 } from "@shared/schemas/runtime.js";
-import { approvalsKeys, runtimeKeys } from "./queryKeys.js";
+import { approvalsKeys, missionKeys, runtimeKeys } from "./queryKeys.js";
 
 const STALE_MS = 2_000;
 
@@ -63,15 +63,21 @@ export const RUNTIME_STATE_FALLBACK_POLL_MS = 8_000;
  * Subscribe the active session to the engine control-state spine (F5).
  *
  * Push: every committed control transition (`EV.engine.controlState`)
- * invalidates `runtimeKeys.state(sessionId)` (composer gating) and
- * `approvalsKeys.pending(sessionId)` (inline approval card) for the
- * matching session — near-instant, instead of waiting on a poll. A 30s
- * fallback re-invalidates `runtimeKeys.state` in case an event is
- * missed; pending approvals retain their own faster fallback poll in
- * `ApprovalsRegion` (the `controlState` emit is post-commit on lease
- * release, not part of the approval transaction, so the approval card
- * must not depend on it alone). Pure side effect — mount once per
- * active session (`SessionPanel`).
+ * invalidates `runtimeKeys.state(sessionId)` (composer gating),
+ * `approvalsKeys.pending(sessionId)` (inline approval card),
+ * `missionKeys.draft(sessionId)` (draft badge), and the session's mission
+ * diff queries (contract-status card) for the matching session — near-
+ * instant, instead of waiting on a poll. The draft/diff pair closes issue
+ * #41: a main-side draft→ready promotion (`reconcileDraftReadiness`, e.g.
+ * from the async edit-stop finalizer) fires a `controlState` event but not
+ * a renderer mutation, so `useMissionRenew`'s own `onSuccess` invalidation
+ * never runs — this push path is what reaches the badge. A 30s fallback
+ * re-invalidates `runtimeKeys.state` in case an event is missed; pending
+ * approvals retain their own faster fallback poll in `ApprovalsRegion`
+ * (the `controlState` emit is post-commit on lease release, not part of
+ * the approval transaction, so the approval card must not depend on it
+ * alone). Pure side effect — mount once per active session
+ * (`SessionPanel`).
  */
 export function useControlStateLiveSync(sessionId: string | null): void {
   const queryClient = useQueryClient();
@@ -85,6 +91,17 @@ export function useControlStateLiveSync(sessionId: string | null): void {
       });
       void queryClient.invalidateQueries({
         queryKey: approvalsKeys.pending(sessionId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: missionKeys.draft(sessionId),
+      });
+      // No `missionKeys.diffsForSession(sessionId)` helper exists in
+      // queryKeys.ts (out of this package's write set) — invalidate via
+      // the `missionKeys.diff(sessionId, missionId)` PREFIX instead.
+      // TanStack matches by prefix by default, so this hits every diff
+      // query cached for the session regardless of missionId.
+      void queryClient.invalidateQueries({
+        queryKey: ["mission", "diff", sessionId],
       });
     });
 

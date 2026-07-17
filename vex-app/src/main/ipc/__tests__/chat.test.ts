@@ -5,6 +5,7 @@ import {
   type TestIpcEvent,
 } from "./test-sender.js";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
+import { MissionRunPausedError } from "@vex-agent/engine/types.js";
 
 type Handler = (
   event: TestIpcEvent,
@@ -203,6 +204,25 @@ describe("registerChatSubmitHandler", () => {
     expect(result.error?.userActionable).toBe(true);
   });
 
+  it("maps a missing inference config failure to a user-actionable chat error", async () => {
+    const row = makeSessionRow({ mode: "mission", initialGoal: "Existing" });
+    mocks.getSessionById.mockResolvedValue({ ok: true, data: row });
+    mocks.submitOperatorInstruction.mockRejectedValue(
+      new Error("No inference config available"),
+    );
+    registerChatSubmitHandler();
+
+    const fn = handlers.get(CH.chat.submit)!;
+    const result = (await fn(trustedSender, {
+      requestId: "r3b",
+      payload: { sessionId: row.id, message: "Continue" },
+    })) as { ok: boolean; error?: { code: string; userActionable: boolean } };
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("provider.unavailable");
+    expect(result.error?.userActionable).toBe(true);
+  });
+
   it("threads ctx.signal (an unaborted AbortSignal) into the engine (9-5b)", async () => {
     const row = makeSessionRow({ mode: "agent", initialGoal: null });
     mocks.getSessionById.mockResolvedValue({ ok: true, data: row });
@@ -218,7 +238,204 @@ describe("registerChatSubmitHandler", () => {
     expect(signal).toBeInstanceOf(AbortSignal);
     expect((signal as AbortSignal).aborted).toBe(false);
   });
+
+  it("falls back to the unchanged internal error for an unrecognized failure shape", async () => {
+    const row = makeSessionRow({ mode: "agent", initialGoal: null });
+    mocks.getSessionById.mockResolvedValue({ ok: true, data: row });
+    mocks.submitOperatorInstruction.mockRejectedValue(new Error("boom"));
+    registerChatSubmitHandler();
+
+    const fn = handlers.get(CH.chat.submit)!;
+    const result = (await fn(trustedSender, {
+      requestId: "r-unknown",
+      payload: { sessionId: row.id, message: "Continue" },
+    })) as { ok: boolean; error?: { code: string; retryable: boolean; userActionable: boolean } };
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("internal.unexpected");
+    expect(result.error?.retryable).toBe(true);
+    expect(result.error?.userActionable).toBe(false);
+  });
+
+  describe("provider error-signal mapping (WP2)", () => {
+    // Each case: a rejection shaped with own-property transport/HTTP signals
+    // → the expected mapped chat error code + retryable flag.
+    const cases: ReadonlyArray<{
+      readonly label: string;
+      readonly signal: { statusCode?: number; causeCode?: string };
+      readonly code: string;
+      readonly retryable: boolean;
+    }> = [
+      { label: "401", signal: { statusCode: 401 }, code: "provider.invalid_api_key", retryable: false },
+      { label: "403", signal: { statusCode: 403 }, code: "provider.invalid_api_key", retryable: false },
+      { label: "402", signal: { statusCode: 402 }, code: "provider.insufficient_credits", retryable: false },
+      { label: "429", signal: { statusCode: 429 }, code: "provider.unavailable", retryable: true },
+      { label: "503", signal: { statusCode: 503 }, code: "provider.unavailable", retryable: true },
+      {
+        label: "causeCode ECONNRESET",
+        signal: { causeCode: "ECONNRESET" },
+        code: "provider.unavailable",
+        retryable: true,
+      },
+    ];
+
+    it.each(cases)(
+      "maps a $label failure to $code (direct own-properties)",
+      async ({ signal, code, retryable }) => {
+        const row = makeSessionRow({ mode: "agent", initialGoal: null });
+        mocks.getSessionById.mockResolvedValue({ ok: true, data: row });
+        mocks.submitOperatorInstruction.mockRejectedValue(
+          makeTransportError(signal),
+        );
+        registerChatSubmitHandler();
+
+        const fn = handlers.get(CH.chat.submit)!;
+        const result = (await fn(trustedSender, {
+          requestId: `r-${code}`,
+          payload: { sessionId: row.id, message: "Continue" },
+        })) as { ok: boolean; error?: { code: string; retryable: boolean } };
+
+        expect(result.ok).toBe(false);
+        expect(result.error?.code).toBe(code);
+        expect(result.error?.retryable).toBe(retryable);
+      },
+    );
+
+    // The production path: mission failures reach this handler wrapped in
+    // MissionRunPausedError (WP1 step 6), never as the raw normalized cause —
+    // repeat the mapping against the ACTUAL wrapper class so the reader is
+    // proven against what really crosses the engine boundary.
+    it.each(cases)(
+      "maps a $label failure to $code (wrapped in MissionRunPausedError)",
+      async ({ signal, code, retryable }) => {
+        const row = makeSessionRow({ mode: "agent", initialGoal: null });
+        mocks.getSessionById.mockResolvedValue({ ok: true, data: row });
+        mocks.submitOperatorInstruction.mockRejectedValue(
+          new MissionRunPausedError({
+            runId: "run-1",
+            missionId: "mission-1",
+            sessionId: row.id,
+            cause: makeTransportError(signal),
+          }),
+        );
+        registerChatSubmitHandler();
+
+        const fn = handlers.get(CH.chat.submit)!;
+        const result = (await fn(trustedSender, {
+          requestId: `r-wrapped-${code}`,
+          payload: { sessionId: row.id, message: "Continue" },
+        })) as { ok: boolean; error?: { code: string; retryable: boolean } };
+
+        expect(result.ok).toBe(false);
+        expect(result.error?.code).toBe(code);
+        expect(result.error?.retryable).toBe(retryable);
+      },
+    );
+
+    it("never maps a wrapped operator-abort to provider.unavailable (negative)", async () => {
+      const row = makeSessionRow({ mode: "agent", initialGoal: null });
+      mocks.getSessionById.mockResolvedValue({ ok: true, data: row });
+      mocks.submitOperatorInstruction.mockRejectedValue(
+        new MissionRunPausedError({
+          runId: "run-1",
+          missionId: "mission-1",
+          sessionId: row.id,
+          cause: makeTransportError({ causeCode: "ABORT_ERR" }),
+        }),
+      );
+      registerChatSubmitHandler();
+
+      const fn = handlers.get(CH.chat.submit)!;
+      const result = (await fn(trustedSender, {
+        requestId: "r-abort",
+        payload: { sessionId: row.id, message: "Continue" },
+      })) as { ok: boolean; error?: { code: string } };
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.code).toBe("internal.unexpected");
+    });
+
+    // WP2 closure (fix-wave prs-17-07-2026): DNS (ENOTFOUND) and TLS
+    // (UNABLE_TO_VERIFY_LEAF_SIGNATURE) causeCodes are in the classifier's
+    // NEVER_TRANSIENT_CODES and are NOT in this handler's transient
+    // allow-list — both must fall through to the unchanged
+    // internal.unexpected fallback, never provider.unavailable.
+    it("never maps a wrapped DNS failure (ENOTFOUND) to provider.unavailable (negative)", async () => {
+      const row = makeSessionRow({ mode: "agent", initialGoal: null });
+      mocks.getSessionById.mockResolvedValue({ ok: true, data: row });
+      mocks.submitOperatorInstruction.mockRejectedValue(
+        new MissionRunPausedError({
+          runId: "run-1",
+          missionId: "mission-1",
+          sessionId: row.id,
+          cause: makeTransportError({ causeCode: "ENOTFOUND" }),
+        }),
+      );
+      registerChatSubmitHandler();
+
+      const fn = handlers.get(CH.chat.submit)!;
+      const result = (await fn(trustedSender, {
+        requestId: "r-dns",
+        payload: { sessionId: row.id, message: "Continue" },
+      })) as { ok: boolean; error?: { code: string } };
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.code).toBe("internal.unexpected");
+    });
+
+    it("never maps a wrapped TLS failure (UNABLE_TO_VERIFY_LEAF_SIGNATURE) to provider.unavailable (negative)", async () => {
+      const row = makeSessionRow({ mode: "agent", initialGoal: null });
+      mocks.getSessionById.mockResolvedValue({ ok: true, data: row });
+      mocks.submitOperatorInstruction.mockRejectedValue(
+        new MissionRunPausedError({
+          runId: "run-1",
+          missionId: "mission-1",
+          sessionId: row.id,
+          cause: makeTransportError({ causeCode: "UNABLE_TO_VERIFY_LEAF_SIGNATURE" }),
+        }),
+      );
+      registerChatSubmitHandler();
+
+      const fn = handlers.get(CH.chat.submit)!;
+      const result = (await fn(trustedSender, {
+        requestId: "r-tls",
+        payload: { sessionId: row.id, message: "Continue" },
+      })) as { ok: boolean; error?: { code: string } };
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.code).toBe("internal.unexpected");
+    });
+  });
 });
+
+/**
+ * Build an Error shaped like a normalized OpenRouter/mission-runner failure:
+ * lean `statusCode`/`status`/`causeCode` own-properties, no message content
+ * asserted on (the mapper never reads `.message`).
+ */
+function makeTransportError(signal: {
+  readonly statusCode?: number;
+  readonly causeCode?: string;
+}): Error {
+  const error = new Error("normalized transport failure");
+  if (signal.statusCode !== undefined) {
+    Object.defineProperty(error, "statusCode", {
+      value: signal.statusCode,
+      enumerable: false,
+    });
+    Object.defineProperty(error, "status", {
+      value: signal.statusCode,
+      enumerable: false,
+    });
+  }
+  if (signal.causeCode !== undefined) {
+    Object.defineProperty(error, "causeCode", {
+      value: signal.causeCode,
+      enumerable: false,
+    });
+  }
+  return error;
+}
 
 function makeSessionRow(args: {
   readonly mode: "agent" | "mission";

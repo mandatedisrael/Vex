@@ -18,6 +18,7 @@ import { log } from "../../logger/index.js";
 import { registerHandler } from "../register-handler.js";
 import { controlFailedError } from "../runtime/_errors.js";
 import { ensureEngineDbUrl } from "../runtime/_ensure-engine-db-url.js";
+import { emitControlStateAfterChange } from "../runtime/_emit-control-state.js";
 
 export function registerMissionRenewHandler(): () => void {
   return registerHandler({
@@ -41,6 +42,12 @@ export function registerMissionRenewHandler(): () => void {
             `previousMissionId=${input.previousMissionId} ` +
             `correlationId=${ctx.requestId}`,
         );
+        if (outcome.outcome === "renewed") {
+          // The engine may have promoted the new draft straight to 'ready'
+          // (reconcileDraftReadiness, issue #41) — refresh the renderer so
+          // the badge reflects it without a remount.
+          await emitControlStateAfterChange(input.sessionId, ctx.requestId);
+        }
         return ok(outcome);
       } catch (cause) {
         log.warn(

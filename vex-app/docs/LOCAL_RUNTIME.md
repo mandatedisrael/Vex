@@ -63,6 +63,12 @@ non-empty absolute path.
 
 ## Clean-slate reset
 
+> **⚠️ Destructive.** `CONFIG_DIR` holds your signing keys — `keystore.json`
+> (EVM) and `solana-keystore.json` (Solana) — plus the `backups/` directory
+> (`src/config/paths.ts:43-51`). Deleting `CONFIG_DIR` deletes all of them
+> with no recovery path. **Before step 3**, export/copy your keystores and
+> backups outside `CONFIG_DIR` — see step 3 below for the exact command.
+
 If a setup gets stuck mid-flow (e.g. corrupt vault, half-applied wizard,
 stale Docker stack), reset:
 
@@ -102,6 +108,55 @@ docker ps -a --filter label=com.docker.compose.project --format '{{.Names}}\t{{.
 ```
 
 ### 3. Delete the config directory
+
+> **⚠️ Destructive — irreversible key loss.** This step permanently deletes
+> `keystore.json`, `solana-keystore.json`, and the `backups/` directory along
+> with the rest of `CONFIG_DIR`. There is no undo. Complete step 3a below
+> before running the delete command in step 3b.
+
+#### 3a. Export keystores and backups first
+
+Copy the entire config directory (or make an encrypted archive of it) to a
+location outside `CONFIG_DIR` — e.g. an external drive or password manager
+attachment — so `keystore.json`, `solana-keystore.json`, and `backups/` all
+survive the reset:
+
+```bash
+# macOS / Linux — replace <dest> with a path outside CONFIG_DIR.
+cp -r "$CONFIG_DIR" <dest>/vex-config-backup-$(date +%Y%m%d)
+```
+
+```powershell
+# Windows (PowerShell) — replace <dest> with a path outside CONFIG_DIR.
+Copy-Item -Recurse -Force "$env:APPDATA\vex" "<dest>\vex-config-backup"
+```
+
+Note: the keystores and `secrets.vault.json` are encrypted at rest — copying
+them does not remove the need for your master password. Keep the password
+itself somewhere separate from the copied files; an unusable password makes
+the backup unusable too.
+
+**Verify the copy before continuing to 3b.** Confirm the destination exists
+and contains `keystore.json`, `solana-keystore.json`, and `backups/` — a
+partial or failed copy here means step 3b's delete is unrecoverable:
+
+```bash
+# macOS / Linux
+ls "<dest>/vex-config-backup-<date>/keystore.json" \
+   "<dest>/vex-config-backup-<date>/solana-keystore.json" \
+   "<dest>/vex-config-backup-<date>/backups"
+```
+
+```powershell
+# Windows (PowerShell)
+Test-Path "<dest>\vex-config-backup\keystore.json"
+Test-Path "<dest>\vex-config-backup\solana-keystore.json"
+Test-Path "<dest>\vex-config-backup\backups"
+```
+
+Do not proceed to 3b until all checks above succeed.
+
+#### 3b. Delete the directory
 
 | OS | Command |
 |---|---|

@@ -42,6 +42,7 @@ import type {
   MissionDraftDto,
   MissionGetDiffResult,
 } from "@shared/schemas/mission.js";
+import type { RuntimeStateDto } from "@shared/schemas/runtime.js";
 import type { PlanGetResult } from "@shared/schemas/session-plan.js";
 import type { SessionListItem } from "@shared/schemas/sessions.js";
 import {
@@ -94,6 +95,12 @@ export function MissionRail({
   // hasActiveRun: a running/paused run (mirrors MissionControls' runtime unwrap).
   const hasActiveRun =
     runtimeQuery.data?.ok === true && runtimeQuery.data.data.hasActiveRun === true;
+  // runtimeStatus: read alongside hasActiveRun so the badge can surface the
+  // paused_error state (MissionControls' standing alert) — never derived from
+  // status alone, since a stale/inconsistent status without an active run
+  // must not paint the badge red.
+  const runtimeStatus: RuntimeStateDto["status"] =
+    runtimeQuery.data?.ok === true ? runtimeQuery.data.data.status : null;
   // hasRenewable: a non-null renewable source means a terminal accepted mission
   // exists (completed/failed/stopped/cancelled), proving the contract was accepted.
   const hasRenewable =
@@ -102,8 +109,17 @@ export function MissionRail({
   const [open, setOpen] = useState<OpenModal>("none");
 
   const mission = useMemo(
-    () => deriveMissionBadge(isMission, draft, diff, plan, hasActiveRun, hasRenewable),
-    [isMission, draft, diff, plan, hasActiveRun, hasRenewable],
+    () =>
+      deriveMissionBadge(
+        isMission,
+        draft,
+        diff,
+        plan,
+        hasActiveRun,
+        hasRenewable,
+        runtimeStatus,
+      ),
+    [isMission, draft, diff, plan, hasActiveRun, hasRenewable, runtimeStatus],
   );
   const planBadge = useMemo(
     () => derivePlanBadge(plan, session?.missionStatus ?? null),
@@ -192,8 +208,16 @@ function deriveMissionBadge(
   plan: PlanGetResult | null,
   hasActiveRun: boolean,
   hasRenewable: boolean,
+  runtimeStatus: RuntimeStateDto["status"],
 ): BadgeDerivation | null {
   if (!isMission) return null;
+  // Standing paused_error alert's badge counterpart (issue #42): override to
+  // "error" only when an active run's own status confirms the pause — never
+  // on status alone, since a stale status without an active run is a
+  // defensive inconsistent-state case, not a live error.
+  if (hasActiveRun && runtimeStatus === "paused_error") {
+    return { state: "error", shimmer: false };
+  }
   // A mission past contract-acceptance is "accepted" — never "preparing".
   // hasActiveRun covers running/paused; hasRenewable (a non-null renewable
   // source) covers terminal accepted missions (completed/failed/stopped/

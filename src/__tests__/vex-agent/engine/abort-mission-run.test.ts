@@ -22,6 +22,7 @@ const mockClearMissionApprovedAt = vi.fn();
 const mockCancelForSession = vi.fn();
 const mockGetPendingApprovals = vi.fn();
 const mockRejectApproval = vi.fn();
+const mockReconcileDraftReadiness = vi.fn();
 
 vi.mock("@vex-agent/db/repos/mission-runs.js", () => ({
   getRun: (...a: unknown[]) => mockGetRun(...a),
@@ -42,6 +43,15 @@ vi.mock("@vex-agent/db/repos/approvals.js", () => ({
   getPending: (...a: unknown[]) => mockGetPendingApprovals(...a),
   reject: (...a: unknown[]) => mockRejectApproval(...a),
   approve: vi.fn(),
+}));
+
+// WP3 (issue #41): `stopMissionRunForEdit` reconciles draft readiness right
+// after it sets the mission back to 'draft' — mocked here so these tests
+// control the promoted/not-promoted outcome directly, independent of
+// `draft-readiness.test.ts`'s own behavior coverage.
+vi.mock("../../../vex-agent/engine/mission/draft-readiness.js", () => ({
+  reconcileDraftReadiness: (...a: unknown[]) =>
+    mockReconcileDraftReadiness(...a),
 }));
 
 const {
@@ -185,12 +195,21 @@ describe("stopActiveMissionForEdit", () => {
     mockCancelForSession.mockReset();
     mockGetPendingApprovals.mockReset();
     mockRejectApproval.mockReset();
+    mockReconcileDraftReadiness.mockReset();
     mockCancelForSession.mockResolvedValue(0);
     mockGetPendingApprovals.mockResolvedValue([]);
+    // Default: not promoted. Individual tests override to cover both
+    // branches of the WP3 reconciliation outcome.
+    mockReconcileDraftReadiness.mockResolvedValue({ promoted: false });
     if (hasMissionRunAbortController("run-edit")) unregisterMissionRunAbortController("run-edit");
   });
 
-  it("stops an active run for editing without cancelling the mission", async () => {
+  // WP3 (issue #41): `finalStatus` used to hard-code "draft" regardless of
+  // whether the stopped-for-edit mission was actually complete — that's the
+  // bug (drafts trapped in "Preparing"). It now reflects
+  // `reconcileDraftReadiness`'s outcome. Two deliberate variants replace the
+  // single always-"draft" assertion this test used to make.
+  it("stops an active run for editing and promotes a complete draft to ready", async () => {
     mockGetActiveRunBySession.mockResolvedValue({ id: "run-edit" });
     mockGetRun.mockResolvedValue({
       id: "run-edit",
@@ -198,11 +217,12 @@ describe("stopActiveMissionForEdit", () => {
       sessionId: "sess-edit",
       status: "paused_wake",
     });
+    mockReconcileDraftReadiness.mockResolvedValue({ promoted: true });
 
     const result = await stopActiveMissionForEdit("sess-edit");
 
     expect(result?.stopped).toBe(true);
-    expect(result?.finalStatus).toBe("draft");
+    expect(result?.finalStatus).toBe("ready");
     expect(mockCancelForSession).toHaveBeenCalledWith("sess-edit", "user_edit");
     expect(mockUpdateRunStatus).toHaveBeenCalledWith(
       "run-edit",
@@ -211,8 +231,30 @@ describe("stopActiveMissionForEdit", () => {
       { summary: "Mission stopped for operator edit" },
     );
     expect(mockClearMissionApprovedAt).toHaveBeenCalledWith("mission-edit");
+    // setStatus('draft') always fires first — reconcile decides the
+    // reported finalStatus, not whether this write happens.
     expect(mockSetMissionStatus).toHaveBeenCalledWith("mission-edit", "draft");
     expect(mockSetMissionStatus).not.toHaveBeenCalledWith("mission-edit", "cancelled");
+    expect(mockReconcileDraftReadiness).toHaveBeenCalledWith("mission-edit");
+  });
+
+  it("stops an active run for editing and leaves an incomplete draft as draft", async () => {
+    mockGetActiveRunBySession.mockResolvedValue({ id: "run-edit" });
+    mockGetRun.mockResolvedValue({
+      id: "run-edit",
+      missionId: "mission-edit",
+      sessionId: "sess-edit",
+      status: "paused_wake",
+    });
+    mockReconcileDraftReadiness.mockResolvedValue({ promoted: false });
+
+    const result = await stopActiveMissionForEdit("sess-edit");
+
+    expect(result?.stopped).toBe(true);
+    expect(result?.finalStatus).toBe("draft");
+    expect(mockSetMissionStatus).toHaveBeenCalledWith("mission-edit", "draft");
+    expect(mockSetMissionStatus).not.toHaveBeenCalledWith("mission-edit", "cancelled");
+    expect(mockReconcileDraftReadiness).toHaveBeenCalledWith("mission-edit");
   });
 
   it("signals a live running loop before returning the mission to draft", async () => {

@@ -18,7 +18,10 @@ import type {
   MessageMetadata,
 } from "../../../vex-agent/engine/types.js";
 
-import { MISSION_DRAFT_REQUIRED_FIELDS } from "../../../vex-agent/engine/types.js";
+import {
+  MISSION_DRAFT_REQUIRED_FIELDS,
+  MissionRunPausedError,
+} from "../../../vex-agent/engine/types.js";
 
 describe("engine types", () => {
   // ── Session axes ────────────────────────────────────────────────
@@ -261,6 +264,53 @@ describe("engine types", () => {
       };
       expect(result.stopReason).toBe("goal_reached");
       expect(result.missionStatus).toBe("completed");
+    });
+  });
+
+  // ── MissionRunPausedError — wrapper propagation (WP1 step 6) ───
+
+  describe("MissionRunPausedError", () => {
+    it("copies statusCode/causeCode from a normalized 503/ECONNRESET-shaped cause", () => {
+      const cause = Object.assign(
+        new Error("OpenRouter chat completion failed: status=503 | unavailable"),
+        { statusCode: 503, causeCode: "ECONNRESET" },
+      );
+      const wrapper = new MissionRunPausedError({
+        runId: "run-1", missionId: "mission-1", sessionId: "session-1", cause,
+      });
+      expect(wrapper.statusCode).toBe(503);
+      expect(wrapper.causeCode).toBe("ECONNRESET");
+      expect(wrapper.cause).toBe(cause);
+    });
+
+    it("is null for a cause with no matching validated own-property", () => {
+      const wrapper = new MissionRunPausedError({
+        runId: "run-1", missionId: "mission-1", sessionId: "session-1",
+        cause: new Error("plain failure"),
+      });
+      expect(wrapper.statusCode).toBeNull();
+      expect(wrapper.causeCode).toBeNull();
+    });
+
+    it("rejects a non-finite statusCode and a non-errno-shaped causeCode", () => {
+      const cause = Object.assign(new Error("weird"), {
+        statusCode: NaN,
+        causeCode: "not an errno shape!",
+      });
+      const wrapper = new MissionRunPausedError({
+        runId: "run-1", missionId: "mission-1", sessionId: "session-1", cause,
+      });
+      expect(wrapper.statusCode).toBeNull();
+      expect(wrapper.causeCode).toBeNull();
+    });
+
+    it("handles a non-Error cause without throwing", () => {
+      const wrapper = new MissionRunPausedError({
+        runId: "run-1", missionId: "mission-1", sessionId: "session-1", cause: "boom",
+      });
+      expect(wrapper.statusCode).toBeNull();
+      expect(wrapper.causeCode).toBeNull();
+      expect(wrapper.message).toBe("boom");
     });
   });
 

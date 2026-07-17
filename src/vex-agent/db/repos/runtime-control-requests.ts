@@ -96,18 +96,27 @@ export interface EnqueueInput {
   readonly reason?: string | null;
   readonly correlationId?: string | null;
   readonly expiresAt?: Date | null;
+  /**
+   * Narrow two-value union (NOT the full `ControlRequestStatus`) — a caller
+   * that already applied the control action synchronously (e.g. cancel_wake)
+   * can insert the audit row already `'cleared'` instead of enqueueing a
+   * `'pending'` row nothing will ever observe or clear. Defaults to
+   * `'pending'`, the historical behavior for every other caller.
+   */
+  readonly initialStatus?: "pending" | "cleared";
 }
 
-/** INSERT a new pending control request. Returns the inserted row. */
+/** INSERT a new control request. Returns the inserted row. */
 export async function enqueueRequest(
   input: EnqueueInput,
   exec?: Executor,
 ): Promise<ControlRequest> {
+  const status = input.initialStatus ?? "pending";
   const row = await queryOneWith<ControlRequestRow>(
     exec ?? (await import("../client.js")).getPool(),
     `INSERT INTO runtime_control_requests
-       (session_id, mission_run_id, kind, requested_by, reason, correlation_id, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+       (session_id, mission_run_id, kind, requested_by, reason, correlation_id, expires_at, status, cleared_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $8 = 'cleared' THEN NOW() ELSE NULL END)
      RETURNING id, session_id, mission_run_id, kind, status, requested_by,
                reason, correlation_id, created_at, observed_at, cleared_at, expires_at`,
     [
@@ -118,6 +127,7 @@ export async function enqueueRequest(
       input.reason ?? null,
       input.correlationId ?? null,
       input.expiresAt ?? null,
+      status,
     ],
   );
   if (row === null) {

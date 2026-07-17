@@ -385,7 +385,17 @@ export class OpenRouterProvider implements InferenceProvider {
       throw normalizeOpenRouterError(err, "streaming chat completion");
     }
 
-    yield* consumeOpenRouterStream(stream);
+    try {
+      // Post-first-chunk (mid-stream) rejections from the async iterator
+      // (dropped connection, upstream disconnect) reach here OUTSIDE the
+      // `client.chat.send` try/catch above — normalize them the same way so
+      // the classifier's own-property signals and the redactor both apply
+      // (a raw SDK rejection would otherwise bypass classification metadata
+      // AND message redaction).
+      yield* consumeOpenRouterStream(stream);
+    } catch (err) {
+      throw normalizeOpenRouterError(err, "streaming chat completion (mid-stream)");
+    }
   }
 
   // ── getBalance ──────────────────────────────────────────────────
