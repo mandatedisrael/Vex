@@ -96,10 +96,10 @@ export const DEFAULT_RPC: Record<string, string> = {
   ronin: "https://api.roninchain.com/rpc",
   unichain: "https://mainnet.unichain.org",
   hyperevm: "https://rpc.hyperliquid.xyz/evm",
-  plasma: "https://rpc.plasma.digital",
+  plasma: "https://rpc.plasma.to",
   etherlink: "https://node.mainnet.etherlink.com",
   monad: "https://rpc.monad.xyz",
-  megaeth: "https://rpc.megaeth.com",
+  megaeth: "https://mainnet.megaeth.com/rpc",
   scroll: "https://rpc.scroll.io",
   zksync: "https://mainnet.era.zksync.io",
 };
