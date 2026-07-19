@@ -30,6 +30,7 @@ function resetStoreToDefaults(): void {
     createSessionOpen: false,
     createSessionInitialMessage: null,
     pendingFirstMessage: null,
+    reviewModal: "none",
   });
 }
 
@@ -59,6 +60,23 @@ describe("uiStore", () => {
     expect(state.createSessionOpen).toBe(false);
     expect(state.createSessionInitialMessage).toBeNull();
     expect(state.pendingFirstMessage).toBeNull();
+    expect(state.reviewModal).toBe("none");
+  });
+
+  it("setReviewModal mutates and reflects new value, without persisting it", () => {
+    useUiStore.getState().setReviewModal("mission");
+    expect(useUiStore.getState().reviewModal).toBe("mission");
+    useUiStore.getState().setReviewModal("plan");
+    expect(useUiStore.getState().reviewModal).toBe("plan");
+    useUiStore.getState().setReviewModal("none");
+    expect(useUiStore.getState().reviewModal).toBe("none");
+    // UI-ephemeral — never in the persist whitelist (a relaunch always starts
+    // with no dialog open).
+    useUiStore.getState().setReviewModal("mission");
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw!);
+    expect(parsed.state.reviewModal).toBeUndefined();
   });
 
   it("setTheme + toggleTheme flip the persisted Robinhood-mode theme", () => {

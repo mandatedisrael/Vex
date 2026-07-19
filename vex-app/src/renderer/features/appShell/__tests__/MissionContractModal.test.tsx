@@ -398,4 +398,80 @@ describe("MissionContractModal", () => {
     });
     expect(screen.queryByRole("button", { name: /Accept/i })).toBeNull();
   });
+
+  it("suppresses acceptance while the plan read is PENDING and the header badge stays Preparing", async () => {
+    mockBridge.getDraft.mockResolvedValue({ ok: true, data: SAMPLE_DRAFT });
+    mockBridge.getDiff.mockResolvedValue({ ok: true, data: READY_DIFF });
+    mockPlanGet.mockImplementation(() => new Promise(() => {})); // never settles
+    renderModal();
+
+    await waitFor(() => {
+      const alert = screen.getByRole("alert");
+      expect(alert.getAttribute("data-vex-state")).toBe("plan-unknown");
+    });
+    expect(screen.queryByRole("button", { name: /Accept contract/i })).toBeNull();
+    // The header must not contradict the blocked footer.
+    expect(screen.queryByText(/Mission ready/i)).toBeNull();
+    expect(screen.getByText(/Preparing/i)).not.toBeNull();
+  });
+
+  it("a FAILED plan read shows the Retry action, keeps the badge Preparing, and recovery re-enables acceptance", async () => {
+    mockBridge.getDraft.mockResolvedValue({ ok: true, data: SAMPLE_DRAFT });
+    mockBridge.getDiff.mockResolvedValue({ ok: true, data: READY_DIFF });
+    mockPlanGet.mockResolvedValueOnce({
+      ok: false as const,
+      error: { code: "session.plan_read_failed", message: "boom", correlationId: "t" },
+    });
+    // The retry resolves a healthy plan-mode-off read.
+    mockPlanGet.mockResolvedValue({ ok: true, data: null });
+    renderModal();
+
+    await waitFor(() => {
+      const alert = screen.getByRole("alert");
+      expect(alert.getAttribute("data-vex-state")).toBe("plan-failed");
+    });
+    expect(screen.queryByRole("button", { name: /Accept contract/i })).toBeNull();
+    expect(screen.queryByText(/Mission ready/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Retry/i }));
+
+    // Recovery: the read succeeds, acceptance becomes available again.
+    expect(
+      await screen.findByRole("button", { name: /Accept contract/i }),
+    ).not.toBeNull();
+  });
+
+  it("a REJECTED plan.get promise (ipc failure) shows the Retry path — never an infinite Loading", async () => {
+    mockBridge.getDraft.mockResolvedValue({ ok: true, data: SAMPLE_DRAFT });
+    mockBridge.getDiff.mockResolvedValue({ ok: true, data: READY_DIFF });
+    mockPlanGet.mockRejectedValueOnce(new Error("ipc channel died"));
+    mockPlanGet.mockResolvedValue({ ok: true, data: null }); // retry succeeds
+    renderModal();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.getAttribute("data-vex-state")).toBe("plan-failed");
+    expect(screen.queryByRole("button", { name: /Accept contract/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Retry/i }));
+    expect(
+      await screen.findByRole("button", { name: /Accept contract/i }),
+    ).not.toBeNull();
+  });
+
+  it("an EMPTY enabled plan keeps the header badge Preparing (matches the blocked footer)", async () => {
+    mockBridge.getDraft.mockResolvedValue({ ok: true, data: SAMPLE_DRAFT });
+    mockBridge.getDiff.mockResolvedValue({ ok: true, data: READY_DIFF });
+    mockPlanGet.mockResolvedValue({
+      ok: true,
+      data: { enabled: true, accepted: false, planMd: "", updatedAt: PLAN_UPDATED_AT },
+    });
+    renderModal();
+
+    await waitFor(() => {
+      const alert = screen.getByRole("alert");
+      expect(alert.getAttribute("data-vex-state")).toBe("plan-missing");
+    });
+    expect(screen.queryByText(/Mission ready/i)).toBeNull();
+    expect(screen.getByText(/Preparing/i)).not.toBeNull();
+  });
 });

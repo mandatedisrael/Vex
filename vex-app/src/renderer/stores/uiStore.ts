@@ -41,6 +41,17 @@ export type VexTheme = "vex" | "robinhood";
  */
 export type WorkspaceMode = "normal" | "hypervexing";
 
+/**
+ * Which mission/plan review dialog (if any) the DESK RULE header cluster
+ * (`MissionRail`) should show. Lifted out of `MissionRail`'s local state so a
+ * DIFFERENT component in a different tree branch — `MissionControls`' "Review
+ * & accept contract" bar, mounted in the session body, not the header — can
+ * open the same dialog `MissionRail` owns. UI-ephemeral, NOT persisted: a
+ * relaunch always starts with no dialog open. The single enum value keeps
+ * mission/plan mutual exclusion for free (setting one closes the other).
+ */
+export type ReviewModal = "none" | "mission" | "plan";
+
 export type View =
   | "splash"
   | "systemCheck"
@@ -146,6 +157,8 @@ interface UiState {
    * Pure UI preference: rows come from the markets query, this only stars.
    */
   readonly hlFavorites: readonly string[];
+  /** See `ReviewModal`. NOT persisted — see partialize. */
+  readonly reviewModal: ReviewModal;
   readonly setTheme: (value: VexTheme) => void;
   readonly toggleTheme: () => void;
   readonly setWorkspaceMode: (value: WorkspaceMode) => void;
@@ -170,6 +183,7 @@ interface UiState {
   ) => void;
   readonly setSigningState: (value: "idle" | "signing" | "signed") => void;
   readonly toggleHlFavorite: (coin: string) => void;
+  readonly setReviewModal: (value: ReviewModal) => void;
   readonly appendLog: (entry: UiLogEntry) => void;
   readonly clearLogs: () => void;
 }
@@ -194,6 +208,7 @@ export const useUiStore = create<UiState>()(
       signingState: "idle",
       reasoningEffortBySession: {},
       hlFavorites: [],
+      reviewModal: "none",
       setTheme: (theme) => set({ theme }),
       toggleTheme: () =>
         set((state) => ({ theme: state.theme === "vex" ? "robinhood" : "vex" })),
@@ -236,6 +251,7 @@ export const useUiStore = create<UiState>()(
             ? state.hlFavorites.filter((c) => c !== coin)
             : [...state.hlFavorites, coin],
         })),
+      setReviewModal: (reviewModal) => set({ reviewModal }),
       appendLog: (entry) =>
         set((state) => ({
           logBuffer: [...state.logBuffer, entry].slice(-MAX_RENDER_LOGS),

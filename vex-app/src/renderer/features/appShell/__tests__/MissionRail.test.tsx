@@ -19,7 +19,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { Result } from "@shared/ipc/result.js";
 import type {
   MissionDraftDto,
@@ -65,6 +65,7 @@ vi.mock("../PlanDisplayModal.js", () => ({
 }));
 
 const { MissionRail } = await import("../MissionRail.js");
+const { useUiStore } = await import("../../../stores/uiStore.js");
 
 const SESSION = "00000000-0000-4000-8000-00000000dd01";
 const MISSION = "mission-1";
@@ -165,6 +166,10 @@ function renewable(missionId: string | null = null) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The open-dialog state now lives in uiStore (`reviewModal`), shared across
+  // components — reset it so no test leaks its open/closed dialog into the
+  // next one.
+  useUiStore.setState({ reviewModal: "none" });
   // Sensible defaults: no draft/diff/plan; tests override per case.
   mockUseSession.mockReturnValue({ data: ok(sessionRow()) });
   mockUseMissionDraft.mockReturnValue({ data: ok(null) });
@@ -240,6 +245,28 @@ describe("MissionRail badge derivation", () => {
     expect(screen.getByText("Ready")).not.toBeNull();
     const btn = screen.getByRole("button", { name: /Mission ready/i });
     expect(btn.classList.contains("vex-badge--shimmer")).toBe(true);
+  });
+
+  it("Mission badge stays Preparing while the plan read is PENDING — unknown plan state never flashes Ready", () => {
+    mockUseSession.mockReturnValue({ data: ok(sessionRow({ mode: "mission" })) });
+    mockUseMissionDraft.mockReturnValue({ data: ok(READY_DRAFT) });
+    mockUseMissionDiff.mockReturnValue({ data: ok(diff()) });
+    mockUseSessionPlan.mockReturnValue({ data: undefined }); // query still pending
+    rail();
+    expect(screen.getByText("Preparing")).not.toBeNull();
+    expect(screen.queryByText("Ready")).toBeNull();
+  });
+
+  it("Mission badge stays Preparing after a FAILED plan read", () => {
+    mockUseSession.mockReturnValue({ data: ok(sessionRow({ mode: "mission" })) });
+    mockUseMissionDraft.mockReturnValue({ data: ok(READY_DRAFT) });
+    mockUseMissionDiff.mockReturnValue({ data: ok(diff()) });
+    mockUseSessionPlan.mockReturnValue({
+      data: { ok: false as const, error: { code: "session.plan_read_failed", message: "boom", correlationId: "t" } },
+    });
+    rail();
+    expect(screen.getByText("Preparing")).not.toBeNull();
+    expect(screen.queryByText("Ready")).toBeNull();
   });
 
   it("Mission badge stays Preparing when plan-mode on but plan is missing", () => {
@@ -408,5 +435,21 @@ describe("MissionRail single-modal mutual exclusion", () => {
     // Clicking Plan again toggles it closed.
     fireEvent.click(screen.getByRole("button", { name: /Plan/i }));
     expect(screen.queryByTestId("plan-modal-open")).toBeNull();
+  });
+
+  it("opens the mission dialog from an EXTERNAL uiStore write (MissionControls' review bar), not just its own badge click", () => {
+    // MissionControls lives in a different tree branch and can only reach
+    // this dialog through uiStore.reviewModal — pin that the rail reacts to
+    // the store regardless of who wrote it.
+    mockUseSession.mockReturnValue({ data: ok(sessionRow({ mode: "mission" })) });
+    mockUseMissionDraft.mockReturnValue({ data: ok(READY_DRAFT) });
+    mockUseMissionDiff.mockReturnValue({ data: ok(diff()) });
+    rail();
+
+    expect(screen.queryByTestId("mission-modal-open")).toBeNull();
+    act(() => {
+      useUiStore.getState().setReviewModal("mission");
+    });
+    expect(screen.getByTestId("mission-modal-open")).not.toBeNull();
   });
 });

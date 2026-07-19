@@ -26,8 +26,12 @@
  *     pending acceptance / accepted), and surfaces an "awaiting resume" stale
  *     marker when an accepted plan's run is parked.
  *
- * Modal open-state is local `useState` with MUTUAL EXCLUSION — opening one
- * closes the other so two dialogs never stack. The state is UI-ephemeral (never
+ * Modal open-state lives in `uiStore` (`reviewModal`), NOT local `useState`:
+ * `MissionControls`' "Review & accept contract" bar (mounted in the session
+ * body, a different tree branch than this header cluster) needs to open the
+ * SAME dialog this component owns, so the state has to be shared, not local.
+ * MUTUAL EXCLUSION is still free — `reviewModal` is a single enum value, so
+ * opening one dialog closes the other. The state is UI-ephemeral (never
  * persisted, never crosses IPC).
  *
  * Trust boundary: 100% renderer presentation over existing hooks. No new IPC,
@@ -35,7 +39,7 @@
  * cluster only derives badge states; the modals own the content render.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { JSX } from "react";
 import type { Result } from "@shared/ipc/result.js";
 import type {
@@ -52,12 +56,10 @@ import {
 } from "../../lib/api/mission.js";
 import { useRuntimeState } from "../../lib/api/runtime.js";
 import { useSession, useSessionPlan } from "../../lib/api/sessions.js";
+import { useUiStore } from "../../stores/uiStore.js";
 import { MissionContractModal } from "./MissionContractModal.js";
 import { PlanDisplayModal } from "./PlanDisplayModal.js";
 import { PremiumBadge, type PremiumBadgeState } from "./PremiumBadge.js";
-
-/** Which review dialog (if any) is open. Mutually exclusive. */
-type OpenModal = "none" | "mission" | "plan";
 
 export interface MissionRailProps {
   readonly activeSessionId: string | null;
@@ -76,6 +78,9 @@ export function MissionRail({
   const diff = readDiff(diffQuery.data);
   const planQuery = useSessionPlan(activeSessionId);
   const plan = readPlan(planQuery.data);
+  // Pending/failed plan read = UNKNOWN plan state; the READY badge below must
+  // treat unknown as still-preparing (same rule as MissionControls' bar).
+  const planKnown = planQuery.data?.ok === true;
 
   const isMission = session?.mode === "mission";
   const planEnabled = plan?.enabled === true;
@@ -106,7 +111,8 @@ export function MissionRail({
   const hasRenewable =
     renewableQuery.data?.ok === true && renewableQuery.data.data !== null;
 
-  const [open, setOpen] = useState<OpenModal>("none");
+  const open = useUiStore((s) => s.reviewModal);
+  const setReviewModal = useUiStore((s) => s.setReviewModal);
 
   const mission = useMemo(
     () =>
@@ -115,11 +121,12 @@ export function MissionRail({
         draft,
         diff,
         plan,
+        planKnown,
         hasActiveRun,
         hasRenewable,
         runtimeStatus,
       ),
-    [isMission, draft, diff, plan, hasActiveRun, hasRenewable, runtimeStatus],
+    [isMission, draft, diff, plan, planKnown, hasActiveRun, hasRenewable, runtimeStatus],
   );
   const planBadge = useMemo(
     () => derivePlanBadge(plan, session?.missionStatus ?? null),
@@ -148,7 +155,9 @@ export function MissionRail({
           state={mission.state}
           shimmer={mission.shimmer}
           expanded={open === "mission"}
-          onClick={() => setOpen((cur) => (cur === "mission" ? "none" : "mission"))}
+          onClick={() =>
+            setReviewModal(open === "mission" ? "none" : "mission")
+          }
         />
       ) : null}
 
@@ -159,7 +168,7 @@ export function MissionRail({
           state={planBadge.state}
           shimmer={planBadge.shimmer}
           expanded={open === "plan"}
-          onClick={() => setOpen((cur) => (cur === "plan" ? "none" : "plan"))}
+          onClick={() => setReviewModal(open === "plan" ? "none" : "plan")}
         />
       ) : null}
 
@@ -171,7 +180,7 @@ export function MissionRail({
           sessionId={sessionId}
           permission={session.permission}
           open={open === "mission"}
-          onOpenChange={(next) => setOpen(next ? "mission" : "none")}
+          onOpenChange={(next) => setReviewModal(next ? "mission" : "none")}
         />
       ) : null}
       {planEnabled ? (
@@ -180,7 +189,7 @@ export function MissionRail({
           missionStatus={session?.missionStatus ?? null}
           suppressAccept={suppressPlanAccept}
           open={open === "plan"}
-          onOpenChange={(next) => setOpen(next ? "plan" : "none")}
+          onOpenChange={(next) => setReviewModal(next ? "plan" : "none")}
         />
       ) : null}
     </div>
@@ -206,6 +215,7 @@ function deriveMissionBadge(
   draft: MissionDraftDto | null,
   diff: ReadyDiff | null,
   plan: PlanGetResult | null,
+  planKnown: boolean,
   hasActiveRun: boolean,
   hasRenewable: boolean,
   runtimeStatus: RuntimeStateDto["status"],
@@ -254,7 +264,9 @@ function deriveMissionBadge(
   }
   // awaiting-acceptance. Gate "ready" on the plan when plan-mode is on:
   // plan_missing → keep preparing; otherwise ready (shimmer).
-  if (planMissing(plan)) {
+  if (!planKnown || planMissing(plan)) {
+    // Unknown (pending/failed read) counts as missing — never flash READY
+    // on a plan state we have not actually seen.
     return { state: "preparing", shimmer: false };
   }
   return { state: "ready", shimmer: true };
@@ -281,8 +293,12 @@ function derivePlanBadge(
   return { state: "accepted", shimmer: false };
 }
 
-/** Plan-mode on with an empty body → the engine's `plan_missing` block. */
-function planMissing(plan: PlanGetResult | null): boolean {
+/**
+ * Plan-mode on with an empty body → the engine's `plan_missing` block.
+ * Exported as THE shared mission-readiness gate: MissionControls' review bar
+ * must never claim "ready" while this rail still (correctly) says Preparing.
+ */
+export function planMissing(plan: PlanGetResult | null): boolean {
   return plan !== null && plan.enabled && !plan.accepted && plan.planMd.length === 0;
 }
 
