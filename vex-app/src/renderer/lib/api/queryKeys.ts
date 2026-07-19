@@ -139,6 +139,14 @@ export const missionKeys = {
   diff: (sessionId: string, missionId: string) =>
     ["mission", "diff", sessionId, missionId] as const,
   /**
+   * Session-wide diff-invalidation prefix — matches every `diff(sessionId,
+   * missionId)` entry for a session regardless of which mission id is
+   * current (TanStack's default fuzzy `invalidateQueries` matching), so
+   * `useMissionLiveSync` can refresh the diff without knowing the active
+   * mission id. Mirrors `messagesKeys.forSession`.
+   */
+  diffsForSession: (sessionId: string) => ["mission", "diff", sessionId] as const,
+  /**
    * Puzzle 04 phase 7 — latest terminal accepted mission for
    * `/mission-renew`. Returns `{ missionId }` or null. Invalidated on
    * any mutation that may flip a mission to terminal (start, stop,

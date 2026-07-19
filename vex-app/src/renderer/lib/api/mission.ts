@@ -12,8 +12,14 @@
  *
  * `useMissionDiff` query reader follows the same staleTime as
  * `useMissionDraft`.
+ *
+ * `useMissionLiveSync` (mission review-&-accept bar) keeps the draft + diff
+ * queries fresh the same way `useTranscriptLiveSync`/`useUsageLiveSync` do:
+ * event-driven invalidation on `engine.transcriptAppend` plus a 30s fallback
+ * poll, so a dropped IPC event can never strand the review bar invisible.
  */
 
+import { useEffect } from "react";
 import {
   queryOptions,
   useMutation,
@@ -155,6 +161,50 @@ export function useMissionResultForRun(
   walletAddress: string | null,
 ): UseQueryResult<Result<MissionGetResultForRunResult>> {
   return useQuery(missionResultForRunOptions(missionRunId ?? "", walletAddress ?? ""));
+}
+
+/**
+ * 30s fallback invalidation cadence for the mission draft/diff queries —
+ * mirrors `TRANSCRIPT_LIVE_FALLBACK_POLL_MS`/`USAGE_LIVE_FALLBACK_POLL_MS`.
+ * Exported for tests.
+ */
+export const MISSION_LIVE_FALLBACK_POLL_MS = 30_000;
+
+/**
+ * Keep a mission session's draft + diff queries fresh so the review-&-accept
+ * bar (and the MISSION badge) can never be stranded by a dropped
+ * `transcriptAppend` event: the agent's draft patches land via the same
+ * transcript writes the transcript/usage live-sync hooks already key off, so
+ * this mounts the identical two-layer refresh — event-driven invalidation +
+ * a 30s fallback poll. Pure side effect — mount once per active mission
+ * session (in `MissionControls`).
+ */
+export function useMissionLiveSync(sessionId: string | null): void {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (sessionId === null || sessionId.length === 0) return;
+
+    const invalidate = (): void => {
+      void queryClient.invalidateQueries({
+        queryKey: missionKeys.draft(sessionId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: missionKeys.diffsForSession(sessionId),
+      });
+    };
+
+    const off = window.vex.engine.onTranscriptAppend((event) => {
+      if (event.sessionId !== sessionId) return;
+      invalidate();
+    });
+
+    const intervalId = window.setInterval(invalidate, MISSION_LIVE_FALLBACK_POLL_MS);
+
+    return () => {
+      off();
+      window.clearInterval(intervalId);
+    };
+  }, [sessionId, queryClient]);
 }
 
 // ── Mutations ───────────────────────────────────────────────────

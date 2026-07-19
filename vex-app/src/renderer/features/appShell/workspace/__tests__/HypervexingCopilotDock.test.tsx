@@ -71,11 +71,11 @@ const SESSION = "00000000-0000-4000-8000-00000000dc01";
 const MISSION = "mission-1";
 const HASH = "a".repeat(64);
 
-let activeSessionId: string | null = SESSION;
-vi.mock("../../../../stores/uiStore.js", () => ({
-  useUiStore: (selector: (s: { activeSessionId: string | null }) => unknown) =>
-    selector({ activeSessionId }),
-}));
+// REAL uiStore (no static mock): MissionRail's dialog state moved to
+// uiStore.reviewModal, so the rail's reads/writes are reactive store state —
+// a fixed-selector mock would swallow the badge click. Tests drive
+// activeSessionId/reviewModal via useUiStore.setState (reset in beforeEach).
+const { useUiStore } = await import("../../../../stores/uiStore.js");
 
 const { HypervexingCopilotDock } = await import("../HypervexingCopilotDock.js");
 
@@ -166,7 +166,7 @@ function runtime(hasActiveRun = false) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  activeSessionId = SESSION;
+  useUiStore.setState({ activeSessionId: SESSION, reviewModal: "none" });
   mockUseSession.mockReturnValue({ data: ok(sessionRow()) });
   mockUseMissionDraft.mockReturnValue({ data: ok(null) });
   mockUseMissionDiff.mockReturnValue({ data: undefined });
@@ -223,7 +223,7 @@ describe("HypervexingCopilotDock mission rail", () => {
   });
 
   it("passes a null active session straight through (rail render-gates off)", () => {
-    activeSessionId = null;
+    useUiStore.setState({ activeSessionId: null });
     mockUseSession.mockReturnValue({ data: undefined });
 
     const { container } = render(<HypervexingCopilotDock />);

@@ -64,9 +64,22 @@ import { PremiumBadge, type PremiumBadgeState } from "./PremiumBadge.js";
 type PlanGate =
   | { readonly kind: "none" }
   | { readonly kind: "ready"; readonly planUpdatedAt: string }
-  | { readonly kind: "missing" };
+  | { readonly kind: "missing" }
+  | { readonly kind: "loading" }
+  | { readonly kind: "failed" };
 
-function resolvePlanGate(plan: PlanGetResult | null): PlanGate {
+type PlanReadState = "loading" | "failed" | "known";
+
+function resolvePlanGate(plan: PlanGetResult | null, readState: PlanReadState): PlanGate {
+  // Pending/failed plan read = the plan state is UNKNOWN. The engine would
+  // reject an unsafe accept anyway, but the UI must not INVITE a knowingly
+  // invalid action — both suppress acceptance (same rule as the rail badge
+  // and the MissionControls review bar). They differ in the exit: loading
+  // resolves itself; failed needs an explicit Retry (the failed Result sits
+  // in the query cache as "successful" data, so nothing refetches on its
+  // own while the modal stays mounted).
+  if (readState === "loading") return { kind: "loading" };
+  if (readState === "failed") return { kind: "failed" };
   if (plan === null || !plan.enabled || plan.accepted) return { kind: "none" };
   if (plan.planMd.length === 0) return { kind: "missing" };
   return { kind: "ready", planUpdatedAt: plan.updatedAt };
@@ -96,7 +109,16 @@ export function MissionContractModal({
   const diffQuery = useMissionDiff(sessionId, draft?.missionId ?? null);
   const diff = readDiff(diffQuery.data);
   const planQuery = useSessionPlan(sessionId);
-  const planGate = resolvePlanGate(readPlan(planQuery.data));
+  // isError FIRST: a rejected ipc invoke leaves data undefined forever —
+  // reading only `data` would render "loading" with no way out.
+  const planReadState: PlanReadState = planQuery.isError
+    ? "failed"
+    : planQuery.data === undefined
+      ? "loading"
+      : planQuery.data.ok
+        ? "known"
+        : "failed";
+  const planGate = resolvePlanGate(readPlan(planQuery.data), planReadState);
   const accept = useAcceptMissionContract();
   const autoRetry = useSetAutoRetry();
 
@@ -172,7 +194,7 @@ export function MissionContractModal({
   }, [accept.data, planRefetch]);
 
   const title = state?.draft.title?.trim() || "Mission contract";
-  const badgeState = toBadgeState(state?.kind, acceptOutcome);
+  const badgeState = toBadgeState(state?.kind, acceptOutcome, planGate);
   const badgeShimmer = badgeState === "ready";
 
   const showAutoRetry = permission === "full" && state !== null;
@@ -237,6 +259,8 @@ export function MissionContractModal({
           pending={accept.isPending}
           onAccept={onAccept}
           planGate={planGate}
+          onPlanRetry={() => void planQuery.refetch()}
+          planRetryPending={planQuery.isFetching}
           notice={acceptNotice}
         />
       </DialogContent>
@@ -249,6 +273,10 @@ interface FooterActionProps {
   readonly pending: boolean;
   readonly onAccept: (hash: string) => void;
   readonly planGate: PlanGate;
+  /** Refetches the plan read after a failed Result — see the `failed` gate. */
+  readonly onPlanRetry: () => void;
+  /** True while a refetch is in flight — the Retry button disables itself. */
+  readonly planRetryPending: boolean;
   readonly notice: string | null;
 }
 
@@ -263,6 +291,8 @@ function FooterAction({
   pending,
   onAccept,
   planGate,
+  onPlanRetry,
+  planRetryPending,
   notice,
 }: FooterActionProps): JSX.Element | null {
   if (state === null) return null;
@@ -285,6 +315,47 @@ function FooterAction({
     );
   }
   if (currentHash === null) return null;
+
+  // Plan state not yet known — block accept: the UI must never present an
+  // action the engine is known to reject right now.
+  if (planGate.kind === "loading") {
+    return (
+      <DialogFooter className="justify-start border-[var(--vex-line)]">
+        <p
+          className="text-xs text-warning"
+          role="alert"
+          data-vex-state="plan-unknown"
+        >
+          Plan status is loading. Accepting is unavailable until it is known.
+        </p>
+      </DialogFooter>
+    );
+  }
+  // Failed read: the err Result sits in the query cache as data, so nothing
+  // refetches by itself while the modal stays mounted — without an explicit
+  // Retry the user would be stranded here.
+  if (planGate.kind === "failed") {
+    return (
+      <DialogFooter className="justify-between border-[var(--vex-line)]">
+        <p
+          className="text-xs text-warning"
+          role="alert"
+          data-vex-state="plan-failed"
+        >
+          Plan status could not be read. Accepting is unavailable until it is.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={planRetryPending}
+          onClick={() => void onPlanRetry()}
+        >
+          Retry
+        </Button>
+      </DialogFooter>
+    );
+  }
 
   // Plan-mode ON but nothing authored — block accept and prompt to write a plan
   // first (matches the engine `plan_missing`).
@@ -354,6 +425,7 @@ function FooterAction({
 function toBadgeState(
   kind: CardStateKind | undefined,
   acceptOutcome: MissionAcceptContractResult["outcome"] | null,
+  planGate: PlanGate,
 ): PremiumBadgeState {
   if (acceptOutcome === "plan_stale") return "stale";
   switch (kind) {
@@ -365,7 +437,12 @@ function toBadgeState(
     case "dirty-acceptance":
       return "stale";
     case "awaiting-acceptance":
-      return "ready";
+      // The header must never contradict the footer: while the plan is
+      // loading/failed/empty the footer blocks acceptance, so the badge says
+      // Preparing (same semantics as the Rail badge and the Controls bar).
+      return planGate.kind === "loading" || planGate.kind === "failed" || planGate.kind === "missing"
+        ? "preparing"
+        : "ready";
   }
 }
 

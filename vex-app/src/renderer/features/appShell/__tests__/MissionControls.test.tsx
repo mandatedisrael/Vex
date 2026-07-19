@@ -1,15 +1,25 @@
 /**
  * MissionControls — runtime-gated mission control surface (Phase 4b-2).
  * Verifies Start gating, the status-gated toolbar (Continue/Recover/Edit/Stop),
- * dispatch wiring to the mission IPC, the in-flight/pending disable, and that
- * refusal outcomes (ok:true non-success) surface a notice.
+ * dispatch wiring to the mission IPC, the in-flight/pending disable, refusal
+ * outcomes (ok:true non-success) surfacing a notice, the review-&-accept bar
+ * (ready-unaccepted state, store wiring), and its turn-gated reveal.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
 
+import { useSubmitChat } from "../../../lib/api/chat.js";
+import { useUiStore } from "../../../stores/uiStore.js";
 import { MissionControls } from "../MissionControls.js";
 
 const SESSION = "00000000-0000-4000-8000-0000000000d1";
@@ -29,6 +39,9 @@ const retryMock = vi.fn();
 const editMock = vi.fn();
 const stopMock = vi.fn();
 const renewMock = vi.fn();
+const chatSubmitMock = vi.fn();
+const getPlanMock = vi.fn();
+const onTranscriptAppendMock = vi.fn(() => vi.fn());
 
 function setVex(): void {
   Object.defineProperty(window, "vex", {
@@ -36,6 +49,7 @@ function setVex(): void {
     writable: true,
     value: {
       runtime: { getState: getStateMock },
+      sessions: { plan: { get: getPlanMock } },
       mission: {
         getDraft: getDraftMock,
         getDiff: getDiffMock,
@@ -47,6 +61,8 @@ function setVex(): void {
         stop: stopMock,
         renew: renewMock,
       },
+      chat: { submit: chatSubmitMock },
+      engine: { onTranscriptAppend: onTranscriptAppendMock },
     },
   });
 }
@@ -101,14 +117,33 @@ function renderControls() {
   });
 }
 
+/**
+ * Renders MissionControls against a CALLER-SUPPLIED client (instead of the
+ * one-off client `Wrapper` creates internally) so a `useSubmitChat` hook
+ * driven separately in the same test can share the mutation cache
+ * `useIsChatSubmitting` reads — used by the turn-gated reveal test.
+ */
+function renderControlsOnClient(client: QueryClient) {
+  setVex();
+  function SharedWrapper({ children }: { readonly children: ReactNode }) {
+    return createElement(QueryClientProvider, { client }, children);
+  }
+  return render(createElement(MissionControls, { sessionId: SESSION }), {
+    wrapper: SharedWrapper,
+  });
+}
+
 beforeEach(() => {
   // Default: no renewable source. The hook fires for every render (active or
   // not), so give it a safe value; renew-specific tests override it.
   getRenewableMock.mockResolvedValue(ok(null));
+  getPlanMock.mockResolvedValue(ok({ enabled: false, accepted: false, planMd: "" }));
+  useUiStore.setState({ reviewModal: "none" });
 });
 
 afterEach(() => {
   vi.clearAllMocks();
+  useUiStore.setState({ reviewModal: "none" });
   // @ts-expect-error — test cleanup
   delete window.vex;
 });
@@ -124,26 +159,79 @@ describe("MissionControls", () => {
     renderControls();
 
     const startBtn = await screen.findByRole("button", { name: "Start mission" });
-    // Accepted-clean contract → the acceptance-pending notice must be gone
-    // (the Start CTA is the deterministic signal from here).
+    // Accepted-clean contract → the acceptance-pending notice AND the review
+    // bar must be gone (the Start CTA is the deterministic signal from here).
     expect(screen.queryByText(/Mission contract not accepted/i)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Review & accept contract" }),
+    ).toBeNull();
     fireEvent.click(startBtn);
     await waitFor(() => expect(startMock).toHaveBeenCalledTimes(1));
     expect(startMock).toHaveBeenCalledWith({ sessionId: SESSION, missionId: MISSION });
   });
 
-  it("does not show Start when the contract is not accepted", async () => {
+  it("shows the Review & accept contract bar (not Start, not the notice) for a ready, unaccepted contract — the MISSION READY state", async () => {
     getStateMock.mockResolvedValue(runtimeState({ hasActiveRun: false }));
     getDraftMock.mockResolvedValue(draftReady());
     getDiffMock.mockResolvedValue(diffAccepted(false));
     renderControls();
 
-    await waitFor(() => expect(getDiffMock).toHaveBeenCalled());
-    await new Promise((r) => setTimeout(r, 0));
+    // One next-step surface at a time: the bar replaces the standing notice.
+    const reviewBtn = await screen.findByRole("button", {
+      name: "Review & accept contract",
+    });
+    expect(screen.queryByText(/Mission contract not accepted/i)).toBeNull();
     expect(screen.queryByRole("button", { name: "Start mission" })).toBeNull();
-    // Standing acceptance-pending notice: the runtime gate blocks every
-    // on-chain broadcast pre-acceptance, and the user must SEE that.
-    await screen.findByText(/on-chain actions .* are blocked until you accept/i);
+    // Store wiring: clicking the bar opens the mission dialog via uiStore.
+    expect(useUiStore.getState().reviewModal).toBe("none");
+    fireEvent.click(reviewBtn);
+    expect(useUiStore.getState().reviewModal).toBe("mission");
+  });
+
+  it("keeps the bar hidden while the plan read is still PENDING — unknown plan state is not readiness", async () => {
+    getStateMock.mockResolvedValue(runtimeState({ hasActiveRun: false }));
+    getDraftMock.mockResolvedValue(draftReady());
+    getDiffMock.mockResolvedValue(diffAccepted(false));
+    getPlanMock.mockImplementation(() => new Promise(() => {})); // never settles
+    renderControls();
+
+    await screen.findByText(/Mission contract not accepted/i);
+    expect(
+      screen.queryByRole("button", { name: "Review & accept contract" }),
+    ).toBeNull();
+  });
+
+  it("keeps the bar hidden after a FAILED plan read — a failed read must not unlock readiness", async () => {
+    getStateMock.mockResolvedValue(runtimeState({ hasActiveRun: false }));
+    getDraftMock.mockResolvedValue(draftReady());
+    getDiffMock.mockResolvedValue(diffAccepted(false));
+    getPlanMock.mockResolvedValue({
+      ok: false as const,
+      error: { code: "session.plan_read_failed", message: "boom", correlationId: "t" },
+    });
+    renderControls();
+
+    await screen.findByText(/Mission contract not accepted/i);
+    expect(
+      screen.queryByRole("button", { name: "Review & accept contract" }),
+    ).toBeNull();
+  });
+
+  it("keeps the bar hidden while an enabled plan is still missing — MissionRail's Preparing state must win", async () => {
+    // Shared readiness predicate (planMissing, exported by MissionRail): a
+    // ready draft with plan-mode ON but an empty plan body is NOT the
+    // MISSION READY state — the rail says Preparing, and the bar must agree.
+    getStateMock.mockResolvedValue(runtimeState({ hasActiveRun: false }));
+    getDraftMock.mockResolvedValue(draftReady());
+    getDiffMock.mockResolvedValue(diffAccepted(false));
+    getPlanMock.mockResolvedValue(ok({ enabled: true, accepted: false, planMd: "" }));
+    renderControls();
+
+    // The standing notice (the pre-existing affordance) stays instead.
+    await screen.findByText(/Mission contract not accepted/i);
+    expect(
+      screen.queryByRole("button", { name: "Review & accept contract" }),
+    ).toBeNull();
   });
 
   it("shows the standing acceptance-pending notice while the draft is still in setup", async () => {
@@ -154,6 +242,54 @@ describe("MissionControls", () => {
 
     await screen.findByText(/Mission contract not accepted/i);
     expect(screen.queryByRole("button", { name: "Start mission" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Review & accept contract" }),
+    ).toBeNull();
+  });
+
+  it("holds the review bar until the chat turn settles, revealing it only once chatSubmitting goes false (no mid-turn flash)", async () => {
+    getStateMock.mockResolvedValue(runtimeState({ hasActiveRun: false }));
+    getDraftMock.mockResolvedValue(draftReady());
+    getDiffMock.mockResolvedValue(diffAccepted(false));
+    let settleSubmit!: (r: { ok: true; data: { text: null } }) => void;
+    chatSubmitMock.mockReturnValue({
+      promise: new Promise((resolve) => {
+        settleSubmit = resolve;
+      }),
+      cancel: vi.fn(),
+    });
+    setVex();
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    function SharedWrapper({ children }: { readonly children: ReactNode }) {
+      return createElement(QueryClientProvider, { client }, children);
+    }
+    const submitHook = renderHook(() => useSubmitChat(), {
+      wrapper: SharedWrapper,
+    });
+    void submitHook.result.current.mutate({ sessionId: SESSION, message: "hi" });
+    await waitFor(() => expect(chatSubmitMock).toHaveBeenCalledTimes(1));
+
+    renderControlsOnClient(client);
+
+    // Turn still in flight → the bar is HELD; the pre-existing standing
+    // notice covers this state instead (never both at once).
+    await screen.findByText(/Mission contract not accepted/i);
+    expect(
+      screen.queryByRole("button", { name: "Review & accept contract" }),
+    ).toBeNull();
+
+    await act(async () => {
+      settleSubmit({ ok: true, data: { text: null } });
+      await Promise.resolve();
+    });
+
+    // Settled → the bar reveals.
+    await screen.findByRole("button", { name: "Review & accept contract" });
   });
 
   it("running: Stop + Edit enabled, Continue + Recover disabled", async () => {

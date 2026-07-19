@@ -9,6 +9,11 @@
  *   - continue/stop  → runtimeKeys.state
  *   - renew          → missionKeys.all
  *   - setAutoRetry   → missionKeys.draft
+ *
+ * `useMissionLiveSync` (review-&-accept bar) mirrors
+ * `useTranscriptLiveSync`/`useUsageLiveSync`: subscribes/unsubscribes,
+ * ignores foreign-session events, invalidates draft + diff on a matching
+ * transcript append, and runs a 30s fallback poll.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,6 +26,7 @@ import {
   useAcceptMissionContract,
   useEditMission,
   useMissionContinue,
+  useMissionLiveSync,
   useMissionRecover,
   useMissionRenew,
   useMissionRetry,
@@ -28,6 +34,7 @@ import {
   useMissionStop,
   useRenewableMissionSource,
   useSetAutoRetry,
+  MISSION_LIVE_FALLBACK_POLL_MS,
 } from "../mission.js";
 import {
   missionKeys,
@@ -53,18 +60,51 @@ const mockMissionBridge = {
   setAutoRetry: vi.fn(),
 };
 
+type TranscriptListener = (event: {
+  type: string;
+  sessionId: string;
+  messageId: number;
+  role: string;
+  createdAt: string;
+  messageType: string | null;
+  correlationId: string | null;
+}) => void;
+
+let lastSubscribedListener: TranscriptListener | null = null;
+const unsubscribeMock = vi.fn();
+const onTranscriptAppendMock = vi.fn((cb: TranscriptListener) => {
+  lastSubscribedListener = cb;
+  return unsubscribeMock;
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
+  lastSubscribedListener = null;
   Object.defineProperty(window, "vex", {
     configurable: true,
     writable: true,
-    value: { mission: mockMissionBridge },
+    value: {
+      mission: mockMissionBridge,
+      engine: { onTranscriptAppend: onTranscriptAppendMock },
+    },
   });
 });
 
 afterEach(() => {
   Reflect.deleteProperty(window, "vex");
 });
+
+function sampleTranscriptEvent(sessionId: string) {
+  return {
+    type: "engine.transcript.append",
+    sessionId,
+    messageId: 1,
+    role: "assistant",
+    createdAt: "2026-05-21T10:00:00.000Z",
+    messageType: null,
+    correlationId: null,
+  };
+}
 
 function makeWrapper(client: QueryClient) {
   return function Wrapper({ children }: { children: ReactNode }) {
@@ -360,5 +400,101 @@ describe("mission hook invalidations", () => {
     });
     expect(result.current.fetchStatus).toBe("idle");
     expect(mockMissionBridge.getRenewableSource).not.toHaveBeenCalled();
+  });
+});
+
+describe("useMissionLiveSync", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const SESSION_B = "00000000-0000-4000-8000-000000000002";
+
+  it("subscribes on mount and unsubscribes on unmount", () => {
+    const { client } = makeClient();
+    const { unmount } = renderHook(() => useMissionLiveSync(SESSION), {
+      wrapper: makeWrapper(client),
+    });
+    expect(lastSubscribedListener).not.toBeNull();
+    unmount();
+    expect(unsubscribeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("no-ops on null sessionId (no subscribe)", () => {
+    const { client } = makeClient();
+    renderHook(() => useMissionLiveSync(null), { wrapper: makeWrapper(client) });
+    expect(lastSubscribedListener).toBeNull();
+    expect(onTranscriptAppendMock).not.toHaveBeenCalled();
+  });
+
+  it("invalidates draft + diff for the session on a matching transcript-append event", () => {
+    const { client, invalidateSpy } = makeClient();
+    renderHook(() => useMissionLiveSync(SESSION), {
+      wrapper: makeWrapper(client),
+    });
+
+    lastSubscribedListener!(sampleTranscriptEvent(SESSION));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: missionKeys.draft(SESSION),
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: missionKeys.diffsForSession(SESSION),
+    });
+  });
+
+  it("ignores events for a different session", () => {
+    const { client, invalidateSpy } = makeClient();
+    renderHook(() => useMissionLiveSync(SESSION), {
+      wrapper: makeWrapper(client),
+    });
+
+    lastSubscribedListener!(sampleTranscriptEvent(SESSION_B));
+
+    expect(invalidateSpy).not.toHaveBeenCalled();
+  });
+
+  it("runs the 30s fallback poll while mounted (draft + diff, repeated ticks), stops after unmount", () => {
+    const { client, invalidateSpy } = makeClient();
+    const { unmount } = renderHook(() => useMissionLiveSync(SESSION), {
+      wrapper: makeWrapper(client),
+    });
+
+    expect(invalidateSpy).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(MISSION_LIVE_FALLBACK_POLL_MS);
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: missionKeys.draft(SESSION),
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: missionKeys.diffsForSession(SESSION),
+    });
+    const callsAfterFirstTick = invalidateSpy.mock.calls.length;
+
+    act(() => {
+      vi.advanceTimersByTime(MISSION_LIVE_FALLBACK_POLL_MS);
+    });
+    expect(invalidateSpy.mock.calls.length).toBeGreaterThan(callsAfterFirstTick);
+
+    const callsAfterSecondTick = invalidateSpy.mock.calls.length;
+    unmount();
+    act(() => {
+      vi.advanceTimersByTime(MISSION_LIVE_FALLBACK_POLL_MS);
+    });
+    expect(invalidateSpy.mock.calls.length).toBe(callsAfterSecondTick);
+  });
+
+  it("mounts no interval handle for a null session (no leaked timer)", () => {
+    const { client, invalidateSpy } = makeClient();
+    renderHook(() => useMissionLiveSync(null), { wrapper: makeWrapper(client) });
+    act(() => {
+      vi.advanceTimersByTime(MISSION_LIVE_FALLBACK_POLL_MS * 2);
+    });
+    expect(invalidateSpy).not.toHaveBeenCalled();
   });
 });
