@@ -47,8 +47,8 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   Clock03Icon: "Clock03Icon",
   DatabaseLightningIcon: "DatabaseLightningIcon",
   Delete02Icon: "Delete02Icon",
-  Exchange01Icon: "Exchange01Icon",
-  Fuel01Icon: "Fuel01Icon",
+  FireIcon: "FireIcon",
+  ChartLineData01Icon: "ChartLineData01Icon",
   FilterHorizontalIcon: "FilterHorizontalIcon",
   Brain01Icon: "Brain01Icon",
   MapPinIcon: "MapPinIcon",
@@ -63,7 +63,7 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   StarIcon: "StarIcon",
   StopCircleIcon: "StopCircleIcon",
   Target02Icon: "Target02Icon",
-  Wallet01Icon: "Wallet01Icon",
+  PercentSquareIcon: "PercentSquareIcon",
   ZapIcon: "ZapIcon",
 }));
 
@@ -648,7 +648,9 @@ describe("AppShell", () => {
     // activeSessionId is set but the detail (activeSession) is still unresolved
     // → quick-action chips stay hidden even though the transcript query
     // succeeded empty (gated on a resolved activeSession, no flicker).
-    expect(screen.queryByRole("button", { name: /wallet balances/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /hunt trending memecoins/i }),
+    ).toBeNull();
   });
 
   it("enables Send when the detail query errors (bug A)", async () => {
@@ -681,7 +683,9 @@ describe("AppShell", () => {
       }),
     );
     // Errored detail → activeSession null → chips hidden (no flicker).
-    expect(screen.queryByRole("button", { name: /wallet balances/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /hunt trending memecoins/i }),
+    ).toBeNull();
   });
 
 });
