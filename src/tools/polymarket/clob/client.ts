@@ -22,6 +22,13 @@ import {
   validateBatchMidpointsResponse, validateBatchSpreadsResponse,
   validateBatchLastTradesPricesResponse, validateOrderScoringResponse,
 } from "./validation.js";
+import {
+  validateSimplifiedMarketsResponse, validateRebatesResponse,
+  validateCurrentRewardsResponse, validateMarketRewardsResponse,
+  validateMultiMarketRewardsResponse, validateUserEarningsResponse,
+  validateUserTotalEarningsResponse, validateUserRewardPercentagesResponse,
+  validateUserEarningsMarketsResponse,
+} from "./validation/rewards.js";
 import logger from "../../../utils/logger.js";
 import { buildClobUrl, clobErrorMessage, buildClobAuthHeaders } from "./client/http.js";
 import type { VexError } from "../../../errors.js";
@@ -29,6 +36,9 @@ import type {
   OrderBookSummary, SendOrderRequest, SendOrderResponse,
   OpenOrder, PaginatedOrders, CancelResponse, PaginatedTrades,
   PriceHistoryResponse, BookRequest, LastTradePrice, OrderScoringResponse,
+  PaginatedSimplifiedMarkets, RebateEntry, PaginatedCurrentRewards,
+  PaginatedMarketRewards, PaginatedMultiMarketInfo, PaginatedUserEarnings,
+  UserTotalEarningEntry, UserRewardPercentages, PaginatedUserRewardsMarkets,
 } from "./types.js";
 
 /**
@@ -233,50 +243,50 @@ export class PolyClobClient {
     }, body);
   }
 
-  getSimplifiedMarkets(nextCursor?: string): Promise<unknown> {
-    return this.requestPublic("/simplified-markets", (raw) => raw, nextCursor ? { next_cursor: nextCursor } : undefined);
+  getSimplifiedMarkets(nextCursor?: string): Promise<PaginatedSimplifiedMarkets> {
+    return this.requestPublic("/simplified-markets", validateSimplifiedMarketsResponse, nextCursor ? { next_cursor: nextCursor } : undefined);
   }
 
-  getRebates(date: string, makerAddress: string): Promise<unknown> {
-    return this.requestPublic("/rebates/current", (raw) => raw, { date, maker_address: makerAddress });
+  getRebates(date: string, makerAddress: string): Promise<RebateEntry[]> {
+    return this.requestPublic("/rebates/current", validateRebatesResponse, { date, maker_address: makerAddress });
   }
 
   // ── Rewards (public) ───────────────────────────────────────────────
 
-  getActiveRewards(opts?: { sponsored?: boolean; next_cursor?: string }): Promise<unknown> {
-    return this.requestPublic("/rewards/markets/current", (raw) => raw, {
+  getActiveRewards(opts?: { sponsored?: boolean; next_cursor?: string }): Promise<PaginatedCurrentRewards> {
+    return this.requestPublic("/rewards/markets/current", validateCurrentRewardsResponse, {
       sponsored: opts?.sponsored != null ? String(opts.sponsored) : undefined,
       next_cursor: opts?.next_cursor,
     });
   }
 
-  getMarketRewards(conditionId: string, opts?: { sponsored?: boolean; next_cursor?: string }): Promise<unknown> {
-    return this.requestPublic(`/rewards/markets/${encodeURIComponent(conditionId)}`, (raw) => raw, {
+  getMarketRewards(conditionId: string, opts?: { sponsored?: boolean; next_cursor?: string }): Promise<PaginatedMarketRewards> {
+    return this.requestPublic(`/rewards/markets/${encodeURIComponent(conditionId)}`, validateMarketRewardsResponse, {
       sponsored: opts?.sponsored != null ? String(opts.sponsored) : undefined,
       next_cursor: opts?.next_cursor,
     });
   }
 
-  getMultiMarketRewards(opts?: Record<string, string | undefined>): Promise<unknown> {
-    return this.requestPublic("/rewards/markets/multi", (raw) => raw, opts);
+  getMultiMarketRewards(opts?: Record<string, string | undefined>): Promise<PaginatedMultiMarketInfo> {
+    return this.requestPublic("/rewards/markets/multi", validateMultiMarketRewardsResponse, opts);
   }
 
   // ── Rewards (authenticated) ────────────────────────────────────────
 
-  getUserEarnings(auth: ClobAuthContext, opts: Record<string, string | undefined>): Promise<unknown> {
-    return this.requestAuth(auth, "GET", "/rewards/user", (raw) => raw, undefined, opts);
+  getUserEarnings(auth: ClobAuthContext, opts: Record<string, string | undefined>): Promise<PaginatedUserEarnings> {
+    return this.requestAuth(auth, "GET", "/rewards/user", validateUserEarningsResponse, undefined, opts);
   }
 
-  getUserTotalEarnings(auth: ClobAuthContext, opts: Record<string, string | undefined>): Promise<unknown> {
-    return this.requestAuth(auth, "GET", "/rewards/user/total", (raw) => raw, undefined, opts);
+  getUserTotalEarnings(auth: ClobAuthContext, opts: Record<string, string | undefined>): Promise<UserTotalEarningEntry[]> {
+    return this.requestAuth(auth, "GET", "/rewards/user/total", validateUserTotalEarningsResponse, undefined, opts);
   }
 
-  getUserRewardPercentages(auth: ClobAuthContext, opts?: Record<string, string | undefined>): Promise<unknown> {
-    return this.requestAuth(auth, "GET", "/rewards/user/percentages", (raw) => raw, undefined, opts);
+  getUserRewardPercentages(auth: ClobAuthContext, opts?: Record<string, string | undefined>): Promise<UserRewardPercentages> {
+    return this.requestAuth(auth, "GET", "/rewards/user/percentages", validateUserRewardPercentagesResponse, undefined, opts);
   }
 
-  getUserEarningsMarkets(auth: ClobAuthContext, opts?: Record<string, string | undefined>): Promise<unknown> {
-    return this.requestAuth(auth, "GET", "/rewards/user/markets", (raw) => raw, undefined, opts);
+  getUserEarningsMarkets(auth: ClobAuthContext, opts?: Record<string, string | undefined>): Promise<PaginatedUserRewardsMarkets> {
+    return this.requestAuth(auth, "GET", "/rewards/user/markets", validateUserEarningsMarketsResponse, undefined, opts);
   }
 
   getOrderScoring(auth: ClobAuthContext, orderId: string): Promise<OrderScoringResponse> {

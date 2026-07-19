@@ -150,3 +150,192 @@ export interface PriceHistoryPoint {
 export interface PriceHistoryResponse {
   history: PriceHistoryPoint[];
 }
+
+// ── Rewards / Rebates / Simplified Markets ───────────────────────────
+
+export interface RewardsToken {
+  token_id: string;
+  outcome: string;
+  price: number;
+}
+
+export interface RewardsConfigItem {
+  id: number;
+  asset_address: string;
+  start_date: string;
+  end_date: string;
+  rate_per_day: number;
+  total_rewards: number;
+  remaining_reward_amount?: number;
+  total_days?: number;
+}
+
+export interface SimplifiedMarketRewardsRate {
+  asset_address: string;
+  rewards_daily_rate: number;
+}
+
+export interface SimplifiedMarketRewards {
+  rates: SimplifiedMarketRewardsRate[];
+  min_size: number;
+  max_spread: number;
+}
+
+export interface SimplifiedMarketToken {
+  token_id: string;
+  outcome: string;
+  price: number;
+  winner: boolean;
+}
+
+export interface SimplifiedMarket {
+  condition_id: string;
+  rewards: SimplifiedMarketRewards;
+  tokens: SimplifiedMarketToken[];
+  active: boolean;
+  closed: boolean;
+  archived: boolean;
+  accepting_orders: boolean;
+}
+
+export interface PaginatedSimplifiedMarkets {
+  limit: number;
+  next_cursor: string;
+  count: number;
+  data: SimplifiedMarket[];
+}
+
+export interface RebateEntry {
+  date: string;
+  condition_id: string;
+  asset_address: string;
+  maker_address: string;
+  rebated_fees_usdc: string;
+}
+
+export interface CurrentReward {
+  condition_id: string;
+  rewards_max_spread: number;
+  rewards_min_size: number;
+  rewards_config: RewardsConfigItem[];
+  sponsored_daily_rate?: number;
+  sponsors_count?: number;
+  native_daily_rate?: number;
+  total_daily_rate?: number;
+}
+
+export interface PaginatedCurrentRewards {
+  limit: number;
+  count: number;
+  next_cursor: string;
+  data: CurrentReward[];
+}
+
+export interface MarketReward {
+  condition_id: string;
+  question: string;
+  market_slug: string;
+  event_slug: string;
+  image: string;
+  rewards_max_spread: number;
+  rewards_min_size: number;
+  market_competitiveness: number;
+  tokens: RewardsToken[];
+  rewards_config: RewardsConfigItem[];
+}
+
+export interface PaginatedMarketRewards {
+  limit: number;
+  count: number;
+  next_cursor: string;
+  data: MarketReward[];
+}
+
+export interface MultiMarketInfo {
+  condition_id: string;
+  event_id: string;
+  event_slug: string;
+  created_at: string;
+  group_item_title: string;
+  image: string;
+  market_competitiveness: number;
+  market_id: string;
+  market_slug: string;
+  one_day_price_change: number;
+  question: string;
+  rewards_max_spread: number;
+  rewards_min_size: number;
+  spread: number;
+  end_date: string;
+  tokens: RewardsToken[];
+  volume_24hr: number;
+  rewards_config: RewardsConfigItem[];
+}
+
+export interface PaginatedMultiMarketInfo {
+  limit: number;
+  count: number;
+  next_cursor: string;
+  data: MultiMarketInfo[];
+}
+
+export interface UserEarning {
+  date: string;
+  condition_id: string;
+  asset_address: string;
+  maker_address: string;
+  earnings: number;
+  asset_rate: number;
+}
+
+export interface PaginatedUserEarnings {
+  limit: number;
+  count: number;
+  next_cursor: string;
+  data: UserEarning[];
+}
+
+export interface UserTotalEarningEntry {
+  date: string;
+  asset_address: string;
+  maker_address: string;
+  earnings: number;
+  asset_rate: number;
+}
+
+/** `condition_id → reward percentage`, per `/rewards/user/percentages`. */
+export type UserRewardPercentages = Record<string, number>;
+
+export interface AssetEarning {
+  asset_address: string;
+  earnings: number;
+  asset_rate: number;
+}
+
+export interface UserRewardsMarket {
+  condition_id: string;
+  market_id: string;
+  event_id: string;
+  question: string;
+  market_slug: string;
+  event_slug: string;
+  image: string;
+  rewards_max_spread: number;
+  rewards_min_size: number;
+  volume_24hr: number;
+  spread: number;
+  market_competitiveness: number;
+  tokens: RewardsToken[];
+  rewards_config: RewardsConfigItem[];
+  maker_address: string;
+  earning_percentage: number;
+  earnings: AssetEarning[];
+}
+
+export interface PaginatedUserRewardsMarkets {
+  limit: number;
+  count: number;
+  total_count: number;
+  next_cursor: string;
+  data: UserRewardsMarket[];
+}
