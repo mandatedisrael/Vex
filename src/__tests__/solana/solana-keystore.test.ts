@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Keypair } from "@solana/web3.js";
 import { ErrorCodes } from "../../errors.js";
+import { encryptSecretBytes } from "@tools/wallet/keystore.js";
 import {
   decryptSolanaSecretKey,
   deriveSolanaAddress,
@@ -92,6 +93,24 @@ describe("solana keystore helpers", () => {
         decryptSolanaSecretKey(keystore, "wrong-password");
       } catch (err: unknown) {
         expect((err as { code: string }).code).toBe(ErrorCodes.KEYSTORE_DECRYPT_FAILED);
+      }
+    });
+  });
+
+  describe("decrypt with correct password but structurally bad payload", () => {
+    it("throws KEYSTORE_CORRUPT (not KEYSTORE_DECRYPT_FAILED) when a successful decrypt yields a non-64-byte payload", () => {
+      // Encrypt a payload of the wrong length directly (bypassing encryptSolanaSecretKey's
+      // own length guard) so the password/crypto succeeds and the post-decrypt length
+      // check is the only thing that fails. This is a structural/corrupt condition,
+      // not a wrong-password condition, and must not be mislabeled as one.
+      const keystore = encryptSecretBytes(new Uint8Array(32), "correct-password");
+
+      expect(() => decryptSolanaSecretKey(keystore, "correct-password")).toThrow();
+      try {
+        decryptSolanaSecretKey(keystore, "correct-password");
+      } catch (err: unknown) {
+        expect((err as { code: string }).code).toBe(ErrorCodes.KEYSTORE_CORRUPT);
+        expect((err as { code: string }).code).not.toBe(ErrorCodes.KEYSTORE_DECRYPT_FAILED);
       }
     });
   });

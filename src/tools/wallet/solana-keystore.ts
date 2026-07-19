@@ -67,7 +67,17 @@ export function encryptSolanaSecretKey(secretKey: Uint8Array, password: string):
 export function decryptSolanaSecretKey(keystore: KeystoreV1, password: string): Uint8Array {
   const secretKey = decryptSecretBytes(keystore, password);
   if (secretKey.length !== SOLANA_SECRET_KEY_LENGTH) {
-    throw new VexError(ErrorCodes.KEYSTORE_DECRYPT_FAILED, `Solana secret key must be ${SOLANA_SECRET_KEY_LENGTH} bytes after decrypt`);
+    // Decrypt already succeeded (right password, valid AES-GCM auth tag) — a
+    // wrong-length payload past that point is a structural/corrupt keystore,
+    // not a wrong-password condition. Keep KEYSTORE_DECRYPT_FAILED reserved
+    // for actual crypto failures (see decryptSecretBytes) so wallets-runner's
+    // "wrong password or corrupted keystore" mapping isn't shown for a
+    // corrupt-but-decryptable file.
+    throw new VexError(
+      ErrorCodes.KEYSTORE_CORRUPT,
+      `Solana secret key must be ${SOLANA_SECRET_KEY_LENGTH} bytes after decrypt`,
+      "Re-import your private key or restore from backup.",
+    );
   }
   return secretKey;
 }
