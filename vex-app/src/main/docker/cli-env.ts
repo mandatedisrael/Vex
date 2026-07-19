@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import { homedir as getHomedir } from "node:os";
 import { posix } from "node:path";
+import { withoutManagedSecrets } from "./env-hygiene.js";
 
 export interface BuildDockerPathOptions {
   readonly platform: NodeJS.Platform;
@@ -65,12 +66,18 @@ function directoryExists(path: string): boolean {
   }
 }
 
-/** Recomputes Docker CLI candidates per spawn so Recheck sees new installs. */
+/**
+ * Recomputes Docker CLI candidates per spawn so Recheck sees new installs,
+ * and strips managed secrets so the Docker CLI/compose child never inherits
+ * the master password or vault-managed API keys.
+ */
 export function dockerSpawnEnv(): NodeJS.ProcessEnv {
-  return buildDockerPath({
-    platform: process.platform,
-    homedir: getHomedir(),
-    env: process.env,
-    dirExists: directoryExists,
-  });
+  return withoutManagedSecrets(
+    buildDockerPath({
+      platform: process.platform,
+      homedir: getHomedir(),
+      env: process.env,
+      dirExists: directoryExists,
+    }),
+  );
 }

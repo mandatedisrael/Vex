@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { buildDockerPath } from "../cli-env.js";
+import { buildDockerPath, dockerSpawnEnv } from "../cli-env.js";
 
 const DARWIN_CANDIDATES = [
   "/usr/local/bin",
@@ -91,5 +91,26 @@ describe("buildDockerPath", () => {
       KEEP: "yes",
     });
     expect(dirExists).not.toHaveBeenCalled();
+  });
+});
+
+describe("dockerSpawnEnv", () => {
+  it("strips managed secrets from the real process.env (covers docker CLI + probe/daemon.ts callers)", () => {
+    const originalEnv = process.env;
+    process.env = {
+      ...originalEnv,
+      PATH: originalEnv.PATH ?? "/usr/bin",
+      OPENROUTER_API_KEY: "secret",
+      VEX_KEYSTORE_PASSWORD: "master-password",
+    };
+    try {
+      const result = dockerSpawnEnv();
+
+      expect(result.OPENROUTER_API_KEY).toBeUndefined();
+      expect(result.VEX_KEYSTORE_PASSWORD).toBeUndefined();
+      expect(result.PATH).toBeDefined();
+    } finally {
+      process.env = originalEnv;
+    }
   });
 });
