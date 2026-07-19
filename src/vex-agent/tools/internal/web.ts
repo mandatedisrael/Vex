@@ -26,7 +26,6 @@ import logger from "@utils/logger.js";
 const DEFAULT_SEARCH_LIMIT = 10;   // search returns up to N results
 const DEFAULT_FETCH_TOP = 5;       // auto-scrape top N when fetchTop is omitted
 const MAX_FETCH_TOP = 10;          // hard cap per call (Tavily allows up to 20)
-const FETCH_TIMEOUT_MS = 15_000;
 const SEARCH_TIMEOUT_S = 30;
 const EXTRACT_TIMEOUT_S = 25;
 
@@ -99,6 +98,22 @@ export async function handleWebResearch(
 
 // ── Single-page fetch (Tavily extract → raw HTTP fallback) ─────
 
+/**
+ * Cache writes are BEST-EFFORT: a failed local write must never discard a
+ * usable provider result or masquerade as a Tavily failure — the content is
+ * already in hand; only future cache hits are lost.
+ */
+async function cacheFetchBestEffort(url: string, markdown: string, title: string | null): Promise<void> {
+  try {
+    await searchRepo.cacheFetchResult(url, markdown, title);
+  } catch (err) {
+    logger.warn("web.fetch.cache_write_failed", {
+      url: url.slice(0, 60),
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 type FetchedPage = {
   url: string;
   title: string | null;
@@ -116,62 +131,58 @@ async function fetchUrl(url: string): Promise<ToolResult> {
   }
 
   const client = getTavilyClient();
-  if (client) {
+  if (!client) {
+    // Defense-in-depth: the registry hides web_research without the key
+    // (requiresEnv), so this branch is unreachable via visible tools.
+    logger.warn("web.fetch.no_api_key", { hint: "Set TAVILY_API_KEY for web fetch" });
+    return fail(
+      "Web fetch unavailable — TAVILY_API_KEY not configured. The key is free (tavily.com); add it in Settings to enable web research.",
+    );
+  }
+  {
     try {
       // Tavily's default extract timeout is 10s (basic) / 30s (advanced).
       // We pin 25s so basic depth still has runway before the SDK fires.
       const response = await client.extract([url], { timeout: EXTRACT_TIMEOUT_S });
-      const extracted = response.results?.[0];
+      // Provider data is untrusted: accept ONLY a result for the URL we
+      // requested — a planted result for a different URL must never be
+      // served (nor cached under the requested key). Tavily's server-side
+      // URL echo is undocumented (SDK verified as byte-verbatim passthrough,
+      // 2026-07-19), so a mismatch here is at least as likely benign
+      // normalization as an attack — the fail-safe response is an honest
+      // fetch failure, never acceptance.
+      const extracted = (response.results ?? []).find((r) => r.url === url);
+      const mismatched = !extracted && (response.results?.length ?? 0) > 0;
+      if (mismatched) {
+        logger.warn("web.fetch.unrequested_result", { url: String(response.results?.[0]?.url ?? "").slice(0, 60) });
+      }
       if (extracted?.rawContent) {
         const titleMatch = extracted.rawContent.match(/^#\s+(.+)$/m);
         const title = titleMatch?.[1] ?? null;
-        await searchRepo.cacheFetchResult(url, extracted.rawContent, title);
+        await cacheFetchBestEffort(url, extracted.rawContent, title);
         const content = `# ${title ?? "Fetched page"}\n\nSource: ${url}\n\n${extracted.rawContent}`;
         return ok({ title, url, content });
       }
-      // Tavily returned no usable content. If it explicitly listed this URL in
-      // failedResults, surface the reason before falling back to raw HTTP.
+      // Tavily returned no usable content. Surface the explicit failure
+      // reason when present. There is deliberately NO raw-HTTP fallback:
+      // owner decision (2026-07-19) removed direct fetching from the
+      // privileged process entirely — Tavily's infrastructure does the
+      // fetching, which also removes the local SSRF surface (the concern
+      // that briefly lived here as a destination policy).
       const failedResult = response.failedResults?.find((f) => f.url === url);
+      const reason = failedResult ? failedResult.error : "no usable content returned";
       if (failedResult) {
         logger.warn("web.fetch.tavily_failed_explicit", {
           url: url.slice(0, 60),
           error: failedResult.error,
         });
       }
+      return fail(`Fetch failed: ${reason}`);
     } catch (err) {
-      logger.debug("web.fetch.tavily_failed", { error: err instanceof Error ? err.message : String(err) });
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.debug("web.fetch.tavily_failed", { error: msg });
+      return fail(`Fetch failed: ${msg}`);
     }
-  }
-
-  // Raw HTTP fallback — used when Tavily extract returned empty/errored or no API key.
-  const fallback = await fetchUrlRawHttp(url);
-  if (fallback.ok) {
-    return ok({ title: fallback.title, url: fallback.url, content: fallback.content });
-  }
-  return fail(`Fetch failed: ${fallback.error ?? "unknown error"}`);
-}
-
-// Raw HTTP fetch + parse <title> + slice. Returns FetchedPage shape so it can
-// be reused in the batch path's failure recovery without a wrapper.
-async function fetchUrlRawHttp(url: string): Promise<FetchedPage> {
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Vex/2.0" },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    if (!res.ok) {
-      return { url, title: null, content: "", ok: false, error: `HTTP ${res.status}` };
-    }
-    const text = await res.text();
-    const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
-    const title = titleMatch?.[1]?.trim() ?? null;
-    const markdown = text.slice(0, 50_000);
-    await searchRepo.cacheFetchResult(url, markdown, title);
-    const content = `# ${title ?? "Fetched page"}\n\nSource: ${url}\n\n${markdown}`;
-    return { url, title, content, ok: true };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { url, title: null, content: "", ok: false, error: msg };
   }
 }
 
@@ -209,7 +220,15 @@ export async function searchAndOptionallyFetch(
         url: r.url ?? "",
         content: r.content ?? "",
       }));
-      await searchRepo.cacheResult(query, results);
+      try {
+        await searchRepo.cacheResult(query, results);
+      } catch (cacheErr) {
+        // Best-effort: a failed cache write must not turn a successful
+        // search into web.search.failed — the results are already in hand.
+        logger.warn("web.search.cache_write_failed", {
+          error: cacheErr instanceof Error ? cacheErr.message : String(cacheErr),
+        });
+      }
       logger.debug("web.search.completed", { count: results.length, query: query.slice(0, 50) });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -229,9 +248,15 @@ export async function searchAndOptionallyFetch(
   const targets = results.slice(0, Math.min(fetchTop, MAX_FETCH_TOP, results.length));
   const fetchedPages: FetchedPage[] = [];
   const uncachedUrls: string[] = [];
+  // Dedup up front: search results can repeat an URL, and every consumer
+  // below (extract call, batch-failure loop, no-key loop, outcome emission)
+  // must see each URL exactly once.
+  const seenTargets = new Set<string>();
 
   for (const target of targets) {
     if (!target.url) continue;
+    if (seenTargets.has(target.url)) continue;
+    seenTargets.add(target.url);
     if (!isHttpUrl(target.url)) {
       fetchedPages.push({
         url: target.url,
@@ -266,46 +291,66 @@ export async function searchAndOptionallyFetch(
           query,
         });
 
-        // Successful results — cache + push.
+        // EXACTLY-ONCE accounting, keyed by what WE requested. The response
+        // is provider data (untrusted until validated): duplicate entries,
+        // an URL listed in both results and failedResults, or an URL we
+        // never asked for must not multiply/poison outcomes or the cache.
+        // Precedence is deterministic: a usable success beats any failure
+        // report for the same URL; among duplicate successes the first wins.
+        const requested = new Set(uncachedUrls); // already unique (deduped at collection)
+        const outcomes = new Map<string, FetchedPage>();
         for (const r of response.results ?? []) {
-          if (!r.rawContent) continue;
+          if (!requested.has(r.url)) {
+            logger.warn("web.fetch.unrequested_result", { url: r.url.slice(0, 60) });
+            continue; // never accept — and never cache — what we did not ask for
+          }
+          if (outcomes.get(r.url)?.ok) continue; // first success wins
+          if (!r.rawContent) {
+            // Still "accounted for" by Tavily — must not vanish: ok:false,
+            // unless a duplicate already produced a real outcome.
+            if (!outcomes.has(r.url)) {
+              outcomes.set(r.url, { url: r.url, title: null, content: "", ok: false, error: "empty content from Tavily extract" });
+            }
+            continue;
+          }
           const titleMatch = r.rawContent.match(/^#\s+(.+)$/m);
           const title = r.title ?? titleMatch?.[1] ?? null;
-          await searchRepo.cacheFetchResult(r.url, r.rawContent, title);
+          await cacheFetchBestEffort(r.url, r.rawContent, title);
           const content = `# ${title ?? "Fetched page"}\n\nSource: ${r.url}\n\n${r.rawContent}`;
-          fetchedPages.push({ url: r.url, title, content, ok: true });
+          outcomes.set(r.url, { url: r.url, title, content, ok: true }); // success overrides an earlier failure entry
         }
-
-        // Explicit failures — log + push as ok:false.
         for (const f of response.failedResults ?? []) {
+          if (!requested.has(f.url)) {
+            logger.warn("web.fetch.unrequested_failure", { url: f.url.slice(0, 60) });
+            continue;
+          }
           logger.warn("web.fetch.tavily_failed_explicit", {
             url: f.url.slice(0, 60),
             error: f.error,
           });
-          fetchedPages.push({ url: f.url, title: null, content: "", ok: false, error: f.error });
+          if (outcomes.has(f.url)) continue; // success (or first report) wins
+          outcomes.set(f.url, { url: f.url, title: null, content: "", ok: false, error: f.error });
         }
-
-        // Orphans (URLs neither in results nor failedResults) — fallback raw HTTP.
-        const accountedFor = new Set([
-          ...(response.results ?? []).map((r) => r.url),
-          ...(response.failedResults ?? []).map((f) => f.url),
-        ]);
-        const orphans = uncachedUrls.filter((u) => !accountedFor.has(u));
-        for (const url of orphans) {
-          fetchedPages.push(await fetchUrlRawHttp(url));
+        // One outcome per requested URL, in request order; anything Tavily
+        // left unmentioned is an honest failure (no raw-HTTP fallback exists
+        // — owner decision: fetching happens only through Tavily).
+        for (const url of [...requested]) {
+          fetchedPages.push(
+            outcomes.get(url) ?? { url, title: null, content: "", ok: false, error: "not returned by Tavily extract" },
+          );
         }
       } catch (err) {
-        // Whole batch failed (timeout, auth) — fallback raw HTTP per URL.
+        // Whole batch failed (timeout, auth) — every URL reported as failed.
         const msg = err instanceof Error ? err.message : String(err);
         logger.warn("web.fetch.tavily_batch_failed", { error: msg, count: uncachedUrls.length });
         for (const url of uncachedUrls) {
-          fetchedPages.push(await fetchUrlRawHttp(url));
+          fetchedPages.push({ url, title: null, content: "", ok: false, error: msg });
         }
       }
     } else {
-      // No API key — raw HTTP per URL.
+      // No API key — fetching is unavailable (free key: tavily.com).
       for (const url of uncachedUrls) {
-        fetchedPages.push(await fetchUrlRawHttp(url));
+        fetchedPages.push({ url, title: null, content: "", ok: false, error: "TAVILY_API_KEY not configured" });
       }
     }
   }

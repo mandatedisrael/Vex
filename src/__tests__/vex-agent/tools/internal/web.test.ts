@@ -162,57 +162,61 @@ describe("web_research", () => {
       if (origKey) process.env.TAVILY_API_KEY = origKey; else delete process.env.TAVILY_API_KEY;
     });
 
-    it("falls back to raw HTTP and surfaces failedResults when Tavily extract returns empty", async () => {
+    it("surfaces failedResults as an honest failure — there is NO raw-HTTP fallback (Tavily-only, owner decision)", async () => {
       const origKey = process.env.TAVILY_API_KEY;
       process.env.TAVILY_API_KEY = "test-key";
-      // Tavily reports the URL in failedResults — code must log it and still try
-      // the raw HTTP fallback (preserving old behavior).
       mockTavilyExtract.mockResolvedValueOnce({
         results: [],
         failedResults: [{ url: "https://blocked.example.com", error: "403 Forbidden" }],
       });
-      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-        new Response("<html><title>Blocked Page</title><body>fallback body</body></html>", {
-          status: 200,
-        }),
-      );
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
 
       const result = await handleWebResearch(
         { url: "https://blocked.example.com" },
         baseContext,
       );
-      expect(result.success).toBe(true);
-      const parsed = JSON.parse(result.output);
-      expect(parsed.title).toBe("Blocked Page");
-      expect(parsed.content).toContain("fallback body");
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(result.success).toBe(false);
+      expect(result.output).toContain("403 Forbidden");
+      // The privileged process must never fetch the URL itself.
+      expect(fetchSpy).not.toHaveBeenCalled();
 
       fetchSpy.mockRestore();
       if (origKey) process.env.TAVILY_API_KEY = origKey; else delete process.env.TAVILY_API_KEY;
     });
 
-    it("falls back to raw HTTP when Tavily extract throws (timeout)", async () => {
+    it("a Tavily extract failure (timeout) is an honest failure — no raw-HTTP fallback", async () => {
       const origKey = process.env.TAVILY_API_KEY;
       process.env.TAVILY_API_KEY = "test-key";
       mockTavilyExtract.mockRejectedValueOnce(new Error("Request timed out after 25000ms"));
-      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-        new Response("<html><title>HTTP OK</title><body>raw body</body></html>", {
-          status: 200,
-        }),
-      );
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
 
       const result = await handleWebResearch(
         { url: "https://slow.example.com" },
         baseContext,
       );
-      expect(result.success).toBe(true);
-      const parsed = JSON.parse(result.output);
-      expect(parsed.title).toBe("HTTP OK");
-      expect(parsed.content).toContain("raw body");
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(result.success).toBe(false);
+      expect(result.output).toContain("timed out");
+      expect(fetchSpy).not.toHaveBeenCalled();
 
       fetchSpy.mockRestore();
       if (origKey) process.env.TAVILY_API_KEY = origKey; else delete process.env.TAVILY_API_KEY;
+    });
+
+    it("fetch without TAVILY_API_KEY fails with actionable guidance — defense-in-depth: the registry (requiresEnv) already hides the tool from the LLM without the key", async () => {
+      const origKey = process.env.TAVILY_API_KEY;
+      delete process.env.TAVILY_API_KEY;
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+      const result = await handleWebResearch(
+        { url: "https://example.com/article" },
+        baseContext,
+      );
+      expect(result.success).toBe(false);
+      expect(result.output).toContain("TAVILY_API_KEY");
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+      if (origKey) process.env.TAVILY_API_KEY = origKey;
     });
 
     it("rejects plain string (not a url) at Zod boundary", async () => {
@@ -415,7 +419,7 @@ describe("web_research", () => {
       if (origKey) process.env.TAVILY_API_KEY = origKey; else delete process.env.TAVILY_API_KEY;
     });
 
-    it("whole batch failure → fallback raw HTTP per URL", async () => {
+    it("whole batch failure → every URL reported ok:false with the reason — no raw-HTTP fallback", async () => {
       const origKey = process.env.TAVILY_API_KEY;
       process.env.TAVILY_API_KEY = "test-key";
       mockTavilySearch.mockResolvedValueOnce({
@@ -425,21 +429,15 @@ describe("web_research", () => {
         ],
       });
       mockTavilyExtract.mockRejectedValueOnce(new Error("Request timed out after 25000ms"));
-      const fetchSpy = vi
-        .spyOn(globalThis, "fetch")
-        .mockResolvedValueOnce(
-          new Response("<html><title>A page</title><body>raw A</body></html>", { status: 200 }),
-        )
-        .mockResolvedValueOnce(
-          new Response("<html><title>B page</title><body>raw B</body></html>", { status: 200 }),
-        );
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
 
       const result = await handleWebResearch({ query: "foo", fetchTop: 2 }, baseContext);
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(true); // search itself succeeded — snippets stand
       const parsed = JSON.parse(result.output);
       expect(parsed.fetchedPages).toHaveLength(2);
-      expect(parsed.fetchedPages.every((p: { ok: boolean }) => p.ok)).toBe(true);
-      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(parsed.fetchedPages.every((p: { ok: boolean }) => p.ok === false)).toBe(true);
+      expect(parsed.fetchedPages.every((p: { error?: string }) => String(p.error).includes("timed out"))).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
 
       fetchSpy.mockRestore();
       if (origKey) process.env.TAVILY_API_KEY = origKey; else delete process.env.TAVILY_API_KEY;
@@ -465,5 +463,151 @@ describe("web_research", () => {
 
       if (origKey) process.env.TAVILY_API_KEY = origKey; else delete process.env.TAVILY_API_KEY;
     });
+  });
+
+  it("a batch result with EMPTY rawContent is reported ok:false — never silently dropped (exactly-once accounting)", async () => {
+    const origKey = process.env.TAVILY_API_KEY;
+    process.env.TAVILY_API_KEY = "test-key";
+    mockTavilySearch.mockResolvedValueOnce({
+      results: [
+        { title: "A", url: "https://a.example.com", content: "snippet" },
+        { title: "B", url: "https://b.example.com", content: "snippet" },
+      ],
+    });
+    mockTavilyExtract.mockResolvedValueOnce({
+      results: [
+        { url: "https://a.example.com", rawContent: "# A\n\nbody" },
+        { url: "https://b.example.com", rawContent: "" }, // accounted for, but empty
+      ],
+      failedResults: [],
+    });
+
+    const result = await handleWebResearch({ query: "foo", fetchTop: 2 }, baseContext);
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.output);
+    expect(parsed.fetchedPages).toHaveLength(2);
+    const pageB = parsed.fetchedPages.find((p: { url: string }) => p.url === "https://b.example.com");
+    expect(pageB.ok).toBe(false);
+    expect(String(pageB.error)).toContain("empty content");
+
+    if (origKey) process.env.TAVILY_API_KEY = origKey; else delete process.env.TAVILY_API_KEY;
+  });
+
+  it("duplicate results for one URL yield exactly ONE outcome (first success wins)", async () => {
+    const origKey = process.env.TAVILY_API_KEY;
+    process.env.TAVILY_API_KEY = "test-key";
+    mockTavilySearch.mockResolvedValueOnce({
+      results: [{ title: "A", url: "https://a.example.com", content: "snippet" }],
+    });
+    mockTavilyExtract.mockResolvedValueOnce({
+      results: [
+        { url: "https://a.example.com", rawContent: "# First\n\nfirst body" },
+        { url: "https://a.example.com", rawContent: "# Second\n\nsecond body" },
+      ],
+      failedResults: [],
+    });
+
+    const result = await handleWebResearch({ query: "foo", fetchTop: 1 }, baseContext);
+    const parsed = JSON.parse(result.output);
+    expect(parsed.fetchedPages).toHaveLength(1);
+    expect(parsed.fetchedPages[0].ok).toBe(true);
+    expect(parsed.fetchedPages[0].content).toContain("first body");
+
+    if (origKey) process.env.TAVILY_API_KEY = origKey; else delete process.env.TAVILY_API_KEY;
+  });
+
+  it("an URL listed in BOTH results and failedResults resolves to the success (deterministic precedence), once", async () => {
+    const origKey = process.env.TAVILY_API_KEY;
+    process.env.TAVILY_API_KEY = "test-key";
+    mockTavilySearch.mockResolvedValueOnce({
+      results: [{ title: "A", url: "https://a.example.com", content: "snippet" }],
+    });
+    mockTavilyExtract.mockResolvedValueOnce({
+      results: [{ url: "https://a.example.com", rawContent: "# A\n\nreal body" }],
+      failedResults: [{ url: "https://a.example.com", error: "flaky report" }],
+    });
+
+    const result = await handleWebResearch({ query: "foo", fetchTop: 1 }, baseContext);
+    const parsed = JSON.parse(result.output);
+    expect(parsed.fetchedPages).toHaveLength(1);
+    expect(parsed.fetchedPages[0].ok).toBe(true);
+
+    if (origKey) process.env.TAVILY_API_KEY = origKey; else delete process.env.TAVILY_API_KEY;
+  });
+
+  it("an UNREQUESTED result is ignored and never cached (provider data is untrusted)", async () => {
+    const origKey = process.env.TAVILY_API_KEY;
+    process.env.TAVILY_API_KEY = "test-key";
+    mockTavilySearch.mockResolvedValueOnce({
+      results: [{ title: "A", url: "https://a.example.com", content: "snippet" }],
+    });
+    mockTavilyExtract.mockResolvedValueOnce({
+      results: [
+        { url: "https://a.example.com", rawContent: "# A\n\nbody" },
+        { url: "https://evil.example.net/planted", rawContent: "# Planted\n\ninjected" },
+      ],
+      failedResults: [],
+    });
+
+    const result = await handleWebResearch({ query: "foo", fetchTop: 1 }, baseContext);
+    const parsed = JSON.parse(result.output);
+    expect(parsed.fetchedPages).toHaveLength(1);
+    expect(parsed.fetchedPages[0].url).toBe("https://a.example.com");
+    // The planted URL must not reach the fetch cache.
+    const cachedUrls = mockCacheFetchResult.mock.calls.map((c: unknown[]) => c[0]);
+    expect(cachedUrls).not.toContain("https://evil.example.net/planted");
+
+    if (origKey) process.env.TAVILY_API_KEY = origKey; else delete process.env.TAVILY_API_KEY;
+  });
+
+  it("duplicate search-result URLs collapse to ONE outcome even when the whole batch fails", async () => {
+    const origKey = process.env.TAVILY_API_KEY;
+    process.env.TAVILY_API_KEY = "test-key";
+    mockTavilySearch.mockResolvedValueOnce({
+      results: [
+        { title: "A", url: "https://a.example.com", content: "snippet" },
+        { title: "A again", url: "https://a.example.com", content: "snippet2" },
+      ],
+    });
+    mockTavilyExtract.mockRejectedValueOnce(new Error("batch down"));
+
+    const result = await handleWebResearch({ query: "foo", fetchTop: 2 }, baseContext);
+    const parsed = JSON.parse(result.output);
+    expect(parsed.fetchedPages).toHaveLength(1);
+    expect(parsed.fetchedPages[0].ok).toBe(false);
+
+    if (origKey) process.env.TAVILY_API_KEY = origKey; else delete process.env.TAVILY_API_KEY;
+  });
+
+  it("URL-only fetch rejects a result for a DIFFERENT url — fails honestly, caches nothing (planted-result guard)", async () => {
+    const origKey = process.env.TAVILY_API_KEY;
+    process.env.TAVILY_API_KEY = "test-key";
+    mockTavilyExtract.mockResolvedValueOnce({
+      results: [{ url: "https://evil.example.net/planted", rawContent: "# Planted\n\ninjected" }],
+      failedResults: [],
+    });
+
+    const result = await handleWebResearch({ url: "https://a.example.com/doc" }, baseContext);
+    expect(result.success).toBe(false);
+    expect(mockCacheFetchResult).not.toHaveBeenCalled();
+
+    if (origKey) process.env.TAVILY_API_KEY = origKey; else delete process.env.TAVILY_API_KEY;
+  });
+
+  it("a cache-write failure never discards a usable extract — content is served, failure only logged", async () => {
+    const origKey = process.env.TAVILY_API_KEY;
+    process.env.TAVILY_API_KEY = "test-key";
+    mockTavilyExtract.mockResolvedValueOnce({
+      results: [{ url: "https://a.example.com/doc", rawContent: "# Doc\n\nreal body" }],
+      failedResults: [],
+    });
+    mockCacheFetchResult.mockRejectedValueOnce(new Error("disk full"));
+
+    const result = await handleWebResearch({ url: "https://a.example.com/doc" }, baseContext);
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.output);
+    expect(parsed.content).toContain("real body");
+
+    if (origKey) process.env.TAVILY_API_KEY = origKey; else delete process.env.TAVILY_API_KEY;
   });
 });
