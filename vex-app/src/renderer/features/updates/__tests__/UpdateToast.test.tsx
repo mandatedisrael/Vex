@@ -88,6 +88,29 @@ describe("UpdateToast — available", () => {
     expect(screen.getByText("Release notes")).toBeTruthy();
   });
 
+  it("anchors Release notes left and strips its inherited horizontal padding", () => {
+    renderToast(AVAILABLE as ToastableUpdateStatus);
+    const releaseNotes = screen.getByText("Release notes");
+    expect(releaseNotes.className).toContain("mr-auto");
+    expect(releaseNotes.className).toContain("px-0");
+  });
+
+  it("compacts the Later secondary action's horizontal padding", () => {
+    renderToast(AVAILABLE as ToastableUpdateStatus);
+    const later = screen.getByText("Later");
+    expect(later.className).toContain("px-2");
+    expect(later.className).not.toContain("px-4");
+  });
+
+  it("keeps the action row on one line at standard toast width and wraps safely if narrower", () => {
+    renderToast(AVAILABLE as ToastableUpdateStatus);
+    const actionsRow = screen.getByText("Update now").parentElement;
+    expect(actionsRow).not.toBeNull();
+    expect(actionsRow?.className).toContain("flex-wrap");
+    expect(actionsRow?.className).toContain("gap-x-2");
+    expect(actionsRow?.className).toContain("gap-y-1");
+  });
+
   it("fires onUpdateNow / onLater / onReleaseNotes from their buttons", () => {
     const props = renderToast(AVAILABLE as ToastableUpdateStatus);
     fireEvent.click(screen.getByText("Update now"));
@@ -210,5 +233,12 @@ describe("UpdateToast — error", () => {
     expect(props.onTryAgain).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByText("Open download page"));
     expect(props.onReleaseNotes).toHaveBeenCalledTimes(1);
+  });
+
+  it("anchors Open download page left and strips its inherited horizontal padding", () => {
+    renderToast(ERROR as ToastableUpdateStatus);
+    const releaseLink = screen.getByText("Open download page");
+    expect(releaseLink.className).toContain("mr-auto");
+    expect(releaseLink.className).toContain("px-0");
   });
 });
