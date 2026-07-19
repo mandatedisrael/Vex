@@ -47,9 +47,9 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   Clock03Icon: "Clock03Icon",
   DatabaseLightningIcon: "DatabaseLightningIcon",
   Delete02Icon: "Delete02Icon",
-  Exchange01Icon: "Exchange01Icon",
+  FireIcon: "FireIcon",
   FilterHorizontalIcon: "FilterHorizontalIcon",
-  Fuel01Icon: "Fuel01Icon",
+  ChartLineData01Icon: "ChartLineData01Icon",
   Brain01Icon: "Brain01Icon",
   MapPinIcon: "MapPinIcon",
   PanelLeftCloseIcon: "PanelLeftCloseIcon",
@@ -63,7 +63,7 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   StarIcon: "StarIcon",
   StopCircleIcon: "StopCircleIcon",
   Target02Icon: "Target02Icon",
-  Wallet01Icon: "Wallet01Icon",
+  PercentSquareIcon: "PercentSquareIcon",
   ZapIcon: "ZapIcon",
 }));
 
@@ -329,7 +329,9 @@ describe("AppShell", () => {
     // Empty transcript (default mock) → chips are visible as conversation starters.
     renderShell();
     await screen.findByText("Chips");
-    expect(await screen.findByRole("button", { name: /wallet balances/i })).not.toBeNull();
+    expect(
+      await screen.findByRole("button", { name: /hunt trending memecoins/i }),
+    ).not.toBeNull();
   });
 
   it("hides quick-action chips once the session transcript has messages", async () => {
@@ -360,7 +362,9 @@ describe("AppShell", () => {
     renderShell();
     await screen.findByText("hi vex");
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: /wallet balances/i })).toBeNull(),
+      expect(
+        screen.queryByRole("button", { name: /hunt trending memecoins/i }),
+      ).toBeNull(),
     );
   });
 

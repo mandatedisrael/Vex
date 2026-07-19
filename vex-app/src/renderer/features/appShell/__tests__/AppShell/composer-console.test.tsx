@@ -39,9 +39,9 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   MapPinIcon: "MapPinIcon",
   AiBrain05Icon: "AiBrain05Icon",
   StopCircleIcon: "StopCircleIcon",
-  Exchange01Icon: "Exchange01Icon",
-  Fuel01Icon: "Fuel01Icon",
-  Wallet01Icon: "Wallet01Icon",
+  FireIcon: "FireIcon",
+  ChartLineData01Icon: "ChartLineData01Icon",
+  PercentSquareIcon: "PercentSquareIcon",
 }));
 
 const mockSubmitChat = {
@@ -219,7 +219,7 @@ describe("SessionComposer — Signal Console chrome", () => {
     ).toBeNull();
     // Starter chips greet an empty welcome by default (the previous shown state).
     expect(
-      screen.queryByRole("button", { name: /wallet balances/i }),
+      screen.queryByRole("button", { name: /hunt trending memecoins/i }),
     ).not.toBeNull();
   });
 

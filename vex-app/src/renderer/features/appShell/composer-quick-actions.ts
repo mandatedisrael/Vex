@@ -1,16 +1,16 @@
 /**
  * Starter chips shown under an empty conversation's composer — three compact
  * hairline chips DETACHED below the Signal Console, each with a small intent
- * icon (a wallet, a swap/exchange, a fuel gauge). Pure data — each chip seeds
+ * icon (a flame, a market chart, a percent square). Pure data — each chip seeds
  * the composer draft with its full-sentence prompt; the short label is what the
  * chip renders. Hidden in mission mode and once the transcript has messages.
  */
 
 import type { IconSvgElement } from "@hugeicons/react";
 import {
-  Exchange01Icon,
-  Fuel01Icon,
-  Wallet01Icon,
+  ChartLineData01Icon,
+  FireIcon,
+  PercentSquareIcon,
 } from "@hugeicons/core-free-icons";
 
 export interface QuickAction {
@@ -22,19 +22,21 @@ export interface QuickAction {
 
 export const QUICK_ACTIONS: readonly QuickAction[] = [
   {
-    label: "Wallet balances & activity",
-    prompt: "Check my wallet balances and recent activity.",
-    icon: Wallet01Icon,
-  },
-  {
-    label: "Plan a swap — route first",
+    label: "Hunt trending memecoins",
     prompt:
-      "Plan a swap for me — show me the full route and costs before anything moves.",
-    icon: Exchange01Icon,
+      "Hunt the trendiest memecoins right now — combine DexScreener trending narratives with X sentiment if my X account is connected, and propose a plan before any trade.",
+    icon: FireIcon,
   },
   {
-    label: "Watch gas, report daily",
-    prompt: "Set up a mission that watches gas prices and reports to me daily.",
-    icon: Fuel01Icon,
+    label: "Turn on Hypervexing",
+    prompt:
+      "Turn on Hypervexing and scan the perp markets for a setup — propose entry, size, and a protective stop before acting.",
+    icon: ChartLineData01Icon,
+  },
+  {
+    label: "Scout Pendle yields",
+    prompt:
+      "Scout the highest-APY Pendle markets across chains, pick the best fit for my holdings, and walk me through a PT quote — ask me for the amount before quoting.",
+    icon: PercentSquareIcon,
   },
 ];

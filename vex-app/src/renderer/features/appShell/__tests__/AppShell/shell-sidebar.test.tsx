@@ -47,8 +47,8 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   Clock03Icon: "Clock03Icon",
   DatabaseLightningIcon: "DatabaseLightningIcon",
   Delete02Icon: "Delete02Icon",
-  Exchange01Icon: "Exchange01Icon",
-  Fuel01Icon: "Fuel01Icon",
+  FireIcon: "FireIcon",
+  ChartLineData01Icon: "ChartLineData01Icon",
   FilterHorizontalIcon: "FilterHorizontalIcon",
   Brain01Icon: "Brain01Icon",
   MapPinIcon: "MapPinIcon",
@@ -63,7 +63,7 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   SparklesIcon: "SparklesIcon",
   StarIcon: "StarIcon",
   Target02Icon: "Target02Icon",
-  Wallet01Icon: "Wallet01Icon",
+  PercentSquareIcon: "PercentSquareIcon",
   ZapIcon: "ZapIcon",
 }));
 

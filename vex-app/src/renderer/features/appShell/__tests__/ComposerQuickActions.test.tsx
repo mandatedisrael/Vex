@@ -18,9 +18,9 @@ vi.mock("@hugeicons/react", () => ({
 }));
 
 vi.mock("@hugeicons/core-free-icons", () => ({
-  Wallet01Icon: "Wallet01Icon",
-  Exchange01Icon: "Exchange01Icon",
-  Fuel01Icon: "Fuel01Icon",
+  FireIcon: "FireIcon",
+  ChartLineData01Icon: "ChartLineData01Icon",
+  PercentSquareIcon: "PercentSquareIcon",
 }));
 
 const { ComposerQuickActions } = await import("../ComposerQuickActions.js");
@@ -33,10 +33,14 @@ describe("ComposerQuickActions", () => {
     const chips = screen.getAllByRole("button");
     expect(chips).toHaveLength(3);
 
-    // Each intent icon is present (wallet / swap / fuel).
-    expect(container.querySelector('[data-icon="Wallet01Icon"]')).not.toBeNull();
-    expect(container.querySelector('[data-icon="Exchange01Icon"]')).not.toBeNull();
-    expect(container.querySelector('[data-icon="Fuel01Icon"]')).not.toBeNull();
+    // Each intent icon is present (flame / chart / percent square).
+    expect(container.querySelector('[data-icon="FireIcon"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-icon="ChartLineData01Icon"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-icon="PercentSquareIcon"]'),
+    ).not.toBeNull();
 
     // The numbering was dropped — no 01/02/03 marks in the chip text.
     for (const n of ["01", "02", "03"]) {
@@ -49,9 +53,11 @@ describe("ComposerQuickActions", () => {
   it("seeds the draft with the chip's full prompt", () => {
     const onPick = vi.fn();
     render(<ComposerQuickActions onPick={onPick} />);
-    fireEvent.click(screen.getByRole("button", { name: /wallet balances/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /hunt trending memecoins/i }),
+    );
     expect(onPick).toHaveBeenCalledWith(
-      "Check my wallet balances and recent activity.",
+      "Hunt the trendiest memecoins right now — combine DexScreener trending narratives with X sentiment if my X account is connected, and propose a plan before any trade.",
     );
   });
 });
