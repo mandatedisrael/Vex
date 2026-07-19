@@ -12,6 +12,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { redact } from "../logger/redact.js";
 import { dockerSpawnEnv } from "./cli-env.js";
+import { withoutManagedSecrets } from "./env-hygiene.js";
 
 export interface SpawnRunnerOptions {
   readonly cwd?: string;
@@ -91,7 +92,15 @@ export async function runSpawn(
     onStdoutLine,
     onStderrLine,
   } = options;
-  const spawnEnv = env ?? (command === "docker" ? dockerSpawnEnv() : undefined);
+  // Every branch strips managed secrets: a caller-supplied env is not
+  // trusted to have done so already, `dockerSpawnEnv()` handles the Docker
+  // CLI case, and any other helper (open/systemctl/powershell, …) still
+  // gets a stripped clone of `process.env` rather than a full inherit.
+  const spawnEnv = env
+    ? withoutManagedSecrets(env)
+    : command === "docker"
+      ? dockerSpawnEnv()
+      : withoutManagedSecrets(process.env);
 
   return new Promise((resolve) => {
     let aborted = false;

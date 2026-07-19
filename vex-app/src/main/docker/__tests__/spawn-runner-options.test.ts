@@ -56,19 +56,29 @@ describe("runSpawn environment and spawn errors", () => {
     );
   });
 
-  it("does not augment a non-docker command environment", async () => {
-    await runSpawn("open", ["-a", "Docker"]);
+  it("does not augment a non-docker command environment, but still strips managed secrets", async () => {
+    const originalEnv = process.env;
+    process.env = { ...originalEnv, PATH: "/system/path", OPENROUTER_API_KEY: "secret" };
+    try {
+      await runSpawn("open", ["-a", "Docker"]);
 
-    expect(mocks.dockerSpawnEnv).not.toHaveBeenCalled();
-    expect(mocks.spawn).toHaveBeenCalledWith(
-      "open",
-      ["-a", "Docker"],
-      expect.objectContaining({ env: undefined }),
-    );
+      expect(mocks.dockerSpawnEnv).not.toHaveBeenCalled();
+      const call = mocks.spawn.mock.calls[0];
+      const passedEnv = (call?.[2] as { env?: NodeJS.ProcessEnv } | undefined)?.env;
+      expect(passedEnv).not.toBeUndefined();
+      expect(passedEnv?.PATH).toBe("/system/path");
+      expect(passedEnv?.OPENROUTER_API_KEY).toBeUndefined();
+    } finally {
+      process.env = originalEnv;
+    }
   });
 
-  it("keeps a caller-supplied docker environment", async () => {
-    const env = { PATH: "/caller/path", CUSTOM: "yes" };
+  it("strips managed secrets from a caller-supplied docker environment", async () => {
+    const env = {
+      PATH: "/caller/path",
+      CUSTOM: "yes",
+      OPENROUTER_API_KEY: "secret",
+    };
 
     await runSpawn("docker", ["info"], { env });
 
@@ -76,7 +86,9 @@ describe("runSpawn environment and spawn errors", () => {
     expect(mocks.spawn).toHaveBeenCalledWith(
       "docker",
       ["info"],
-      expect.objectContaining({ env }),
+      expect.objectContaining({
+        env: { PATH: "/caller/path", CUSTOM: "yes" },
+      }),
     );
   });
 
