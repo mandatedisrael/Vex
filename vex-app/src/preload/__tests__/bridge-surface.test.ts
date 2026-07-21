@@ -157,6 +157,8 @@ describe("preload bridge surface", () => {
       "CH.portfolio.read",
       // Move 0.3 — read-only per-session executed-trade activity (MOVES).
       "CH.portfolio.listMoves",
+      // Chronos-shell — read-only, global-scope per-token TX history.
+      "CH.portfolio.listTokenHistory",
       "CH.sessions.getModel",
       "CH.sessions.exportMarkdown",
       // Error-diagnostics phase (D-FOLDER) — "Open logs folder".
@@ -188,6 +190,9 @@ describe("preload bridge surface", () => {
       "CH.hyperliquid.unwatchLive",
       // User-owned global Hyperliquid settings stay on the settings bridge.
       "CH.settings.setHyperliquidPolicy",
+      // "Vex setup" user profile (DB-backed, replaces persona.md).
+      "CH.settings.getUserProfile",
+      "CH.settings.setUserProfile",
     ];
     const corpus = PRELOAD_FILES.map((f) => readFileSync(f, "utf8")).join("\n");
     for (const channel of expected) {

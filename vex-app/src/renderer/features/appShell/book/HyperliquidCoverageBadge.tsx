@@ -8,9 +8,9 @@
  *
  * Motion law: UNPROTECTED is the loudest chrome in the shell but NEVER blinks —
  * it is loud by COLOR, still by MOTION (an alarm that animates becomes
- * wallpaper). CONSOLIDATING is the only badge that loops, and only because it
- * is a verifiably in-flight state (protection being set up) — it carries the
- * shell's pulse dot, bound to that pending work like every other loop.
+ * wallpaper). CONSOLIDATING (protection being set up) is also still — owner
+ * decree: no pulsing dots anywhere. Its accent dot differs from the others
+ * by color alone.
  */
 
 import type { JSX } from "react";
@@ -31,7 +31,8 @@ interface BadgeSpec {
   readonly aria: string;
   /** Token-driven color trio (text / border / fill). */
   readonly tone: string;
-  /** Only CONSOLIDATING loops — it is verifiably in-flight. */
+  /** Only CONSOLIDATING renders the accent dot (still — no pulsing dots
+   * anywhere); the other states render the plain glyph instead. */
   readonly pending: boolean;
 }
 
@@ -84,11 +85,11 @@ export function HyperliquidCoverageBadge({
       )}
     >
       {spec.pending ? (
-        // Verifiably in-flight → the shell's pulse dot may loop (accent ring,
-        // collapsed to a still dot under prefers-reduced-motion).
+        // In-flight → a still accent dot (owner decree: no pulsing dots
+        // anywhere).
         <span
           aria-hidden
-          className="vex-pulse-dot h-1 w-1 shrink-0 rounded-full bg-[var(--vex-accent)] [--vex-pulse-color:var(--vex-accent)]"
+          className="h-1 w-1 shrink-0 rounded-full bg-[var(--vex-accent)]"
         />
       ) : (
         <span aria-hidden className="shrink-0">

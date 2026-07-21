@@ -1,24 +1,46 @@
 /**
- * PlanDisplayModal — the action plan ("HOW") review surface, hosted in a
- * top-layer native `<dialog>` (the MISSION RAIL's plan `PremiumBadge` opens it).
+ * PlanDisplayModal — legacy Plan Mode recovery surface, hosted in a top-layer
+ * native `<dialog>` (the MISSION RAIL's "Legacy plan" `PremiumBadge` opens it).
  *
- * Wraps the SAME plan well + state line + standalone actions the inline
- * `SessionPlanCard` renders (`useSessionPlan`, `useAcceptPlan`,
- * `useRequestResume`). Read-only under `suppressAccept` (mission setup, where
- * the host accepts the plan together with the contract via
- * `MissionContractModal`); otherwise it surfaces the standalone "Accept plan"
- * and the "Resume mission" recovery action — identical to the card.
+ * Plan Mode is retired from the UI: no session can turn it on anymore
+ * (`PlanSwitch` is gone). This modal exists only for a session that already
+ * carries an enabled plan from before the retirement (`plan.enabled === true`,
+ * the same condition the rail badge gates on) — it never advertises Plan Mode
+ * as a supported feature, only explains the leftover state and gives an exit:
+ * accept the plan to unblock the mission (unaccepted case) or turn Plan Mode
+ * off for good. Once disabled, `plan.enabled` flips false, the rail badge
+ * stops rendering, and `MissionRail` unmounts this modal entirely.
+ *
+ * Read-only under `suppressAccept` (mission setup, where the host accepts the
+ * plan together with the contract via `MissionContractModal`) withholds only
+ * the standalone Accept — "Turn off Plan Mode" stays available there too,
+ * since it never conflicts with the unified accept and, with no run started
+ * yet, always succeeds (no active run to strand).
+ *
+ * "Turn off Plan Mode" calls the retained `useSetPlanMode` mutation with
+ * `enabled: false`. Main's guarded disable (`main/ipc/sessions/plan.ts`) can
+ * refuse with `blocked_pending_acceptance` when an active run holds an
+ * enabled, non-empty, unaccepted plan — this NEVER auto-accepts to clear that
+ * block; the notice tells the user to stop the mission first (the existing
+ * Stop control in `MissionControls`), then turn off.
  *
  * No new IPC and no plan content leaves the renderer: `plan.accept` echoes the
  * reviewed markdown back as `expectedPlanMd` (the optimistic-concurrency guard
- * that already exists), exactly as the inline card does.
+ * that already exists), exactly as before.
  */
 
 import type { JSX } from "react";
-import type { PlanAcceptResult } from "@shared/schemas/session-plan.js";
+import type {
+  PlanAcceptResult,
+  PlanSetEnabledResult,
+} from "@shared/schemas/session-plan.js";
 import { assertNever } from "@shared/ipc/result.js";
 import { MarkdownContent } from "../../lib/markdown/MarkdownContent.js";
-import { useAcceptPlan, useSessionPlan } from "../../lib/api/sessions.js";
+import {
+  useAcceptPlan,
+  useSessionPlan,
+  useSetPlanMode,
+} from "../../lib/api/sessions.js";
 import { useRequestResume } from "../../lib/api/runtime.js";
 import { Button } from "../../components/ui/button.js";
 import {
@@ -62,6 +84,7 @@ export function PlanDisplayModal({
   const planQuery = useSessionPlan(sessionId);
   const acceptPlan = useAcceptPlan();
   const requestResume = useRequestResume();
+  const disablePlanMode = useSetPlanMode();
 
   const plan = planQuery.data?.ok ? planQuery.data.data : null;
   const enabled = plan?.enabled ?? false;
@@ -72,9 +95,15 @@ export function PlanDisplayModal({
     hasPlan &&
     plan?.accepted === true &&
     missionStatus === "paused_plan_acceptance";
+  // The exit ramp: shown whenever a plan is enabled, regardless of
+  // suppressAccept — turning Plan Mode off never conflicts with the unified
+  // mission accept, and is the only way out for an already-accepted plan
+  // that would otherwise keep this session gated forever.
+  const showDisableButton = enabled;
 
   const acceptBusy = acceptPlan.isPending;
   const resumeBusy = requestResume.isPending;
+  const disableBusy = disablePlanMode.isPending;
 
   // Standalone-accept failure surfacing: `plan.accept` can refuse
   // (stale/no_plan/not_found) or the mutation can reject (transport). Without a
@@ -89,6 +118,18 @@ export function PlanDisplayModal({
   const acceptNotice = suppressAccept
     ? null
     : planAcceptNotice(acceptOutcome, acceptErrored);
+
+  // "Turn off Plan Mode" failure surfacing — same shape as the accept notice.
+  // `updated` clears to null: the query invalidation this mutation triggers
+  // flips `plan.enabled` false, and the rail unmounts this modal entirely, so
+  // there is nothing left to show a success notice INTO.
+  const disableOutcome = disablePlanMode.data?.ok
+    ? disablePlanMode.data.data.outcome
+    : null;
+  const disableErrored =
+    disablePlanMode.isError ||
+    (disablePlanMode.data !== undefined && !disablePlanMode.data.ok);
+  const disableNotice = planDisableNotice(disableOutcome, disableErrored);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -110,11 +151,11 @@ export function PlanDisplayModal({
               }
             >
               {pending ? (
-                // Waiting on the host's decision — a live pending state, so
-                // the dot carries the sanctioned pulse ring (amber family).
+                // Waiting on the host's decision — a still amber dot (owner
+                // decree: no pulsing dots anywhere).
                 <span
                   aria-hidden
-                  className="vex-pulse-dot h-1.5 w-1.5 rounded-full bg-warning [--vex-pulse-color:color-mix(in_oklab,var(--color-warning)_50%,transparent)]"
+                  className="h-1.5 w-1.5 rounded-full bg-warning"
                 />
               ) : (
                 <span
@@ -130,8 +171,11 @@ export function PlanDisplayModal({
         <DialogBody>
           {enabled ? (
             <p className="text-xs text-[var(--vex-text-2)]">
-              The agent researches first, writes an action plan (the “HOW”), and
-              waits for your acceptance before executing.
+              Plan Mode has been retired — no session can turn it on anymore.
+              This session still carries a plan from before that change.{" "}
+              {pending
+                ? "Accept it to unblock the mission, or turn Plan Mode off below."
+                : "Turn Plan Mode off below when you no longer need it."}
             </p>
           ) : null}
           {hasPlan ? (
@@ -151,7 +195,11 @@ export function PlanDisplayModal({
           ) : null}
         </DialogBody>
 
-        {showAcceptButton || awaitingResume || acceptNotice !== null ? (
+        {showAcceptButton ||
+        awaitingResume ||
+        showDisableButton ||
+        acceptNotice !== null ||
+        disableNotice !== null ? (
           <DialogFooter className="flex-col items-stretch gap-2 border-[var(--vex-line)] sm:flex-col">
             <div className="flex flex-wrap items-center gap-2">
               {awaitingResume ? (
@@ -187,6 +235,22 @@ export function PlanDisplayModal({
                   {resumeBusy ? "Resuming…" : "Resume mission"}
                 </Button>
               ) : null}
+              {showDisableButton ? (
+                // The exit ramp — a quiet hairline key, never the primary
+                // pill: turning a legacy plan off is a housekeeping action,
+                // not the recommended path when the plan is still reviewable.
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={disableBusy}
+                  onClick={() =>
+                    disablePlanMode.mutate({ sessionId, enabled: false })
+                  }
+                >
+                  {disableBusy ? "Turning off…" : "Turn off Plan Mode"}
+                </Button>
+              ) : null}
             </div>
             {acceptNotice !== null ? (
               <p
@@ -195,6 +259,15 @@ export function PlanDisplayModal({
                 className="w-full text-xs text-warning"
               >
                 {acceptNotice}
+              </p>
+            ) : null}
+            {disableNotice !== null ? (
+              <p
+                role="alert"
+                data-vex-state="plan-disable-notice"
+                className="w-full text-xs text-warning"
+              >
+                {disableNotice}
               </p>
             ) : null}
           </DialogFooter>
@@ -233,6 +306,39 @@ function planAcceptNotice(
   }
   if (isError) {
     return "Couldn't accept the plan — something went wrong. Try again.";
+  }
+  return null;
+}
+
+/**
+ * Map a "Turn off Plan Mode" (`plan.setEnabled({ enabled: false })`) attempt
+ * to a user-facing notice. `updated` → null: the plan-query invalidation this
+ * mutation triggers flips `plan.enabled` false, so the rail unmounts this
+ * modal — nothing left to show a success notice into.
+ *
+ * `blocked_pending_acceptance` is the guarded-disable refusal (main strand-
+ * guards against stranding an active run parked on an unaccepted plan) — the
+ * notice must send the user to the existing Stop control instead of the
+ * mutation silently composing an Accept it never asked for.
+ */
+function planDisableNotice(
+  outcome: PlanSetEnabledResult["outcome"] | null,
+  isError: boolean,
+): string | null {
+  if (outcome !== null) {
+    switch (outcome) {
+      case "updated":
+        return null;
+      case "blocked_pending_acceptance":
+        return "Can't turn off yet — a mission run is waiting on this plan's acceptance. Stop the mission first, then turn off Plan Mode.";
+      case "not_found":
+        return "Couldn't turn off: this session no longer exists. Refresh and try again.";
+      default:
+        return assertNever(outcome);
+    }
+  }
+  if (isError) {
+    return "Couldn't turn off Plan Mode — something went wrong. Try again.";
   }
   return null;
 }

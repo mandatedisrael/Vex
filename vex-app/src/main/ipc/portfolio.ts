@@ -12,7 +12,8 @@
  */
 
 import { CH } from "@shared/ipc/channels.js";
-import type { Result } from "@shared/ipc/result.js";
+import { err, type Result } from "@shared/ipc/result.js";
+import { cancelledError } from "./cancel-helpers.js";
 import {
   portfolioDtoSchema,
   portfolioReadInputSchema,
@@ -23,8 +24,14 @@ import {
   movesReadInputSchema,
   type MovesDto,
 } from "@shared/schemas/portfolio-moves.js";
+import {
+  tokenHistoryDtoSchema,
+  tokenHistoryReadInputSchema,
+  type TokenHistoryDto,
+} from "@shared/schemas/token-history.js";
 import { getPortfolio } from "../database/portfolio-db.js";
 import { getMovesForSession } from "../database/moves-db.js";
+import { getTokenHistory } from "../database/token-history-db.js";
 import { log } from "../logger/index.js";
 import { registerHandler } from "./register-handler.js";
 
@@ -88,6 +95,58 @@ function registerPortfolioMovesReadHandler(): () => void {
   });
 }
 
+/**
+ * TOKEN HISTORY read (chronos-shell) — read-only, global-scope per-token TX
+ * history. Backed by `token-history-db.ts`, which resolves the GLOBAL
+ * configured wallet inventory server-side (never a renderer-supplied
+ * address). Logging records `chainId`, the resolved entry COUNT, the DTO
+ * `status`, and `correlationId` ONLY — never addresses, amounts, or token
+ * identity beyond the caller's own `chainId`.
+ *
+ * A `{status:"unavailable", reason:"query_timeout"}` result is a genuine
+ * degraded-success DTO — UNLESS the caller had already issued `vex:cancel`
+ * for this request (`ctx.signal.aborted`), in which case it is really a user
+ * cancellation and must surface as the canonical `internal.cancelled` Result
+ * instead (round-3 plan closure) — `registerHandler`'s own abort-normalisation
+ * only rewrites `Result` ERRORS, never a successful DTO shape, so this
+ * reinterpretation has to happen here.
+ */
+function registerPortfolioTokenHistoryReadHandler(): () => void {
+  return registerHandler({
+    channel: CH.portfolio.listTokenHistory,
+    domain: "portfolio",
+    inputSchema: tokenHistoryReadInputSchema,
+    outputSchema: tokenHistoryDtoSchema,
+    handle: async (input, ctx): Promise<Result<TokenHistoryDto>> => {
+      const outcome = await getTokenHistory(input);
+      if (outcome.ok) {
+        if (outcome.data.status === "unavailable" && ctx.signal.aborted) {
+          log.info(
+            `[ipc:vex:portfolio:listTokenHistory] timeout reinterpreted as cancel ` +
+              `chainId=${input.chainId} correlationId=${ctx.requestId}`,
+          );
+          return err(cancelledError("portfolio", ctx.requestId));
+        }
+        const entryCount = outcome.data.status === "available" ? outcome.data.entries.length : 0;
+        log.info(
+          `[ipc:vex:portfolio:listTokenHistory] ok chainId=${input.chainId} ` +
+            `status=${outcome.data.status} entries=${entryCount} correlationId=${ctx.requestId}`,
+        );
+        return outcome;
+      }
+      log.info(
+        `[ipc:vex:portfolio:listTokenHistory] errCode=${outcome.error.code} ` +
+          `chainId=${input.chainId} correlationId=${ctx.requestId}`,
+      );
+      return outcome;
+    },
+  });
+}
+
 export function registerPortfolioHandlers(): ReadonlyArray<() => void> {
-  return [registerPortfolioReadHandler(), registerPortfolioMovesReadHandler()];
+  return [
+    registerPortfolioReadHandler(),
+    registerPortfolioMovesReadHandler(),
+    registerPortfolioTokenHistoryReadHandler(),
+  ];
 }

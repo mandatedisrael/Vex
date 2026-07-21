@@ -10,11 +10,19 @@
  * vex-app uses `instanceof` checks — those require a runtime
  * reference (codex turn 4 implementation caveat).
  *
+ * `HTTPClient` (runtime value) + `ResponseHook` (type) are exported for the
+ * reasoning-capability response hook (S6/D1a) — `provider-model-catalog.ts`
+ * attaches a hook to a per-request `HTTPClient` to read the raw `/models`
+ * JSON before the SDK's own schema strips the `reasoning` object.
+ *
  * Used by:
  *   - `vex-app/src/main/onboarding/openrouter-test-client.ts` (M10)
+ *   - `vex-app/src/main/onboarding/provider-model-catalog.ts` (S6)
+ *   - `vex-app/src/main/onboarding/provider-model-reasoning-hook.ts` (S6)
  */
 
-export { OpenRouter } from "@openrouter/sdk";
+export { OpenRouter, HTTPClient } from "@openrouter/sdk";
+export type { Fetcher, ResponseHook } from "@openrouter/sdk/lib/http.js";
 export {
   ConnectionError,
   InvalidRequestError,

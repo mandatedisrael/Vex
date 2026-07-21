@@ -48,12 +48,10 @@ describe("resolveWorkspaceModeEvent", () => {
 
 describe("deriveShellTheme", () => {
   it("reads 'hypervexing' while the mode is active, whatever the user's theme", () => {
-    expect(deriveShellTheme("hypervexing", "vex")).toBe("hypervexing");
-    expect(deriveShellTheme("hypervexing", "robinhood")).toBe("hypervexing");
+    expect(deriveShellTheme("hypervexing", "chronos")).toBe("hypervexing");
   });
 
   it("restores the user's own theme when the mode is normal (EXIT is lossless)", () => {
-    expect(deriveShellTheme("normal", "vex")).toBe("vex");
-    expect(deriveShellTheme("normal", "robinhood")).toBe("robinhood");
+    expect(deriveShellTheme("normal", "chronos")).toBe("chronos");
   });
 });

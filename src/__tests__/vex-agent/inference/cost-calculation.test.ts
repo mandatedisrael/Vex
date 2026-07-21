@@ -23,6 +23,7 @@ describe("OpenRouter cost calculation", () => {
     cachePricePerM: 0.3,       // $0.30/M cached (90% cheaper)
     cacheWritePricePerM: 3.75, // $3.75/M cache write (1.25× input)
     reasoningPricePerM: 15.0,  // same as output for this model
+    supportsReasoningEffort: true,
   };
 
   it("calculates basic prompt + completion cost", () => {
@@ -166,6 +167,7 @@ describe("computeRequestCost — authoritative SDK cost preference", () => {
     cachePricePerM: 0.3,
     cacheWritePricePerM: 3.75,
     reasoningPricePerM: 15.0,
+    supportsReasoningEffort: true,
   };
   // Local estimate for this usage = promptCost 0.03 + completionCost 0.03 = 0.06.
   const baseUsage: InferenceUsage = {

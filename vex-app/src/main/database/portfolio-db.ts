@@ -6,7 +6,8 @@
  * Postgres the engine writes to, against:
  *
  *   proj_balances(wallet_address TEXT, chain_id BIGINT, token_symbol TEXT,
- *                 balance_raw TEXT, decimals INTEGER, balance_usd NUMERIC)
+ *                 token_name TEXT, balance_raw TEXT, decimals INTEGER,
+ *                 balance_usd NUMERIC)
  *   proj_portfolio_snapshots(wallet_family eip155|solana, wallet_address TEXT,
  *                 snapshot_group_id UUID, total_usd NUMERIC,
  *                 pnl_vs_prev NUMERIC, created_at)
@@ -33,6 +34,14 @@
  *    legitimate token's symbol has a DIFFERENT `token_address`, so it can
  *    never coalesce into that token's line before the renderer's trust gate
  *    (address-verified brand icon) can act on it.
+ *  - `token_name` (like `token_symbol`) is attacker-influenceable display
+ *    metadata; it is sanitized through `sanitizeTokenName` HERE, before the
+ *    DTO is built, because the output schema's `safeTokenNameSchema` is a
+ *    validation gate, not a sanitizer — an unsanitized name would fail that
+ *    gate and hard-fail the whole response instead of degrading to `null`.
+ *    Both the symbol and name aggregates share ONE `ORDER BY` fragment
+ *    (`LATEST_ROW_ORDER_SQL`) so an exact `synced_at` tie can never pair a
+ *    name from one source row with a symbol from a different one.
  */
 
 import { Client, type ClientConfig } from "pg";
@@ -44,7 +53,8 @@ import type {
   PositionTokenDto,
 } from "@shared/schemas/portfolio.js";
 import { familyForChainId } from "@shared/chains/display.js";
-import { listWallets } from "@vex-lib/wallet.js";
+import { sanitizeTokenName } from "@shared/token-name-sanitizer.js";
+import { listInventoryWalletEntries } from "./inventory-wallets.js";
 import { getSessionWalletScope } from "./sessions-db.js";
 import { buildPoolConfig } from "./db-config.js";
 import { log } from "../logger/index.js";
@@ -124,6 +134,7 @@ interface TokenRow {
   readonly chain_id: number | string | null;
   readonly token_address: string;
   readonly token_symbol: string | null;
+  readonly token_name: string | null;
   readonly usd: number | string | null;
   readonly amount: number | string | null;
 }
@@ -138,6 +149,7 @@ interface ChainBreakdownRow {
   readonly chain_total: number | string;
   readonly token_address: string | null;
   readonly token_symbol: string | null;
+  readonly token_name: string | null;
   readonly token_usd: number | string | null;
   readonly token_amount: number | string | null;
 }
@@ -173,7 +185,18 @@ const MAX_TOKEN_LINES = 500;
 // (freshest `synced_at` wins; symbol text breaks exact ties) — never one
 // arbitrary row's stale label.
 const NORMALIZED_TOKEN_ADDRESS_SQL = `CASE WHEN token_address ~* '^0x' THEN lower(token_address) ELSE token_address END`;
-const LATEST_TOKEN_SYMBOL_SQL = `(array_agg(token_symbol ORDER BY synced_at DESC NULLS LAST, token_symbol ASC NULLS LAST))[1]`;
+
+// ONE shared ORDER BY fragment for BOTH the symbol and name "latest row"
+// aggregates below. This is deliberate, not incidental: `array_agg(...)[1]`
+// picks the first row of ITS OWN sort order, so if the name aggregate used a
+// different tie-breaker (e.g. `token_name ASC`) an exact `synced_at` tie
+// could pick symbol from one source row and name from a DIFFERENT row —
+// pairing a legitimate symbol with an unrelated name (or vice versa). Reusing
+// the identical fragment (tie-broken on `token_symbol`, not `token_name`)
+// guarantees both aggregates resolve to the SAME winning row.
+const LATEST_ROW_ORDER_SQL = `ORDER BY synced_at DESC NULLS LAST, token_symbol ASC NULLS LAST`;
+const LATEST_TOKEN_SYMBOL_SQL = `(array_agg(token_symbol ${LATEST_ROW_ORDER_SQL}))[1]`;
+const LATEST_TOKEN_NAME_SQL = `(array_agg(token_name ${LATEST_ROW_ORDER_SQL}))[1]`;
 
 /**
  * Caps for the per-chain breakdown — mirror `portfolioDtoSchema.chains`
@@ -204,6 +227,7 @@ function buildChainBreakdown(
     tokens: {
       symbol: string | null;
       tokenAddress: string | null;
+      tokenName: string | null;
       balanceUsd: number | null;
       amount: number | null;
     }[];
@@ -243,6 +267,7 @@ function buildChainBreakdown(
       current.tokens.push({
         symbol: row.token_symbol,
         tokenAddress: row.token_address,
+        tokenName: sanitizeTokenName(row.token_name),
         balanceUsd: tokenUsd,
         amount: tokenAmount,
       });
@@ -345,7 +370,7 @@ async function resolveAddresses(
   input: PortfolioReadInput,
 ): Promise<Result<readonly string[], VexError>> {
   if (input.scope === "global") {
-    const entries = [...listWallets("evm"), ...listWallets("solana")];
+    const entries = listInventoryWalletEntries();
     if (input.walletAddress !== undefined) {
       const match = entries.find((e) => e.address === input.walletAddress);
       if (match === undefined) return invalidWalletSelection();
@@ -406,6 +431,7 @@ export async function getPortfolio(
         `SELECT chain_id,
                 ${NORMALIZED_TOKEN_ADDRESS_SQL} AS token_address,
                 ${LATEST_TOKEN_SYMBOL_SQL} AS token_symbol,
+                ${LATEST_TOKEN_NAME_SQL} AS token_name,
                 SUM(balance_usd)::float8 AS usd,
                 ${AMOUNT_SUM_SQL} AS amount
            FROM proj_balances
@@ -421,6 +447,7 @@ export async function getPortfolio(
           chainId: toChainId(row.chain_id),
           symbol: row.token_symbol,
           tokenAddress: row.token_address,
+          tokenName: sanitizeTokenName(row.token_name),
           balanceUsd: toNumberOrNull(row.usd),
           amount: toNumberOrNull(row.amount),
         }));
@@ -440,6 +467,7 @@ export async function getPortfolio(
            SELECT chain_id,
                   ${NORMALIZED_TOKEN_ADDRESS_SQL} AS token_address,
                   ${LATEST_TOKEN_SYMBOL_SQL} AS token_symbol,
+                  ${LATEST_TOKEN_NAME_SQL} AS token_name,
                   SUM(balance_usd)::float8 AS usd,
                   ${AMOUNT_SUM_SQL} AS amount
              FROM proj_balances
@@ -448,7 +476,7 @@ export async function getPortfolio(
             GROUP BY chain_id, ${NORMALIZED_TOKEN_ADDRESS_SQL}
          ),
          ranked AS (
-           SELECT chain_id, token_address, token_symbol, usd, amount,
+           SELECT chain_id, token_address, token_symbol, token_name, usd, amount,
                   ROW_NUMBER() OVER (
                     PARTITION BY chain_id ORDER BY usd DESC NULLS LAST
                   ) AS rn
@@ -466,6 +494,7 @@ export async function getPortfolio(
                 t.chain_total,
                 r.token_address,
                 r.token_symbol,
+                r.token_name,
                 r.usd AS token_usd,
                 r.amount AS token_amount
            FROM totals t

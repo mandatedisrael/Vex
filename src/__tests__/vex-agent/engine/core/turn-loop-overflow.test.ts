@@ -177,7 +177,7 @@ const provider = {
   getBalance: vi.fn(),
   calculateCost: vi.fn(),
 };
-const config = { provider: "test", model: "m", contextLimit: 1_000_000, maxOutputTokens: 512, inputPricePerM: 0, outputPricePerM: 0, priceCurrency: "USD" as const, cachePricePerM: null, cacheWritePricePerM: null, reasoningPricePerM: null };
+const config = { provider: "test", model: "m", contextLimit: 1_000_000, maxOutputTokens: 512, inputPricePerM: 0, outputPricePerM: 0, priceCurrency: "USD" as const, cachePricePerM: null, cacheWritePricePerM: null, reasoningPricePerM: null, supportsReasoningEffort: false };
 const loopConfig = { maxIterations: 1, timeoutMs: 60000, contextLimit: 1_000_000 };
 
 beforeEach(() => {

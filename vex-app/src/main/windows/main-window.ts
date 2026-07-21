@@ -11,8 +11,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "../logger/index.js";
 import { preferencesStore } from "../preferences/store.js";
-import { loadPersona } from "@vex-lib/persona.js";
-import { CONFIG_DIR } from "../paths/config-dir.js";
 import { APP_ORIGIN } from "../protocol/app-protocol.js";
 import {
   isAllowedExternalUrl,
@@ -163,11 +161,6 @@ export async function createMainWindow(): Promise<BrowserWindow> {
     ? path.join(__dirname, "../renderer/icon.png")
     : path.resolve(__dirname, "../../src/renderer/public/icon.png");
 
-  // Window title from the local-first persona (defaults to "Vex"). Read here in
-  // the privileged main process — never via the renderer. Persona name changes
-  // apply on the next app start (configure-at-startup).
-  const personaName = loadPersona(path.join(CONFIG_DIR, "persona.md")).name;
-
   const win = new BrowserWindow({
     width: normalized.width,
     height: normalized.height,
@@ -177,7 +170,9 @@ export async function createMainWindow(): Promise<BrowserWindow> {
     minHeight,
     show: false,
     backgroundColor: "#0A0E27",
-    title: personaName,
+    // Window title is the fixed product name — the agent's display name is
+    // no longer user-configurable (retired persona.md mechanism).
+    title: "Vex",
     icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.cjs"),

@@ -16,8 +16,8 @@
  *     that runs the .vex-sign-stroke ink loop ONLY while the unlock IPC
  *     is in flight, then a full-width filled cobalt pill.
  *   - Corner chrome: hallmark + VEX/UNLOCK (top-left), live gate status
- *     readout (top-right — pulses only while pending), brand tetrad +
- *     barcode (bottom-left), version (bottom-right).
+ *     readout (top-right — a still dot; owner decree: no pulsing dots
+ *     anywhere), brand tetrad (bottom-left), version (bottom-right).
  *
  * Functional logic (unchanged from the previous version):
  *   - password ref is uncontrolled (skill §14 — secret never lands in
@@ -220,15 +220,16 @@ export function UnlockScreen(): JSX.Element {
         </div>
       </div>
 
-      {/* Top-right: live gate readout. The dot pulses ONLY while the
-        unlock IPC is in flight (motion law: loops bind to real work). */}
+      {/* Top-right: live gate readout. The dot is a still color mark (owner
+        decree: no pulsing dots anywhere) — pending/throttled/idle differ by
+        color alone. */}
       <div className="pointer-events-none absolute right-6 top-8 z-10 flex items-center gap-2.5">
         <span
           aria-hidden
           className={cn(
             "h-1.5 w-1.5 rounded-full",
             pending
-              ? "vex-pulse-dot bg-[var(--color-accent-primary)]"
+              ? "bg-[var(--color-accent-primary)]"
               : throttleActive
                 ? "bg-[var(--color-warning)]"
                 : "bg-[var(--color-text-muted)]",
@@ -239,9 +240,8 @@ export function UnlockScreen(): JSX.Element {
         </span>
       </div>
 
-      {/* Bottom-left: barcode artifact + brand tetrad. */}
+      {/* Bottom-left: brand tetrad. */}
       <div className="pointer-events-none absolute bottom-7 left-10 z-10 flex flex-col gap-2 text-[var(--color-text-muted)]">
-        <span aria-hidden className="vex-barcode h-2.5 w-16 opacity-30" />
         <span className="font-mono text-[10px] uppercase tracking-[0.4em] opacity-60">
           Clarity · Focus · Understand · Evolve
         </span>
@@ -266,14 +266,8 @@ export function UnlockScreen(): JSX.Element {
           className="mx-auto h-11 w-auto object-contain"
         />
 
-        {/* Eyebrow — .vex-eyebrow carries the leading rule; a mirrored
-          trailing dash (inherits currentColor + the class's 10px gap)
-          keeps the centered composition symmetric. */}
         <div className="mt-8 flex justify-center">
-          <span className="vex-eyebrow">
-            Master Vault · Sealed
-            <span aria-hidden className="h-px w-7 bg-current opacity-70" />
-          </span>
+          <span className="vex-eyebrow">Master Vault · Sealed</span>
         </div>
 
         <h1

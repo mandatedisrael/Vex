@@ -190,8 +190,8 @@ describe("portfolio-db getPortfolio — global scope", () => {
     expect(result.data.pnlVsPrev).toBeCloseTo(34.5, 4);
     expect(result.data.snapshotAt).toBe("2026-05-21T10:00:00.000Z");
     expect(result.data.tokens).toEqual([
-      { chainId: 1, symbol: "ETH", balanceUsd: 1000, amount: null },
-      { chainId: 137, symbol: "USDC", balanceUsd: 234.5, amount: null },
+      { chainId: 1, symbol: "ETH", tokenName: null, balanceUsd: 1000, amount: null },
+      { chainId: 137, symbol: "USDC", tokenName: null, balanceUsd: 234.5, amount: null },
     ]);
 
     // Every SELECT (live + tokens + breakdown + snapshot) carries the
@@ -383,6 +383,7 @@ describe("portfolio-db getPortfolio — coercion + fallback", () => {
     expect(result.data.tokens[0]).toEqual({
       chainId: null,
       symbol: null,
+      tokenName: null,
       balanceUsd: 1,
       amount: null,
     });
@@ -402,6 +403,7 @@ describe("portfolio-db getPortfolio — coercion + fallback", () => {
     expect(result.data.tokens[0]).toEqual({
       chainId: 4663,
       symbol: "ETH",
+      tokenName: null,
       balanceUsd: null,
       amount: 0.005,
     });
@@ -548,15 +550,15 @@ describe("portfolio-db getPortfolio — per-chain breakdown (codex plan review)"
         family: "solana",
         totalUsd: 60,
         tokens: [
-          { symbol: "SOL", balanceUsd: 50, amount: null },
-          { symbol: "BONK", balanceUsd: 10, amount: null },
+          { symbol: "SOL", tokenName: null, balanceUsd: 50, amount: null },
+          { symbol: "BONK", tokenName: null, balanceUsd: 10, amount: null },
         ],
       },
       {
         chainId: 1,
         family: "evm",
         totalUsd: 40,
-        tokens: [{ symbol: "ETH", balanceUsd: 40, amount: null }],
+        tokens: [{ symbol: "ETH", tokenName: null, balanceUsd: 40, amount: null }],
       },
     ]);
   });
@@ -588,13 +590,13 @@ describe("portfolio-db getPortfolio — per-chain breakdown (codex plan review)"
         chainId: 1,
         family: "evm",
         totalUsd: 10,
-        tokens: [{ symbol: "ETH", balanceUsd: 10, amount: null }],
+        tokens: [{ symbol: "ETH", tokenName: null, balanceUsd: 10, amount: null }],
       },
       {
         chainId: 4663,
         family: "evm",
         totalUsd: 0,
-        tokens: [{ symbol: "ETH", balanceUsd: null, amount: 0.005 }],
+        tokens: [{ symbol: "ETH", tokenName: null, balanceUsd: null, amount: 0.005 }],
       },
     ]);
   });
@@ -622,7 +624,7 @@ describe("portfolio-db getPortfolio — per-chain breakdown (codex plan review)"
         chainId: 1,
         family: "evm",
         totalUsd: 10,
-        tokens: [{ symbol: "ETH", balanceUsd: 10, amount: null }],
+        tokens: [{ symbol: "ETH", tokenName: null, balanceUsd: 10, amount: null }],
       },
       { chainId: 137, family: "evm", totalUsd: 0, tokens: [] },
     ]);
@@ -646,9 +648,9 @@ describe("portfolio-db getPortfolio — per-chain breakdown (codex plan review)"
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.data.chains[0]?.tokens).toEqual([
-      { symbol: "A", balanceUsd: 4, amount: null },
-      { symbol: "B", balanceUsd: 3, amount: null },
-      { symbol: "C", balanceUsd: 2, amount: null },
+      { symbol: "A", tokenName: null, balanceUsd: 4, amount: null },
+      { symbol: "B", tokenName: null, balanceUsd: 3, amount: null },
+      { symbol: "C", tokenName: null, balanceUsd: 2, amount: null },
     ]);
   });
 
@@ -762,8 +764,22 @@ describe("portfolio-db getPortfolio — address-correct aggregation (position br
     // Neither line absorbed the other's balance — both survive at their own
     // USD figure, ranked biggest-first, each carrying its OWN address.
     expect(result.data.tokens).toEqual([
-      { chainId: 1, symbol: "WETH", tokenAddress: LEGIT_WETH, balanceUsd: 1000, amount: null },
-      { chainId: 1, symbol: "WETH", tokenAddress: SPOOF_WETH, balanceUsd: 500, amount: null },
+      {
+        chainId: 1,
+        symbol: "WETH",
+        tokenAddress: LEGIT_WETH,
+        tokenName: null,
+        balanceUsd: 1000,
+        amount: null,
+      },
+      {
+        chainId: 1,
+        symbol: "WETH",
+        tokenAddress: SPOOF_WETH,
+        tokenName: null,
+        balanceUsd: 500,
+        amount: null,
+      },
     ]);
   });
 
@@ -798,8 +814,20 @@ describe("portfolio-db getPortfolio — address-correct aggregation (position br
         family: "evm",
         totalUsd: 1500,
         tokens: [
-          { symbol: "WETH", tokenAddress: LEGIT_WETH, balanceUsd: 1000, amount: null },
-          { symbol: "WETH", tokenAddress: SPOOF_WETH, balanceUsd: 500, amount: null },
+          {
+            symbol: "WETH",
+            tokenAddress: LEGIT_WETH,
+            tokenName: null,
+            balanceUsd: 1000,
+            amount: null,
+          },
+          {
+            symbol: "WETH",
+            tokenAddress: SPOOF_WETH,
+            tokenName: null,
+            balanceUsd: 500,
+            amount: null,
+          },
         ],
       },
     ]);
@@ -827,6 +855,7 @@ describe("portfolio-db getPortfolio — address-correct aggregation (position br
         chainId: 1,
         symbol: "WETH-RENAMED",
         tokenAddress: LEGIT_WETH,
+        tokenName: null,
         balanceUsd: 1000,
         amount: null,
       },
@@ -843,6 +872,107 @@ describe("portfolio-db getPortfolio — address-correct aggregation (position br
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.data.tokens[0]?.tokenAddress).toBeNull();
+  });
+});
+
+describe("portfolio-db getPortfolio — token NAME sanitization (main-side gate)", () => {
+  beforeEach(() => {
+    mocks.listWallets.mockImplementation((family: string) =>
+      family === "evm" ? [{ id: "1", address: WALLET_A, label: "", createdAt: "" }] : [],
+    );
+  });
+
+  it("preserves a real-world name with an internal space ('USD Coin') in the flat mapping", async () => {
+    scriptPortfolioQueries({
+      live: "1",
+      tokens: [
+        { chain_id: "1", token_symbol: "USDC", token_name: "USD Coin", usd: "1" },
+      ],
+      snapshot: null,
+    });
+    const result = await getPortfolio({ scope: "global" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.tokens[0]?.tokenName).toBe("USD Coin");
+  });
+
+  it("nulls a hostile token_name (control character) while the symbol survives unaffected", async () => {
+    scriptPortfolioQueries({
+      live: "1",
+      tokens: [
+        { chain_id: "1", token_symbol: "SCAM", token_name: "BAD\nNAME", usd: "1" },
+      ],
+      snapshot: null,
+    });
+    const result = await getPortfolio({ scope: "global" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.tokens[0]?.tokenName).toBeNull();
+    expect(result.data.tokens[0]?.symbol).toBe("SCAM");
+  });
+
+  it("nulls a zero-width-spoofed token_name", async () => {
+    scriptPortfolioQueries({
+      live: "1",
+      tokens: [
+        { chain_id: "1", token_symbol: "USDC", token_name: "USD\u200bCoin", usd: "1" },
+      ],
+      snapshot: null,
+    });
+    const result = await getPortfolio({ scope: "global" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.tokens[0]?.tokenName).toBeNull();
+  });
+
+  it("nulls an over-64-char token_name without truncating", async () => {
+    const longName = "A".repeat(65);
+    scriptPortfolioQueries({
+      live: "1",
+      tokens: [{ chain_id: "1", token_symbol: "X", token_name: longName, usd: "1" }],
+      snapshot: null,
+    });
+    const result = await getPortfolio({ scope: "global" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.tokens[0]?.tokenName).toBeNull();
+  });
+
+  it("threads a sanitized token_name through the per-chain breakdown", async () => {
+    scriptPortfolioQueries({
+      live: "1",
+      tokens: [],
+      snapshot: null,
+      breakdown: [
+        {
+          chain_id: "1",
+          chain_total: "1",
+          token_symbol: "USDC",
+          token_name: "USD Coin",
+          token_usd: "1",
+        },
+      ],
+    });
+    const result = await getPortfolio({ scope: "global" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.chains[0]?.tokens[0]?.tokenName).toBe("USD Coin");
+  });
+
+  it("selects token_name via the SAME ORDER BY fragment as token_symbol in both queries (tie-ordering determinism by construction)", async () => {
+    scriptPortfolioQueries({ live: "0", tokens: [], snapshot: null });
+    await getPortfolio({ scope: "global" });
+    const tokenSql = String(mocks.query.mock.calls[1]?.[0] ?? "");
+    const breakdownSql = String(mocks.query.mock.calls[2]?.[0] ?? "");
+    const ORDER = "ORDER BY synced_at DESC NULLS LAST, token_symbol ASC NULLS LAST";
+    // Both the symbol aggregate and the name aggregate must share the
+    // IDENTICAL ORDER BY fragment — the name aggregate does NOT sort on
+    // `token_name` — so array_agg(...)[1] resolves to the SAME source row
+    // for both columns even on an exact synced_at tie.
+    expect(tokenSql).toContain(`(array_agg(token_symbol ${ORDER}))[1]`);
+    expect(tokenSql).toContain(`(array_agg(token_name ${ORDER}))[1]`);
+    expect(breakdownSql).toContain(`(array_agg(token_symbol ${ORDER}))[1]`);
+    expect(breakdownSql).toContain(`(array_agg(token_name ${ORDER}))[1]`);
   });
 });
 

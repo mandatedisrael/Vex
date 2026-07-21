@@ -1,22 +1,31 @@
 /**
- * BOOK — the on-demand right-side instrument rail (a new <aside> sibling in the
- * AppShell <main> flex row). Per-session register: POSITION (scoped wallet
- * portfolio), MOVES (what the agent did), RUNTIME & COST (model/context/usage/
- * compaction), SESSION (metadata). The global no-session view shows the GLOBAL
- * inventory POSITION ("Portfolio"). The MISSION contract/setup lives in the
- * centre column (SessionPanel), not here — this rail is instruments only.
+ * BOOK — the right-edge stage router (welcome redesign, 2026-07-20). Mode is
+ * a pure derivation of `activeSessionId`:
+ *
+ *  - WELCOME stage (`null`): the rail presentation is REPLACED by the
+ *    floating collapsible Portfolio tab (`book/portfolio/
+ *    WelcomePortfolioPanel` — a round handle button that expands upward
+ *    into the Overview/Wallets/Balances card stack). Same persisted
+ *    `bookOpen` flag, same `onToggle`.
+ *  - SESSION stage: the on-demand instrument rail below, byte-for-byte the
+ *    prior behavior — an <aside> sibling in the AppShell <main> flex row
+ *    carrying the per-session register: POSITION (scoped wallet portfolio),
+ *    MOVES (what the agent did), RUNTIME & COST (model/context/usage/
+ *    compaction), SESSION (metadata). The MISSION contract/setup lives in
+ *    the centre column (SessionPanel), not here — this rail is instruments
+ *    only.
  *
  * The rail is ONE continuous editorial column of soft translucent ink
  * (--vex-rail + backdrop-blur, guard-whitelisted for exactly this file and
- * SessionsList) floating over the Signal Sky WebGL canvas behind the shell,
+ * SessionsList) floating over the Eclipse backdrop behind the shell,
  * delimited only by the edge-fading .vex-rail-seam-l hairline (seamless-shell
  * owner review — no full-height border wall). Inside, the landing
  * right-workspace-column grammar (.ws-col) holds: eyebrow section heads +
  * border-t hairlines between sections (BookBlock owns that chrome), no boxed
- * tiles, so the column reads as one pane, not a card stack. Mode is a pure
- * derivation of `activeSessionId`: null = welcome (global), else the open
- * session (scoped). Slides in via a CSP-safe one-shot keyframe
- * (`vex-book-enter`); reduced motion collapses it to the final frame.
+ * tiles, so the column reads as one pane, not a card stack. Slides in via a
+ * CSP-safe one-shot keyframe (`vex-book-enter`) — it replays on the
+ * welcome→session remount, which is exactly when the rail materializes;
+ * reduced motion collapses it to the final frame.
  *
  * The panel owns its own collapse header bar (first child): the version stamp
  * (relocated from the DESK RULE) + a chevron that calls the same `toggleBook`
@@ -42,6 +51,7 @@ import { HyperliquidPositionsBlock } from "./book/HyperliquidPositionsBlock.js";
 import { HyperliquidRiskBlock } from "./book/HyperliquidRiskBlock.js";
 import { HypervexingEnterButton } from "./workspace/HypervexingEnterButton.js";
 import { SidebarIconButton } from "./SessionRows.js";
+import { WelcomePortfolioPanel } from "./book/portfolio/WelcomePortfolioPanel.js";
 
 export function BookPanel({
   activeSessionId,
@@ -52,21 +62,30 @@ export function BookPanel({
   readonly bookOpen: boolean;
   readonly onToggle: () => void;
 }): JSX.Element {
+  // WELCOME stage: the floating Portfolio tab replaces the rail entirely
+  // (it is an absolute overlay, so the welcome canvas keeps its full width).
+  if (activeSessionId === null) {
+    return <WelcomePortfolioPanel bookOpen={bookOpen} onToggle={onToggle} />;
+  }
   return (
     <aside
       data-vex-area="book-panel"
       data-vex-book-open={bookOpen ? "true" : "false"}
       aria-label="Session instrument"
       className={cn(
-        // Rail over the Signal Sky: softer translucent ink (--vex-rail) in
+        // Rail over the Eclipse backdrop: softer translucent ink (--vex-rail) in
         // BOTH states — the collapsed spine is the same tint, thinner. Pure
         // glass, NO separating stroke (owner review round 2: even the
         // edge-fading hairline still read as a dividing line). Backdrop-blur
-        // stays guard-whitelisted for this rail.
-        "vex-book-enter flex h-full shrink-0 flex-col overflow-y-auto bg-[var(--vex-rail)] backdrop-blur-xl",
+        // stays guard-whitelisted for this rail. macOS-clean ink glass (owner
+        // decree, 2026-07-20): the rail carries ONLY the ink tint + blur, no
+        // grain overlay — a prior grain layer greyed the glass out and is
+        // retired.
+        "vex-book-enter relative flex h-full shrink-0 flex-col overflow-hidden bg-[var(--vex-rail)] backdrop-blur-xl transition-[width] duration-300 ease-[var(--vex-ease-out)]",
         // Collapsed: a thin spine carrying only the header bar (version +
-        // chevron). Expanded: the full instrument rail. Width change is CSS
-        // only — the panel never remounts, so the blocks keep their state.
+        // chevron). Expanded: the full instrument rail. The width change
+        // animates (mirrors SessionsList's left rail) but the panel never
+        // remounts, so the blocks keep their state.
         bookOpen ? "w-[320px] gap-3 p-3" : "w-12 p-0",
       )}
     >
@@ -99,30 +118,19 @@ export function BookPanel({
       {bookOpen ? (
         // Sections separate themselves (BookBlock border-t hairlines + py
         // rhythm) — no gap here, so the rules run edge to edge as one column.
-        <div className="flex min-h-0 flex-col">
-          {activeSessionId !== null ? (
-            <>
-              <PositionBlock activeSessionId={activeSessionId} hero />
-              <HyperliquidPositionsBlock sessionId={activeSessionId} />
-              <HyperliquidRiskBlock sessionId={activeSessionId} />
-              <MovesBlock sessionId={activeSessionId} />
-              <BookBlock title="Runtime & Cost">
-                <SessionRuntimeBar sessionId={activeSessionId} layout="stack" />
-              </BookBlock>
-              <SessionBlock sessionId={activeSessionId} />
-              {/* Zero-token door back into the room (owner feature): shows
-                  only for acknowledged sessions with mode history — main
-                  re-verifies both fail-closed on the invoke. */}
-              <HypervexingEnterButton sessionId={activeSessionId} />
-            </>
-          ) : (
-            <>
-              {/* Global portfolio (no active session) — the configured inventory.
-                  No Hyperliquid block here by owner decree: the agent activates
-                  the mode and risk setup arrives as a confirmable card. */}
-              <PositionBlock activeSessionId={null} hero />
-            </>
-          )}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <PositionBlock activeSessionId={activeSessionId} hero />
+          <HyperliquidPositionsBlock sessionId={activeSessionId} />
+          <HyperliquidRiskBlock sessionId={activeSessionId} />
+          <MovesBlock sessionId={activeSessionId} />
+          <BookBlock title="Runtime & Cost">
+            <SessionRuntimeBar sessionId={activeSessionId} layout="stack" />
+          </BookBlock>
+          <SessionBlock sessionId={activeSessionId} />
+          {/* Zero-token door back into the room (owner feature): shows
+              only for acknowledged sessions with mode history — main
+              re-verifies both fail-closed on the invoke. */}
+          <HypervexingEnterButton sessionId={activeSessionId} />
         </div>
       ) : null}
     </aside>

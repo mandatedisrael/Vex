@@ -16,7 +16,7 @@ describe("models schemas", () => {
     expect(modelsListSourceSchema.safeParse("openrouter").success).toBe(false);
   });
 
-  it("modelOptionDtoSchema allows nullable pricing and context metadata", () => {
+  it("modelOptionDtoSchema allows nullable pricing, context metadata, and reasoning", () => {
     const parsed = modelOptionDtoSchema.safeParse({
       providerId: "openrouter",
       modelId: "anthropic/claude-opus-4.7",
@@ -25,6 +25,39 @@ describe("models schemas", () => {
       contextLength: null,
       pricingInputPerMillion: null,
       pricingOutputPerMillion: null,
+      reasoning: null,
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("modelOptionDtoSchema requires the reasoning key (no implicit omission)", () => {
+    const parsed = modelOptionDtoSchema.safeParse({
+      providerId: "openrouter",
+      modelId: "anthropic/claude-opus-4.7",
+      displayName: "Claude Opus 4.7",
+      brand: "openrouter",
+      contextLength: null,
+      pricingInputPerMillion: null,
+      pricingOutputPerMillion: null,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("modelOptionDtoSchema accepts a normalized non-null reasoning capability", () => {
+    const parsed = modelOptionDtoSchema.safeParse({
+      providerId: "openrouter",
+      modelId: "anthropic/claude-opus-4.7",
+      displayName: "Claude Opus 4.7",
+      brand: "openrouter",
+      contextLength: null,
+      pricingInputPerMillion: null,
+      pricingOutputPerMillion: null,
+      reasoning: {
+        supportedEfforts: ["high", "medium", "low", "none"],
+        defaultEffort: "medium",
+        defaultEnabled: true,
+        mandatory: false,
+      },
     });
     expect(parsed.success).toBe(true);
   });
@@ -56,6 +89,7 @@ describe("models schemas", () => {
             contextLength: null,
             pricingInputPerMillion: null,
             pricingOutputPerMillion: null,
+            reasoning: null,
           },
         ],
         fetchedAt: null,

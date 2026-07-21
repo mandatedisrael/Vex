@@ -285,10 +285,11 @@ function ToastIcon({
   readonly status: ToastableUpdateStatus;
 }): JSX.Element {
   if (status.kind === "downloading") {
+    // Still color mark — owner decree: no pulsing dots anywhere.
     return (
       <span
         aria-hidden
-        className="vex-pulse-dot mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
+        className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
       />
     );
   }

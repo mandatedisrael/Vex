@@ -3,9 +3,12 @@
  *
  * Reads `AGENT_PROVIDER` + `AGENT_MODEL` from `process.env` (populated
  * after vault unlock per the onboarding flow) and returns a single-option
- * list for the one global model every session uses. No network call, no
- * OpenRouter `/models` catalogue, no pricing/context claims; a future
- * catalogue fetch could enrich pricing + context length + brand.
+ * list for the one global model every session uses, including its
+ * reasoning capability (S6) resolved via the SAME neutral resolver
+ * `sessions.getModel` uses (`reasoning-capability-resolver.ts`) — one
+ * resolver, two channels, so both stay in lockstep for the same model id.
+ * No pricing/context claims yet; a future catalogue fetch could enrich
+ * pricing + context length + brand.
  *
  * When the env vars are missing the handler returns
  * `{source: "unconfigured", models: [], fetchedAt: null}` — empty list,
@@ -22,6 +25,7 @@ import {
 } from "@shared/schemas/models.js";
 import { log } from "../logger/index.js";
 import { registerHandler } from "./register-handler.js";
+import { resolveReasoningCapability } from "./reasoning-capability-resolver.js";
 
 const MODEL_ID_MAX = 200;
 const PROVIDER_ID_MAX = 64;
@@ -45,11 +49,12 @@ function readEnvDefault(): {
   return { provider, model };
 }
 
-function buildResult(): ModelsListAvailableResult {
+async function buildResult(signal: AbortSignal): Promise<ModelsListAvailableResult> {
   const { provider, model } = readEnvDefault();
   if (provider === null || model === null) {
     return { source: "unconfigured", models: [], fetchedAt: null };
   }
+  const { reasoning } = await resolveReasoningCapability(model, signal);
   const option: ModelOptionDto = {
     providerId: provider,
     modelId: model,
@@ -58,6 +63,7 @@ function buildResult(): ModelsListAvailableResult {
     contextLength: null,
     pricingInputPerMillion: null,
     pricingOutputPerMillion: null,
+    reasoning,
   };
   return {
     source: "global_default",
@@ -77,7 +83,7 @@ export function registerModelsHandlers(): ReadonlyArray<() => void> {
         _input,
         ctx,
       ): Promise<Result<ModelsListAvailableResult>> => {
-        const result = buildResult();
+        const result = await buildResult(ctx.signal);
         log.info(
           `[ipc:vex:models:listAvailable] ok source=${result.source} ` +
             `count=${result.models.length} correlationId=${ctx.requestId}`,

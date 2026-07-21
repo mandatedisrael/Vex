@@ -1,29 +1,34 @@
 /**
- * Main app shell — THE SIGNAL DESK (the landing's design language, opened
- * for business).
+ * Main app shell — THE SIGNAL DESK, CHRONOS edition (Focused · Quiet ·
+ * Precise).
  *
  * Onboarding proved identity in a dark room (one light, one signature);
- * the shell is the working register that signature unlocked. Same ink
- * canvas (#0a0d18 via --vex-surface-0), zero photography, zero resting
- * glow: depth comes from the three solid luminance steps defined by the
- * [data-vex-shell] scope in globals.css, separated by hairlines. The one
- * sanctioned gradient is the selection beam (.vex-select-beam).
+ * the shell is the working register that signature unlocked. Ink canvas
+ * (#0a0d18 via --vex-surface-0), zero resting glow: depth on solid surfaces
+ * comes from the three luminance steps defined by the [data-vex-shell]
+ * scope in globals.css, separated by hairlines. The one sanctioned gradient
+ * is the selection beam (.vex-select-beam).
  *
- * Phase 5 (Signal Sky): the room's back wall is the landing's procedural
- * WebGL dither sky (SignalSky, z-0 — no imagery), running FULL on the
- * welcome/idle stage and DIMMED behind an active session transcript. The
- * columns float above it: the center section carries `relative z-10`; the
- * two side rails (SessionsList / BookPanel) are guard-whitelisted soft ink
- * (--vex-rail over a blurred backdrop, edge-fading seams instead of border
- * walls) so the sky reads through them and the shell stays ONE canvas.
+ * The room's back wall is the Eclipse photo backdrop (ShellBackdrop, z-0 —
+ * owner-decreed 2026-07-20, superseding the retired procedural SignalSky
+ * and its "zero photography" law), running LIGHT-veiled on the welcome/idle
+ * stage and DEEP-veiled behind an active session transcript. The columns
+ * float above it: the center section carries `relative z-10`; the two side
+ * rails (SessionsList / BookPanel) are guard-whitelisted glass (--vex-rail
+ * over a blurred backdrop, no border walls) so the artwork reads through
+ * them and the shell stays ONE canvas.
  *
- * Layout: sidebar rail (SessionsList) | content column under the DESK RULE
+ * Layout: sidebar rail (SessionsList) | session column under the DESK RULE
  * | optional on-demand BOOK panel (right <aside>, gated on bookOpen). The
- * DESK RULE (h-12 header) is a 3-zone grid: the live tape-state word (left),
- * the MISSION/PLAN badge cluster (`MissionRail`, center — session view only),
- * and an empty right flank (the BOOK toggle + version stamp both live in
- * BookPanel's collapse header — single-toggle owner review). Its
- * bottom-hairline accent tick sits over the left-anchored transcript spine.
+ * center panel is ALWAYS the session panel (Chronos screens redesign,
+ * 2026-07-20): Memory, the sessions library, and "How Vex works" open as
+ * full-app ShellScreen overlays (screens/), not center sub-views.
+ * The DESK RULE (h-12 header) is a 3-zone grid: the live tape-state word
+ * (left), the MISSION/PLAN badge cluster (`MissionRail`, center), and the
+ * right flank hosting the approvals inbox (the BOOK toggle + version stamp
+ * both live in BookPanel's collapse header — single-toggle owner review).
+ * The rule carries no decorative accent tick (owner decree, 2026-07-20: the
+ * stray dash read as visual noise, not a landmark).
  *
  * `data-vex-shell="true"` scopes the Protocol Desk tokens (sibling of
  * data-vex-onboarding); `data-vex-screen="appShell"` stays the e2e/test
@@ -34,8 +39,7 @@
 
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { AnimatePresence } from "motion/react";
-import type { SkyTheme } from "./signalSkyShaders.js";
-import type { AppShellView, WorkspaceMode } from "../../stores/uiStore.js";
+import type { WorkspaceMode } from "../../stores/uiStore.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { BookPanel } from "./BookPanel.js";
 import { shouldFocusComposerAfterWorkspaceExit } from "./composer-focus-handoff.js";
@@ -44,24 +48,19 @@ import { MissionRail } from "./MissionRail.js";
 import { useAutoCollapseBook } from "./useAutoCollapseBook.js";
 import { SessionCreator } from "./SessionCreator.js";
 import { SessionPanel } from "./SessionPanel.js";
-import { SessionsLibrary } from "./SessionsLibrary.js";
 import { SessionsList } from "./SessionsList.js";
-import { MemoryPanel } from "./MemoryPanel.js";
-import { MissionHistory } from "./MissionHistory.js";
 import { GlobalApprovals } from "./GlobalApprovals.js";
-import { SignalSky } from "./SignalSky.js";
+import { ShellBackdrop } from "./ShellBackdrop.js";
+import { ShellScreens } from "./screens/ShellScreens.js";
 import { HypervexingWorkspace } from "./workspace/HypervexingWorkspace.js";
 import { HypervexingFirstEntryAck } from "./workspace/HypervexingFirstEntryAck.js";
 import { useHypervexingWorkspace } from "./workspace/useHypervexingWorkspace.js";
-import { deriveShellTheme } from "./workspace/workspaceModeGate.js";
-
-/** Sky strength behind an active session transcript — dimmed so the tape
- * stays the protagonist; the welcome/idle stage runs the sky at full 1. The
- * Hypervexing workspace also dims the sky (the chart is the protagonist). */
-const SKY_DIM_INTENSITY = 0.35;
+import {
+  deriveShellTheme,
+  type ShellTheme,
+} from "./workspace/workspaceModeGate.js";
 
 export function AppShell(): JSX.Element {
-  const appShellView = useUiStore((s) => s.appShellView);
   const activeSessionId = useUiStore((s) => s.activeSessionId);
   const theme = useUiStore((s) => s.theme);
   const bookOpen = useUiStore((s) => s.bookOpen);
@@ -85,9 +84,9 @@ export function AppShell(): JSX.Element {
 
   // `data-vex-theme` is DERIVED: while the mode is visually active (including
   // through the exit drain) it reads "hypervexing"; otherwise it is the
-  // user's own persisted theme, so EXIT restores navy vs lime exactly once
-  // the drain completes. The mode never overwrites `theme`.
-  const derivedTheme: SkyTheme = deriveShellTheme(
+  // user's own persisted theme, so EXIT restores Chronos exactly once the
+  // drain completes. The mode never overwrites `theme`.
+  const derivedTheme: ShellTheme = deriveShellTheme(
     workspace.visualWorkspaceMode,
     theme,
   );
@@ -98,15 +97,12 @@ export function AppShell(): JSX.Element {
   // inside a narrow window — we don't fight a manual toggle.
   useAutoCollapseBook();
 
-  // Sky intensity is derived from state AppShell already subscribes to —
-  // full on welcome/idle (no active session, or a non-session sub-view),
-  // dimmed behind an active session transcript OR the Hypervexing chart
-  // (including through its exit drain, alongside the theme above). The
-  // uniform itself eases inside SignalSky, so this can flip freely.
-  const skyIntensity =
-    visuallyInWorkspace || (activeSessionId !== null && appShellView === "session")
-      ? SKY_DIM_INTENSITY
-      : 1;
+  // Backdrop veil is derived from state AppShell already subscribes to —
+  // light on welcome/idle (no active session), deep behind an active session
+  // transcript OR the Hypervexing chart (including through its exit drain,
+  // alongside the theme above). The opacity itself eases inside
+  // ShellBackdrop, so this can flip freely.
+  const backdropDimmed = visuallyInWorkspace || activeSessionId !== null;
 
   // Focus handoff BACK to the normal chat composer once the exit drain
   // completes (see SessionComposer's `focusRequest` doc). Detected as the one
@@ -135,15 +131,15 @@ export function AppShell(): JSX.Element {
   }, []);
 
   return (
-    // `relative isolate`: anchors the absolutely-positioned Signal Sky and
-    // traps the shell's z-layering in one stacking context.
+    // `relative isolate`: anchors the absolutely-positioned Eclipse backdrop
+    // and traps the shell's z-layering in one stacking context.
     <main
       className="relative isolate flex h-screen w-screen overflow-hidden bg-[var(--vex-surface-0)] text-foreground"
       data-vex-shell="true"
       data-vex-theme={derivedTheme}
       data-vex-screen="appShell"
     >
-      <SignalSky intensity={skyIntensity} theme={derivedTheme} />
+      <ShellBackdrop dimmed={backdropDimmed} />
 
       {/* The 5-zone trading room replaces the normal columns while active. It
        * reuses the SAME SessionPanel (docked), so chat context is preserved
@@ -165,7 +161,6 @@ export function AppShell(): JSX.Element {
        * alongside a still-present (entering or still-exiting) room. */}
       {inWorkspace || visuallyInWorkspace ? null : (
         <NormalShell
-          appShellView={appShellView}
           activeSessionId={activeSessionId}
           bookOpen={bookOpen}
           toggleBook={toggleBook}
@@ -174,6 +169,13 @@ export function AppShell(): JSX.Element {
           onComposerFocusHandled={handleComposerFocusHandled}
         />
       )}
+
+      {/* Full-app overlay screens (Memory / Sessions / How Vex works) —
+       * `fixed` overlays expanding from their profile-menu rows, floating
+       * above the columns and NEVER in shell flow. Must stay a direct child
+       * of this <main>, outside the center section. The center panel below
+       * stays the session panel always. */}
+      <ShellScreens />
 
       <SessionCreator
         open={createSessionOpen}
@@ -194,11 +196,10 @@ export function AppShell(): JSX.Element {
   );
 }
 
-/** The normal (non-Hypervexing) shell columns: sessions rail · content column
+/** The normal (non-Hypervexing) shell columns: sessions rail · session column
  * under the desk rule · optional BOOK panel. Extracted so the AppShell root
  * cleanly branches between the normal shell and the Hypervexing workspace. */
 function NormalShell({
-  appShellView,
   activeSessionId,
   bookOpen,
   toggleBook,
@@ -206,7 +207,6 @@ function NormalShell({
   focusComposerOnReturn,
   onComposerFocusHandled,
 }: {
-  readonly appShellView: AppShellView;
   readonly activeSessionId: string | null;
   readonly bookOpen: boolean;
   readonly toggleBook: () => void;
@@ -221,22 +221,18 @@ function NormalShell({
       <section className="relative z-10 flex min-w-0 flex-1 flex-col">
         {/* DESK RULE — the working header datum and the head of the tape. The
          * full-width bottom hairline was removed so the header and main content
-         * read as one seamless surface (owner review); only the short accent
-         * tick that heads the left-anchored transcript spine remains. Three
-         * zones on a 1fr/auto/1fr grid (equal flanks keep the center truly
-         * centered): live tape state (left), MISSION/PLAN badge cluster
-         * (center), and the right flank hosting the app-wide pending-approvals
-         * inbox (`GlobalApprovals`, owner-approved global visibility). The
-         * badge renders null at count 0, so the flank stays empty when idle —
-         * the center stays truly centered. The BOOK toggle still lives ONLY in
-         * BookPanel's collapse header (single-toggle owner review). The rule
-         * itself never moves; only the tape-state word, the cluster's badge
-         * states, and the approvals badge change. */}
+         * read as one seamless surface (owner review); no decorative accent
+         * tick remains either (owner decree, 2026-07-20: the dash read as
+         * visual noise). Three zones on a 1fr/auto/1fr grid (equal flanks keep
+         * the center truly centered): live tape state (left), MISSION/PLAN
+         * badge cluster (center), and the right flank hosting the app-wide
+         * pending-approvals inbox (`GlobalApprovals`, owner-approved global
+         * visibility). The badge renders null at count 0, so the flank stays
+         * empty when idle — the center stays truly centered. The BOOK toggle
+         * still lives ONLY in BookPanel's collapse header (single-toggle owner
+         * review). The rule itself never moves; only the tape-state word, the
+         * cluster's badge states, and the approvals badge change. */}
         <header className="relative grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 px-6">
-          <span
-            aria-hidden
-            className="absolute -bottom-px left-6 h-px w-6 bg-[var(--vex-accent)]"
-          />
           <div className="flex min-w-0 items-center justify-start">
             <DeskRuleTapeState />
           </div>
@@ -244,9 +240,7 @@ function NormalShell({
            * column 3 even when the cluster gates itself away (MissionRail
            * renders nothing for a plain agent session with plan-mode off). */}
           <div className="flex min-w-0 items-center justify-center">
-            {appShellView === "session" ? (
-              <MissionRail activeSessionId={activeSessionId} />
-            ) : null}
+            <MissionRail activeSessionId={activeSessionId} />
           </div>
           <div className="flex items-center justify-end gap-3">
             <GlobalApprovals />
@@ -254,31 +248,21 @@ function NormalShell({
         </header>
 
         <div className="min-h-0 flex-1">
-          {appShellView === "sessionsLibrary" ? (
-            <SessionsLibrary />
-          ) : appShellView === "memory" ? (
-            <MemoryPanel />
-          ) : appShellView === "missionHistory" ? (
-            <MissionHistory />
-          ) : (
-            <SessionPanel
-              focusRequest={focusComposerOnReturn}
-              onFocusRequestHandled={onComposerFocusHandled}
-            />
-          )}
+          <SessionPanel
+            focusRequest={focusComposerOnReturn}
+            onFocusRequestHandled={onComposerFocusHandled}
+          />
         </div>
       </section>
 
-      {appShellView === "session" ? (
-        // Always mounted in session view — the panel owns its collapsed state
-        // (a thin spine + version stamp) so toggling never remounts it or
-        // replays the slide-in keyframe.
-        <BookPanel
-          activeSessionId={activeSessionId}
-          bookOpen={bookOpen}
-          onToggle={toggleBook}
-        />
-      ) : null}
+      {/* Always mounted — the panel owns its collapsed state (a thin spine +
+       * version stamp) so toggling never remounts it or replays the slide-in
+       * keyframe. */}
+      <BookPanel
+        activeSessionId={activeSessionId}
+        bookOpen={bookOpen}
+        onToggle={toggleBook}
+      />
     </>
   );
 }

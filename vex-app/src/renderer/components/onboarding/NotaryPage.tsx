@@ -5,10 +5,10 @@
  * Renders the full-screen near-black canvas (--vex-onboarding-bg), the
  * document column (shared geometry — same width as the intro's plinth),
  * the settled signature hallmark (no glow: the glow belonged to the act
- * of signing), the brand overline, the plinth rule with its 24px accent
- * tick, the mono title line with an optional STEP XX / YY counter, the
- * subline, and the corner chrome (brand tetrad bottom-left, version
- * bottom-right). Screen content renders as children below the subline.
+ * of signing), the brand overline, the mono title line with an optional
+ * STEP XX / YY counter, the subline, and the corner chrome (brand tetrad
+ * bottom-left, version bottom-right). Screen content renders as children
+ * below the subline.
  *
  * Chrome discipline: everything this scaffold renders stands at final
  * opacity from frame one — entrances are hard cuts; only screen content
@@ -80,12 +80,6 @@ export function NotaryPage({
           Enforce AI Trades · Prove Every Action
         </span>
 
-        {/* PLINTH RULE — the intro's plinth carried forward, 24px accent
-         * tick at the left edge. */}
-        <div aria-hidden className="relative mt-6 h-px w-full bg-white/[0.08]">
-          <span className="absolute left-0 top-0 h-px w-6 bg-[var(--vex-onboarding-accent)]" />
-        </div>
-
         {/* TITLE LINE — mono microtype continues the intro's voice. */}
         <div className="mt-5 flex items-baseline justify-between">
           <h1
@@ -113,11 +107,8 @@ export function NotaryPage({
         {children}
       </section>
 
-      {/* VIEWPORT CHROME — identical voice and position on every page.
-       * The barcode strip is the landing's .barcode-ind artifact
-       * (currentColor bars — the muted text token sets the ink). */}
+      {/* VIEWPORT CHROME — identical voice and position on every page. */}
       <div className="pointer-events-none absolute bottom-7 left-10 flex flex-col gap-2 text-[var(--color-text-muted)]">
-        <span aria-hidden className="vex-barcode h-2.5 w-16 opacity-30" />
         <span className="font-mono text-[10px] uppercase tracking-[0.4em] opacity-60">
           Models Reason · Runtimes Enforce · Chains Prove
         </span>

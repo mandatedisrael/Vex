@@ -12,7 +12,10 @@
 
 import {
   queryOptions,
+  useInfiniteQuery,
   useQuery,
+  type InfiniteData,
+  type UseInfiniteQueryResult,
   type UseQueryResult,
 } from "@tanstack/react-query";
 import type { Result } from "@shared/ipc/result.js";
@@ -21,6 +24,10 @@ import type {
   PortfolioReadInput,
 } from "@shared/schemas/portfolio.js";
 import type { MovesDto } from "@shared/schemas/portfolio-moves.js";
+import type {
+  TokenHistoryCursor,
+  TokenHistoryDto,
+} from "@shared/schemas/token-history.js";
 import { portfolioKeys } from "./queryKeys.js";
 
 const STALE_MS = 15_000;
@@ -98,4 +105,50 @@ export function useMoves(
   sessionId: string,
 ): UseQueryResult<Result<MovesDto>> {
   return useQuery(movesOptions(sessionId));
+}
+
+/**
+ * Token history (chronos-shell) — the click-through per-token history
+ * screen. Global scope, exact `(chainId, tokenAddress)` identity only (no
+ * symbol-only lookup — name/symbol are display metadata, never a query
+ * input). `identity: null` disables the query (screen closed / no token
+ * selected yet).
+ */
+export interface TokenHistoryIdentity {
+  readonly chainId: number;
+  readonly tokenAddress: string;
+}
+
+/**
+ * Next page param for the token-history infinite query. Mirrors
+ * `getTranscriptNextPageParam` (`messages.ts`): a failed `Result`, an
+ * `"unavailable"` (timed-out) page, or an exhausted page all stop pagination
+ * rather than throwing — the component surfaces the page's own status.
+ */
+export function getTokenHistoryNextPageParam(
+  lastPage: Result<TokenHistoryDto>,
+): TokenHistoryCursor | undefined {
+  if (!lastPage.ok) return undefined;
+  if (lastPage.data.status !== "available") return undefined;
+  return lastPage.data.hasMore && lastPage.data.nextCursor !== null
+    ? lastPage.data.nextCursor
+    : undefined;
+}
+
+export function useTokenHistoryInfinite(
+  identity: TokenHistoryIdentity | null,
+): UseInfiniteQueryResult<
+  InfiniteData<Result<TokenHistoryDto>, TokenHistoryCursor | null>
+> {
+  const chainId = identity?.chainId ?? 0;
+  const tokenAddress = identity?.tokenAddress ?? "";
+  return useInfiniteQuery({
+    queryKey: portfolioKeys.tokenHistory(chainId, tokenAddress),
+    queryFn: ({ pageParam }) =>
+      window.vex.portfolio.listTokenHistory({ chainId, tokenAddress, cursor: pageParam }),
+    initialPageParam: null as TokenHistoryCursor | null,
+    getNextPageParam: (lastPage) => getTokenHistoryNextPageParam(lastPage),
+    staleTime: STALE_MS,
+    enabled: identity !== null,
+  });
 }

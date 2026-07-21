@@ -38,8 +38,6 @@ function getConfigDir(): string {
 
 export const CONFIG_DIR = getConfigDir();
 export const CONFIG_FILE = join(CONFIG_DIR, "config.json");
-/** User-authored persona file (name + tone) injected into the system prompt. */
-export const PERSONA_FILE = join(CONFIG_DIR, "persona.md");
 export const KEYSTORE_FILE = join(CONFIG_DIR, "keystore.json");
 export const SOLANA_KEYSTORE_FILE = join(CONFIG_DIR, "solana-keystore.json");
 export const INTENTS_DIR = join(CONFIG_DIR, "intents");

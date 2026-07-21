@@ -32,16 +32,16 @@ export function Footer({
   return (
     <>
       {/* GATE COUNTER — quiet attestation progress, left-aligned. The
-       * status dot pulses ONLY while probes are verifiably in flight
-       * (the landing .hero-status law); once resolved it rests still —
-       * neutral ink, because "attested" covers warn/fail stamps too. */}
+       * status dot is a still color mark (owner decree: no pulsing dots
+       * anywhere) — armed vs. attesting differ by color alone, because
+       * "attested" covers warn/fail stamps too. */}
       <div className="mt-5 flex w-full items-center gap-2.5">
         <span
           aria-hidden
           className={
             armed
               ? "h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-text-muted)]"
-              : "vex-pulse-dot h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent-secondary)]"
+              : "h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent-secondary)]"
           }
         />
         <span

@@ -7,7 +7,7 @@ interface MockStoreState {
   readonly activeSessionId: string | null;
   readonly sessionModeFilter: SessionModeFilter;
   readonly setActiveSessionId: (id: string | null) => void;
-  readonly setAppShellView: (view: "session" | "sessionsLibrary") => void;
+  readonly setShellRoute: (route: { readonly kind: string }) => void;
   readonly setSessionModeFilter: (filter: SessionModeFilter) => void;
 }
 
@@ -29,7 +29,7 @@ function resetStore(filter: SessionModeFilter = "all"): void {
     setActiveSessionId: (activeSessionId) => {
       publishState({ ...makeState(sessionModeFilter), activeSessionId });
     },
-    setAppShellView: () => {},
+    setShellRoute: () => {},
     setSessionModeFilter: (nextFilter) => {
       publishState(makeState(nextFilter));
     },

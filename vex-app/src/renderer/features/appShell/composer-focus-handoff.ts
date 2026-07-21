@@ -6,7 +6,7 @@
  *
  * Pulled out of `AppShell.tsx` (same reason as `composer-helpers.ts`): no
  * React, no hooks, so the rule is unit-testable without mounting the shell's
- * heavy import graph (SignalSky, the workspace panes, session lists, …).
+ * heavy import graph (the backdrop, the workspace panes, session lists, …).
  */
 
 import type { WorkspaceMode } from "../../stores/uiStore.js";

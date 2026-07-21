@@ -3,6 +3,8 @@ import { portfolioReadInputSchema } from "../../shared/schemas/portfolio.js";
 import type { PortfolioReadInput } from "../../shared/schemas/portfolio.js";
 import { movesReadInputSchema } from "../../shared/schemas/portfolio-moves.js";
 import type { MovesReadInput } from "../../shared/schemas/portfolio-moves.js";
+import { tokenHistoryReadInputSchema } from "../../shared/schemas/token-history.js";
+import type { TokenHistoryReadInput } from "../../shared/schemas/token-history.js";
 import type { PortfolioBridge } from "../../shared/types/bridge/agent/portfolio.js";
 import { invokeWithSchema } from "../_dispatch.js";
 
@@ -12,5 +14,12 @@ export const portfolio = {
   },
   listMoves(input: MovesReadInput) {
     return invokeWithSchema(CH.portfolio.listMoves, input, movesReadInputSchema);
+  },
+  listTokenHistory(input: TokenHistoryReadInput) {
+    return invokeWithSchema(
+      CH.portfolio.listTokenHistory,
+      input,
+      tokenHistoryReadInputSchema,
+    );
   },
 } satisfies PortfolioBridge;

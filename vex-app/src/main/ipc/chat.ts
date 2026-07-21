@@ -240,6 +240,22 @@ export function registerChatSubmitHandler(): () => void {
       const dbUrlOutcome = await ensureEngineDbUrl(ctx.requestId);
       if (!dbUrlOutcome.ok) return dbUrlOutcome;
 
+      // Blocker 2 (fix-wave): the renderer's mount gate is defense-in-depth,
+      // not the authority — a mission session must never carry a per-turn
+      // reasoningEffort, so strip it here from the session's OWN DB-read
+      // mode, using the `session` this handler already fetched above. This
+      // catches any renderer race (or future renderer bug) that lets a
+      // reasoningEffort ride a mission-session submit.
+      const forwardedReasoningEffort =
+        input.reasoningEffort !== undefined && session.data.mode !== "mission"
+          ? input.reasoningEffort
+          : undefined;
+      if (input.reasoningEffort !== undefined && session.data.mode === "mission") {
+        log.debug(
+          `[ipc:vex:chat:submit] stripped reasoningEffort for mission session correlationId=${ctx.requestId}`,
+        );
+      }
+
       try {
         const { submitOperatorInstruction } = await import(
           "@vex-agent/engine/index.js"
@@ -249,11 +265,12 @@ export function registerChatSubmitHandler(): () => void {
           input.message,
           ctx.signal,
           // S6: per-turn reasoning effort, validated by chatSubmitInputSchema.
-          // Absent → engine default ("medium" when the model supports
-          // reasoning; the param is omitted entirely otherwise).
-          input.reasoningEffort === undefined
+          // Absent (or stripped above for a mission session) → the field is
+          // omitted entirely and the provider selects its own default; there
+          // is no engine-side "medium" fallback.
+          forwardedReasoningEffort === undefined
             ? undefined
-            : { reasoningEffort: input.reasoningEffort },
+            : { reasoningEffort: forwardedReasoningEffort },
         );
         log.info(
           `[ipc:vex:chat:submit] ok sessionId=${input.sessionId} ` +

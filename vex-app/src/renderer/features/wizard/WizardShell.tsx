@@ -125,8 +125,7 @@ function TopChrome(): JSX.Element {
         </div>
       </div>
       <div className="pointer-events-none absolute bottom-7 left-10 z-10 flex flex-col gap-1.5">
-        {/* Static backed-by line — quiet monochrome partner marks; no theme
-         * toggle here (the wizard is single-theme onboarding). */}
+        {/* Static backed-by line — a quiet monochrome partner mark. */}
         <span className="flex items-center gap-2 opacity-60">
           <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--color-text-muted)]">
             Backed by
@@ -134,11 +133,6 @@ function TopChrome(): JSX.Element {
           <img
             src="/logo/virtuals.svg"
             alt="Virtuals"
-            className="h-3.5 w-3.5"
-          />
-          <img
-            src="/logo/robinhood.svg"
-            alt="Robinhood"
             className="h-3.5 w-3.5"
           />
         </span>

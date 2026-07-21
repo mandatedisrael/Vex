@@ -4,6 +4,10 @@ import {
   hyperliquidSettingsUpdateInputSchema,
   type HyperliquidSettingsUpdateInput,
 } from "../../shared/schemas/hyperliquid.js";
+import {
+  userProfileSchema,
+  type UserProfile,
+} from "../../shared/schemas/user-profile.js";
 import type { SettingsBridge } from "../../shared/types/bridge/shell/settings.js";
 import { invokeWithSchema } from "../_dispatch.js";
 
@@ -28,5 +32,11 @@ export const settings = {
       input,
       hyperliquidSettingsUpdateInputSchema,
     );
+  },
+  getUserProfile() {
+    return invokeWithSchema(CH.settings.getUserProfile, {});
+  },
+  setUserProfile(profile: UserProfile) {
+    return invokeWithSchema(CH.settings.setUserProfile, profile, userProfileSchema);
   },
 } satisfies SettingsBridge;

@@ -21,6 +21,7 @@
  */
 
 import { z } from "zod";
+import { reasoningCapabilitySchema } from "./reasoning.js";
 
 export const VEX_APP_SESSION_SCOPE = "vex_app" as const;
 export const INITIAL_GOAL_MAX_LENGTH = 2000;
@@ -266,14 +267,28 @@ export const sessionModelDtoSchema = z
      */
     updatedAt: z.string().datetime({ offset: true }).nullable(),
     /**
-     * Whether the resolved model supports reasoning (S6). Derived in main
-     * from the engine inference config: `true` when the OpenRouter catalog
-     * reports internal-reasoning pricing for the model, `false` when the
-     * catalog says it has none, `null` when unknown (unconfigured, provider
-     * locked, or catalog unreachable). The renderer shows the composer
-     * reasoning-effort control ONLY for `true`.
+     * Whether the resolved model supports reasoning at all (S6), coarse
+     * boolean/unknown signal kept for backward compatibility. Resolved in
+     * main via the `reasoning` fallback chain below: `true`/`false` when
+     * either `reasoning` is non-null or the reasoning-capability catalog
+     * entry's `supportsReasoningParameter` is known, `null` when totally
+     * unknown (unconfigured, provider locked, or catalog unreachable).
      */
     supportsReasoning: z.boolean().nullable(),
+    /**
+     * Per-model reasoning capability (S6 reasoning-selector), REQUIRED
+     * nullable. `null` means "no selector" (non-reasoning model, or
+     * capability data unavailable); non-null is the D4-set-normalized
+     * FINAL selectable set (`normalizeReasoningCapability`,
+     * `shared/schemas/reasoning.ts`). Resolved in main
+     * (`main/ipc/sessions/get-model.ts`) via a fallback chain: the
+     * reasoning-capability catalog entry for the configured model id →
+     * `null` when the catalog entry itself has no levels but the model
+     * still nominally supports reasoning → `null` when the catalog is
+     * unavailable entirely (falls back to the pre-S6 pricing-proxy probe
+     * for `supportsReasoning` only).
+     */
+    reasoning: reasoningCapabilitySchema.nullable(),
   })
   .strict();
 export type SessionModelDto = z.infer<typeof sessionModelDtoSchema>;

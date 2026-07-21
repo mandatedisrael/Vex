@@ -332,25 +332,50 @@ export interface EngineContext {
   walletPolicy: WalletPolicy;
   loadedDocuments: Map<string, string>;
   /**
-   * Agent display/identity name from the user persona file. Set by hydration;
-   * optional so non-hydrated/test contexts fall back to the default ("Vex") in
-   * `buildIdentityPrompt`. Local-first user config — never widens permissions
-   * (style/name only).
+   * How the agent should address the user, from the DB-backed "Vex setup"
+   * user profile (`soul` singleton). Set by hydration; optional so
+   * non-hydrated/test contexts render without it. Advisory style only — never
+   * widens permissions.
    */
-  personaName?: string;
+  userDisplayName?: string | null;
   /**
-   * Free-form persona/tone block from the user persona file, or null when
-   * unconfigured. Optional for the same reason as `personaName`. Rendered as
-   * subordinate style guidance in the prompt (after the authoritative
-   * safety/permission layers).
+   * User's standing style/preference instructions from the user profile, or
+   * null when unconfigured. Optional for the same reason as
+   * `userDisplayName`. Rendered as subordinate style guidance in the prompt
+   * (after the authoritative safety/permission layers) — never overrides
+   * tool, permission, mission, approval, or safety rules.
    */
-  personaBlock?: string | null;
+  userInstructionsMd?: string | null;
   /**
-   * True when the user configured a persona (custom name OR block). Set by
-   * hydration. Gates the one-time persona-setup offer so a name-only persona is
-   * not treated as "unconfigured". Optional → `undefined` is treated as false.
+   * Short self-description of the user's work, from the user profile, or
+   * null when unconfigured. Optional for the same reason as
+   * `userDisplayName`. Advisory context only.
    */
-  personaConfigured?: boolean;
+  userWorkDescription?: string | null;
+  /**
+   * Preferred tone/register from the user profile ("Vex setup" 043), or null
+   * when unconfigured. Optional for the same reason as `userDisplayName`.
+   * Advisory style guidance only, rendered as a subordinate identity-layer
+   * line; an unrecognized token is silently skipped at render time (see
+   * `engine/prompts/identity.ts`) rather than surfaced. Never widens
+   * permissions or changes tool/approval/safety behavior.
+   */
+  userStylePreset?: string | null;
+  /**
+   * Self-described style traits from the user profile ("Vex setup" 043,
+   * e.g. "warm", "emoji"), or an empty array when none are set. Optional for
+   * the same reason as `userDisplayName`. Advisory style guidance only;
+   * unrecognized tokens are silently skipped at render time.
+   */
+  userCharacteristics?: readonly string[];
+  /**
+   * Self-described risk appetite from the user profile ("Vex setup" 043), or
+   * null when unconfigured. Optional for the same reason as
+   * `userDisplayName`. Shapes TONE only — the identity layer renders an
+   * explicit disclaimer that it never changes approval requirements, limits,
+   * or safety behavior.
+   */
+  userRiskAppetite?: string | null;
   /**
    * Plan-mode (session-scoped). Set by hydration as the turn-start snapshot
    * driving tool visibility and the `# Active Plan` prompt layer. Optional so

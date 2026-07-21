@@ -217,15 +217,28 @@ export const DialogContent = forwardRef<HTMLDialogElement, DialogContentProps>(
           // on the dialog element, not the inner content (so the
           // currentTarget check above is reliable).
           "fixed inset-0 m-auto max-h-[85vh] w-full max-w-md overflow-hidden",
-          // Brand chrome: raised ink panel + hairline; depth comes from the
-          // opaque backdrop dimming the desk, never from glass or glow.
-          "rounded-xl border border-border bg-popover p-0 text-card-foreground shadow-none",
+          // Brand chrome (Chronos glass, owner correction round 2026-07-20):
+          // floating glass surface — translucent ink + backdrop-blur carries
+          // legibility, a static grain overlay decorates (never a filter on
+          // content — the previous DistortedGlass displacement filter warped
+          // dialog text and is retired), and the white/10 hairline +
+          // rounded-2xl mark it as a floating surface. The rgba fallbacks
+          // keep dialogs identical OUTSIDE the shell scope (wizard/unlock),
+          // where the --vex-* tokens are undefined.
+          "rounded-2xl border border-[var(--vex-line-strong,rgba(255,255,255,0.1))] bg-[var(--vex-glass-strong,rgba(11,15,29,0.82))] p-0 text-card-foreground shadow-none backdrop-blur-xl",
           "backdrop:bg-black/70 backdrop:backdrop-blur-none",
           "open:flex open:flex-col",
           className,
         )}
         {...rest}
       >
+        {/* Decorative static grain over the panel — an empty overlay (no
+         * filter, no defs), so it works identically in wizard/unlock dialogs
+         * mounted outside the shell. -z-10 keeps it under the content. */}
+        <div
+          aria-hidden
+          className="vex-noise vex-noise--panel pointer-events-none absolute inset-0 -z-10 rounded-[inherit]"
+        />
         {children}
       </dialog>
     );
@@ -257,10 +270,11 @@ export const DialogTitle = forwardRef<
     <h2
       ref={ref}
       id={id ?? ctx.titleId}
-      // Brand modal title — the landing mono-stamp register (uppercase
-      // micro-type), consistent across every dialog.
+      // Brand modal title — the Chronos editorial serif (Instrument Serif),
+      // consistent across every dialog (2026-07-20 redesign; the mono stamp
+      // register is retired for dialog titles).
       className={cn(
-        "font-mono text-[13px] font-medium uppercase leading-none tracking-[0.3em]",
+        "font-serif text-[24px] font-normal leading-tight",
         className,
       )}
       {...props}

@@ -15,8 +15,7 @@ import * as missionsRepo from "@vex-agent/db/repos/missions.js";
 import * as missionRunsRepo from "@vex-agent/db/repos/mission-runs.js";
 import * as sessionLinksRepo from "@vex-agent/db/repos/session-links.js";
 import * as sessionPlansRepo from "@vex-agent/db/repos/session-plans.js";
-import { loadPersona } from "../../../lib/persona.js";
-import { PERSONA_FILE } from "@config/paths.js";
+import { getUserProfile, type UserProfile } from "@vex-agent/db/repos/soul.js";
 
 export interface HydratedSession {
   context: EngineContext;
@@ -123,9 +122,17 @@ export async function hydrateEngineSession(sessionId: string): Promise<HydratedS
   const sessionKind: SessionKind = mission ? "mission" : session.mode;
   const sessionPermission: Permission = session.permission;
 
-  // Local-first user persona (name + optional tone block). Best-effort read —
-  // a missing/malformed persona.md degrades to the default ("Vex", no block).
-  const persona = loadPersona(PERSONA_FILE);
+  // User profile (DB singleton) — advisory prompt personalization; a read
+  // failure degrades to an unpersonalized prompt, never a failed hydration.
+  let userProfile: UserProfile = {
+    displayName: null,
+    instructionsMd: null,
+    workDescription: null,
+    stylePreset: null,
+    characteristics: [],
+    riskAppetite: null,
+  };
+  try { userProfile = await getUserProfile(); } catch { /* degrade silently */ }
 
   // Session-scoped plan-mode (turn-start snapshot for tool visibility + the
   // "# Active Plan" prompt layer). A missing row means plan-mode is off. The
@@ -148,9 +155,12 @@ export async function hydrateEngineSession(sessionId: string): Promise<HydratedS
       selectedSolanaWallet: session.selectedSolanaWallet,
       walletPolicy: resolveWalletPolicy(mission, activeRun),
       loadedDocuments: new Map(), // Populated by caller
-      personaName: persona.name,
-      personaBlock: persona.block,
-      personaConfigured: persona.configured,
+      userDisplayName: userProfile.displayName,
+      userInstructionsMd: userProfile.instructionsMd,
+      userWorkDescription: userProfile.workDescription,
+      userStylePreset: userProfile.stylePreset,
+      userCharacteristics: userProfile.characteristics,
+      userRiskAppetite: userProfile.riskAppetite,
       planMode: plan?.enabled ?? false,
       planMd: plan?.enabled ? plan.planMd : null,
       planAccepted: plan?.accepted ?? false,

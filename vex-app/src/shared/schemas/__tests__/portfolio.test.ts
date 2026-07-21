@@ -361,4 +361,90 @@ describe("portfolio dto schema", () => {
       }).success,
     ).toBe(false);
   });
+
+  // ── tokenName: additive human-readable name (B5) ───────────────────────
+
+  it("accepts a real-world tokenName with an internal space on a flat token line", () => {
+    const parsed = positionTokenDtoSchema.safeParse({
+      chainId: 1,
+      symbol: "USDC",
+      tokenName: "USD Coin",
+      balanceUsd: 1000,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.tokenName).toBe("USD Coin");
+  });
+
+  it("accepts a tokenName on a chain-breakdown token line", () => {
+    expect(
+      chainTokenDtoSchema.safeParse({
+        symbol: "USDC",
+        tokenName: "USD Coin",
+        balanceUsd: 50,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts a null tokenName and tolerates a missing tokenName key entirely (additive)", () => {
+    expect(
+      positionTokenDtoSchema.safeParse({
+        chainId: 1,
+        symbol: "ETH",
+        tokenName: null,
+        balanceUsd: 1,
+      }).success,
+    ).toBe(true);
+    const withoutKey = positionTokenDtoSchema.safeParse({
+      chainId: 1,
+      symbol: "ETH",
+      balanceUsd: 1,
+    });
+    expect(withoutKey.success).toBe(true);
+    if (withoutKey.success) {
+      expect(withoutKey.data.tokenName).toBeUndefined();
+    }
+  });
+
+  it("rejects a tokenName that is not already in its sanitized form (leading/trailing whitespace)", () => {
+    // The schema is a VALIDATION GATE on an already-sanitized shape, not a
+    // transformer — main must sanitize before building the DTO.
+    expect(
+      positionTokenDtoSchema.safeParse({
+        chainId: 1,
+        symbol: "USDC",
+        tokenName: "  USD Coin  ",
+        balanceUsd: 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a hostile tokenName (control character)", () => {
+    expect(
+      positionTokenDtoSchema.safeParse({
+        chainId: 1,
+        symbol: "USDC",
+        tokenName: "BAD\nNAME",
+        balanceUsd: 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts exactly 64 chars and rejects 65 chars for tokenName", () => {
+    expect(
+      positionTokenDtoSchema.safeParse({
+        chainId: 1,
+        symbol: "X",
+        tokenName: "A".repeat(64),
+        balanceUsd: 1,
+      }).success,
+    ).toBe(true);
+    expect(
+      positionTokenDtoSchema.safeParse({
+        chainId: 1,
+        symbol: "X",
+        tokenName: "A".repeat(65),
+        balanceUsd: 1,
+      }).success,
+    ).toBe(false);
+  });
 });

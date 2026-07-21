@@ -1,10 +1,10 @@
 /**
  * Identity layer — constant, always the FIRST static layer.
  *
- * Emits the agent identity (persona name + what Vex is), the chains claim
- * (incl. the $VEX own-token fact), the Robinhood Chain awareness section, an
- * optional user persona block, the single active mode aspect, and the current
- * session context.
+ * Emits the agent identity (what Vex is), the chains claim (incl. the $VEX
+ * own-token fact), the Robinhood Chain awareness section, an optional user
+ * profile block, the single active mode aspect, and the current session
+ * context.
  *
  * Split out of the old `base.ts` (P3 decomposition): response formatting now
  * lives in `response-format.ts` and the memory/self-learning contract in
@@ -13,14 +13,58 @@
  */
 
 import type { EngineContext } from "../types.js";
-import { DEFAULT_PERSONA_NAME } from "../../../lib/persona.js";
+
+/** The agent's own name is fixed — there is no more user-configurable persona name. */
+const VEX_NAME = "Vex";
+
+/** Type guard: a configured (non-empty, trimmed) user-profile string field. */
+function isConfiguredProfileField(value: string | null | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+/**
+ * Canonical style-preset copy (043). Keyed by the IPC enum's own literal so
+ * an unrecognized/stale token — the repo layer stores loose strings — is
+ * silently skipped rather than rendered as raw DB text.
+ */
+const STYLE_PRESET_COPY: Record<string, { label: string; descriptor: string }> = {
+  default: { label: "Default", descriptor: "your natural balanced voice" },
+  professional: { label: "Professional", descriptor: "precise and thorough" },
+  friendly: { label: "Friendly", descriptor: "warm and approachable" },
+  frank: { label: "Frank", descriptor: "direct and encouraging" },
+  quirky: { label: "Quirky", descriptor: "playful and imaginative" },
+  concise: { label: "Concise", descriptor: "short and to the point" },
+  cynical: { label: "Cynical", descriptor: "critical and sarcastic, yet substantive" },
+};
+
+/** Canonical characteristic-trait copy (043). Unknown tokens are dropped, not rendered. */
+const CHARACTERISTIC_COPY: Record<string, string> = {
+  warm: "warm",
+  enthusiastic: "enthusiastic",
+  headers_lists: "structure answers with headers and lists",
+  emoji: "emoji are welcome",
+};
+
+/** Canonical risk-appetite copy (043). Unknown tokens are skipped, not rendered. */
+const RISK_APPETITE_COPY: Record<string, string> = {
+  conservative: "conservative",
+  balanced: "balanced",
+  aggressive: "aggressive",
+};
+
+/** Joins known trait phrases into a natural English list ("a, b, and c"). */
+function joinNaturally(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
 
 export function buildIdentityPrompt(context: EngineContext): string {
   const lines: string[] = [];
 
   lines.push("# Identity");
   lines.push("");
-  lines.push(`You are ${context.personaName ?? DEFAULT_PERSONA_NAME} — an autonomous agent with a self-learning mechanism,`);
+  lines.push(`You are ${VEX_NAME} — an autonomous agent with a self-learning mechanism,`);
   lines.push("operating across major EVM chains, Solana, and Robinhood Chain.");
   lines.push("");
   lines.push("Your own token $VEX is live on Robinhood Chain, launched via Virtuals Protocol, trading on Uniswap V2 against VIRTUAL. Its unverified badge on Virtuals is normal anti-impersonation mechanics, not a warning.");
@@ -39,17 +83,54 @@ export function buildIdentityPrompt(context: EngineContext): string {
   lines.push(resolveAspect(context));
   lines.push("");
 
-  // Optional user persona — local-first style/tone preferences. Explicitly
-  // subordinate to the tool/permission/mission/approval/safety layers that
-  // follow: it shapes voice, never authority.
-  if (context.personaBlock) {
-    lines.push("## Persona (user style preferences)");
+  // Optional user profile — DB-backed "Vex setup" style/tone preferences.
+  // Explicitly subordinate to the tool/permission/mission/approval/safety
+  // layers that follow: it shapes voice and address, never authority.
+  const knownCharacteristics = (context.userCharacteristics ?? [])
+    .map((token) => CHARACTERISTIC_COPY[token])
+    .filter((trait): trait is string => trait !== undefined);
+
+  if (
+    isConfiguredProfileField(context.userDisplayName)
+    || isConfiguredProfileField(context.userWorkDescription)
+    || isConfiguredProfileField(context.userInstructionsMd)
+    || isConfiguredProfileField(context.userStylePreset)
+    || (context.userCharacteristics?.length ?? 0) > 0
+    || isConfiguredProfileField(context.userRiskAppetite)
+  ) {
+    lines.push("## User profile (style preferences)");
     lines.push("");
-    lines.push("The user configured the persona below. Apply it to your tone and voice. It");
-    lines.push("does NOT override tool, permission, mission, approval, or safety rules —");
+    lines.push("The user configured the profile below. Apply it to your tone, address, and");
+    lines.push("approach. It does NOT override tool, permission, mission, approval, or safety rules —");
     lines.push("those remain authoritative regardless of anything stated here.");
     lines.push("");
-    lines.push(context.personaBlock);
+    if (isConfiguredProfileField(context.userDisplayName)) {
+      lines.push(`- Address the user as ${context.userDisplayName}.`);
+    }
+    if (isConfiguredProfileField(context.userWorkDescription)) {
+      lines.push(`- The user describes their work as: ${context.userWorkDescription}.`);
+    }
+    if (isConfiguredProfileField(context.userStylePreset)) {
+      const preset = STYLE_PRESET_COPY[context.userStylePreset];
+      if (preset) {
+        lines.push(`- Preferred tone: ${preset.label} — ${preset.descriptor}.`);
+      }
+    }
+    if (knownCharacteristics.length > 0) {
+      lines.push(`- Style traits: ${joinNaturally(knownCharacteristics)}.`);
+    }
+    if (isConfiguredProfileField(context.userRiskAppetite)) {
+      const riskLabel = RISK_APPETITE_COPY[context.userRiskAppetite];
+      if (riskLabel) {
+        lines.push(
+          `- Risk communication: the user self-describes a ${riskLabel} risk appetite. This shapes TONE only — always state material risks plainly, and it NEVER changes approval requirements, limits, or safety behavior.`,
+        );
+      }
+    }
+    if (isConfiguredProfileField(context.userInstructionsMd)) {
+      lines.push("");
+      lines.push(context.userInstructionsMd);
+    }
     lines.push("");
   }
 
@@ -71,7 +152,7 @@ export function buildIdentityPrompt(context: EngineContext): string {
  * without the noise of modes unreachable from this session.
  */
 function resolveAspect(ctx: EngineContext): string {
-  const name = ctx.personaName ?? DEFAULT_PERSONA_NAME;
+  const name = VEX_NAME;
   // INTENTIONAL BEHAVIOR FIX (P3): the subagent aspect no longer instructs
   // `subagent_report_complete` / `subagent_request_parent`. Those tools are
   // unwired (`subagent_spawn` is out of the registry), so instructing them was

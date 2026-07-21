@@ -1,6 +1,6 @@
 /**
  * Glass zone shell for the Hypervexing grid (design spec §13.1). Every grid
- * slot wears the SAME translucent ink over the Signal Sky, so the room reads
+ * slot wears the SAME translucent ink over the Eclipse backdrop, so the room reads
  * as one liquid surface: separation comes from the sky showing through the
  * grid gaps, never from borders drawn between panels.
  *

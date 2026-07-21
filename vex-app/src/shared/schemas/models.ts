@@ -3,9 +3,8 @@
  *
  * Vex uses a single global model for every session, derived from
  * `AGENT_PROVIDER` + `AGENT_MODEL` in the engine `.env` (loaded into
- * `process.env` after vault unlock). No network call, no OpenRouter
- * `/models` catalogue, no pricing/context claims yet — a future
- * catalogue fetch could enrich the option metadata.
+ * `process.env` after vault unlock). No pricing/context claims yet — a
+ * future catalogue fetch could enrich the option metadata further.
  *
  * When the env vars are absent the read-only handler resolves to
  * `models: []` with `source: "unconfigured"`; it never errors. The UI
@@ -13,6 +12,7 @@
  */
 
 import { z } from "zod";
+import { reasoningCapabilitySchema } from "./reasoning.js";
 
 export const modelOptionDtoSchema = z
   .object({
@@ -33,6 +33,19 @@ export const modelOptionDtoSchema = z
     /** USD per 1M input tokens. `null` today (no catalogue fetch). */
     pricingInputPerMillion: z.number().nonnegative().nullable(),
     pricingOutputPerMillion: z.number().nonnegative().nullable(),
+    /**
+     * Per-model reasoning capability (S6), REQUIRED nullable — the SAME
+     * D4-set-normalized shape as `SessionModelDto.reasoning`
+     * (`shared/schemas/reasoning.ts`), resolved in main
+     * (`main/ipc/models.ts`) via the SAME neutral resolver
+     * `sessions.getModel` uses (`main/ipc/reasoning-capability-resolver.ts`)
+     * — one resolver, two channels, never a second fallback chain. `null`
+     * means "no selector" (non-reasoning model, unconfigured, or capability
+     * data unavailable). No `supportsReasoning` boolean here: unlike
+     * `SessionModelDto`, this DTO has no legacy consumer depending on that
+     * coarse signal.
+     */
+    reasoning: reasoningCapabilitySchema.nullable(),
   })
   .strict();
 export type ModelOptionDto = z.infer<typeof modelOptionDtoSchema>;

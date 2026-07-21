@@ -3,7 +3,7 @@
  * fill is reserved for danger (none here yet). On the selection beam
  * (`.vex-select-beam`) the accent/amber inks sink into the gradient, so
  * `onBeam` flips the stamp to the beam's contrast ink (white on cobalt, ink
- * on the Robinhood lime beam) via `--vex-accent-contrast`. */
+ * on a light accent beam) via `--vex-accent-contrast`. */
 
 import type { JSX } from "react";
 import { cn } from "../../../lib/utils.js";

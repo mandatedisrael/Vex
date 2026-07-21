@@ -87,9 +87,8 @@ const PRIMARY_KEY =
  * accent-OUTLINED full-width pill (vs. the solid commitment key above),
  * reusing the same `--vex-accent-border-strong`/`--vex-accent-fill-8`/
  * `--vex-accent-text` tokens the rest of the shell already uses for an
- * "outlined, accent-toned" affordance (`PlanSwitch`, `ReasoningSwitch`), so
- * it re-tints correctly across themes (incl. hypervexing) alongside the
- * solid key.
+ * "outlined, accent-toned" affordance, so it re-tints
+ * correctly across themes (incl. hypervexing) alongside the solid key.
  */
 const REVIEW_KEY =
   "flex h-10 w-full items-center justify-center gap-2 rounded-full border border-[var(--vex-accent-border-strong)] bg-[var(--vex-accent-fill-8)] font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--vex-accent-text)] transition-colors hover:bg-[var(--vex-accent-fill-12)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50";

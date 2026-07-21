@@ -10,15 +10,22 @@ import type { JsonSchema } from "../tools/types.js";
 // ── Provider config (loaded once at startup) ─────────────────────
 
 /**
- * Reasoning effort exposed to operators (S6). Deliberately a SUBSET of the
- * OpenRouter SDK's `ChatRequestEffort` ("xhigh" | "high" | "medium" | "low" |
- * "minimal" | "none"): "xhigh"/"minimal" add little user-meaningful range and
- * "none" (provider-side reasoning off) is intentionally not exposed — for
- * reasoning-capable models Vex always requests at least "low", and for models
- * WITHOUT reasoning support the `reasoning` param is omitted entirely (see
- * `buildOpenRouterParams`), which is the only true "off".
+ * Reasoning effort exposed to operators (S6/D2). Mirrors the transport enum
+ * in `vex-app/src/shared/schemas/reasoning.ts` (an independent literal
+ * union — this package does not depend on vex-app). The FULL OpenRouter
+ * effort range plus "max", which the installed `@openrouter/sdk` (0.12.79)
+ * does not type yet — OpenRouter's live API added it ahead of the pinned
+ * SDK; `buildOpenRouterParams`/`toChatRequestEffort` (openrouter/params.ts)
+ * map "max" through the SDK's public `unrecognized()` OpenEnum escape hatch.
  */
-export type ReasoningEffort = "low" | "medium" | "high";
+export type ReasoningEffort =
+  | "none"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
 
 export interface InferenceConfig {
   /** Provider identifier, e.g. "openrouter". */
@@ -46,15 +53,27 @@ export interface InferenceConfig {
    * DeepSeek, Gemini) charge nothing extra for writes.
    */
   cacheWritePricePerM: number | null;
-  /** Price per 1M reasoning tokens, when reported by the provider. */
+  /** Price per 1M reasoning tokens, when reported by the provider. Pricing
+   * only (D6) — does NOT gate whether a `reasoning` param is sent; see
+   * `supportsReasoningEffort` below. */
   reasoningPricePerM: number | null;
   /**
-   * Per-TURN reasoning effort requested by the operator (S6). NEVER set by
-   * `loadConfig()` — the engine entry point stamps it onto its caller-owned
-   * config copy for that turn only. `buildOpenRouterParams` reads it ONLY
-   * when the model supports reasoning (`reasoningPricePerM !== null`) and
-   * falls back to "medium" when absent; non-reasoning models never see a
-   * `reasoning` param regardless of this field.
+   * Whether the configured model advertises the OpenRouter `reasoning_effort`
+   * request parameter (from the `/models` catalog's `supported_parameters`,
+   * derived once per `loadConfig()` fetch — see `openrouter.ts`). This is
+   * the SOLE gate for whether `buildOpenRouterParams` may attach a
+   * `reasoning.effort` value at all; independent of `reasoningPricePerM`.
+   */
+  supportsReasoningEffort: boolean;
+  /**
+   * Per-TURN reasoning effort requested by the operator (S6/D6). NEVER set
+   * by `loadConfig()` — the engine entry point stamps it onto its
+   * caller-owned config copy for that turn only. `buildOpenRouterParams`
+   * sends it verbatim ONLY when BOTH an explicit value is present here AND
+   * `supportsReasoningEffort` is true; no explicit effort → NO reasoning
+   * param at all (the forced "medium" default is retired — the provider's
+   * own model default applies). An explicit `"none"` is sent verbatim, not
+   * treated as "omit".
    */
   reasoningEffort?: ReasoningEffort;
 }

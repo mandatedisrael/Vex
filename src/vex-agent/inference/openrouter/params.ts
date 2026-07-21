@@ -1,7 +1,9 @@
-import type { ChatRequest } from "@openrouter/sdk/models/chatrequest.js";
+import type { ChatRequest, ChatRequestEffort } from "@openrouter/sdk/models/chatrequest.js";
+import { unrecognized } from "@openrouter/sdk/types";
 import type {
   InferenceConfig,
   ProviderMessage,
+  ReasoningEffort,
   ToolDefinition,
 } from "../types.js";
 import { normalizeToolSchemaForProvider } from "../schema-normalizer.js";
@@ -43,17 +45,17 @@ export function isExplicitCacheModel(model: string): boolean {
 export const MERGE_TURN_STATE_FALLBACK_ENABLED = false;
 
 /**
- * Engine-wide default reasoning effort (S6, product-owner approved): every
- * request to a reasoning-capable model (catalog reports `internalReasoning`
- * pricing → `config.reasoningPricePerM !== null`) carries
- * `reasoning: { effort }` so opt-in-thinking models (e.g. Claude) actually
- * emit reasoning. Models WITHOUT reasoning pricing never get the param —
- * their request shape (and cost) is byte-identical to before. The SDK also
- * accepts "xhigh"/"minimal"/"none"; Vex deliberately exposes only
- * low/medium/high and uses param omission as the sole "off" state (see
- * `ReasoningEffort` in ../types.ts).
+ * Adapt Vex's own 7-value `ReasoningEffort` to the SDK's `ChatRequestEffort`
+ * OpenEnum. The installed SDK (0.12.79) does not type a "max" member —
+ * OpenRouter's live API added it ahead of the pinned SDK's types (verified
+ * against the installed package) — so "max" is passed through the SDK's
+ * own public `unrecognized()` escape hatch (`ChatRequestEffort` is an
+ * OpenEnum: unknown values forward to the wire unchanged). Every other
+ * value is already a literal member of `ChatRequestEffort` — no cast.
  */
-export const DEFAULT_REASONING_EFFORT = "medium" as const;
+export function toChatRequestEffort(effort: ReasoningEffort): ChatRequestEffort {
+  return effort === "max" ? unrecognized<string>("max") : effort;
+}
 
 export function buildOpenRouterParams(
   messages: ProviderMessage[],
@@ -79,11 +81,17 @@ export function buildOpenRouterParams(
     maxTokens: config.maxOutputTokens,
     ...(config.temperature !== undefined && { temperature: config.temperature }),
     ...(stream && { stream: true }),
-    // Reasoning ONLY for models the catalog prices as reasoning-capable —
-    // everything else keeps today's exact request shape (zero cost change).
-    ...(config.reasoningPricePerM !== null && {
-      reasoning: { effort: config.reasoningEffort ?? DEFAULT_REASONING_EFFORT },
-    }),
+    // D6: send `reasoning.effort` ONLY when the operator made an EXPLICIT
+    // per-turn choice AND the model advertises the `reasoning_effort`
+    // parameter. No explicit choice → no reasoning param at all — the
+    // provider's own model default applies (the forced "medium" fallback is
+    // retired; an unconditional default risked sending an unadvertised
+    // effort to models with a narrower advertised set). Explicit "none" is
+    // sent verbatim, not treated as omission.
+    ...(config.reasoningEffort !== undefined &&
+      config.supportsReasoningEffort && {
+        reasoning: { effort: toChatRequestEffort(config.reasoningEffort) },
+      }),
     // API-level output-format enforcement (F31 Layer B). Omitted by default so
     // every caller that passes nothing keeps a byte-identical wire request.
     ...(responseFormat !== undefined && { responseFormat }),

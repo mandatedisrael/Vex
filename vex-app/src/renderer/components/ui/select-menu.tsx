@@ -46,6 +46,7 @@ export function SelectMenu({
   disabled = false,
   placement = "bottom",
   className,
+  shimmerLabels = false,
 }: {
   readonly value: string;
   readonly options: ReadonlyArray<SelectMenuOption>;
@@ -63,6 +64,14 @@ export function SelectMenu({
    */
   readonly placement?: "top" | "bottom";
   readonly className?: string;
+  /**
+   * Opt-in brand shimmer on the VALUE labels (trigger + every option): each
+   * label span carries `.vex-preview-shimmer` + `data-shimmer-text`, so the
+   * slow accent band sweeps the level names themselves (owner decree
+   * 2026-07-21 — the reasoning-effort selector; other consumers stay
+   * plain). The base text remains solid; reduced motion stills the band.
+   */
+  readonly shimmerLabels?: boolean;
 }): JSX.Element {
   const listboxId = useId();
   const [open, setOpen] = useState(false);
@@ -198,8 +207,10 @@ export function SelectMenu({
         <span
           className={cn(
             "min-w-0 truncate",
+            shimmerLabels && "vex-preview-shimmer",
             selectedIndex < 0 && "text-[var(--color-text-muted)]",
           )}
+          data-shimmer-text={shimmerLabels ? selectedLabel : undefined}
         >
           {selectedLabel}
         </span>
@@ -223,8 +234,11 @@ export function SelectMenu({
           // Solid semantic popover surface (A6) — depth from luminance + a
           // hairline, never backdrop blur or a resting glow. `placement`
           // flips the anchor edge (down vs up); everything else is shared.
+          // The listbox FLOATS (absolute + z-30 + its own max-h scroll): it
+          // overlays whatever follows the trigger and never pushes layout —
+          // the Personalize dialog's chip rows sit under it while open.
           className={cn(
-            "absolute left-0 right-0 z-20 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground",
+            "absolute left-0 right-0 z-30 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground",
             placement === "top" ? "bottom-full mb-1" : "top-full mt-1",
           )}
         >
@@ -247,7 +261,12 @@ export function SelectMenu({
                   selected && !active && "text-foreground",
                 )}
               >
-                <span className="min-w-0 truncate">{opt.label}</span>
+                <span
+                  className={cn("min-w-0 truncate", shimmerLabels && "vex-preview-shimmer")}
+                  data-shimmer-text={shimmerLabels ? opt.label : undefined}
+                >
+                  {opt.label}
+                </span>
                 {selected ? (
                   <span
                     aria-hidden

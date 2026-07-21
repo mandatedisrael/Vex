@@ -1,0 +1,76 @@
+@theme {
+  /* Vex semantic palette — the landing-page (projectvex.ai) brand family.
+   * Ink scale from the landing dark stage (--ink #0a0d18, .frame gradient
+   * #11162a→#0b0f1d, .frame-cell #0f1424) and ONE electric-cobalt accent
+   * (--blue #1f44ff, deep #0a23b8). Status colors are the landing's:
+   * live-green #1fb954 (.get-row/.wl-ok), amber #febc2e (.ws-alert), and
+   * danger stays #ef4444 (the landing defines no red; blocked states there
+   * use ink). The retired Protocol Desk palette (#04060f canvas, #3275f8
+   * accent, #161b3f/#1f2552 navy) is banned in shell sources — pinned by
+   * features/appShell/__tests__/shell-design-guard.test.ts. */
+  --color-bg-primary: #0a0d18;
+  --color-bg-elevated: #11162a;
+  --color-bg-overlay: #171e38;
+  --color-accent-primary: #1f44ff;
+  --color-accent-deep: #0a23b8;
+  --color-accent-secondary: color-mix(in oklab, #1f44ff 55%, white);
+  /* Text — the landing's paper (#f3f4f7) as ink-surface foreground, with a
+   * three-step solid hierarchy (never opacity-stacked). */
+  --color-text-primary: #f3f4f7;
+  --color-text-secondary: #c9cdd8;
+  --color-text-muted: #939aad;
+  --color-success: #1fb954;
+  --color-warning: #febc2e;
+  --color-danger: #ef4444;
+  /* DotMatrix solid-theme preset color (referenced by
+   * components/ui/dotmatrix-core/color.ts). */
+  --color-dot-on: var(--color-accent-primary);
+
+  /* shadcn semantic aliases — Vex palette projected through the
+   * naming shadcn upstream components expect (background/foreground/
+   * card/border/ring/etc). Vex tokens above stay the source of truth;
+   * any palette change propagates automatically. */
+  --color-background: var(--color-bg-primary);
+  --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-bg-elevated);
+  --color-card-foreground: var(--color-text-primary);
+  --color-popover: var(--color-bg-overlay);
+  --color-popover-foreground: var(--color-text-primary);
+  --color-primary: var(--color-accent-primary);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--color-accent-secondary);
+  --color-secondary-foreground: #0a0d18;
+  --color-muted: var(--color-bg-overlay);
+  --color-muted-foreground: var(--color-text-muted);
+  --color-accent: var(--color-bg-overlay);
+  --color-accent-foreground: var(--color-text-primary);
+  --color-destructive: var(--color-danger);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--color-bg-overlay);
+  --color-input: var(--color-bg-overlay);
+  --color-ring: var(--color-accent-primary);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  /* Typography — self-hosted WOFF2 (CSP-clean). The whitehouse.gov 2026
+   * pair: body/UI AND display numerals = Instrument Sans (variable 400-700;
+   * `font-black` call sites resolve to the 700 cap); the editorial display
+   * voice (hero statements) = Instrument Serif; micro-labels, stamps and
+   * numerals = JetBrains Mono. Archivo + Inter Tight are retired. */
+  --font-sans:
+    "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    "JetBrains Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+  --font-display:
+    "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Display serif — Instrument Serif (static 400 + italic only): the hero
+   * statement voice of the Chronos shell, plus the Hyperliquid protocol
+   * accents. Falls back to the platform serifs so a font-load miss still
+   * reads as a serif. */
+  --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+}
+

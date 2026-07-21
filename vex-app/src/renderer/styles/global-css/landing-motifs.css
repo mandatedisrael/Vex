@@ -1,0 +1,165 @@
+/* ============================================================ *
+ *  LANDING MOTIF UTILITIES — the projectvex.ai signature set    *
+ * ============================================================ */
+
+/* Eyebrow — the landing .eyebrow: mono micro-label. Formerly carried a
+ * leading ::before rule (28px currentColor hairline); removed app-wide by
+ * owner decree (2026-07-20: no dash rules) — the mark read as visual noise
+ * next to group headers, the welcome tagline, and block titles. The dash
+ * sweep (2026-07-20) also retired the last multi-child call site
+ * (UnlockScreen's mirrored trailing dash on "Master Vault · Sealed"), so
+ * `gap` is dropped too — every call site is single-child text now. Color
+ * comes from the accent-text family (readable cobalt on ink). */
+.vex-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(
+    --vex-accent-text,
+    color-mix(in oklab, var(--color-accent-primary) 55%, white)
+  );
+}
+/* Welcome-stage modifier ONLY (White House/Instrument typography pass): swaps
+ * the eyebrow's hardcoded mono face for the sans display face without
+ * touching every other `.vex-eyebrow` call site (memory/session dialogs
+ * etc. stay mono). */
+.vex-eyebrow--sans {
+  font-family: var(--font-sans);
+}
+
+/* Scanline texture — the landing .scanlines motif inverted for ink surfaces.
+ * Paint-only: put it on an absolutely-positioned overlay. Kept extremely
+ * faint so text contrast is untouched. */
+.vex-scanlines {
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.016) 0 1px,
+    transparent 1px 4px
+  );
+}
+
+/* Grain — the landing .noise SVG turbulence, near-invisible. CSP-safe:
+ * data: URIs are governed by img-src (which allows data:). */
+.vex-noise {
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Chronos glass grain — opacity step for `.vex-noise` reused as the
+ * distortion/dither removal's replacement texture (owner correction round,
+ * 2026-07-20): a plain static grain overlay, never a filter on content. Kept
+ * subtle and used ONLY on floating glass panels/menus/dialogs; the two rails
+ * (SessionsList / BookPanel) are macOS-clean ink glass with no grain overlay
+ * at all (owner decree, 2026-07-20 — grain over blur greyed the rails out).
+ * Declared unlayered (like `.vex-noise` itself) so this modifier reliably
+ * wins over the class's own near-invisible default — a Tailwind opacity
+ * utility would NOT win here (Tailwind v4 utilities live in `@layer
+ * utilities`, and unlayered rules always beat layered ones regardless of
+ * source order). */
+.vex-noise--panel {
+  opacity: 0.15;
+}
+
+/* Backdrop film grain (owner request 2026-07-21): a fine static grain over
+ * the 4K-upscaled meadow artwork — dithers the painterly gradients so the
+ * lanczos upscale reads as intentional film texture instead of clean
+ * interpolation blur on large displays. Deliberately stronger than the
+ * panel step but still a whisper. */
+.vex-noise--backdrop {
+  opacity: 0.07;
+}
+
+/* Selection beam — the landing workspace's selected item (.ws-item.sel):
+ * cobalt gradient sweep + white ledger bar. The ONE sanctioned gradient in
+ * the shell; the shadow is directional (depth of the lit item), not a
+ * resting glow. Host must be position-relative-capable (the class sets it). */
+.vex-select-beam {
+  position: relative;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--vex-accent, var(--color-accent-primary)) 92%, transparent),
+    color-mix(in oklab, var(--vex-accent, var(--color-accent-primary)) 50%, transparent)
+  );
+  box-shadow: 0 8px 22px -8px
+    color-mix(in oklab, var(--vex-accent, var(--color-accent-primary)) 75%, transparent);
+}
+.vex-select-beam::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 16%;
+  bottom: 16%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  /* The ledger bar is the beam's foreground mark: white on the cobalt beam,
+   * ink on the Robinhood lime beam (same law as text on an accent fill). The
+   * fallback keeps it white if the beam is ever used outside the shell scope
+   * where the token is undefined. */
+  background: var(--vex-accent-contrast, #ffffff);
+  opacity: 0.9;
+}
+
+/* Hero rise — the landing's load-in reveal (masked line rise, "Out" curve),
+ * one-shot with stagger delay modifiers for the welcome-stage choreography:
+ * status line → headline → instrument → chips. Rests perfectly still. */
+@keyframes vex-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.vex-rise {
+  animation: vex-rise 600ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+.vex-rise-d1 {
+  animation-delay: 90ms;
+}
+.vex-rise-d2 {
+  animation-delay: 190ms;
+}
+.vex-rise-d3 {
+  animation-delay: 300ms;
+}
+.vex-rise-d4 {
+  animation-delay: 420ms;
+}
+
+/* Dialog reveal — rise + settle on the native <dialog> top layer, retuned to
+ * the shared EASE_STANDARD curve [0.42, 0, 0.58, 1] (lib/motion.ts — the
+ * macOS-grade motion pass; keep the two in sync). Element-level so every
+ * modal inherits it; one-shot, rests still; the global reduced-motion rule
+ * collapses it. */
+@keyframes vex-dialog-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+dialog[open] {
+  animation: vex-dialog-enter 240ms cubic-bezier(0.42, 0, 0.58, 1) both;
+}
+@keyframes vex-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+dialog[open]::backdrop {
+  animation: vex-backdrop-enter 240ms ease-out both;
+}
+

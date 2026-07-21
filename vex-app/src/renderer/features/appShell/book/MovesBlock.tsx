@@ -13,32 +13,14 @@
  * LEDGER GRAMMAR (landing .ws-stat): one hairline-separated row per fill —
  * status dot · stamp (mono 9px chip: BUY success-tone / SELL paper-tone /
  * SWAP muted; `productType` takes priority — `bridge` → BRIDGE·VENUE,
- * `send`/`transfer` → TRANSFER, both muted) · `IN → OUT` legs · HH:MM. Raw
- * mint addresses never print in full: a well-known-mint address ALWAYS wins
- * (ticker + the app's offline brand mark), full mint kept on the tooltip.
- * Only once no known mint matches does a bounded, sanitized display symbol
- * from the activity's exact capture item get a turn — captured symbols are
- * UNTRUSTED (any token can self-declare metadata claiming a brand ticker
- * such as "SOL"), so brand-ticker claims are always dropped. The activity's
- * raw token field can be populated from the same provider capture for
- * bridge-style legs, so it cannot corroborate one either. A known mint
- * address is the ONLY thing that authorizes a brand LOGO. When the capture
- * item recorded NO usable symbol (legacy raw-address rows), a FALLBACK
- * symbol resolved from this wallet's own `proj_balances` metadata
- * (`inputTokenLocalSymbol`/`outputTokenLocalSymbol`) gets a turn next —
- * EQUALLY UNTRUSTED provider-supplied data, gated by the exact same
- * brand-collision rule, but PLAIN TEXT ONLY: unlike the captured symbol it
- * never reaches `TokenIcon` even for a non-brand match, since its
- * provenance is one step further removed from the actual fill (any balance
- * the wallet currently/previously held at that address, not the trade
- * capture itself). Short raw token strings still render as uppercased plain
- * TEXT (so a legacy `ETH`/`SOL` leg stays readable), but a brand-matching
- * raw string is withheld from the icon so it never borrows the real asset's
- * mark; non-brand strings may keep the neutral monogram (see `tokenDisplay`
- * and `@shared/token-symbol-sanitizer.js`). Address-like fallbacks truncate
- * to `So1111…1112`. A leg carries its amount (`0.0017 ETH`) ONLY when the
- * recorded amount is a dotted decimal — raw base-unit integers from legacy
- * captures (wei/lamports) and nulls render nothing.
+ * `send`/`transfer` → TRANSFER, both muted) · `IN → OUT` legs · HH:MM. Leg
+ * token identity and amounts render through the shared token-leg policy
+ * (`lib/token-leg-display.ts` — extracted from this file, behavior pinned
+ * by MovesBlock.test.tsx): a known mint address is the ONLY thing that
+ * authorizes a brand ticker + logo; captured and local symbols are
+ * UNTRUSTED, brand claims dropped; address-like fallbacks truncate to
+ * `So1111…1112`; a leg carries its amount ONLY when the recorded amount is
+ * a dotted decimal — raw base-unit integers (wei/lamports) render nothing.
  *
  * The ledger shows the 10 newest fills (`MOVES_DISPLAY_CAP`); the header badge
  * still counts the FULL fetched result (server-capped at `MOVES_MAX`). A row
@@ -53,7 +35,9 @@
  * Dot colour is a PURE client-side derivation over the tolerant `captureStatus`
  * string (executed/filled/closed/claimed → done; open/pending → pending;
  * cancelled/rejected → muted; failed → destructive; null/unknown → neutral).
- * Unknown statuses fall back gracefully — the derivation never throws.
+ * Unknown statuses fall back gracefully — the derivation never throws. The
+ * dot is always still (owner decree: no pulsing dots anywhere) — color is
+ * the only state signal.
  */
 
 import type { JSX } from "react";
@@ -64,10 +48,10 @@ import {
   explorerAccountUrl,
   explorerTxUrl,
 } from "@shared/explorer-links.js";
-import { sanitizeTokenSymbol } from "@shared/token-symbol-sanitizer.js";
-import { BRAND_ICON_SYMBOLS, TokenIcon } from "../../../components/common/TokenIcon.js";
+import { TokenIcon } from "../../../components/common/TokenIcon.js";
 import { useMoves } from "../../../lib/api/portfolio.js";
-import { formatClock, truncateAddress } from "../../../lib/format.js";
+import { formatClock } from "../../../lib/format.js";
+import { amountDisplay, tokenDisplay } from "../../../lib/token-leg-display.js";
 import { cn } from "../../../lib/utils.js";
 import { BookBlock } from "./BookBlock.js";
 
@@ -110,149 +94,6 @@ const DOT: Record<MoveState, string> = {
   cancelled: "bg-[var(--vex-text-3)]",
   neutral: "bg-[var(--vex-text-2)]",
 };
-
-/**
- * Well-known mint → ticker. Deliberately tiny (the Solana constants a trader
- * recognises on sight); everything else goes through the address heuristic.
- * Do NOT grow this into a token registry — that belongs server-side.
- */
-const KNOWN_MINTS: ReadonlyMap<string, string> = new Map([
-  ["So11111111111111111111111111111111111111112", "SOL"],
-  ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "USDC"],
-  ["Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", "USDT"],
-]);
-
-/** Reads as a raw mint/address: one long unbroken alnum (base58/hex) run. */
-const ADDRESS_LIKE = /^[0-9a-zA-Z]{13,}$/;
-
-interface TokenDisplay {
-  /** What the ledger prints. */
-  readonly text: string;
-  /** Full value for the tooltip when `text` is lossy, else `null`. */
-  readonly full: string | null;
-  /** Safe symbol used by the app's offline token mark; null for raw addresses. */
-  readonly iconSymbol: string | null;
-}
-
-/**
- * Display rule for one swap leg, in strict priority order. The GOVERNING
- * invariant: a brand ticker + brand logo may be rendered ONLY when a
- * `KNOWN_MINTS` address proves the identity; no untrusted string (captured
- * symbol, the local balances-derived symbol, or the provider-populated raw
- * `token`) may ever borrow a brand's name AND logo.
- *
- *  1. `token` resolves through the tiny `KNOWN_MINTS` map → canonical ticker
- *     + brand mark. This is the ONLY brand path, and it is checked BEFORE the
- *     captured symbol so a scam mint's capture metadata can never override a
- *     genuinely recognized mint.
- *  2. Captured symbol (`inputTokenSymbol`/`outputTokenSymbol`), sanitized: an
- *     UNTRUSTED self-declared label. Allowed ONLY when it is NOT one of the
- *     app's brand-marked tickers (`BRAND_ICON_SYMBOLS`, case-insensitive) — a
- *     brand claim like "SOL" is ALWAYS dropped, with no corroboration
- *     exception (bridge activity rows carry the same provider symbol in
- *     `token`, so `token` cannot prove it). A permitted non-brand symbol is
- *     absent from the brand-icon set, so `TokenIcon` renders a neutral
- *     monogram, never a brand mark.
- *  3. LOCAL SYMBOL FALLBACK (`inputTokenLocalSymbol`/`outputTokenLocalSymbol`,
- *     WP-L2 sibling change): consulted ONLY once rule 2 yields nothing usable
- *     (no captured symbol, or a captured brand claim just got dropped).
- *     Resolved server-side from THIS WALLET's own `proj_balances` metadata —
- *     EQUALLY UNTRUSTED, sanitized, and gated by the SAME brand-collision
- *     check as rule 2 (a colliding local symbol is dropped outright, falling
- *     through to the address truncation below — mirrors rule 2's precedent
- *     exactly). Stricter than rule 2 even when it wins: `iconSymbol` is
- *     ALWAYS withheld (plain text only, never even the neutral monogram) —
- *     its provenance is a balance the wallet holds/held, not the fill itself.
- *  4. Address-like raw `token` → the canonical `truncateAddress` shortening
- *     (`So1111…1112`), full value on the tooltip.
- *  5. Short raw `token` string, sanitized → uppercased PLAIN TEXT. This
- *     restores human-readable legacy legs like "ETH"/"SOL". A brand-matching
- *     raw string is shown as text but its `iconSymbol` is withheld (null), so
- *     it NEVER reaches `TokenIcon` — text without a borrowed logo. A non-brand
- *     raw string may keep the neutral monogram. An invalid / Unicode-bearing /
- *     null / empty raw string → `?`.
- *
- * Legs are nullable in the tolerant DTO → `?`. Truncated/known forms carry
- * the full mint on the tooltip; symbols are uppercased in JS (not CSS) so
- * base58 case in truncations stays intact.
- */
-function tokenDisplay(
-  token: string | null,
-  capturedSymbol: string | null,
-  localSymbol: string | null,
-): TokenDisplay {
-  // Rule 1 — the ONLY brand path: a known mint address proves the identity.
-  const knownTicker = token !== null ? KNOWN_MINTS.get(token) : undefined;
-  if (knownTicker !== undefined) {
-    return { text: knownTicker, full: token, iconSymbol: knownTicker };
-  }
-
-  // Rule 2 — captured symbol: untrusted; non-brand only, brand claims dropped.
-  const symbol = sanitizeTokenSymbol(capturedSymbol);
-  if (symbol !== null && !BRAND_ICON_SYMBOLS.has(symbol.toLowerCase())) {
-    return {
-      text: symbol.toUpperCase(),
-      full:
-        token !== null && token.toUpperCase() !== symbol.toUpperCase()
-          ? token
-          : null,
-      iconSymbol: symbol,
-    };
-  }
-
-  // Rule 3 — local balances-derived symbol fallback: untrusted; non-brand
-  // only (same gate as rule 2), PLAIN TEXT ONLY — never grants an icon.
-  const local = sanitizeTokenSymbol(localSymbol);
-  if (local !== null && !BRAND_ICON_SYMBOLS.has(local.toLowerCase())) {
-    return {
-      text: local.toUpperCase(),
-      full:
-        token !== null && token.toUpperCase() !== local.toUpperCase()
-          ? token
-          : null,
-      iconSymbol: null,
-    };
-  }
-
-  // Rule 4 — address-like raw token: truncated-address fallback.
-  if (token !== null && ADDRESS_LIKE.test(token)) {
-    return { text: truncateAddress(token), full: token, iconSymbol: null };
-  }
-
-  // Rule 5 — short raw token string: uppercased plain text. Invalid/Unicode/
-  // null/empty → `?`; brand-matching raw strings render as text but withhold
-  // the icon so they never borrow a brand logo; non-brand keeps the monogram.
-  const safeToken = sanitizeTokenSymbol(token);
-  if (safeToken === null) {
-    return { text: "?", full: null, iconSymbol: null };
-  }
-  const iconSymbol = BRAND_ICON_SYMBOLS.has(safeToken.toLowerCase())
-    ? null
-    : safeToken;
-  return { text: safeToken.toUpperCase(), full: null, iconSymbol };
-}
-
-/** ≤6 significant digits, no grouping — mono-ledger compact figures. */
-const AMOUNT_FORMAT = new Intl.NumberFormat("en-US", {
-  maximumSignificantDigits: 6,
-  useGrouping: false,
-});
-
-/**
- * Compact leg amount. The engine records HUMAN-readable amounts only for
- * newer captures (relay bridge, uniswap spot); older captures store raw
- * base-unit integers (wei/lamports) that are meaningless to print. Tolerant
- * guard: render ONLY dotted-decimal strings that parse to a finite positive
- * number (a raw base-unit integer never carries a `.`); everything else —
- * null, integers, non-numeric — renders nothing, so legacy rows keep today's
- * amount-less legs.
- */
-function amountDisplay(amount: string | null): string | null {
-  if (amount === null || !amount.includes(".")) return null;
-  const parsed = Number.parseFloat(amount);
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  return AMOUNT_FORMAT.format(parsed);
-}
 
 type SideTone = "buy" | "sell" | "neutral";
 
@@ -336,7 +177,7 @@ export function MovesBlock({ sessionId }: { readonly sessionId: string }): JSX.E
       trailing={
         allMoves.length > 0 ? (
           // Landing .ws-badge: accent fill, accent-contrast mono figure
-          // (white on cobalt, ink on the Robinhood lime fill), rounded-[5px].
+          // (contrast ink on the accent fill), rounded-[5px].
           // Counts the FETCHED total (server-capped at MOVES_MAX), not the
           // 10-row display window below it.
           <span className="inline-flex min-w-[18px] items-center justify-center rounded-[5px] bg-[var(--vex-accent)] px-1.5 py-px font-mono text-[9px] font-medium tabular-nums text-[var(--vex-accent-contrast)]">
@@ -378,15 +219,11 @@ function MoveRow({ move }: { readonly move: MoveItem }): JSX.Element {
   // linked rows, <li> for plain rows) so legs lighten on row hover in both.
   const cells = (
     <>
-      {/* Pending = verifiably in-flight → the pulse ring loops; every
-       * terminal state (done/failed/cancelled) rests still. */}
+      {/* Status dot — a still color mark (owner decree: no pulsing dots
+       * anywhere); DOT[state] alone carries pending vs. terminal. */}
       <span
         aria-hidden
-        className={cn(
-          "h-1.5 w-1.5 shrink-0 rounded-full",
-          DOT[state],
-          state === "pending" && "vex-pulse-dot",
-        )}
+        className={cn("h-1.5 w-1.5 shrink-0 rounded-full", DOT[state])}
       />
       <span
         className={cn(

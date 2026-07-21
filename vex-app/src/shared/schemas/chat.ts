@@ -8,20 +8,21 @@
 
 import { z } from "zod";
 import { INITIAL_GOAL_MAX_LENGTH } from "./sessions.js";
+import { reasoningEffortSchema } from "./reasoning.js";
 
 export const CHAT_MESSAGE_MAX_LENGTH = INITIAL_GOAL_MAX_LENGTH;
 
 /**
- * Operator-facing reasoning effort (S6). Deliberately a SUBSET of what
- * OpenRouter accepts ("xhigh"/"minimal"/"none" are not exposed in v1):
- * three levels are meaningful to users, and "off" is not a choice — the
- * engine omits the reasoning param entirely for models without reasoning
- * support, and reasoning-capable models always run at least "low"
- * (engine default: "medium"). Mirrors `ReasoningEffort` in
- * `src/vex-agent/inference/types.ts`.
+ * Operator-facing reasoning effort (S6). The FULL OpenRouter transport
+ * enum — extracted to `reasoning.ts` so both this file and `sessions.ts`
+ * can import it without a `chat.ts` <-> `sessions.ts` circular import
+ * (this file already imports `INITIAL_GOAL_MAX_LENGTH` from sessions.ts).
+ * Whether a GIVEN model supports a GIVEN value is a per-model capability
+ * (`SessionModelDto.reasoning`, `sessions.ts`), not a schema-level
+ * restriction — the transport enum stays maximal.
  */
-export const reasoningEffortSchema = z.enum(["low", "medium", "high"]);
-export type ReasoningEffort = z.infer<typeof reasoningEffortSchema>;
+export { reasoningEffortSchema };
+export type { ReasoningEffort } from "./reasoning.js";
 
 export const chatSubmitInputSchema = z
   .object({
@@ -35,10 +36,13 @@ export const chatSubmitInputSchema = z
         `Message must be ${CHAT_MESSAGE_MAX_LENGTH} characters or less.`,
       ),
     /**
-     * Per-turn reasoning effort (S6). Optional + additive: the renderer
-     * sends it ONLY when the active model supports reasoning; absent means
-     * "engine default" ("medium" when the model supports reasoning, no
-     * reasoning param otherwise). Ignored by mission interrupt/resume paths.
+     * Per-turn reasoning effort (S6/D6). Optional + additive. Absent means
+     * "no explicit choice" — the engine sends NO reasoning param at all and
+     * the provider's own model default applies (the forced "medium"
+     * fallback is retired). An explicit value (including "none") is sent
+     * verbatim, but ONLY when the model actually advertises reasoning
+     * support (`InferenceConfig.supportsReasoningEffort`). Ignored by
+     * mission interrupt/resume paths.
      */
     reasoningEffort: reasoningEffortSchema.optional(),
   })

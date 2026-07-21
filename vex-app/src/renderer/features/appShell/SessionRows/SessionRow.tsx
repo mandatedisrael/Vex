@@ -79,7 +79,7 @@ export function SessionRow({
           // Selection = the landing beam (accent gradient + ledger bar,
           // globals.css `.vex-select-beam`); hover stays a quiet surface lift.
           // Text on the beam reads `--vex-accent-contrast` (white on cobalt,
-          // ink on the Robinhood lime beam), never a raw white.
+          // ink on a light accent beam), never a raw white.
           selected
             ? "vex-select-beam text-[var(--vex-accent-contrast)]"
             : "hover:bg-white/[0.035]",
@@ -95,11 +95,17 @@ export function SessionRow({
           aria-label={!sidebarOpen ? title : undefined}
           className={cn(
             "flex h-full w-full text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]",
-            // pr-14 (sidebarOpen) reserves room on the right for the
-            // absolutely positioned Trash + Pin sibling cluster so the
-            // title flex never paints under them. Collapsed sidebar
-            // hides both actions, so no reservation.
-            sidebarOpen ? "items-center gap-2.5 px-2.5 pr-14" : "items-center justify-center px-0",
+            // Actions-take-priority hover (Chronos): at rest the title owns
+            // the full width; the moment the row is hovered/focused, pr-14
+            // reserves the right slot for the Trash + Pin sibling cluster and
+            // the title truncates earlier (the timestamp yields — see the
+            // group-hover:opacity-0 on the right-slot spans below). The
+            // padding swap is deliberately instant (no transition) so the
+            // truncation never smears mid-reflow. Collapsed sidebar hides
+            // both actions, so no reservation.
+            sidebarOpen
+              ? "items-center gap-2.5 px-2.5 group-focus-within:pr-14 group-hover:pr-14"
+              : "items-center justify-center px-0",
           )}
           title={sidebarOpen ? undefined : title}
         >
@@ -137,33 +143,20 @@ export function SessionRow({
                 >
                   {title}
                 </span>
-                {activity?.tone === "active" ? (
-                  // Unified SIGNAL DOT (open rail): the live signal earns the
-                  // landing pulse ring — a running mission is verifiably
-                  // in-flight work. Same tone→colour language as the collapsed
-                  // badge; the "live" stamp on the line below carries the word.
-                  <span
-                    role="img"
-                    aria-label="Session active"
-                    className={cn(
-                      "vex-pulse-dot h-2 w-2 shrink-0 rounded-full",
-                      selected
-                        ? "bg-[var(--vex-accent-contrast)] [--vex-pulse-color:color-mix(in_oklab,var(--vex-accent-contrast)_45%,transparent)]"
-                        : activity?.dotClass,
-                    )}
-                  />
-                ) : (
-                  <span
-                    className={cn(
-                      "shrink-0 font-mono text-[10px] tabular-nums",
-                      selected
-                        ? "text-[color-mix(in_oklab,var(--vex-accent-contrast)_80%,transparent)]"
-                        : "text-[var(--vex-text-2)]",
-                    )}
-                  >
-                    {startedLabel}
-                  </span>
-                )}
+                {/* Owner decree — no pulsing dots anywhere: the right slot
+                 * ALWAYS shows the timestamp now. A running mission's signal
+                 * lives entirely in the "live" Stamp on the subtitle line
+                 * below, so dropping the dot loses no information. */}
+                <span
+                  className={cn(
+                    "shrink-0 font-mono text-[10px] tabular-nums transition-opacity group-hover:opacity-0 group-focus-within:opacity-0",
+                    selected
+                      ? "text-[color-mix(in_oklab,var(--vex-accent-contrast)_80%,transparent)]"
+                      : "text-[var(--vex-text-2)]",
+                  )}
+                >
+                  {startedLabel}
+                </span>
               </span>
               <span className="mt-0.5 flex items-center gap-1.5">
                 <span

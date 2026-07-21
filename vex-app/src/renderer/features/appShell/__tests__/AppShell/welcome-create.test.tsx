@@ -13,6 +13,8 @@ import type {
   SessionDeleteResult,
   SessionListItem,
 } from "@shared/schemas/sessions.js";
+import type { ModelsListAvailableResult } from "@shared/schemas/models.js";
+import type { ReasoningCapability } from "@shared/schemas/reasoning.js";
 import type { HealthReport } from "@shared/schemas/system.js";
 import { sessionKeys } from "../../../../lib/api/sessions.js";
 import { createQueryClient } from "../../../../app/queryClient.js";
@@ -38,6 +40,12 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   ArrowLeft01Icon: "ArrowLeft01Icon",
   ArrowRight01Icon: "ArrowRight01Icon",
   ArrowUp01Icon: "ArrowUp01Icon",
+  // Chronos screens redesign — ShellScreen (close) + TokenHistoryScreen
+  // (entry-kind glyphs), both statically imported via AppShell → ShellScreens.
+  ArrowDataTransferHorizontalIcon: "ArrowDataTransferHorizontalIcon",
+  ArrowUpRight01Icon: "ArrowUpRight01Icon",
+  Cancel01Icon: "Cancel01Icon",
+  CoinsSwapIcon: "CoinsSwapIcon",
   BitcoinWalletIcon: "BitcoinWalletIcon",
   BridgeIcon: "BridgeIcon",
   BubbleChatSparkIcon: "BubbleChatSparkIcon",
@@ -64,6 +72,8 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   StopCircleIcon: "StopCircleIcon",
   Target02Icon: "Target02Icon",
   PercentSquareIcon: "PercentSquareIcon",
+  // Welcome Portfolio tab (BookPanel's welcome stage): handle + card icons.
+  Wallet01Icon: "Wallet01Icon",
   ZapIcon: "ZapIcon",
 }));
 
@@ -80,6 +90,10 @@ vi.mock("@thesvg/react", () => ({
   Circle: () => null,
   Chainlink: () => null,
   Postgresql: () => null,
+  Bitcoin: () => null,
+  Bnb: () => null,
+  DaiStablecoin: () => null,
+  Usdc: () => null,
 }));
 
 // Stage 4: the always-mounted BookPanel renders SessionRuntimeBar (in the
@@ -113,6 +127,51 @@ const healthMock = vi.fn<() => Promise<Result<HealthReport>>>();
 const messagesListMock = vi.fn();
 const missionGetDraftMock = vi.fn();
 const runtimeGetStateMock = vi.fn();
+// E1/E2: the composer now sources reasoning capability from the GLOBAL
+// models query on BOTH stages (welcome and in-session) instead of the
+// per-session query — every test in this file that mounts the shell needs
+// this stubbed. Defaults to "unconfigured" (resolved, no capability) so the
+// existing welcome→create assertions below (no `reasoningEffort` key) keep
+// holding without every test needing to know about capability.
+const modelsListAvailableMock = vi.fn<
+  () => Promise<Result<ModelsListAvailableResult>>
+>();
+
+function reasoningModelsResult(
+  reasoning: ReasoningCapability | null,
+): Result<ModelsListAvailableResult> {
+  return {
+    ok: true,
+    data: {
+      source: "global_default",
+      fetchedAt: null,
+      models: [
+        {
+          providerId: "openrouter",
+          modelId: "anthropic/claude-sonnet-4",
+          displayName: "anthropic/claude-sonnet-4",
+          brand: "openrouter",
+          contextLength: null,
+          pricingInputPerMillion: null,
+          pricingOutputPerMillion: null,
+          reasoning,
+        },
+      ],
+    },
+  };
+}
+
+function fullEffortCapability(
+  over: Partial<ReasoningCapability> = {},
+): ReasoningCapability {
+  return {
+    supportedEfforts: ["high", "medium", "low", "none"],
+    defaultEffort: null,
+    defaultEnabled: null,
+    mandatory: false,
+    ...over,
+  };
+}
 
 beforeAll(() => {
   const proto = HTMLDialogElement.prototype as unknown as {
@@ -163,11 +222,20 @@ beforeEach(() => {
   healthMock.mockReset();
   missionGetDraftMock.mockReset();
   runtimeGetStateMock.mockReset();
+  modelsListAvailableMock.mockReset();
   // SessionComposer queries mission.getDraft + runtime.getState as soon as a
   // session is active (Send gate moved to activeSessionId). Benign defaults:
   // no draft, no run status (free text allowed).
   missionGetDraftMock.mockResolvedValue({ ok: true, data: null });
   runtimeGetStateMock.mockResolvedValue({ ok: true, data: { status: null } });
+  // Default: resolved, no capability — keeps every EXISTING assertion below
+  // (first hand-off submit carries no `reasoningEffort`) holding without
+  // requiring every test to know about the models query. Tests that pin the
+  // capability-driven behavior override this per-test.
+  modelsListAvailableMock.mockResolvedValue({
+    ok: true,
+    data: { source: "unconfigured", models: [], fetchedAt: null },
+  });
   useUiStore.setState({
     sidebarOpen: true,
     currentView: "appShell",
@@ -176,10 +244,16 @@ beforeEach(() => {
     logBuffer: [],
     sessionModeFilter: "all",
     activeSessionId: null,
-    appShellView: "session",
+    shellScreen: "none",
+    shellScreenOrigin: null,
     createSessionOpen: false,
-    createSessionInitialMessage: null,
-    pendingFirstMessage: null,
+    createSessionInitialTurn: null,
+    // `NEW_SESSION_ID` is a fixed constant every test's session-create mock
+    // returns, so a value left here by an earlier test (e.g. a welcome
+    // reasoning pick that rode into the store) would otherwise bleed into
+    // the next test's assertions on this same key — mirrors the reset
+    // `composer-reasoning-select.test.tsx` already does.
+    reasoningEffortBySession: {},
   });
   sessionsListMock.mockResolvedValue({ ok: true, data: [] });
   sessionsGetMock.mockResolvedValue({ ok: true, data: null });
@@ -252,6 +326,9 @@ beforeEach(() => {
       runtime: {
         getState: runtimeGetStateMock,
       },
+      models: {
+        listAvailable: modelsListAvailableMock,
+      },
       system: {
         health: healthMock,
       },
@@ -300,8 +377,12 @@ describe("AppShell", () => {
     useUiStore.setState({ activeSessionId: null });
     renderShell();
 
-    await screen.findByRole("heading", { name: "What should I execute?" });
-    expect(screen.getByText(/PREVIEW/)).not.toBeNull();
+    // The PREVIEW wordmark badge is the welcome sentinel now — the H1
+    // display statement is deleted (owner decree 2026-07-21).
+    await screen.findByText("PREVIEW · v0.0.0-test");
+    expect(
+      screen.queryByRole("heading", { name: /What should I execute/i }),
+    ).toBeNull();
   });
 
   it("welcome composer Send opens the creator with the draft carried + name pre-filled (welcome→create)", async () => {
@@ -425,6 +506,217 @@ describe("AppShell", () => {
     expect(screen.queryByRole("button", { name: "Stop generating" })).toBeNull();
   });
 
+  const NEW_SESSION_ID = "a6bf4f85-e645-4df7-9bc5-70ec2eb0bd51";
+
+  it("welcome: the reasoning selector renders from the global models query and a NON-DEFAULT pick rides the first submit verbatim", async () => {
+    sessionsListMock.mockResolvedValueOnce({ ok: true, data: [] });
+    useUiStore.setState({ activeSessionId: null });
+    modelsListAvailableMock.mockResolvedValue(
+      reasoningModelsResult(fullEffortCapability()),
+    );
+    renderShell();
+
+    // Preselect with no upstream default → "medium" (selectDefaultReasoningEffort).
+    const selector = await screen.findByRole("combobox", {
+      name: "Reasoning effort",
+    });
+    expect(selector.textContent).toContain("Medium");
+
+    // Pick something OTHER than the default so a passing test can only mean
+    // the EXACT pick rode, never a recomputed default.
+    fireEvent.click(selector);
+    fireEvent.click(screen.getByRole("option", { name: "Low" }));
+    expect(selector.textContent).toContain("Low");
+
+    const draft = (await screen.findByLabelText("Session draft")) as HTMLTextAreaElement;
+    fireEvent.change(draft, { target: { value: "research TAO liquidity" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByRole("heading", { name: "New session" });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(chatSubmitMock).toHaveBeenCalledWith({
+        sessionId: NEW_SESSION_ID,
+        message: "research TAO liquidity",
+        reasoningEffort: "low",
+      }),
+    );
+    // The new session's own store slot reflects the carried pick too (the
+    // hand-off seeds it, same as an in-session pick would).
+    expect(useUiStore.getState().reasoningEffortBySession[NEW_SESSION_ID]).toBe(
+      "low",
+    );
+  });
+
+  it("submit-before-resolution: the first hand-off submit omits reasoningEffort and never seeds the store, even once the query resolves afterward", async () => {
+    sessionsListMock.mockResolvedValueOnce({ ok: true, data: [] });
+    useUiStore.setState({ activeSessionId: null });
+    // The selector re-check below happens in the POST-create composer
+    // (keyed by the new session id), which only treats the stage as
+    // agent when its OWN session detail resolves with `mode: "agent"` —
+    // the suite-wide default `sessionsGetMock` (`data: null`) would gate
+    // the selector off forever regardless of the models query resolving.
+    sessionsGetMock.mockResolvedValue({
+      ok: true,
+      data: {
+        id: NEW_SESSION_ID,
+        mode: "agent",
+        permission: "restricted",
+        title: "research TAO liquidity",
+        initialGoal: null,
+        startedAt: localIsoDaysAgo(0),
+        endedAt: null,
+        missionStatus: null,
+        pinnedAt: null,
+      },
+    });
+    let resolveModels!: (value: Result<ModelsListAvailableResult>) => void;
+    modelsListAvailableMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveModels = resolve;
+      }),
+    );
+    renderShell();
+
+    // The control slot shows the quiet inert placeholder, never the real
+    // selector, while the query is unresolved — and Send is NOT blocked.
+    const draft = (await screen.findByLabelText("Session draft")) as HTMLTextAreaElement;
+    expect(screen.queryByRole("combobox", { name: "Reasoning effort" })).toBeNull();
+    const send = screen.getByRole("button", { name: "Send message" });
+    fireEvent.change(draft, { target: { value: "research TAO liquidity" } });
+    expect((send as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(send);
+    await screen.findByRole("heading", { name: "New session" });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(chatSubmitMock).toHaveBeenCalledWith({
+        sessionId: NEW_SESSION_ID,
+        message: "research TAO liquidity",
+      }),
+    );
+    const input = chatSubmitMock.mock.calls[0]![0] as object;
+    expect("reasoningEffort" in input).toBe(false);
+    expect(
+      useUiStore.getState().reasoningEffortBySession[NEW_SESSION_ID],
+    ).toBeUndefined();
+
+    // Resolve the query only AFTER the turn already went out — the selector
+    // appearing later must never retro-alter the already-sent turn (no
+    // second submit, no late store seed from a value that was never there
+    // to snapshot).
+    resolveModels(reasoningModelsResult(fullEffortCapability()));
+    await screen.findByRole("combobox", { name: "Reasoning effort" });
+    expect(chatSubmitMock).toHaveBeenCalledTimes(1);
+    expect(
+      useUiStore.getState().reasoningEffortBySession[NEW_SESSION_ID],
+    ).toBeUndefined();
+  });
+
+  it("resolve-then-send: once the global query has resolved, an untouched welcome selector still carries the computed default into the first submit", async () => {
+    sessionsListMock.mockResolvedValueOnce({ ok: true, data: [] });
+    useUiStore.setState({ activeSessionId: null });
+    modelsListAvailableMock.mockResolvedValue(
+      reasoningModelsResult(fullEffortCapability({ defaultEffort: "high" })),
+    );
+    renderShell();
+    await screen.findByRole("combobox", { name: "Reasoning effort" });
+
+    const draft = (await screen.findByLabelText("Session draft")) as HTMLTextAreaElement;
+    fireEvent.change(draft, { target: { value: "untouched default" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByRole("heading", { name: "New session" });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(chatSubmitMock).toHaveBeenCalledWith({
+        sessionId: NEW_SESSION_ID,
+        message: "untouched default",
+        reasoningEffort: "high",
+      }),
+    );
+  });
+
+  it("cancelling the create modal retains the visible welcome reasoning selection", async () => {
+    sessionsListMock.mockResolvedValueOnce({ ok: true, data: [] });
+    useUiStore.setState({ activeSessionId: null });
+    modelsListAvailableMock.mockResolvedValue(
+      reasoningModelsResult(fullEffortCapability()),
+    );
+    renderShell();
+
+    const selector = await screen.findByRole("combobox", {
+      name: "Reasoning effort",
+    });
+    fireEvent.click(selector);
+    fireEvent.click(screen.getByRole("option", { name: "Low" }));
+    expect(selector.textContent).toContain("Low");
+
+    const draft = (await screen.findByLabelText("Session draft")) as HTMLTextAreaElement;
+    fireEvent.change(draft, { target: { value: "research TAO liquidity" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByRole("heading", { name: "New session" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "New session" })).toBeNull(),
+    );
+
+    // The welcome composer's OWN visible pick survived the cancel — this is
+    // the SAME composer instance's local state, untouched by
+    // `closeCreateSession` (which only discards the create-handoff turn).
+    expect(
+      screen.getByRole("combobox", { name: "Reasoning effort" }).textContent,
+    ).toContain("Low");
+
+    // Re-pressing Send carries that SAME pick again.
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByRole("heading", { name: "New session" });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() =>
+      expect(chatSubmitMock).toHaveBeenCalledWith({
+        sessionId: NEW_SESSION_ID,
+        message: "research TAO liquidity",
+        reasoningEffort: "low",
+      }),
+    );
+  });
+
+  it("welcome→mission-create: the welcome reasoning pick is stripped — first submit omits it and the store is never seeded", async () => {
+    sessionsListMock.mockResolvedValueOnce({ ok: true, data: [] });
+    useUiStore.setState({ activeSessionId: null });
+    modelsListAvailableMock.mockResolvedValue(
+      reasoningModelsResult(fullEffortCapability()),
+    );
+    renderShell();
+
+    const selector = await screen.findByRole("combobox", {
+      name: "Reasoning effort",
+    });
+    fireEvent.click(selector);
+    fireEvent.click(screen.getByRole("option", { name: "Low" }));
+
+    const draft = (await screen.findByLabelText("Session draft")) as HTMLTextAreaElement;
+    fireEvent.change(draft, { target: { value: "LP rebalance" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByRole("heading", { name: "New session" });
+
+    fireEvent.click(screen.getByRole("radio", { name: /Mission/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(chatSubmitMock).toHaveBeenCalledWith({
+        sessionId: NEW_SESSION_ID,
+        message: "LP rebalance",
+      }),
+    );
+    const input = chatSubmitMock.mock.calls[0]![0] as object;
+    expect("reasoningEffort" in input).toBe(false);
+    expect(
+      useUiStore.getState().reasoningEffortBySession[NEW_SESSION_ID],
+    ).toBeUndefined();
+  });
+
   it("new-session modal form is a bounded flex column so the footer/Create stays reachable (bug C)", async () => {
     sessionsListMock.mockResolvedValueOnce({ ok: true, data: [] });
     const view = renderShell();
@@ -493,7 +785,10 @@ describe("AppShell", () => {
     await screen.findByText("New mission");
 
     const draft = screen.getByLabelText("Session draft") as HTMLTextAreaElement;
-    expect(draft.placeholder).toBe("Describe the mission goal.");
+    // Mission copy rides the faux-placeholder overlay now (the native
+    // placeholder attribute is retired — it cannot animate the prompt swap).
+    expect(draft.getAttribute("placeholder")).toBeNull();
+    expect(screen.getByText("Describe the mission goal.")).not.toBeNull();
     fireEvent.change(draft, {
       target: { value: "Rebalance Arbitrum LP range" },
     });

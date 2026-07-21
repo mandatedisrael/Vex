@@ -56,6 +56,7 @@ function anthropicConfig(overrides: Partial<InferenceConfig> = {}): InferenceCon
     cachePricePerM: 0.3,
     cacheWritePricePerM: 3.75,
     reasoningPricePerM: null,
+    supportsReasoningEffort: false,
     ...overrides,
   };
 }

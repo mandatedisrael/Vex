@@ -19,23 +19,23 @@ import { resolveProvider } from "@vex-agent/inference/registry.js";
 import { appendMessage } from "@vex-agent/engine/events/index.js";
 import logger from "@utils/logger.js";
 import { toToolDefinitions, DEFAULT_LOOP_CONFIG, ITERATION_LIMIT_REPLY } from "./shared.js";
-import { buildPersonaSetupHint } from "@vex-agent/engine/prompts/persona-setup.js";
 
 // ── processAgentTurn ────────────────────────────────────────────
 
 /**
- * Per-turn request options threaded from the desktop host (S6). Optional and
- * additive: existing call sites compile unchanged. Only interactive agent
- * turns honour these — mission setup/resume/wake keep the engine defaults
- * (uniform "medium"-when-supported reasoning, no per-iteration UI).
+ * Per-turn request options threaded from the desktop host (S6/D6). Optional
+ * and additive: existing call sites compile unchanged. Only interactive
+ * agent turns honour these — mission setup/resume/wake keep the engine
+ * defaults (no reasoning param unless explicitly requested, no
+ * per-iteration UI).
  */
 export interface TurnRequestOptions {
   /**
    * Operator-chosen reasoning effort for THIS turn. Applied to the
-   * caller-owned `InferenceConfig` copy; `buildOpenRouterParams` only acts
-   * on it when the model supports reasoning (`reasoningPricePerM !== null`),
-   * so a stale/unsupported request can never change a non-reasoning model's
-   * request shape or cost.
+   * caller-owned `InferenceConfig` copy; `buildOpenRouterParams` only sends
+   * it when the model advertises reasoning support
+   * (`config.supportsReasoningEffort`), so a stale/unsupported request can
+   * never change a non-advertising model's request shape or cost.
    */
   readonly reasoningEffort?: ReasoningEffort;
 }
@@ -106,15 +106,6 @@ export async function processAgentTurn(
   // entry point always processes a single agent turn (no mission loop).
   const agentContext = { ...hydrated.context, sessionKind: "agent" as const };
 
-  // One-time persona-setup offer: only when the persona is unconfigured AND
-  // this is the session's first reply (no prior assistant turn). Transcript-
-  // gated so it never repeats once the agent has spoken or a persona is set.
-  const personaSetupHint =
-    !agentContext.personaConfigured
-    && !hydrated.messages.some(m => m.role === "assistant")
-      ? buildPersonaSetupHint(agentContext.personaName)
-      : undefined;
-
   const baseVisibility: ToolVisibilityBase = {
     sessionId,
     permission: agentContext.sessionPermission,
@@ -153,7 +144,7 @@ export async function processAgentTurn(
     config,
     tools,
     loopConfig,
-    { personaSetupHint }, // promptOptions
+    {}, // promptOptions
     undefined, // abortSignal — chat turns have no mission-boundary controller
     signal, // inferenceAbortSignal (9-5a) — chat-turn "stop generating"
   );

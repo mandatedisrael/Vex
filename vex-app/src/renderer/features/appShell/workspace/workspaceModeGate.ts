@@ -11,19 +11,26 @@
  */
 
 import type { HyperliquidWorkspaceModeEvent } from "@shared/schemas/hyperliquid.js";
-import type { SkyTheme } from "../signalSkyShaders.js";
 import type { VexTheme, WorkspaceMode } from "../../../stores/uiStore.js";
+
+/**
+ * The `data-vex-theme` value the shell root wears: the user's persisted
+ * `VexTheme` OR the transient "hypervexing" workspace re-tint layered over
+ * it. (The retired SignalSky called this `SkyTheme`; the attribute now only
+ * drives the CSS theme scopes in globals.css.)
+ */
+export type ShellTheme = VexTheme | "hypervexing";
 
 /**
  * The `data-vex-theme` value the shell root wears. DERIVED, never stored: while
  * the workspace is active it is always "hypervexing"; otherwise it is the
- * user's own persisted theme — so EXIT restores navy vs lime exactly, and the
+ * user's own persisted theme — so EXIT restores Chronos exactly, and the
  * mode never overwrites `theme`.
  */
 export function deriveShellTheme(
   workspaceMode: WorkspaceMode,
   theme: VexTheme,
-): SkyTheme {
+): ShellTheme {
   return workspaceMode === "hypervexing" ? "hypervexing" : theme;
 }
 

@@ -20,8 +20,8 @@
  *     grammar as `MissionContractCardSections.headerMeta`.
  *   - `compact`: an h-7 mono pill for the DESK RULE header cluster — a still
  *     status dot + label + caption on one line (no icon). Pills are the
- *     landing's button silhouette; the dot is STILL (never `.vex-pulse-dot`,
- *     which is reserved for verifiably in-flight work).
+ *     landing's button silhouette; the dot is STILL (pulsing dots are retired
+ *     shell-wide — state is color + words, never looping motion).
  * Both keep a hairline tone border with text in the tone, never a filled
  * chip. Color carries meaning; neutrals carry the rest.
  *
@@ -165,8 +165,9 @@ export function PremiumBadge(props: PremiumBadgeProps): JSX.Element {
 
   const inner = compact ? (
     <>
-      {/* Still status dot — NOT .vex-pulse-dot (reserved for in-flight work);
-       * "awaiting your action" is carried by the shimmer contract instead. */}
+      {/* Still status dot — never a pulsing loop (pulse dots are retired
+       * shell-wide); "awaiting your action" is carried by the shimmer
+       * contract instead. */}
       <span
         aria-hidden
         className={cn("h-1.5 w-1.5 shrink-0 rounded-full", meta.dotClass)}

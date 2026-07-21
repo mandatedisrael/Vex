@@ -28,7 +28,8 @@
  *   - leg amounts render ONLY for dotted-decimal strings (compact ≤6
  *     significant digits); raw base-unit integers (legacy wei/lamports) and
  *     nulls render nothing,
- *   - the pulse ring is bound ONLY to a pending (in-flight) fill,
+ *   - the status dot is a still color mark (owner decree: no pulsing dots
+ *     anywhere) — pending vs. terminal fills differ by color alone,
  *   - rows whose `chain`+`txRef` resolve through `explorerTxUrl` render as
  *     external links (href + target=_blank + rel="noopener noreferrer");
  *     a row with no `txRef` whose `chain`+`walletAddress` resolve through
@@ -359,13 +360,13 @@ describe("MovesBlock ledger display", () => {
     expect(screen.getByText("SOL")).not.toBeNull();
   });
 
-  it("binds the pulse ring ONLY to a pending fill", () => {
+  it("never pulses the status dot (owner decree: no pulsing dots anywhere)", () => {
     mockMoves([
       move({ id: "1", captureStatus: "open" }),
       move({ id: "2", captureStatus: "executed" }),
     ]);
     const { container } = render(<MovesBlock sessionId={SESSION} />);
-    expect(container.querySelectorAll(".vex-pulse-dot")).toHaveLength(1);
+    expect(container.querySelectorAll(".vex-pulse-dot")).toHaveLength(0);
   });
 
   it("links a row with a resolvable chain+txRef to its block explorer", () => {

@@ -1,16 +1,20 @@
 /**
- * BookPanel chrome — the collapse header bar that now carries the version
- * stamp (relocated from the DESK RULE) + the collapse/expand chevron.
+ * BookPanel — the right-edge STAGE ROUTER (welcome redesign, 2026-07-20)
+ * plus the session rail's own chrome.
  *
  * Pins:
- *   - the version stamp renders in the header when expanded, and is hidden
- *     when collapsed (the panel still mounts a chevron-only spine),
- *   - the chevron's accessible label flips with bookOpen and calls onToggle,
- *   - the instrument blocks render only when expanded (CSS collapse, the panel
- *     itself stays mounted in both states).
+ *   - WELCOME stage (activeSessionId null): the rail is REPLACED by the
+ *     floating Portfolio tab (WelcomePortfolioPanel, mocked here — its own
+ *     collapsed/expanded behavior has a dedicated suite) receiving the SAME
+ *     persisted bookOpen flag; no rail chrome (version stamp / chevron /
+ *     instrument blocks) mounts at all,
+ *   - SESSION stage: today's rail, unchanged — the version stamp renders in
+ *     the header when expanded and hides when collapsed (chevron-only
+ *     spine), the chevron's accessible label flips with bookOpen and calls
+ *     onToggle, the instrument blocks render only when expanded.
  *
- * The child instrument blocks are mocked — this suite owns the panel's own
- * chrome, not the blocks' data wiring.
+ * The child instrument blocks are mocked — this suite owns the router and
+ * the rail's chrome, not the blocks' data wiring.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -42,6 +46,17 @@ vi.mock("../book/HyperliquidRiskBlock.js", () => ({
 }));
 vi.mock("../SessionRuntimeBar.js", () => ({
   SessionRuntimeBar: () => <div data-testid="runtime-bar" />,
+}));
+// The welcome-stage floating Portfolio tab has its own suite
+// (WelcomePortfolioPanel.test.tsx); here the router only needs to prove it
+// mounts with the shared bookOpen flag.
+vi.mock("../book/portfolio/WelcomePortfolioPanel.js", () => ({
+  WelcomePortfolioPanel: ({ bookOpen }: { readonly bookOpen: boolean }) => (
+    <div
+      data-testid="welcome-portfolio-panel"
+      data-book-open={bookOpen ? "true" : "false"}
+    />
+  ),
 }));
 
 const { BookPanel } = await import("../BookPanel.js");
@@ -95,15 +110,42 @@ describe("BookPanel chrome", () => {
     expect(onToggle).toHaveBeenCalledOnce();
   });
 
-  it("shows the global portfolio (no active session) when expanded", () => {
+  it("routes the WELCOME stage to the floating Portfolio tab — no rail chrome at all", () => {
     render(<BookPanel activeSessionId={null} bookOpen onToggle={() => {}} />);
-    expect(screen.queryByTestId("position-block")).not.toBeNull();
-    // No session-scoped blocks for the global view.
+    const tab = screen.getByTestId("welcome-portfolio-panel");
+    expect(tab.getAttribute("data-book-open")).toBe("true");
+    // The rail's chrome and instrument blocks never mount on welcome.
+    expect(screen.queryByText(/^v/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /the BOOK panel/i }),
+    ).toBeNull();
+    expect(screen.queryByTestId("position-block")).toBeNull();
     expect(screen.queryByTestId("moves-block")).toBeNull();
     expect(screen.queryByTestId("session-block")).toBeNull();
     expect(screen.queryByTestId("hyperliquid-positions-block")).toBeNull();
-    // Owner decree (round 3): no Hyperliquid block on the global/welcome
-    // view — risk setup arrives as a confirmable card only when proposed.
     expect(screen.queryByTestId("hyperliquid-risk-block")).toBeNull();
+  });
+
+  it("passes the persisted bookOpen=false through to the welcome tab (collapsed handle)", () => {
+    render(
+      <BookPanel activeSessionId={null} bookOpen={false} onToggle={() => {}} />,
+    );
+    expect(
+      screen.getByTestId("welcome-portfolio-panel").getAttribute("data-book-open"),
+    ).toBe("false");
+  });
+
+  it("keeps the SESSION rail on session stage — the welcome tab never mounts there", () => {
+    render(
+      <BookPanel activeSessionId={SESSION} bookOpen onToggle={() => {}} />,
+    );
+    expect(screen.queryByTestId("welcome-portfolio-panel")).toBeNull();
+    // Pinned rail assertion (no regression): the expanded rail still carries
+    // its version stamp + collapse chevron + the session instrument blocks.
+    expect(screen.getByText(/^v/)).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: /Collapse the BOOK panel/i }),
+    ).not.toBeNull();
+    expect(screen.queryByTestId("position-block")).not.toBeNull();
   });
 });

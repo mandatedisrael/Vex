@@ -53,13 +53,6 @@ export interface PromptStackOptions {
   /** Optional test/host override; production builds this from EngineContext. */
   runtimeClock?: RuntimeClockSnapshot;
   /**
-   * Optional one-time persona setup hint. Set by the agent runner ONLY on the
-   * first reply of a session that has no configured persona (transcript-gated
-   * so it never repeats). Prompts the agent to briefly offer to personalize its
-   * name/tone. Empty/undefined omits it.
-   */
-  personaSetupHint?: string;
-  /**
    * Pre-formatted "# Active Plan" layer — the session's accepted action plan
    * (sanitised + length-capped) rendered as ADVISORY HOW guidance. Built in
    * `buildTurnPromptStack` only when plan-mode is on and a plan exists. Sits
@@ -259,10 +252,9 @@ export function buildPromptStack(
   }
 
   // One-shots last: transcript-gated / consume-once notes whose semantics do
-  // not depend on layer position.
-  if (options.personaSetupHint && options.personaSetupHint.length > 0) {
-    turnLayers.push(options.personaSetupHint);
-  }
+  // not depend on layer position. (The persona-setup hint was retired
+  // 2026-07-20: persona editing is the user's job via the app UI, never a
+  // model-driven offer.)
   if (options.planOffNotice && options.planOffNotice.length > 0) {
     turnLayers.push(options.planOffNotice);
   }

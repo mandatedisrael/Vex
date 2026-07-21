@@ -212,18 +212,44 @@ describe("MissionRail render gate", () => {
     ).not.toBeNull();
     // Mission badge present.
     expect(screen.getByText("Mission")).not.toBeNull();
-    // No plan badge when plan-mode is off.
-    expect(screen.queryByText("Plan")).toBeNull();
+    // No legacy-plan recovery badge when the session never carries a plan.
+    expect(screen.queryByText("Legacy plan")).toBeNull();
   });
 
-  it("renders for an agent session with plan-mode on (Plan badge only)", () => {
+  it("renders for an agent session with plan-mode on (Legacy plan badge only)", () => {
     mockUseSession.mockReturnValue({ data: ok(sessionRow({ mode: "agent" })) });
     mockUseSessionPlan.mockReturnValue({
       data: ok(plan({ enabled: true, planMd: "# Plan" })),
     });
     rail();
-    expect(screen.getByText("Plan")).not.toBeNull();
+    expect(screen.getByText("Legacy plan")).not.toBeNull();
     expect(screen.queryByText("Mission")).toBeNull();
+  });
+
+  it("renders the Legacy plan chip for an ACCEPTED, still-enabled plan — the only exit ramp left for that session", () => {
+    // Plan Mode can never be re-enabled, so an accepted plan that stays
+    // `enabled: true` would otherwise strand the session with no visible
+    // way to turn it off. The condition is exactly `plan.enabled === true`,
+    // not the accept/pending sub-state.
+    mockUseSession.mockReturnValue({ data: ok(sessionRow({ mode: "agent" })) });
+    mockUseSessionPlan.mockReturnValue({
+      data: ok(plan({ enabled: true, planMd: "# Plan", accepted: true })),
+    });
+    rail();
+    const btn = screen.getByRole("button", { name: /Legacy plan/i });
+    expect(btn.getAttribute("data-vex-state")).toBe("accepted");
+  });
+
+  it("renders no Legacy plan chip once the plan is disabled (agent session, plan-mode off)", () => {
+    // Post-disable state: `plan.enabled` false → `derivePlanBadge` returns
+    // null → the chip disappears, matching PlanDisplayModal's "Turn off"
+    // outcome after the invalidated query resolves.
+    mockUseSession.mockReturnValue({ data: ok(sessionRow({ mode: "agent" })) });
+    mockUseSessionPlan.mockReturnValue({
+      data: ok(plan({ enabled: false })),
+    });
+    rail();
+    expect(screen.queryByText("Legacy plan")).toBeNull();
   });
 });
 

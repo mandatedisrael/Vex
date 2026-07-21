@@ -1,8 +1,9 @@
 /**
  * "New Session" dialog. Owns the local form state and submits via
- * `useCreateSession()`. On success the new session is selected
- * automatically (`uiStore.setActiveSessionId`) so the panel opens
- * straight onto it.
+ * `useCreateSession()`. On success `uiStore.completeSessionCreate` selects
+ * the new session automatically (so the panel opens straight onto it),
+ * installs the mode-gated welcome reasoning-effort hand-off, and closes the
+ * modal, all in one store transition.
  *
  * Form invariants mirror the IPC schema discriminated union:
  *   - mode + permission are immutable session axes
@@ -53,15 +54,14 @@ export function SessionCreator({
   open,
   onOpenChange,
 }: SessionCreatorProps): JSX.Element {
-  const setActiveSessionId = useUiStore((s) => s.setActiveSessionId);
   // The sidebar's active mode filter (all/agent/mission). When the operator is
   // already filtered to Mission and opens "New session", default the dialog to
   // Mission mode so they don't have to flip it by hand.
   const sessionModeFilter = useUiStore((s) => s.sessionModeFilter);
-  const createSessionInitialMessage = useUiStore(
-    (s) => s.createSessionInitialMessage,
+  const createSessionInitialTurn = useUiStore(
+    (s) => s.createSessionInitialTurn,
   );
-  const setPendingFirstMessage = useUiStore((s) => s.setPendingFirstMessage);
+  const completeSessionCreate = useUiStore((s) => s.completeSessionCreate);
   const setSigningState = useUiStore((s) => s.setSigningState);
   const createMutation = useCreateSession();
   const availableWallets = useAvailableWallets();
@@ -82,8 +82,8 @@ export function SessionCreator({
   useEffect(() => {
     if (open) {
       setName(
-        createSessionInitialMessage !== null
-          ? deriveSessionName(createSessionInitialMessage)
+        createSessionInitialTurn !== null
+          ? deriveSessionName(createSessionInitialTurn.message)
           : "",
       );
       setMode(sessionModeFilter === "mission" ? "mission" : "agent");
@@ -92,7 +92,7 @@ export function SessionCreator({
       setSelectedSolanaWalletId(null);
       setSubmitError(null);
     }
-  }, [open, createSessionInitialMessage, sessionModeFilter]);
+  }, [open, createSessionInitialTurn, sessionModeFilter]);
 
   // Focus the Name input first when the dialog opens — it is the only
   // text field in this modal. Mission goal capture happens in chat.
@@ -131,34 +131,32 @@ export function SessionCreator({
           return;
         }
         setSigningState("signed");
-        // Hand the welcome-typed first message to the new session's composer,
-        // which owns the actual chat.submit (+ failure/preserve UX). Set the
-        // hand-off BEFORE activating so the composer's consume-effect sees it on
-        // mount; `closeCreateSession` (via onOpenChange) clears only modal state,
-        // never this hand-off.
-        if (createSessionInitialMessage !== null) {
-          setPendingFirstMessage({
-            sessionId: outcome.data.id,
-            message: createSessionInitialMessage,
-          });
-        }
-        setActiveSessionId(outcome.data.id);
-        onOpenChange(false);
+        // Single atomic transition (E3/v2): install the MODE-GATED reasoning
+        // effort into the hand-off turn, close the modal, and activate the
+        // new session — the new composer's hand-off effect picks up the
+        // (already gated) turn on mount. Mission sessions never carry a
+        // reasoning pick: the welcome composer captures it mode-agnostically
+        // (Send is pressed before Mode is even chosen here), so this is
+        // where it gets stripped — main/ipc/chat.ts's own mission strip
+        // stays defense-in-depth, not the only gate.
+        const initialReasoningEffort =
+          mode === "mission"
+            ? null
+            : (createSessionInitialTurn?.reasoningEffort ?? null);
+        completeSessionCreate(outcome.data.id, initialReasoningEffort);
       } catch (error: unknown) {
         setSigningState("idle");
         throw error;
       }
     },
     [
+      completeSessionCreate,
       createMutation,
-      createSessionInitialMessage,
+      createSessionInitialTurn,
       mode,
-      onOpenChange,
       permission,
       selectedEvmWalletId,
       selectedSolanaWalletId,
-      setActiveSessionId,
-      setPendingFirstMessage,
       setSigningState,
       submitDisabled,
       trimmedName,

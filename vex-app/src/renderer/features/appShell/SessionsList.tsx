@@ -3,9 +3,10 @@ import type { JSX } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Add01Icon,
-  ArrowRight01Icon,
+  Cancel01Icon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
+  Search01Icon,
 } from "@hugeicons/core-free-icons";
 import type {
   SessionDeleteOutcome,
@@ -19,11 +20,8 @@ import {
 } from "../../lib/api/sessions.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { SessionDeleteDialog } from "./SessionDeleteDialog.js";
-import { MemoryButton } from "./MemoryButton.js";
-import { MissionsButton } from "./MissionsButton.js";
-import { RuntimeLedger } from "./RuntimeLedger.js";
-import { SettingsButton } from "./SettingsButton.js";
 import { SidebarHomeSigil } from "./SidebarHomeSigil.js";
+import { SidebarProfile } from "./SidebarProfile.js";
 import { VexTokenCardCompact } from "./market/VexTokenCardCompact.js";
 import {
   SessionGroups,
@@ -34,6 +32,7 @@ import {
 } from "./SessionRows.js";
 import {
   filterSessionsByMode,
+  filterSessionsByTitle,
   groupSessions,
   SESSION_MODE_FILTERS,
 } from "./sessionListModel.js";
@@ -46,7 +45,6 @@ interface SessionsListProps {
 export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
   const activeSessionId = useUiStore((s) => s.activeSessionId);
   const setActiveSessionId = useUiStore((s) => s.setActiveSessionId);
-  const setAppShellView = useUiStore((s) => s.setAppShellView);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
   const sessionModeFilter = useUiStore((s) => s.sessionModeFilter);
@@ -68,8 +66,19 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
   const [removeBlocked, setRemoveBlocked] =
     useState<SessionDeleteOutcome | null>(null);
 
+  // Rail search (Chronos): a title filter over the SAME resolved titles the
+  // rows render (`filterSessionsByTitle`), toggled by the header magnifier.
+  // Local, launch-ephemeral state — closing the field clears the filter.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [containerHeight, setContainerHeight] = useState<number>(0);
+
+  useEffect((): void => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
 
   useEffect((): (() => void) | undefined => {
     const el = scrollContainerRef.current;
@@ -88,24 +97,26 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
 
   const visibleRows = useMemo(() => {
     if (!query.data?.ok) return [];
-    return filterSessionsByMode(query.data.data, sessionModeFilter);
-  }, [query.data, sessionModeFilter]);
+    const byMode = filterSessionsByMode(query.data.data, sessionModeFilter);
+    return searchOpen ? filterSessionsByTitle(byMode, searchText) : byMode;
+  }, [query.data, sessionModeFilter, searchOpen, searchText]);
 
   const groups = useMemo(() => groupSessions(visibleRows), [visibleRows]);
 
-  const { visible: visibleGroups, hiddenCount } = useMemo(
+  // hiddenCount is intentionally dropped: the retired "Browse all" row was
+  // its only consumer — overflow now lives on the Sessions screen.
+  const { visible: visibleGroups } = useMemo(
     () => computeVisibleGroups(groups, containerHeight),
     [groups, containerHeight],
   );
 
   const handleSelect = useCallback(
     (id: string): void => {
+      // The center panel is always the session panel (Chronos screens
+      // redesign) — selecting a row only needs to point it at the session.
       setActiveSessionId(id);
-      // Selecting from the sidebar should ALWAYS return the panel area
-      // to the session view, even if the user was browsing the library.
-      setAppShellView("session");
     },
-    [setActiveSessionId, setAppShellView],
+    [setActiveSessionId],
   );
 
   const handleTogglePin = useCallback(
@@ -146,25 +157,46 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
     setRemoveBlocked(outcome);
   }, [deleteMutation, removeTarget]);
 
-  const handleBrowseAll = useCallback((): void => {
-    setAppShellView("sessionsLibrary");
-  }, [setAppShellView]);
-
   const toggleSidebar = useCallback((): void => {
     setSidebarOpen(!sidebarOpen);
   }, [setSidebarOpen, sidebarOpen]);
 
-  const totalRows = visibleRows.length;
+  const closeSearch = useCallback((): void => {
+    setSearchOpen(false);
+    setSearchText("");
+  }, []);
+
+  // The magnifier on a collapsed rail expands it first — a search field has
+  // no room on the 72px spine (the ChatGPT-sidebar gesture).
+  const toggleSearch = useCallback((): void => {
+    if (!sidebarOpen) {
+      setSidebarOpen(true);
+      setSearchOpen(true);
+      return;
+    }
+    if (searchOpen) {
+      closeSearch();
+    } else {
+      setSearchOpen(true);
+    }
+  }, [sidebarOpen, searchOpen, setSidebarOpen, closeSearch]);
 
   return (
     <aside
       className={cn(
-        // Rail over the Signal Sky: softer translucent ink (--vex-rail) so the
-        // sidebar merges with the center column into ONE canvas — pure glass,
-        // NO separating stroke of any kind (owner review round 2: even the
-        // edge-fading hairline still read as a dividing line). Backdrop-blur
-        // stays guard-whitelisted for this rail.
-        "relative z-10 flex h-full shrink-0 flex-col bg-[var(--vex-rail)] backdrop-blur-xl transition-[width] duration-200",
+        // Rail over the Eclipse backdrop: softer translucent ink (--vex-rail)
+        // so the artwork shows through and the sidebar merges with the center
+        // column into ONE canvas — pure glass, NO separating stroke of any
+        // kind (owner review round 2: even the edge-fading hairline still
+        // read as a dividing line). Backdrop-blur stays guard-whitelisted for
+        // this rail. z-20 (one step above the center section's z-10) so the
+        // profile menu — wider than the rail by design — paints ABOVE the
+        // center column where it overflows instead of sliding under the
+        // later flex sibling. NO overflow clipping on this aside for the
+        // same reason. macOS-clean ink glass (owner decree, 2026-07-20): the
+        // rail carries ONLY the ink tint + blur, no grain overlay — a prior
+        // grain layer greyed the glass out and is retired.
+        "relative z-20 flex h-full shrink-0 flex-col bg-[var(--vex-rail)] backdrop-blur-xl transition-[width] duration-300 ease-[var(--vex-ease-out)]",
         sidebarOpen ? "w-[296px]" : "w-[72px]",
       )}
       data-vex-area="sessions-sidebar"
@@ -172,23 +204,33 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
     >
       <header
         className={cn(
-          // rail-strong anchors the brand strip: extra ink keeps the logo
-          // mark solid where the sky is brightest (top of the canvas). The
-          // static logo mark is the sole brand (no wordmark) and doubles as
-          // the "Back to welcome" control (SidebarHomeSigil). The header
-          // border-b was dropped so the top band reads as one seamless surface
-          // with the desk rule — the rail-strong luminance step separates the
-          // brand strip from the actions below. Open height aligns with the
-          // h-12 desk rule; collapsed stays taller to stack the mark above the
-          // collapse toggle.
-          "relative flex shrink-0 bg-[var(--vex-rail-strong)]",
+          // Owner decree — uniform sidebar glass: the header no longer
+          // carries its own rail-strong fill; it shares the aside's own
+          // bg-[var(--vex-rail)] so the whole rail reads as ONE glass tint,
+          // not a stronger strip sitting over a softer body.
+          // Chronos grammar (the ChatGPT/Grok sidebar reference): the mark
+          // sits LEFT as the sole brand (doubling as "Back to welcome" —
+          // SidebarHomeSigil), the magnifier + collapse arrow sit RIGHT.
+          // Collapsed, the spine stacks mark → magnifier → expand arrow.
+          "relative flex shrink-0",
           sidebarOpen
-            ? "h-12 items-center justify-center px-4"
-            : "h-14 flex-col items-center justify-center gap-1 px-2",
+            ? "h-12 items-center justify-between px-3"
+            : "flex-col items-center justify-center gap-0.5 px-2 py-2",
         )}
       >
         <SidebarHomeSigil sidebarOpen={sidebarOpen} />
-        <div className={cn(sidebarOpen && "absolute right-3 top-1/2 -translate-y-1/2")}>
+        <div
+          className={cn(
+            "flex items-center",
+            sidebarOpen ? "gap-0.5" : "flex-col gap-0.5",
+          )}
+        >
+          <SidebarIconButton
+            label={searchOpen ? "Close session search" : "Search sessions"}
+            onClick={toggleSearch}
+          >
+            <HugeiconsIcon icon={Search01Icon} size={16} aria-hidden />
+          </SidebarIconButton>
           <SidebarIconButton
             label={sidebarOpen ? "Collapse sessions sidebar" : "Expand sessions sidebar"}
             onClick={toggleSidebar}
@@ -202,32 +244,55 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
         </div>
       </header>
 
+      {sidebarOpen && searchOpen ? (
+        // Search field — glass well under the brand strip. Escape (or the
+        // clear button on an empty query) closes and clears; typing filters
+        // the rail live via filterSessionsByTitle.
+        <div className="px-3 pt-3">
+          <div className="flex h-9 items-center gap-2 rounded-lg border border-[var(--vex-line-strong)] bg-white/[0.04] px-2.5 transition-colors focus-within:border-[var(--vex-accent-border)]">
+            <HugeiconsIcon
+              icon={Search01Icon}
+              size={14}
+              aria-hidden
+              className="shrink-0 text-[var(--vex-text-3)]"
+            />
+            <input
+              ref={searchInputRef}
+              type="search"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  closeSearch();
+                }
+              }}
+              placeholder="Search sessions"
+              aria-label="Search sessions"
+              className="min-w-0 flex-1 bg-transparent text-[12.5px] text-foreground placeholder:text-[var(--vex-text-3)] focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+            />
+            <button
+              type="button"
+              aria-label="Close search"
+              onClick={closeSearch}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--vex-text-3)] transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]"
+            >
+              <HugeiconsIcon icon={Cancel01Icon} size={12} aria-hidden />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className={cn("p-3", !sidebarOpen && "px-2")}>
         {/* The signing key: the sidebar's primary CTA — the landing's filled
-         * cobalt pill (mono uppercase micro-type, radius 100px) sunk into a
-         * full-width plinth hairline that passes visibly behind it. The
-         * signing mechanics are unchanged: the ink stroke draws on
+         * cobalt pill (mono uppercase micro-type, radius 100px), standing
+         * alone (owner decree, 2026-07-20: the "signing key on a plinth"
+         * story is retired — no hairline or accent tick behind the pill).
+         * The signing mechanics are unchanged: the ink stroke draws on
          * hover/focus (globals.css owns the draw) and loops while
          * SessionCreator's mutation is in flight; the glint is the one-shot
-         * success light. Both paint the accent-contrast ink (white on the
-         * cobalt fill, ink on the Robinhood lime fill). */}
-        <div className="relative">
-          <span
-            aria-hidden
-            className={cn(
-              "absolute top-1/2 h-px bg-[var(--vex-line)]",
-              sidebarOpen ? "-inset-x-3" : "-inset-x-2",
-            )}
-          />
-          <span
-            aria-hidden
-            className={cn(
-              "absolute top-1/2 h-px bg-[color-mix(in_oklab,var(--vex-accent)_60%,transparent)]",
-              // The tick anchors to the plinth's left end, which tracks the
-              // wrapper padding (p-3 open / px-2 collapsed).
-              sidebarOpen ? "-left-3 w-6" : "-left-2 w-3",
-            )}
-          />
+         * success light. Both paint the accent-contrast ink. */}
+        <div>
           <button
             type="button"
             onClick={onCreate}
@@ -327,62 +392,28 @@ export function SessionsList({ onCreate }: SessionsListProps): JSX.Element {
         ) : null}
       </div>
 
-      {totalRows > 0 ? (
-        // Ledger row, never blue-filled: the row itself is the touch target
-        // (no inner padding box), hairline-separated like the rows above it.
-        <div className="border-t border-[var(--vex-line)]">
-          <button
-            type="button"
-            onClick={handleBrowseAll}
-            aria-label={
-              hiddenCount > 0
-                ? `Browse all ${totalRows} sessions (${hiddenCount} hidden)`
-                : "Open sessions library"
-            }
-            className={cn(
-              // Registry-row micro-type: 10px/0.18em — one grammar with the
-              // Memory/Settings rows and the runtime ledger line below.
-              // Hover fill runs at 5% (not the solid-surface 3.5%) so it
-              // stays legible over the glass + sky luminance.
-              "flex h-9 w-full items-center font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--vex-text-2)] transition-colors hover:bg-white/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--vex-accent)]",
-              sidebarOpen ? "justify-between px-4" : "justify-center px-0",
-            )}
-          >
-            {sidebarOpen ? (
-              <span className="truncate">
-                {hiddenCount > 0 ? `Browse all · ${hiddenCount} more` : "Browse all"}
-              </span>
-            ) : null}
-            <HugeiconsIcon icon={ArrowRight01Icon} size={12} aria-hidden />
-          </button>
-        </div>
-      ) : null}
+      {/* The "Browse all" ledger row is retired (Chronos screens redesign):
+       * the full register now lives on the Sessions screen, opened from the
+       * profile menu. `hiddenCount` from computeVisibleGroups still trims the
+       * rail to its visible budget. */}
 
-      {/* LIVE $VEX — the compact market widget rides the rail between BROWSE
-       * ALL and the footer registry (moved off the welcome stage to keep it
-       * clean). Hidden when the rail is collapsed: the icon-only rail has no
-       * room for the price + stats grid. */}
+      {/* LIVE $VEX — the slim market widget (price · shimmer delta ·
+       * sparkline) rides the rail between the session groups and the profile
+       * footer. Hidden when the rail is collapsed: the icon-only rail has no
+       * room for a price figure. */}
       {sidebarOpen ? (
         <div className="border-t border-[var(--vex-line)] px-3 py-3">
           <VexTokenCardCompact />
         </div>
       ) : null}
 
-      {/* Footer registry: every row carries its own border-t hairline (the
-       * first one doubles as the footer's top rule), so separators stay
-       * correct when MemoryButton renders null (capability-gated).
-       * rail-strong anchors the registry rows against the sky's flecks. */}
-      <footer
-        className={cn(
-          "flex flex-col bg-[var(--vex-rail-strong)]",
-          sidebarOpen ? "" : "items-stretch",
-        )}
-      >
-        <MemoryButton compact={!sidebarOpen} />
-        <MissionsButton compact={!sidebarOpen} />
-        <SettingsButton compact={!sidebarOpen} />
-        {/* Report issue intentionally hidden for now; ReportIssueButton/Dialog retained for re-enable. */}
-        <RuntimeLedger sidebarOpen={sidebarOpen} />
+      {/* Footer — the Chronos profile element: one avatar row whose side-panel
+       * menu owns Personalize / Memory / Sessions / How Vex works / Settings
+       * and the runtime status row.
+       * Report issue intentionally hidden for now; ReportIssueButton/Dialog
+       * retained for re-enable. */}
+      <footer className="flex flex-col">
+        <SidebarProfile sidebarOpen={sidebarOpen} />
       </footer>
 
       <SessionDeleteDialog
