@@ -23,6 +23,8 @@ function resetStoreToDefaults(): void {
     sidebarOpen: true,
     bookOpen: true,
     currentView: "splash",
+    setupGateActive: true,
+    unlockCurtainActive: false,
     wizardEntryMode: "setup",
     unlockReturnView: "appShell",
     logBuffer: [],
@@ -53,6 +55,8 @@ describe("uiStore", () => {
     expect(state.workspaceMode).toBe("normal");
     expect(state.sidebarOpen).toBe(true);
     expect(state.currentView).toBe("splash");
+    expect(state.setupGateActive).toBe(true);
+    expect(state.unlockCurtainActive).toBe(false);
     expect(state.wizardEntryMode).toBe("setup");
     expect(state.unlockReturnView).toBe("appShell");
     expect(state.sessionModeFilter).toBe("all");
@@ -304,6 +308,46 @@ describe("uiStore", () => {
     expect(useUiStore.getState().shellRoute).toEqual({ kind: "none" });
   });
 
+  it("setShellRoute carries the settings section payload atomically (deep-link + register)", () => {
+    // Deep-link (welcome Portfolio "Add wallet") lands straight on Wallets.
+    useUiStore.getState().setShellRoute({
+      kind: "settings",
+      origin: { x: 12, y: 640, width: 240, height: 44 },
+      section: "wallets",
+    });
+    const route = useUiStore.getState().shellRoute;
+    expect(route.kind).toBe("settings");
+    if (route.kind !== "settings") throw new Error("route kind mismatch");
+    expect(route.section).toBe("wallets");
+    // The profile-menu row opens the landing register (section null).
+    useUiStore.getState().setShellRoute({
+      kind: "settings",
+      origin: null,
+      section: null,
+    });
+    expect(useUiStore.getState().shellRoute).toEqual({
+      kind: "settings",
+      origin: null,
+      section: null,
+    });
+    useUiStore.getState().setShellRoute({ kind: "none" });
+    expect(useUiStore.getState().shellRoute).toEqual({ kind: "none" });
+  });
+
+  it("dismissSetupGate is the one-way boot-gate flip (defaults active)", () => {
+    expect(useUiStore.getState().setupGateActive).toBe(true);
+    useUiStore.getState().dismissSetupGate();
+    expect(useUiStore.getState().setupGateActive).toBe(false);
+  });
+
+  it("beginUnlockCurtain / dismissUnlockCurtain arm and clear the exit curtain", () => {
+    expect(useUiStore.getState().unlockCurtainActive).toBe(false);
+    useUiStore.getState().beginUnlockCurtain();
+    expect(useUiStore.getState().unlockCurtainActive).toBe(true);
+    useUiStore.getState().dismissUnlockCurtain();
+    expect(useUiStore.getState().unlockCurtainActive).toBe(false);
+  });
+
   it("setSidebarOpen mutates and reflects new value", () => {
     useUiStore.getState().setSidebarOpen(false);
     expect(useUiStore.getState().sidebarOpen).toBe(false);
@@ -325,9 +369,9 @@ describe("uiStore", () => {
   });
 
   it("openWizard sets the wizard view and entry mode together", () => {
-    useUiStore.getState().openWizard("reconfigure");
+    useUiStore.getState().openWizard("setup");
     expect(useUiStore.getState().currentView).toBe("wizard");
-    expect(useUiStore.getState().wizardEntryMode).toBe("reconfigure");
+    expect(useUiStore.getState().wizardEntryMode).toBe("setup");
   });
 
   it("openUnlock sets the unlock view and return target together", () => {
@@ -380,7 +424,7 @@ describe("uiStore", () => {
       },
       returnTo: "shell",
     });
-    useUiStore.getState().openWizard("reconfigure");
+    useUiStore.getState().openWizard("setup");
     useUiStore.getState().openUnlock("wizard");
     useUiStore.getState().appendLog({
       id: "secret-log",

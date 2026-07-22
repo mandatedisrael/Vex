@@ -66,7 +66,11 @@ export type View =
   | "unlock"
   | "appShell";
 
-export type WizardEntryMode = "setup" | "reconfigure";
+// Single-member since Decision C retired the reconfigure-wizard door —
+// Settings now owns every back-edit form (export lives only there). The type
+// and the openWizard(mode) plumbing survive so re-adding a launch mode later
+// stays a one-line widening, not a re-wire.
+export type WizardEntryMode = "setup";
 export type UnlockReturnView = "wizard" | "appShell";
 export type SessionModeFilter = "all" | "agent" | "mission";
 /**
@@ -100,6 +104,22 @@ export interface ShellRouteToken {
 export type ShellRouteReturnTo = "shell" | "assets";
 
 /**
+ * Settings screen sections (Phase 2b — the in-shell Settings rebuild that
+ * retired the reconfigure-wizard "Edit infrastructure" entry). Each section
+ * hosts the matching wizard step form in back-edit mode. Carried on the
+ * `settings` route so callers can deep-link a section (the welcome
+ * Portfolio "Add wallet" row lands directly on `wallets`); `null` opens
+ * the landing register.
+ */
+export type SettingsSection =
+  | "vault"
+  | "wallets"
+  | "apiKeys"
+  | "model"
+  | "memory"
+  | "tuning";
+
+/**
  * Full-app overlay screen route (Chronos screens redesign, 2026-07-20;
  * atomised into ONE discriminated union in the token-history round so a
  * screen and its payload can never desync). The center panel is ALWAYS the
@@ -119,6 +139,11 @@ export type ShellRoute =
       readonly origin: ShellScreenOrigin | null;
     }
   | { readonly kind: "assets"; readonly origin: ShellScreenOrigin | null }
+  | {
+      readonly kind: "settings";
+      readonly origin: ShellScreenOrigin | null;
+      readonly section: SettingsSection | null;
+    }
   | {
       readonly kind: "tokenHistory";
       readonly origin: ShellScreenOrigin | null;
@@ -171,6 +196,19 @@ interface UiState {
    */
   readonly bookOpen: boolean;
   readonly currentView: View;
+  /**
+   * The Chronos Gate boot overlay (features/setup/SetupGate). `true` from
+   * first paint until the launch pipeline resolves and the curtain reveal
+   * completes — then dismissed for the rest of the process. NOT persisted.
+   */
+  readonly setupGateActive: boolean;
+  /**
+   * The unlock-success exit curtain (features/setup/CurtainExit, mounted by
+   * App): `true` from a successful unlock IPC until the cobalt curtain has
+   * covered the screen, flipped `currentView` to `unlockReturnView`, and
+   * split open over the revealed view. No cancel path. NOT persisted.
+   */
+  readonly unlockCurtainActive: boolean;
   readonly wizardEntryMode: WizardEntryMode;
   readonly unlockReturnView: UnlockReturnView;
   readonly logBuffer: ReadonlyArray<UiLogEntry>;
@@ -245,6 +283,12 @@ interface UiState {
   readonly toggleBook: () => void;
   readonly setSessionModeFilter: (value: SessionModeFilter) => void;
   readonly setCurrentView: (value: View) => void;
+  /** One-way: the boot gate unmounts for the rest of the process. */
+  readonly dismissSetupGate: () => void;
+  /** Arm the unlock-success curtain — called ONLY after the unlock IPC succeeds. */
+  readonly beginUnlockCurtain: () => void;
+  /** The curtain finished its reveal and unmounts. */
+  readonly dismissUnlockCurtain: () => void;
   readonly openWizard: (mode: WizardEntryMode) => void;
   readonly openUnlock: (returnView: UnlockReturnView) => void;
   readonly setActiveSessionId: (value: string | null) => void;
@@ -311,6 +355,8 @@ export const useUiStore = create<UiState>()(
       sidebarOpen: true,
       bookOpen: true,
       currentView: "splash",
+      setupGateActive: true,
+      unlockCurtainActive: false,
       wizardEntryMode: "setup",
       unlockReturnView: "appShell",
       logBuffer: [],
@@ -330,6 +376,9 @@ export const useUiStore = create<UiState>()(
       toggleBook: () => set((state) => ({ bookOpen: !state.bookOpen })),
       setSessionModeFilter: (sessionModeFilter) => set({ sessionModeFilter }),
       setCurrentView: (currentView) => set({ currentView }),
+      dismissSetupGate: () => set({ setupGateActive: false }),
+      beginUnlockCurtain: () => set({ unlockCurtainActive: true }),
+      dismissUnlockCurtain: () => set({ unlockCurtainActive: false }),
       openWizard: (wizardEntryMode) =>
         set({ currentView: "wizard", wizardEntryMode }),
       openUnlock: (unlockReturnView) =>

@@ -1,19 +1,35 @@
 /**
  * Top-level renderer state machine.
  *
- * Flow (Phase 1 onboarding + Phase 2 shell):
- *   splash → systemCheck → dockerBootstrap → composeBootstrap →
- *   migrations → wizard → appShell.
- * The wizard completion screen now routes the user straight into the
- * multi-session app shell (M12) instead of the old M2-era placeholder.
+ * Boot (Chronos Gate, PR1): the `SetupGate` overlay covers the window
+ * from first paint while its orchestrator runs the launch pipeline, then
+ * hands off to a view beneath itself and curtain-reveals it. The view
+ * machine itself is unchanged:
+ *   splash (void beneath the gate) → systemCheck → dockerBootstrap →
+ *   composeBootstrap → migrations → wizard → unlock → appShell —
+ * a healthy returning user skips straight from the gate to
+ * unlock/appShell; first-run still walks the classic guided chain.
+ *
+ * Pre-shell STAGE (Phase 2b, decree C.3): the six pre-shell screens all
+ * paint the identical cobalt plate, so their swaps ride ONE
+ * `AnimatePresence mode="wait"` stage — the outgoing slide lifts away
+ * (0.18s), the incoming one settles (0.3s), and the plate never moves:
+ * screens read as slides on a continuous surface. The app shell is NEVER
+ * inside the stage. Unlock→shell instead plays the `CurtainExit` cobalt
+ * curtain (armed by a successful unlock), which flips the view while the
+ * plate is opaque and splits open over the shell.
  *
  * The legacy M0 capability/health/security cards are gated behind
  * `import.meta.env.DEV` and are reachable via a dev-only side panel —
  * they are not part of the user-facing flow.
  */
 
-import { useCallback, useEffect, useState, type JSX } from "react";
-import { IntroScreen } from "./features/splash/IntroScreen.js";
+import { useEffect, useState, type JSX } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { SetupGate } from "./features/setup/SetupGate.js";
+import { SetupTour } from "./features/setup/SetupTour.js";
+import { CurtainExit } from "./features/setup/CurtainExit.js";
+import { EASE_STANDARD } from "./lib/motion.js";
 import { SystemCheck } from "./features/systemCheck/SystemCheck.js";
 import { BootstrapPanel } from "./features/docker/BootstrapPanel.js";
 import { ComposeBootstrap } from "./features/compose/ComposeBootstrap.js";
@@ -26,20 +42,36 @@ import { useUiStore, type View } from "./stores/uiStore.js";
 import type { Capabilities } from "../shared/schemas/capabilities.js";
 import type { HealthReport } from "../shared/schemas/system.js";
 
+/** The stage members — every cobalt-plate slide. Never splash/appShell. */
+const PRE_SHELL_VIEWS: ReadonlySet<View> = new Set<View>([
+  "systemCheck",
+  "dockerBootstrap",
+  "composeBootstrap",
+  "migrations",
+  "wizard",
+  "unlock",
+]);
+
 export function App(): JSX.Element {
   const currentView = useUiStore((s) => s.currentView);
+  const unlockCurtainActive = useUiStore((s) => s.unlockCurtainActive);
   const setCurrentView = useUiStore((s) => s.setCurrentView);
-
-  const handleSplashComplete = useCallback(() => {
-    setCurrentView("systemCheck");
-  }, [setCurrentView]);
+  const dismissUnlockCurtain = useUiStore((s) => s.dismissUnlockCurtain);
+  const reducedMotion = useReducedMotion() === true;
 
   // Dispatch map keeps view routing flat: adding a view = one entry,
   // not a new ternary branch. Keep the map inline (no separate registry
   // module) until M7+ wizard step views need real per-step prop wiring
   // or lazy loading (codex turn 4).
   const views: Record<View, () => JSX.Element> = {
-    splash: () => <IntroScreen onComplete={handleSplashComplete} />,
+    // The ink void beneath the SetupGate plate — the gate owns the boot
+    // ritual and flips the view before its curtain reveal.
+    splash: () => (
+      <main
+        data-vex-screen="boot-void"
+        className="h-screen w-screen bg-[var(--color-bg-primary)]"
+      />
+    ),
     systemCheck: () => <SystemCheck />,
     dockerBootstrap: () => <BootstrapPanel />,
     composeBootstrap: () => <ComposeBootstrap />,
@@ -51,11 +83,69 @@ export function App(): JSX.Element {
 
   return (
     <>
-      {views[currentView]()}
+      {currentView === "appShell" || currentView === "splash"
+        ? views[currentView]()
+        : null}
+      {/* Pre-shell stage — one continuous cobalt plate, screens as slides.
+          `mode="wait"` sequences exit before enter so two full-bleed slides
+          never stack; the wrapper is `fixed inset-0` so an exiting slide
+          overlays (not reflows) whatever replaced it. Transform/opacity
+          only (CSP-safe); reduced motion collapses both durations. Motion
+          settles the wrapper's transform to `none` at rest, so fixed
+          overlays inside the screens (dialogs) keep their viewport anchor. */}
+      <AnimatePresence mode="wait" initial={false}>
+        {PRE_SHELL_VIEWS.has(currentView) ? (
+          <motion.div
+            key={currentView}
+            className="fixed inset-0"
+            initial={reducedMotion ? false : { opacity: 0, y: 18 }}
+            animate={{
+              opacity: 1,
+              y: 0,
+              transition: {
+                duration: reducedMotion ? 0 : 0.3,
+                ease: EASE_STANDARD,
+              },
+            }}
+            exit={
+              reducedMotion
+                ? { opacity: 0, transition: { duration: 0 } }
+                : {
+                    opacity: 0,
+                    y: -14,
+                    transition: { duration: 0.18, ease: EASE_STANDARD },
+                  }
+            }
+          >
+            {views[currentView]()}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+      {/* Boot overlay (z-50) — covers every view until the launch pipeline
+          resolves and the curtain reveal completes, then unmounts for the
+          rest of the process. Mounted BELOW UpdateLayer (z-[60]) so a
+          critical update toast stays visible over the boot ritual. */}
+      <SetupGate />
+      {/* Unlock-success exit curtain — armed by UnlockScreen after the
+          unlock IPC succeeds; flips the view to unlockReturnView while the
+          cobalt plate is opaque, then splits open over the revealed view.
+          Same z-band as the gate (below UpdateLayer). */}
+      {unlockCurtainActive ? (
+        <CurtainExit
+          onCovered={() =>
+            setCurrentView(useUiStore.getState().unlockReturnView)
+          }
+          onDone={dismissUnlockCurtain}
+        />
+      ) : null}
       {/* Global, view-independent: a user-triggered update prompt can appear
           over any screen. No-ops when the updater bridge is absent. */}
       <UpdateLayer />
       {import.meta.env.DEV ? <DevDiagnostics /> : null}
+      {/* Diagnostic screen tour — renders only when VITE_VEX_SETUP_TOUR=1
+          is baked into the build (owner request: view every pre-shell
+          screen regardless of configured state). */}
+      <SetupTour />
     </>
   );
 }

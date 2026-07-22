@@ -30,3 +30,10 @@ export const SPRING_SNAPPY = {
 } as const;
 
 export const EASE_STANDARD = [0.42, 0, 0.58, 1] as const;
+
+/**
+ * The landing GSAP "InOut" curve — mirrored in CSS as `--vex-ease-inout`
+ * (global-css/tokens.css) and hand-duplicated in workspaceTransition.ts.
+ * Used for full-surface reveals (the Chronos Gate curtain). Keep in sync.
+ */
+export const EASE_INOUT = [0.76, 0, 0.24, 1] as const;
