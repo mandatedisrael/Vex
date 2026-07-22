@@ -28,8 +28,12 @@ import {
   useUpdaterLiveSync,
 } from "../../lib/api/updates.js";
 import { isToastKind, UpdateToast } from "./UpdateToast.js";
+import { UPDATER_PREVIEW_ENABLED, UpdaterPreview } from "./UpdaterPreview.js";
 
 export function UpdateLayer(): JSX.Element | null {
+  // Diagnostic toast viewer (VITE_VEX_UPDATER_PREVIEW=1, dev builds only):
+  // replaces the live layer with local mock statuses — no bridge, no IPC.
+  if (UPDATER_PREVIEW_ENABLED) return <UpdaterPreview />;
   if (typeof window === "undefined" || !window.vex?.updater) return null;
   return <UpdateLayerInner />;
 }
