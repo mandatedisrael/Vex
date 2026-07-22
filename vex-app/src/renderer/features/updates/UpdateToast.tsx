@@ -5,10 +5,14 @@
  * `fixed bottom-4 right-4`; the production build never shows `DevDiagnostics`
  * in that corner (DEV-only, see App.tsx), so the toast owns it outright.
  *
- * Design law (shell rebrand): solid ink card (`bg-card` / `--vex-surface-1`),
- * hairline `border-border` (`--vex-line-strong`), mono-uppercase title, cobalt
- * `--vex-accent` primary CTA via the shared `Button` component's `default`
- * variant. NO glass/backdrop-blur, NO resting glow, NO raw hex — Tailwind
+ * Design law (shell rebrand): solid ink card (`bg-card`), hairline
+ * `border-border`, mono-uppercase title, cobalt primary CTA via the shared
+ * `Button` component's `default` variant. The toast mounts at the App root,
+ * OUTSIDE both `[data-vex-shell]` and `[data-vex-gate]` scopes, so its
+ * shadcn aliases always resolve through the GLOBAL tokens.css palette —
+ * never the shell's `--vex-*` layer — regardless of the screen beneath.
+ * (A3 boxless does not apply: it scopes itself to full-page surfaces;
+ * a floating notification keeps its card chrome — owner-reviewed.) NO glass/backdrop-blur, NO resting glow, NO raw hex — Tailwind
  * semantic tokens only. `.vex-rise` entrance; the global reduced-motion rule
  * in globals.css collapses every animation to ~instant, so no extra
  * media-query handling is needed here. The ONLY inline style is the download

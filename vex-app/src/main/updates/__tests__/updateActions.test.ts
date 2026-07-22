@@ -373,10 +373,11 @@ describe("cancelDownload / checkNow / openReleaseNotes", () => {
     );
   });
 
-  it("openReleaseNotes opens an external URL", async () => {
+  it("openReleaseNotes opens the Vex releases page", async () => {
     const r = await actions.openReleaseNotes("req");
     expect(r).toEqual({ ok: true, data: { opened: true } });
     expect(openExternal).toHaveBeenCalledTimes(1);
+    expect(openExternal).toHaveBeenCalledWith("https://projectvex.ai/releases");
   });
 });
 

@@ -65,8 +65,11 @@ const ALLOWED_EXTERNAL: ReadonlyArray<ExternalAllowEntry> = [
   // Hyperliquid/HyperEVM/Robinhood hosts are path-scoped there. https-only and
   // path-boundary matching are enforced upstream in `isAllowedExternalUrl`.
   ...EXPLORER_EXTERNAL_ALLOW,
-  // GitHub: restrict to Vex Foundation org + Electron releases (specific repos only)
-  { host: "github.com", pathPrefix: "/Vex-Foundation/" },
+  // Vex release notes (updater toast CTA) — path-scoped per owner decision
+  // 2026-07-22. The former github.com/Vex-Foundation/ entry died with this
+  // repoint (it existed solely for the release-notes CTA; zero remaining
+  // consumers). Electron releases stay for the auto-updater doc links.
+  { host: "projectvex.ai", pathPrefix: "/releases" },
   { host: "github.com", pathPrefix: "/electron/electron/releases" },
   // Rettiwt = the privacy-respecting Twitter/X API client the agent uses for
   // authenticated timeline/tweet reads (src/tools/twitter-account). Its

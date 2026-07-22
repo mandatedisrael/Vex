@@ -75,7 +75,7 @@ describe("isAllowedExternalUrl", () => {
     "bscscan.com",
     "polygonscan.com",
     "optimistic.etherscan.io",
-    { host: "github.com", pathPrefix: "/Vex-Foundation/" },
+    { host: "projectvex.ai", pathPrefix: "/releases" },
     { host: "github.com", pathPrefix: "/electron/electron/releases" },
     {
       host: "chromewebstore.google.com",
@@ -99,8 +99,8 @@ describe("isAllowedExternalUrl", () => {
     "https://releases.electronjs.org/schedule",
     "https://desktop.docker.com/mac/main/arm64/Docker.dmg",
     "https://docs.docker.com/desktop/setup/install/mac-install/",
-    "https://github.com/Vex-Foundation/Vex",
-    "https://github.com/Vex-Foundation/Vex/releases",
+    "https://projectvex.ai/releases",
+    "https://projectvex.ai/releases/v0-2-0",
     "https://github.com/electron/electron/releases",
     "https://github.com/electron/electron/releases/tag/v42.0.0",
     "https://dexscreener.com/solana/8sLbNZoA1cfnvMJLPfp98ZLAnFSYCFApfJKMbiXNLwxj",
@@ -126,7 +126,7 @@ describe("isAllowedExternalUrl", () => {
     "data:text/html,<script>",
     "https://evil.com/",
     "https://vex.ai.evil.com/",
-    "https://github.com/", // root not under Vex-Foundation/
+    "https://github.com/", // only /electron/electron/releases remains allowlisted
     "https://github.com/torvalds/linux",
     "https://github.com/electron/electron", // missing /releases boundary
     "https://github.com/electron/electron/issues/1",
@@ -134,10 +134,18 @@ describe("isAllowedExternalUrl", () => {
     // Without boundary, /releases-malicious would slip through.
     "https://github.com/electron/electron/releases-malicious/",
     "https://github.com/electron/electron/releasesfoo",
-    "https://github.com/Vex-Foundation",
-    "https://github.com/Vex-FoundationX/Vex",
+    // Regression: the github.com/Vex-Foundation/ entry died with the
+    // projectvex.ai/releases repoint (2026-07-22) — must stay denied.
+    "https://github.com/Vex-Foundation/Vex",
+    "https://github.com/Vex-Foundation/Vex/releases",
+    // projectvex.ai near-misses: path boundary, host root, exact-host only
+    "https://projectvex.ai/", // root not under /releases
+    "https://projectvex.ai/releasesX",
+    "https://projectvex.ai/release",
+    "https://www.projectvex.ai/releases", // exact-host match, no subdomains
+    "https://projectvex.ai.evil.com/releases",
     // Traversal in path
-    "https://github.com/../Vex-Foundation/",
+    "https://projectvex.ai/releases/../../evil",
     "https://github.com/electron/electron/releases/../../torvalds/linux",
     "https://github.com/%2e%2e/Vex-Foundation/",
     // Tavily — host pollution / wrong subdomain / wrong scheme
@@ -178,7 +186,7 @@ describe("isAllowedExternalUrl", () => {
   it("URL spec normalizes hostname to lowercase — mixed case still allowed", () => {
     expect(isAllowedExternalUrl("https://VEX.AI/", allowlist)).toBe(true);
     expect(
-      isAllowedExternalUrl("https://gIThub.com/Vex-Foundation/Vex", allowlist)
+      isAllowedExternalUrl("https://PROJECTvex.ai/releases", allowlist)
     ).toBe(true);
   });
 });
