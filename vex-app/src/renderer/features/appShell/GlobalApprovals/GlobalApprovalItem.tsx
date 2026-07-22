@@ -28,7 +28,7 @@ export function GlobalApprovalItem({
   onOpenSession,
 }: GlobalApprovalItemProps): JSX.Element {
   const setActiveSessionId = useUiStore((s) => s.setActiveSessionId);
-  const setAppShellView = useUiStore((s) => s.setAppShellView);
+  const setShellRoute = useUiStore((s) => s.setShellRoute);
 
   // A5 nulls `sessionId` for session-less / deleted-session rows upstream, so
   // "Open session" gates on it directly.
@@ -39,7 +39,9 @@ export function GlobalApprovalItem({
   const openSession = (): void => {
     if (row.sessionId === null) return;
     setActiveSessionId(row.sessionId);
-    setAppShellView("session");
+    // A full-app screen (Memory / Missions / …) may be covering the shell —
+    // close it so the jump actually lands on the session transcript.
+    setShellRoute({ kind: "none" });
     onOpenSession();
   };
 

@@ -469,7 +469,7 @@ describe("WalletsStep", () => {
     expect(getByRole("tab", { name: /EVM/i })).toBeTruthy();
   });
 
-  it("back-edit + both wallets present (legacy addresses null) shows inventory-sourced management + Return to review", () => {
+  it("back-edit + both wallets present (legacy addresses null) shows inventory-sourced management + Done affordance", () => {
     // walletStatus present but NO walletAddresses (multi-wallet config model:
     // legacy addresses are not written). Inventory is the source of truth.
     mockUseEnvState.mockReturnValue(
@@ -498,9 +498,8 @@ describe("WalletsStep", () => {
     );
     expect(configuredEl).not.toBeNull();
     expect(view.getByText(/Add another/i)).toBeTruthy();
-    // Back-edit return affordance (the Tabs path footer).
-    expect(
-      view.getByRole("button", { name: /Return to review/i })
-    ).toBeTruthy();
+    // Back-edit exit affordance (the Tabs path footer) — context-neutral
+    // "Done", since Settings hosts the same form (Phase 2b).
+    expect(view.getByRole("button", { name: /^Done$/ })).toBeTruthy();
   });
 });

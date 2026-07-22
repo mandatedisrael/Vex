@@ -181,3 +181,41 @@ describe("MarkdownContent", () => {
     expect(container.textContent).not.toContain("[ ]");
   });
 });
+
+describe("article variant protocol-entry headings (owner correction 2026-07-20)", () => {
+  const PROTOCOL_MD = "### ![Uniswap](/protocols/uniswap.png) Uniswap";
+
+  it("renders a leading local logo as a 44px rounded card head with a serif name", () => {
+    const { container } = render(
+      createElement(MarkdownContent, { text: PROTOCOL_MD, variant: "article" }),
+    );
+    const heading = container.querySelector("h3");
+    expect(heading).not.toBeNull();
+    const logo = heading?.querySelector("img");
+    // Local bundled asset passes the article gate; decorative (alt "") —
+    // the serif name beside it carries the accessible heading text.
+    expect(logo?.getAttribute("src")).toBe("/protocols/uniswap.png");
+    expect(logo?.className).toContain("h-11");
+    expect(logo?.className).toContain("rounded-lg");
+    const name = heading?.querySelector("span");
+    expect(name?.className).toContain("font-serif");
+    expect(name?.textContent).toContain("Uniswap");
+  });
+
+  it("keeps the chat variant image-free for the same markdown (alt text only)", () => {
+    const { container } = renderMd(PROTOCOL_MD);
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toContain("Uniswap");
+  });
+
+  it("falls back to the plain heading when the leading image source is rejected", () => {
+    const { container } = render(
+      createElement(MarkdownContent, {
+        text: "### ![X](https://evil.example/x.png) Name",
+        variant: "article",
+      }),
+    );
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("h3")?.textContent).toContain("Name");
+  });
+});

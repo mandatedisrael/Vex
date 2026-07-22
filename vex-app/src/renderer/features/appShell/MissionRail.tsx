@@ -24,7 +24,11 @@
  *     `plan_missing` block in the modal footer).
  *   - Plan badge mirrors the plan state (preparing while authoring / ready while
  *     pending acceptance / accepted), and surfaces an "awaiting resume" stale
- *     marker when an accepted plan's run is parked.
+ *     marker when an accepted plan's run is parked. Plan Mode itself is retired
+ *     from the UI (no session can enable it again — `PlanSwitch` is gone), so
+ *     this badge only ever surfaces for a legacy session that already carries
+ *     `plan.enabled === true`; it is labelled "Legacy plan" so it reads as a
+ *     recovery affordance, never a live feature.
  *
  * Modal open-state lives in `uiStore` (`reviewModal`), NOT local `useState`:
  * `MissionControls`' "Review & accept contract" bar (mounted in the session
@@ -162,9 +166,12 @@ export function MissionRail({
       ) : null}
 
       {planBadge !== null ? (
+        // Legacy-recovery affordance, not a live-feature control: Plan Mode
+        // can never be turned on again, so a session only reaches this badge
+        // by already carrying an enabled plan from before the retirement.
         <PremiumBadge
           compact
-          label="Plan"
+          label="Legacy plan"
           state={planBadge.state}
           shimmer={planBadge.shimmer}
           expanded={open === "plan"}
@@ -273,7 +280,10 @@ function deriveMissionBadge(
 }
 
 /**
- * Plan badge mirrors the plan state. Hidden (null) when plan-mode is off.
+ * Legacy-recovery badge state, derived from the plan the same way it always
+ * was. Hidden (null) when plan-mode is off — condition is exactly
+ * `plan.enabled === true`, so an accepted-and-still-enabled plan keeps
+ * surfacing the badge (it is the only exit ramp for that session).
  *   - enabled, no markdown        → preparing (authoring)
  *   - enabled, markdown, !accepted → ready (shimmer — awaiting your acceptance)
  *   - accepted + run parked        → stale (awaiting resume)

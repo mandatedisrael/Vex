@@ -11,7 +11,7 @@ export function RestoreSummary({ result }: RestoreResultView): JSX.Element {
     result.walletsRestored.length === 1 ? "wallet" : "wallets";
   return (
     <div
-      className="flex flex-col gap-3 rounded-xl border border-[color-mix(in_oklab,var(--color-success)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-success)_10%,transparent)] p-3"
+      className="flex flex-col gap-3"
       role="status"
       aria-live="polite"
       data-vex-restore-success
@@ -36,7 +36,7 @@ export function RestoreSummary({ result }: RestoreResultView): JSX.Element {
       ) : null}
       {result.vaultLocked ? (
         <p
-          className="rounded-md border border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_10%,transparent)] p-3 text-sm text-[var(--color-warning)]"
+          className="border-l-2 border-[color-mix(in_oklab,var(--color-warning)_45%,transparent)] py-1 pl-3 text-sm text-[var(--color-warning)]"
           role="alert"
           data-vex-restore-vault-locked
         >

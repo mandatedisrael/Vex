@@ -182,6 +182,31 @@ describe("registerChatSubmitHandler", () => {
     );
   });
 
+  it("strips reasoningEffort for a mission session even if the renderer sent one (blocker 2, main-side authoritative gate)", async () => {
+    const row = makeSessionRow({ mode: "mission", initialGoal: "Existing" });
+    mocks.getSessionById.mockResolvedValue({ ok: true, data: row });
+    registerChatSubmitHandler();
+
+    const fn = handlers.get(CH.chat.submit)!;
+    const result = (await fn(trustedSender, {
+      requestId: "r-strip",
+      payload: {
+        sessionId: row.id,
+        message: "Continue the mission",
+        reasoningEffort: "high",
+      },
+    })) as { ok: boolean };
+
+    expect(result.ok).toBe(true);
+    expect(mocks.submitOperatorInstruction).toHaveBeenCalledWith(
+      row.id,
+      "Continue the mission",
+      expect.any(AbortSignal),
+      undefined,
+    );
+    expect(mocks.log.debug).toHaveBeenCalled();
+  });
+
   it("maps missing provider failures to a user-actionable chat error", async () => {
     const row = makeSessionRow({ mode: "mission", initialGoal: "Existing" });
     mocks.getSessionById.mockResolvedValue({ ok: true, data: row });

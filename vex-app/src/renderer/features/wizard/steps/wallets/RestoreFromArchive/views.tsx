@@ -1,7 +1,7 @@
 import type { FormEvent, JSX, RefObject } from "react";
 import type { WalletAvailableBackup } from "@shared/schemas/wallets.js";
 import { Button } from "../../../../../components/ui/button.js";
-import { DotmSquare3 } from "../../../../../components/ui/dotm-square-3.js";
+import { VexLoader } from "../../../../../components/ui/vex-loader.js";
 import { Label } from "../../../../../components/ui/label.js";
 import { PasswordField } from "../../../../../components/common/PasswordField.js";
 import { AddressDisplay } from "../../../../../components/common/AddressDisplay.js";
@@ -49,17 +49,17 @@ export function PanelHeader({ onClose }: PanelHeaderProps): JSX.Element {
 }
 
 export function LoadingBackups(): JSX.Element {
-  // Brand loading language — DotMatrix (role="status" + aria-label live
-  // on the loader root), never a generic pulse bar.
+  // Brand loading language — the VexLoader ring (role="status" +
+  // label live on the loader root), never a generic pulse bar.
   return (
     <div className="flex items-center gap-2.5" data-vex-restore-loading>
-      <DotmSquare3
-        size={22}
-        dotSize={3}
-        colorPreset="grad-cobalt"
-        ariaLabel="Loading backups…"
+      <VexLoader
+        size={16}
+        stroke={2}
+        tone="paper"
+        label="Loading backups…"
       />
-      <span aria-hidden className="text-xs text-[var(--color-text-muted)]">
+      <span aria-hidden className="text-xs text-[rgba(243,244,247,0.58)]">
         Loading backups…
       </span>
     </div>
@@ -102,7 +102,7 @@ export function BackupsListError({
 export function EmptyBackups(): JSX.Element {
   return (
     <p
-      className="text-sm text-[var(--color-text-muted)]"
+      className="text-sm text-[var(--color-text-secondary)]"
       role="status"
       data-vex-restore-empty
     >
@@ -151,9 +151,14 @@ export function RestoreForm({
           {backups.map((backup) => {
             const checked = selectedId === backup.id;
             return (
-              <li key={backup.id}>
+              // A3 boxless: hairline-separated rows; the checked state is a
+              // paper left bar on the label, never a filled card.
+              <li
+                key={backup.id}
+                className="border-b border-white/[0.10] last:border-0"
+              >
                 <label
-                  className="flex cursor-pointer flex-col gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 has-[:checked]:border-[var(--vex-onboarding-accent)]"
+                  className="flex cursor-pointer flex-col gap-2 border-l-2 border-l-transparent py-3 pl-3 has-[:checked]:border-l-[var(--color-text-primary)]"
                   data-vex-restore-backup={backup.id}
                 >
                   <div className="flex items-start gap-2">
@@ -172,12 +177,12 @@ export function RestoreForm({
                       </span>
                       <div className="flex flex-wrap gap-1">
                         {backup.vaultIncluded ? (
-                          <span className="rounded-sm border border-white/[0.12] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
+                          <span className="rounded-sm border border-white/[0.12] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
                             vault
                           </span>
                         ) : null}
                         {backup.envIncluded ? (
-                          <span className="rounded-sm border border-white/[0.12] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[var(--color-text-muted)]">
+                          <span className="rounded-sm border border-white/[0.12] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
                             .env
                           </span>
                         ) : null}

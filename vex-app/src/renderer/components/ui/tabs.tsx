@@ -78,7 +78,7 @@ export const TabsList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement
       // Landing hairline grammar — transparent rail bounded by a hairline,
       // never a filled muted slab.
       className={cn(
-        "inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-white/[0.08] bg-transparent p-1 text-[var(--color-text-muted)]",
+        "inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-white/[0.16] bg-transparent p-1 text-[var(--color-text-muted)]",
         className
       )}
       {...props}

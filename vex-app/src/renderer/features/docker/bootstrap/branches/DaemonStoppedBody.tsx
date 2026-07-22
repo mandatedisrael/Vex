@@ -4,9 +4,10 @@
  *   Linux:  the main-process `useDockerStart()` only attempts the
  *           user-mode Docker Desktop unit (`systemctl --user start
  *           docker-desktop`), it never runs `sudo systemctl start
- *           docker`. So the prominent path on Linux is the sudo command,
- *           with "Try Start Docker Desktop" as a subordinate ghost
- *           button for users running user-mode Docker Desktop.
+ *           docker`. So the prominent path on Linux is the sudo command
+ *           as a COPY-PASTE block (never auto-run), with "Try Start
+ *           Docker Desktop" as a subordinate ghost button for users
+ *           running user-mode Docker Desktop.
  *
  *   macOS / Windows:  the standard launch flow — Vex calls the system
  *                     "open" handler which boots Docker Desktop.
@@ -14,10 +15,8 @@
  *   unknown platform: generic fallback copy, no docs link.
  */
 
-import { HugeiconsIcon } from "@hugeicons/react";
-import { PauseIcon, PlayIcon } from "@hugeicons/core-free-icons";
-import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
-import { PrimaryButton } from "../../../../components/onboarding/PrimaryButton.js";
+import { Button } from "../../../../components/ui/button.js";
+import { SetupStatusCard } from "../../../../components/onboarding/SetupStatusCard.js";
 import { DocsLink } from "../../../../components/onboarding/DocsLink.js";
 import { OpenLogsLink } from "../../../../components/common/OpenLogsLink.js";
 import {
@@ -42,34 +41,35 @@ export function DaemonStoppedBody({
   if (platform === "linux") {
     return (
       <div className="flex flex-col gap-4">
-        <StatusTile
-          tone="warning"
-          icon={<HugeiconsIcon icon={PauseIcon} size={20} aria-hidden />}
+        <SetupStatusCard
+          tone="warn"
+          word="Paused"
           title="Docker daemon is not running"
           detail="On Linux the Docker daemon is a system service and requires sudo to start."
         />
 
         <div className="flex flex-col gap-2">
-          <p className="text-xs uppercase tracking-[0.2em] text-[var(--color-text-secondary)]">
-            Run this in a terminal:
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[rgba(243,244,247,0.78)]">
+            Run this in a terminal
           </p>
-          <pre className="overflow-auto rounded-lg border border-white/[0.08] bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-[var(--color-text-primary)]">
+          <pre className="overflow-auto rounded-lg border border-white/[0.14] bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-[var(--color-text-primary)]">
             <code>sudo systemctl start docker</code>
           </pre>
-          <p className="text-xs text-[var(--color-text-secondary)]">
+          <p className="text-xs text-[rgba(243,244,247,0.78)]">
             Then click Recheck below.
           </p>
         </div>
 
-        <PrimaryButton
-          icon={PlayIcon}
-          label={starting ? "Starting…" : "Try Start Docker Desktop"}
+        <Button
           variant="ghost"
           disabled={starting}
           onClick={onStart}
-        />
+          className="self-start text-[rgba(243,244,247,0.78)]"
+        >
+          {starting ? "Starting…" : "Try Start Docker Desktop"}
+        </Button>
         {startMessage ? (
-          <p className="text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+          <p className="text-[11px] leading-relaxed text-[rgba(243,244,247,0.78)]">
             {startMessage}
           </p>
         ) : null}
@@ -96,29 +96,31 @@ export function DaemonStoppedBody({
 
   return (
     <div className="flex flex-col gap-4">
-      <StatusTile
-        tone="warning"
-        icon={<HugeiconsIcon icon={PauseIcon} size={20} aria-hidden />}
+      <SetupStatusCard
+        tone="warn"
+        word="Paused"
         title={tileTitle}
         detail={tileDetail}
       />
 
       {isDesktopPlatform ? (
-        <ol className="flex list-decimal flex-col gap-1 pl-5 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+        <ol className="flex list-decimal flex-col gap-1 pl-5 text-xs leading-relaxed text-[rgba(243,244,247,0.78)]">
           <li>Click Start Docker (launches Docker Desktop).</li>
           <li>Wait ~30s for the daemon to answer.</li>
           <li>Click Recheck below.</li>
         </ol>
       ) : null}
 
-      <PrimaryButton
-        icon={PlayIcon}
-        label={starting ? "Starting…" : "Start Docker"}
+      <Button
+        size="lg"
+        className="w-full"
         disabled={starting}
         onClick={onStart}
-      />
+      >
+        {starting ? "Starting…" : "Start Docker"}
+      </Button>
       {startMessage ? (
-        <p className="text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+        <p className="text-[11px] leading-relaxed text-[rgba(243,244,247,0.78)]">
           {startMessage}
         </p>
       ) : null}

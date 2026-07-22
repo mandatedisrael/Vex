@@ -29,9 +29,9 @@ import { getVisibleToolsByCategory, type ToolVisibilityContext } from "../../too
 export function buildToolCatalogPrompt(ctx: ToolVisibilityContext): string {
   const categories = getVisibleToolsByCategory(ctx);
   if (categories.length === 0) {
-    // No agent-surface tools visible (unlikely outside dormant-subagent
-    // edge case). Suppress the section entirely rather than render an
-    // empty heading — `buildPromptStack` already skips empty strings.
+    // No agent-surface tools visible (unlikely in practice). Suppress the
+    // section entirely rather than render an empty heading —
+    // `buildPromptStack` already skips empty strings.
     return "";
   }
 

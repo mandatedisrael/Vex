@@ -1,0 +1,38 @@
+/* GLOBAL PAGE FOUNDATION — unscoped rules with no single feature owner:
+ * the ::selection accent, the html/body/#root base surface, and the WCAG
+ * reduced-motion catch-all. The catch-all is a HARD dependency for every
+ * effect without a dedicated reduced-motion override (including the looping
+ * badge shimmer and backdrop drift) — never drop this import and never add
+ * layer(...) to it. */
+
+/* Text selection speaks the accent — same as the landing (::selection). */
+::selection {
+  background: var(--color-accent-primary);
+  color: #ffffff;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Respect reduced-motion preference (WCAG AA) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

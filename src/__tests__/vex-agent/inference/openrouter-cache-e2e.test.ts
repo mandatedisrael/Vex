@@ -35,7 +35,6 @@ function makeContext(overrides: Partial<EngineContext> = {}): EngineContext {
     sessionPermission: "full",
     missionId: null,
     missionRunId: null,
-    isSubagent: false,
     selectedEvmWallet: null,
     selectedSolanaWallet: null,
     walletPolicy: { kind: "none" },
@@ -56,6 +55,7 @@ function anthropicConfig(overrides: Partial<InferenceConfig> = {}): InferenceCon
     cachePricePerM: 0.3,
     cacheWritePricePerM: 3.75,
     reasoningPricePerM: null,
+    supportsReasoningEffort: false,
     ...overrides,
   };
 }

@@ -7,9 +7,13 @@ import type {
   MovesDto,
   MovesReadInput,
 } from "../../../schemas/portfolio-moves.js";
+import type {
+  TokenHistoryDto,
+  TokenHistoryReadInput,
+} from "../../../schemas/token-history.js";
 
 /**
- * Portfolio — read-only wallet-scoped reads (stage 3 + move 0.3).
+ * Portfolio — read-only wallet-scoped reads (stage 3 + move 0.3 + chronos-shell).
  *
  * `read` resolves a server-side wallet address allow-list (the configured
  * inventory for `{ scope: "global" }`, or the session's wallet scope for
@@ -21,9 +25,18 @@ import type {
  * activity from `proj_activity` (the MOVES feed — real swaps, success-only by
  * construction). An empty scope resolves to the empty array, never an error.
  *
+ * `listTokenHistory` resolves the GLOBAL configured wallet inventory (same
+ * allow-list as `read`'s `scope: "global"`) and reads one token's full
+ * activity + executed-transfer history, keyset-paginated. A `{status:
+ * "unavailable"}` DTO is a genuine degraded-success shape (the read hit its
+ * bounded statement timeout) — never an error `Result`.
+ *
  * The renderer never supplies a wallet address.
  */
 export interface PortfolioBridge {
   readonly read: (input: PortfolioReadInput) => Promise<Result<PortfolioDto>>;
   readonly listMoves: (input: MovesReadInput) => Promise<Result<MovesDto>>;
+  readonly listTokenHistory: (
+    input: TokenHistoryReadInput,
+  ) => Promise<Result<TokenHistoryDto>>;
 }

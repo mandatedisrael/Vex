@@ -116,7 +116,7 @@ export async function findRowsWithDimNotMatching(currentDim: number): Promise<nu
  * Cheap check on the singleton `runtime_state` row. Used as a soft pre-check
  * by `knowledge-reembed` against the most obvious race with the loop engine.
  *
- * NOTE: This is NOT a full write lock. Internal tools, subagents, scripts, or
+ * NOTE: This is NOT a full write lock. Internal tools, scripts, or
  * future hosts can still write to knowledge_entries while `active = FALSE`.
  * Operators must stop the full stack of writers before running reembed.
  */

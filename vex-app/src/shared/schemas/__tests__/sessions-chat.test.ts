@@ -35,20 +35,25 @@ describe("chatSubmitInputSchema", () => {
     }
   });
 
-  // S6: reasoningEffort is OPTIONAL + additive — absent means engine default.
-  it("accepts the optional per-turn reasoningEffort levels", () => {
-    for (const effort of ["low", "medium", "high"] as const) {
+  // S6/D2: reasoningEffort is OPTIONAL + additive — absent means "no
+  // explicit choice" (D6: the engine sends no reasoning param and the
+  // provider's own default applies). The transport enum was WIDENED to the
+  // full 7-value OpenRouter range (including "none"/"max") — behavior
+  // change by decree, this test now pins the WIDER contract instead of the
+  // old 3-value subset.
+  it("accepts every reasoning effort in the widened 7-value transport enum", () => {
+    for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const) {
       const parsed = chatSubmitInputSchema.safeParse({
         sessionId: "11111111-1111-4111-8111-111111111111",
         message: "think hard",
         reasoningEffort: effort,
       });
-      expect(parsed.success).toBe(true);
+      expect(parsed.success, `reasoningEffort "${effort}" must parse`).toBe(true);
     }
   });
 
-  it("rejects reasoning efforts outside the v1 enum (no xhigh/minimal/none)", () => {
-    for (const effort of ["xhigh", "minimal", "none", "max"]) {
+  it("rejects reasoning efforts outside the 7-value transport enum", () => {
+    for (const effort of ["off", "extreme", "MEDIUM", "", "very_high"]) {
       const parsed = chatSubmitInputSchema.safeParse({
         sessionId: "11111111-1111-4111-8111-111111111111",
         message: "think hard",
@@ -73,14 +78,43 @@ describe("sessionModelDtoSchema (S6 reasoning capability)", () => {
       const parsed = sessionModelDtoSchema.safeParse({
         ...baseDto,
         supportsReasoning,
+        reasoning: null,
       });
       expect(parsed.success).toBe(true);
     }
   });
 
   it("requires the supportsReasoning field (strict DTO)", () => {
-    const parsed = sessionModelDtoSchema.safeParse(baseDto);
+    const parsed = sessionModelDtoSchema.safeParse({ ...baseDto, reasoning: null });
     expect(parsed.success).toBe(false);
+  });
+
+  it("requires the reasoning field (D3: REQUIRED nullable, strict DTO)", () => {
+    const parsed = sessionModelDtoSchema.safeParse({ ...baseDto, supportsReasoning: true });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("accepts a null reasoning capability alongside supportsReasoning: true (boolean-only fallback)", () => {
+    const parsed = sessionModelDtoSchema.safeParse({
+      ...baseDto,
+      supportsReasoning: true,
+      reasoning: null,
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("accepts a full non-null reasoning capability", () => {
+    const parsed = sessionModelDtoSchema.safeParse({
+      ...baseDto,
+      supportsReasoning: true,
+      reasoning: {
+        supportedEfforts: ["high", "medium", "low", "none"],
+        defaultEffort: "medium",
+        defaultEnabled: true,
+        mandatory: false,
+      },
+    });
+    expect(parsed.success).toBe(true);
   });
 });
 

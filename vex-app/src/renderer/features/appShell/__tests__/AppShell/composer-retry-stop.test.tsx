@@ -38,6 +38,10 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   ArrowLeft01Icon: "ArrowLeft01Icon",
   ArrowRight01Icon: "ArrowRight01Icon",
   ArrowUp01Icon: "ArrowUp01Icon",
+  ArrowDataTransferHorizontalIcon: "ArrowDataTransferHorizontalIcon",
+  ArrowUpRight01Icon: "ArrowUpRight01Icon",
+  Cancel01Icon: "Cancel01Icon",
+  CoinsSwapIcon: "CoinsSwapIcon",
   BitcoinWalletIcon: "BitcoinWalletIcon",
   BridgeIcon: "BridgeIcon",
   BubbleChatSparkIcon: "BubbleChatSparkIcon",
@@ -64,7 +68,17 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   StopCircleIcon: "StopCircleIcon",
   Target02Icon: "Target02Icon",
   PercentSquareIcon: "PercentSquareIcon",
+  // Welcome Portfolio tab (BookPanel's welcome stage): handle + card icons.
+  Wallet01Icon: "Wallet01Icon",
   ZapIcon: "ZapIcon",
+}));
+
+// Phase 2b: the Settings ShellScreen hosts the wizard step forms, whose
+// module graph (icons, RHF, brand marks) is far beyond this suite's
+// partial mocks. The screen has its own suite; a stub keeps THIS suite's
+// AppShell import light.
+vi.mock("../../screens/SettingsScreen.js", () => ({
+  SettingsScreen: () => null,
 }));
 
 vi.mock("@thesvg/react", () => ({
@@ -80,6 +94,10 @@ vi.mock("@thesvg/react", () => ({
   Circle: () => null,
   Chainlink: () => null,
   Postgresql: () => null,
+  Bitcoin: () => null,
+  Bnb: () => null,
+  DaiStablecoin: () => null,
+  Usdc: () => null,
 }));
 
 // Stage 4: the always-mounted BookPanel renders SessionRuntimeBar (in the
@@ -176,10 +194,9 @@ beforeEach(() => {
     logBuffer: [],
     sessionModeFilter: "all",
     activeSessionId: null,
-    appShellView: "session",
+    shellRoute: { kind: "none" },
     createSessionOpen: false,
-    createSessionInitialMessage: null,
-    pendingFirstMessage: null,
+    createSessionInitialTurn: null,
   });
   sessionsListMock.mockResolvedValue({ ok: true, data: [] });
   sessionsGetMock.mockResolvedValue({ ok: true, data: null });

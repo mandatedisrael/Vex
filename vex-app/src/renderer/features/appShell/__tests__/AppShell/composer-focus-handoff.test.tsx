@@ -18,6 +18,9 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   Download01Icon: "Download01Icon",
   ArrowDown01Icon: "ArrowDown01Icon",
   ArrowUp01Icon: "ArrowUp01Icon",
+  // Welcome Portfolio tab (BookPanel's welcome stage): handle + card icons.
+  ArrowRight01Icon: "ArrowRight01Icon",
+  Wallet01Icon: "Wallet01Icon",
   MapPinIcon: "MapPinIcon",
   AiBrain05Icon: "AiBrain05Icon",
   StopCircleIcon: "StopCircleIcon",
@@ -41,12 +44,8 @@ vi.mock("../../../../lib/api/messages.js", () => ({
 vi.mock("../../../../lib/api/runtime.js", () => ({
   useRuntimeState: () => ({ data: { ok: true, data: { status: null } } }),
 }));
-vi.mock("../../../../lib/api/sessions.js", () => ({
-  useSessionPlan: () => ({
-    data: { ok: true, data: { enabled: false, planMd: "", accepted: false } },
-  }),
-  useSetPlanMode: () => ({ mutate: vi.fn(), isPending: false }),
-  useSessionModel: () => ({ data: undefined }),
+vi.mock("../../../../lib/api/models.js", () => ({
+  useAvailableModels: () => ({ data: undefined }),
 }));
 
 const { SessionComposer } = await import("../../SessionComposer.js");
@@ -56,8 +55,7 @@ const SESSION = "00000000-0000-4000-8000-00000000cc02";
 beforeEach(() => {
   vi.clearAllMocks();
   useUiStore.setState({
-    pendingFirstMessage: null,
-    createSessionInitialMessage: null,
+    createSessionInitialTurn: null,
   });
 });
 

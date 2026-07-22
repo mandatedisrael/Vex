@@ -10,6 +10,11 @@
  */
 
 import type { JSX } from "react";
+import { cn } from "../../../../lib/utils.js";
+import {
+  RAIL_DANGER_CHROME,
+  RAIL_WARNING_CHROME,
+} from "../step-chrome.js";
 import type { ServerError } from "./form.js";
 
 export interface EmbeddingWarningPanelsProps {
@@ -29,7 +34,10 @@ export function EmbeddingWarningPanels({
         <div
           role="alert"
           data-vex-embedding-warning="dim-locked"
-          className="rounded-md border border-[color-mix(in_oklab,var(--color-danger)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-danger)_10%,transparent)] p-4 text-sm text-[var(--color-danger)]"
+          className={cn(
+            "py-1 text-sm text-[var(--color-danger)]",
+            RAIL_DANGER_CHROME,
+          )}
         >
           <strong className="block font-semibold">Dim change blocked.</strong>
           <p className="mt-1">
@@ -39,9 +47,8 @@ export function EmbeddingWarningPanels({
             unavailable.
           </p>
           <p className="mt-2 text-xs">
-            Safe path: export your memory first, wipe
-            <code className="mx-1">knowledge_entries</code>, then change
-            dim and re-import. (Phase 2 GUI for this.)
+            Safe path: export your memory first, clear the stored entries,
+            then change the dimension and re-import.
           </p>
         </div>
       ) : null}
@@ -49,7 +56,10 @@ export function EmbeddingWarningPanels({
         <div
           role="alert"
           data-vex-embedding-warning="db-unavailable"
-          className="rounded-md border border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_10%,transparent)] p-4 text-sm text-[var(--color-warning)]"
+          className={cn(
+            "py-1 text-sm text-[var(--color-warning)]",
+            RAIL_WARNING_CHROME,
+          )}
         >
           <strong className="block font-semibold">
             Database unavailable.

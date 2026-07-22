@@ -7,7 +7,7 @@
  * the pure type declarations moved. This test pins the EXACT public runtime
  * surface (every exported value present with the right `typeof`, and no extra
  * keys) so a future refactor cannot silently drop or add an export. The
- * importers (runner/{agent,shared,mission-run,setup-turn}.ts, subagents/runner.ts)
+ * importers (runner/{agent,shared,mission-run,setup-turn}.ts)
  * consume exactly `runTurnLoop` (value) + `TurnLoopConfig` (type).
  */
 

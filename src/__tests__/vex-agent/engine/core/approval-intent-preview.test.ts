@@ -364,7 +364,6 @@ describe("buildPolicySnapshot", () => {
     loadedDocuments: new Map(),
     sessionPermission: "restricted",
     approved: false,
-    role: "parent",
     missionRunId: "run-1",
     missionId: "mission-1",
     sessionKind: "mission",
@@ -380,7 +379,6 @@ describe("buildPolicySnapshot", () => {
       contextUsageBand: "warning",
       missionId: "mission-1",
       missionRunId: "run-1",
-      role: "parent",
     });
   });
 
@@ -393,11 +391,6 @@ describe("buildPolicySnapshot", () => {
   it("captures permission='full' in the approval audit snapshot", () => {
     const snap = buildPolicySnapshot({ ...baseContext, sessionPermission: "full" });
     expect(snap.permission).toBe("full");
-  });
-
-  it("captures role='subagent' when set", () => {
-    const snap = buildPolicySnapshot({ ...baseContext, role: "subagent" });
-    expect(snap.role).toBe("subagent");
   });
 
   it("captures contextUsageBand at enqueue time (not re-derived later)", () => {

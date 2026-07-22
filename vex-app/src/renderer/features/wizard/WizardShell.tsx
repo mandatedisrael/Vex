@@ -1,21 +1,18 @@
 /**
  * Wizard shell (M7, Phase 2 refactor — Mode + Wake steps removed; PR6
- * redesign — onboarding glass; V2 redesign — sidebar removed, full-
- * bleed background, horizontal stepper above the glass panel).
+ * redesign — onboarding glass; V2 redesign — sidebar removed; Chronos
+ * rebrand — the wizard joins the cobalt continuum).
  *
- * Layout (Countersign/NOTARY rebrand — photo background and glass
- * removed; the wizard is a working page of the same signed document):
- *   - Near-black `--vex-onboarding-bg` canvas, no backdrop image.
- *   - Top-left chip: hallmark + "VEX" wordmark + "SETUP" tag. Bottom
- *     corners carry the shared chrome (brand tetrad + app version),
- *     matching every other onboarding page.
- *   - Centered column hosts `HorizontalStepper` above `WizardStepPanel`.
- *     Each step's unique DotMatrix loader lives inside the active
- *     stepper node (`stepper/stepper-loader-variants.ts`).
- *   - "Your data stays yours" link + step counter live inside the
- *     panel footer (rendered by `WizardStepPanel` itself).
+ * Layout (AMENDMENT A2): the wizard keeps its own full-bleed `<main>`
+ * but paints the same SetupGate plate as every other pre-shell slide
+ * (`.vex-gate-plate` + vignette + grain) and carries the
+ * `data-vex-gate` token scope, so stock Buttons inside step forms are
+ * paper pills. Top-left brand + bottom corners match `SetupFrame`
+ * (plus the "Backed by · Virtuals" partner mark, wizard-only). The
+ * centered column hosts the minimal `HorizontalStepper` rail above
+ * `WizardStepPanel`. Loading state is the VexLoader ring.
  *
- * Per-step chrome lives in `WizardStepPanel`; each step now returns a
+ * Per-step chrome lives in `WizardStepPanel`; each step returns a
  * `WizardStepPanel` (or, for ReviewStep back-edit, a sub-step's panel
  * with a small editing notice banner above). `AnimatePresence` stays
  * on this shell — the panel itself is a plain `<div>` so transitions
@@ -28,9 +25,8 @@
  * TanStack Query cache.
  *
  * If `completed === true` (Review finalised on a previous launch) we
- * flip the view to `appShell` immediately unless the app shell opened
- * the wizard in reconfiguration mode. Two effects own this routing: the
- * one-time init effect handles first-mount (relaunch into a completed
+ * flip the view to `appShell` immediately. Two effects own this routing:
+ * the one-time init effect handles first-mount (relaunch into a completed
  * setup), and a dedicated COMPLETION WATCHER handles the in-session flip
  * after Finalize succeeds on Review (where `currentStepId` is already
  * non-null, so the init effect's guard skips it).
@@ -44,10 +40,11 @@ import {
 } from "@shared/schemas/wizard.js";
 import { Button } from "../../components/ui/button.js";
 import { OpenLogsLink } from "../../components/common/OpenLogsLink.js";
-import { DotmSquare3 } from "../../components/ui/dotm-square-3.js";
+import { VexLoader } from "../../components/ui/vex-loader.js";
 import { cn } from "../../lib/utils.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { useWizardState } from "../../lib/api/wizard.js";
+import { resolveWizardEntry } from "./wizard-entry.js";
 import { HorizontalStepper } from "./HorizontalStepper.js";
 import { AgentCoreStep } from "./steps/AgentCoreStep.js";
 import { ApiKeysStep } from "./steps/ApiKeysStep.js";
@@ -61,8 +58,6 @@ function renderStep(
   stepId: WizardStepId,
   completedSteps: ReadonlyArray<WizardStepId>,
   onAdvance: (next: WizardStepId) => void,
-  reviewMode: "setup" | "reconfigure",
-  onExitReconfigure: () => void,
 ): JSX.Element {
   // M11: every wizard step receives `flowMode="first-pass"` from the
   // shell. ReviewStep itself dispatches edited steps with
@@ -83,52 +78,43 @@ function renderStep(
       return <ProviderStep {...props} />;
     case "review":
       return (
-        <ReviewStep
-          completedSteps={completedSteps}
-          mode={reviewMode}
-          onAdvance={onAdvance}
-          onExitReconfigure={onExitReconfigure}
-        />
+        <ReviewStep completedSteps={completedSteps} onAdvance={onAdvance} />
       );
   }
 }
 
 const SHELL_CHROME = cn(
   "relative flex h-screen w-screen overflow-hidden",
-  "bg-[var(--vex-onboarding-bg)] text-[var(--color-text-primary)]",
+  "text-[var(--color-text-primary)]",
 );
 
-const ERROR_PANEL_CHROME = cn(
-  "w-full max-w-md overflow-hidden rounded-xl",
-  "border border-white/[0.08] bg-white/[0.02]",
-);
+/* Error state is an open composition on the plate (AMENDMENT A3 —
+ * boxless): serif title, danger rail for the message, actions in flow. */
+const ERROR_STACK_CHROME = cn("relative z-10 flex w-full max-w-md flex-col gap-4");
 
-/** Hallmark chip top-left + the shared corner chrome (tetrad, version). */
-function TopChrome(): JSX.Element {
+/** The cobalt plate + corner chrome shared by all three shell states.
+ * Paint layers first (behind), then the pointer-events-none corners. */
+function WizardChrome(): JSX.Element {
   return (
     <>
-      <div className="pointer-events-none absolute left-6 top-6 z-10 flex items-center gap-3">
+      <div aria-hidden className="vex-gate-plate absolute inset-0" />
+      <div aria-hidden className="vex-gate-vignette absolute inset-0" />
+      <div aria-hidden className="vex-noise pointer-events-none absolute inset-0" />
+
+      {/* The mark alone — owner decree 2026-07-22: no "VEX" text beside it. */}
+      <div className="pointer-events-none absolute left-6 top-6 z-10">
         <img
           src="/logo_clean.png"
           alt=""
           aria-hidden
           draggable={false}
-          className="h-9 w-9 object-contain opacity-90"
+          className="h-7 w-7 select-none object-contain"
         />
-        <div className="flex flex-col leading-tight">
-          <span className="font-display text-sm font-extrabold uppercase tracking-[0.3em] text-[var(--color-text-primary)]">
-            VEX
-          </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--color-text-muted)]">
-            Setup
-          </span>
-        </div>
       </div>
-      <div className="pointer-events-none absolute bottom-7 left-10 z-10 flex flex-col gap-1.5">
-        {/* Static backed-by line — quiet monochrome partner marks; no theme
-         * toggle here (the wizard is single-theme onboarding). */}
-        <span className="flex items-center gap-2 opacity-60">
-          <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--color-text-muted)]">
+      <div className="pointer-events-none absolute bottom-7 left-10 z-10">
+        {/* Static backed-by line — a quiet monochrome partner mark. */}
+        <span className="flex items-center gap-2 opacity-70">
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[rgba(243,244,247,0.58)]">
             Backed by
           </span>
           <img
@@ -136,17 +122,9 @@ function TopChrome(): JSX.Element {
             alt="Virtuals"
             className="h-3.5 w-3.5"
           />
-          <img
-            src="/logo/robinhood.svg"
-            alt="Robinhood"
-            className="h-3.5 w-3.5"
-          />
-        </span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.4em] text-[var(--color-text-muted)] opacity-60">
-          Models Reason · Runtimes Enforce · Chains Prove
         </span>
       </div>
-      <span className="pointer-events-none absolute bottom-7 right-10 z-10 font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--color-text-muted)] opacity-60">
+      <span className="pointer-events-none absolute bottom-7 right-10 z-10 font-mono text-[10px] uppercase tracking-[0.18em] text-[rgba(243,244,247,0.58)]">
         v{__VEX_APP_VERSION__}
       </span>
     </>
@@ -168,12 +146,22 @@ export function WizardShell(): JSX.Element {
 
   const [currentStepId, setCurrentStepId] = useState<WizardStepId | null>(null);
 
+  // Diagnostic screen tour (VITE_VEX_SETUP_TOUR=1, dev builds only): pin
+  // the wizard to its persisted step instead of auto-routing away, so a
+  // completed setup can still be VIEWED. Routing logic is untouched for
+  // real builds; unlock/appShell handoffs never fire while touring.
+  const setupTour = import.meta.env.VITE_VEX_SETUP_TOUR === "1";
+
   // Initialise local step from persisted state on first resolution.
   // We deliberately don't bind to persisted on every change — once the
   // wizard is mounted, the local step is the source of truth (the
   // user's `Save and Continue` advances both local and persisted).
   useEffect(() => {
     if (persisted === null || currentStepId !== null) return;
+    if (setupTour) {
+      setCurrentStepId(persisted.currentStepId);
+      return;
+    }
     let cancelled = false;
     const route = async (): Promise<void> => {
       const status = await window.vex.secrets.status();
@@ -181,32 +169,24 @@ export function WizardShell(): JSX.Element {
       const vaultConfigured = status.ok ? status.data.vaultConfigured : false;
       const unlocked = status.ok ? status.data.unlocked : false;
 
-      if (persisted.completed) {
-        if (wizardEntryMode === "reconfigure") {
-          setCurrentStepId("review");
-          return;
-        }
-        if (vaultConfigured && !unlocked) {
-          openUnlock("appShell");
-          return;
-        }
-        if (!vaultConfigured) {
-          setCurrentStepId("keystore");
-          return;
-        }
+      // Shared decision table (features/wizard/wizard-entry.ts) — the boot
+      // orchestrator resolves the SAME table, so a launch and a wizard
+      // mount can never disagree about where the user lands.
+      const decision = resolveWizardEntry({
+        persisted,
+        vaultConfigured,
+        unlocked,
+        entryMode: wizardEntryMode,
+      });
+      if (decision.kind === "unlock") {
+        openUnlock(decision.returnView);
+        return;
+      }
+      if (decision.kind === "appShell") {
         setCurrentView("appShell");
         return;
       }
-
-      if (
-        persisted.currentStepId !== "keystore" &&
-        vaultConfigured &&
-        !unlocked
-      ) {
-        openUnlock("wizard");
-        return;
-      }
-      setCurrentStepId(persisted.currentStepId);
+      setCurrentStepId(decision.stepId);
     };
     void route();
     return () => {
@@ -223,13 +203,12 @@ export function WizardShell(): JSX.Element {
   // the shell actually flips to the app shell. It guards on
   // `currentStepId !== null` (the init effect owns first-mount; this
   // avoids a relaunch double-fire) and on `persisted.completed` (only
-  // fires after a real completion). Reconfigure mode is skipped so a
-  // settings-editor reviewing infrastructure is not bounced out of Review.
+  // fires after a real completion).
   useEffect(() => {
     if (persisted === null || currentStepId === null || !persisted.completed) {
       return;
     }
-    if (wizardEntryMode === "reconfigure") return;
+    if (setupTour) return;
     let cancelled = false;
     const route = async (): Promise<void> => {
       const status = await window.vex.secrets.status();
@@ -237,12 +216,19 @@ export function WizardShell(): JSX.Element {
       const vaultConfigured = status.ok ? status.data.vaultConfigured : false;
       const unlocked = status.ok ? status.data.unlocked : false;
 
-      if (vaultConfigured && !unlocked) {
-        openUnlock("appShell");
+      // Resolve the completed-routing rows of the shared table.
+      const decision = resolveWizardEntry({
+        persisted,
+        vaultConfigured,
+        unlocked,
+        entryMode: "setup",
+      });
+      if (decision.kind === "unlock") {
+        openUnlock(decision.returnView);
         return;
       }
-      if (!vaultConfigured) {
-        setCurrentStepId("keystore");
+      if (decision.kind === "step") {
+        setCurrentStepId(decision.stepId);
         return;
       }
       setCurrentView("appShell");
@@ -251,18 +237,11 @@ export function WizardShell(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [persisted, currentStepId, setCurrentView, wizardEntryMode, openUnlock]);
+  }, [persisted, currentStepId, setCurrentView, openUnlock]);
 
   const onAdvance = useCallback((next: WizardStepId) => {
     setCurrentStepId(next);
   }, []);
-  const onExitReconfigure = useCallback(() => {
-    setCurrentView("appShell");
-  }, [setCurrentView]);
-  const reviewMode =
-    persisted?.completed === true && wizardEntryMode === "reconfigure"
-      ? "reconfigure"
-      : "setup";
 
   if (queryError) {
     const message =
@@ -272,20 +251,22 @@ export function WizardShell(): JSX.Element {
     return (
       <main
         data-vex-onboarding="true"
+        data-vex-gate="true"
         data-vex-screen="wizard"
         className={cn(SHELL_CHROME, "items-center justify-center p-8")}
       >
-        <TopChrome />
-        <div
-          className={cn(ERROR_PANEL_CHROME, "relative z-10 flex flex-col gap-4 p-6")}
-        >
-          <div className="flex flex-col gap-1">
-            <h1 className="font-display text-lg font-bold tracking-[-0.02em] text-[var(--color-text-primary)]">
+        <WizardChrome />
+        <div className={ERROR_STACK_CHROME}>
+          <div className="flex flex-col gap-2">
+            <h1 className="font-serif text-2xl font-normal leading-tight text-[var(--color-text-primary)]">
               Setup unavailable
             </h1>
-            <p className="text-sm text-[var(--color-text-secondary)]">{message}</p>
+            {/* Danger RAIL (A3 alert grammar — no fill, no box). */}
+            <p className="border-l-2 border-[color-mix(in_oklab,var(--color-danger)_45%,transparent)] pl-3 text-sm text-[rgba(243,244,247,0.78)]">
+              {message}
+            </p>
           </div>
-          <p className="text-xs text-[var(--color-text-muted)]">
+          <p className="text-xs text-[rgba(243,244,247,0.58)]">
             Most setup-state failures are transient — retry once, then
             restart Vex if the problem persists.
           </p>
@@ -311,18 +292,19 @@ export function WizardShell(): JSX.Element {
     return (
       <main
         data-vex-onboarding="true"
+        data-vex-gate="true"
         data-vex-screen="wizard"
         className={cn(SHELL_CHROME, "items-center justify-center p-8")}
       >
-        <TopChrome />
-        {/* Brand loading language — DotMatrix, never a generic pulse bar.
-            The loader root carries role="status" aria-live itself. */}
+        <WizardChrome />
+        {/* Brand loading language — the VexLoader ring, paper on the
+            plate. The loader root carries role="status" itself. */}
         <div className="relative z-10 flex flex-col items-center">
-          <DotmSquare3
+          <VexLoader
             size={24}
-            dotSize={3}
-            colorPreset="grad-cobalt"
-            ariaLabel="Loading wizard progress…"
+            stroke={2}
+            tone="paper"
+            label="Loading wizard progress…"
           />
         </div>
       </main>
@@ -332,24 +314,27 @@ export function WizardShell(): JSX.Element {
   return (
     <main
       data-vex-onboarding="true"
+      data-vex-gate="true"
       data-vex-screen="wizard"
       className={cn(SHELL_CHROME, "flex-col items-center px-6 pt-24 pb-8")}
     >
-      <TopChrome />
+      <WizardChrome />
 
       {/*
         `m-auto` keeps the column vertically centered when the active
         step content is short. `min-h-0` + the panel's own
         `max-h-[calc(100vh-13rem)]` (13rem = pt-24 + stepper + gap-6 +
-        pb-8) let the glass panel shrink and scroll on the 1024×720
-        minimum BrowserWindow size (codex final review V2 P1).
+        pb-8) let the panel shrink and scroll on the 1024×720 minimum
+        BrowserWindow size (codex final review V2 P1).
       */}
       <div className="relative z-10 m-auto flex min-h-0 w-full max-w-[760px] flex-col items-center gap-6">
         <HorizontalStepper
           currentStepId={currentStepId}
           completedSteps={persisted?.completedSteps ?? []}
         />
-        <div className="w-full min-h-0 max-w-[640px]">
+        {/* A3 boxless: the page scrolls here (quiet onboarding scrollbar),
+            not inside a bordered panel well. */}
+        <div className="vex-gate-page min-h-0 w-full max-w-[640px]">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={currentStepId}
@@ -363,8 +348,6 @@ export function WizardShell(): JSX.Element {
                 currentStepId,
                 persisted?.completedSteps ?? [],
                 onAdvance,
-                reviewMode,
-                onExitReconfigure,
               )}
             </motion.div>
           </AnimatePresence>

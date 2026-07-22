@@ -82,14 +82,6 @@ export const INTERNAL_TOOL_LOADERS: Readonly<Record<string, InternalHandlerLoade
   // `hyperliquid.workspace.enter` available through execute_tool.
   hyperliquid_enter: async () => (await import("../internal/hyperliquid-enter.js")).handleHyperliquidEnter,
 
-  // Subagents — DISABLED (TODO subagent-disabled). Re-enable z registry/subagents.ts.
-  // subagent_spawn: async () => (await import("../internal/subagent.js")).handleSubagentSpawn,
-  // subagent_status: async () => (await import("../internal/subagent.js")).handleSubagentStatus,
-  // subagent_stop: async () => (await import("../internal/subagent.js")).handleSubagentStop,
-  // subagent_reply: async () => (await import("../internal/subagent.js")).handleSubagentReply,
-  // subagent_request_parent: async () => (await import("../internal/subagent.js")).handleSubagentRequestParent,
-  // subagent_report_complete: async () => (await import("../internal/subagent.js")).handleSubagentReportComplete,
-
   // EVM on-chain forensics — receipts + ERC-721 mint detection
   chain_read: async () => (await import("../internal/chain-read.js")).handleChainRead,
 

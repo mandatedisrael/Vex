@@ -19,12 +19,14 @@ import { Button } from "../../../../../components/ui/button.js";
 
 export type SummaryStatus = "ok" | "missing" | "partial" | "warning" | "info";
 
-const STATUS_DOT: Record<SummaryStatus, string> = {
-  ok: "bg-[var(--color-success)]",
-  missing: "bg-[var(--color-danger)]",
-  partial: "bg-[var(--color-warning)]",
-  warning: "bg-[var(--color-warning)]",
-  info: "bg-[var(--color-text-muted)]",
+/* Status is a colored WORD (design law: state = color + words, never a
+ * dot) — the statusLabel itself carries the tone. */
+const STATUS_WORD_COLOR: Record<SummaryStatus, string> = {
+  ok: "text-[var(--color-success)]",
+  missing: "text-[var(--color-danger)]",
+  partial: "text-[var(--color-warning)]",
+  warning: "text-[var(--color-warning)]",
+  info: "text-[var(--color-text-muted)]",
 };
 
 export interface SummaryCardProps {
@@ -50,24 +52,23 @@ export function SummaryCard({
     <div
       data-vex-review-card={testId}
       className={cn(
-        // Flat hairline tile — one luminance step above the panel, no
-        // glass, no inset shadow (landing ink-surface grammar).
-        "flex flex-col gap-2 rounded-xl border border-white/[0.08]",
-        "bg-white/[0.03] px-3 py-2.5",
+        // A3 boxless: hairline-separated register row, never a filled
+        // tile — the statusLabel word carries the state color.
+        "flex flex-col gap-2 border-b border-white/[0.10] pb-3",
+        "last:border-0 last:pb-0",
       )}
     >
       <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-[var(--color-text-primary)]">
+          {title}
+        </span>
         <div className="flex items-center gap-2">
           <span
-            aria-hidden
-            className={cn("h-2 w-2 rounded-full", STATUS_DOT[status])}
-          />
-          <span className="text-sm font-medium text-[var(--color-text-primary)]">
-            {title}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
+            className={cn(
+              "font-mono text-[10px] uppercase tracking-[0.18em]",
+              STATUS_WORD_COLOR[status],
+            )}
+          >
             {statusLabel}
           </span>
           {onEdit ? (

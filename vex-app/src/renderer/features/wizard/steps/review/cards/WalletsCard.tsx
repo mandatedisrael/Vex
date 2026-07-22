@@ -1,36 +1,22 @@
 import type { JSX } from "react";
 import type { EnvState } from "@shared/schemas/onboarding.js";
-import type { WalletChain } from "@shared/schemas/wallets.js";
 import { AddressDisplay } from "../../../../../components/common/AddressDisplay.js";
-import { Button } from "../../../../../components/ui/button.js";
 import { SummaryCard } from "./SummaryCard.js";
 
 export interface WalletsCardProps {
   readonly envState: EnvState;
   readonly onEdit: () => void;
   readonly editDisabled: boolean;
-  /**
-   * Wizard mode the card is rendered in. Export-private-key is gated to
-   * `reconfigure` so the action is only ever offered to operators who
-   * already finished setup and are intentionally managing existing
-   * wallets.
-   */
-  readonly mode?: "setup" | "reconfigure";
-  /**
-   * Optional export trigger. When provided AND `mode === "reconfigure"`
-   * AND the wallet for that chain is present, the card renders a
-   * per-chain "Export private key" button that delegates the modal
-   * lifecycle to the parent (ReviewStep).
-   */
-  readonly onExport?: (chain: WalletChain) => void;
 }
 
+// Display-only review card: shows each chain's public address (copyable
+// inline) and an Edit affordance. Private-key export lives ONLY in
+// Settings' ExportPrivateKeySection since Decision C retired the
+// reconfigure-wizard door — the wizard review never exposes it.
 export function WalletsCard({
   envState,
   onEdit,
   editDisabled,
-  mode = "setup",
-  onExport,
 }: WalletsCardProps): JSX.Element {
   const evmOk = envState.walletStatus.evm === "present";
   const solOk = envState.walletStatus.solana === "present";
@@ -40,10 +26,6 @@ export function WalletsCard({
   const evmAddr = envState.walletAddresses?.evm ?? null;
   const solAddr = envState.walletAddresses?.solana ?? null;
 
-  const canExport = mode === "reconfigure" && onExport !== undefined;
-  const evmExportShown = canExport && evmOk;
-  const solExportShown = canExport && solOk;
-
   return (
     <SummaryCard
       title="Wallets"
@@ -52,8 +34,8 @@ export function WalletsCard({
         status === "ok"
           ? "Both chains"
           : status === "partial"
-            ? "Partial"
-            : "None — optional"
+            ? "One chain"
+            : "None"
       }
       onEdit={onEdit}
       editDisabled={editDisabled}
@@ -74,19 +56,6 @@ export function WalletsCard({
               <span>{evmOk ? "—" : "missing"}</span>
             )}
           </div>
-          {evmExportShown ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onExport?.("evm")}
-              disabled={editDisabled}
-              data-vex-wallets-export="evm"
-              aria-label="Export EVM private key"
-            >
-              Export EVM key
-            </Button>
-          ) : null}
         </div>
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
@@ -102,19 +71,6 @@ export function WalletsCard({
               <span>{solOk ? "—" : "missing"}</span>
             )}
           </div>
-          {solExportShown ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onExport?.("solana")}
-              disabled={editDisabled}
-              data-vex-wallets-export="solana"
-              aria-label="Export Solana private key"
-            >
-              Export Solana key
-            </Button>
-          ) : null}
         </div>
       </div>
     </SummaryCard>

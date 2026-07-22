@@ -17,7 +17,6 @@ function makeMissionContext(overrides: Partial<EngineContext> = {}): EngineConte
     sessionPermission: "restricted",
     missionId: "mission-1",
     missionRunId: null,
-    isSubagent: false,
     loadedDocuments: new Map(),
     ...overrides,
   };

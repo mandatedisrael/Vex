@@ -29,7 +29,6 @@ export {
 export {
   defaultVisibilityContext,
   getVisibleToolDefs,
-  isToolBlockedForRole,
 } from "./registry/visibility.js";
 export type {
   ToolVisibilityContext,

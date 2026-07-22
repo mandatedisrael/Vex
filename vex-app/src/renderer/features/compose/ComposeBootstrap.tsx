@@ -1,16 +1,16 @@
 /**
- * Compose bootstrap surface — 3rd user-facing screen in the onboarding
- * flow. Runs `composeUpAbortable`, parses the streamed log lines into
- * per-service substate, dispatches to the right branch body based on
- * the IPC result kind, and (on success) lets the user continue to the
- * migrations screen.
+ * Compose bootstrap surface — the "Starting services" slide on the
+ * cobalt continuum. Runs `composeUpAbortable`, parses the streamed log
+ * lines into per-service substate, dispatches to the right branch body
+ * based on the IPC result kind, and (on success) lets the user
+ * continue to the migrations screen.
  *
- * Visual system: Countersign/NOTARY document page (NotaryPage scaffold —
- * near-black canvas, hallmark, plinth, mono title line). Service startup
- * renders as a ledger; the armed CONTINUE key appears in the shared
- * 208×44 slot only when the phase flips to ready. Per-branch render
- * delegates to the body components in `bootstrap/branches/`; shared
- * primitives come from `components/onboarding/`.
+ * Visual system (Chronos rebrand, AMENDMENT A2): `SetupFrame` paints
+ * the SetupGate plate, a serif "Starting services" title sits above
+ * one ink-glass card. The running branch is the VexLoader hero above
+ * the two service rows; terminal branches are quiet status stanzas
+ * with paper-pill actions. Per-branch render delegates to the body
+ * components in `bootstrap/branches/`.
  *
  * Cancellation contract (PR3 — `vex:cancel` IPC) is preserved verbatim:
  * the Cancel button calls the `cancel` handle returned by
@@ -22,22 +22,17 @@
  * `__tests__/ComposeBootstrap.test.tsx` pin this contract.
  *
  * Log parser is COSMETIC ONLY (codex plan v2): it feeds per-service
- * pill substate but never flips the orchestrator phase — phase
- * transitions are driven solely by the IPC `ComposeUpResult.kind`
- * discriminator.
+ * substate but never flips the orchestrator phase — phase transitions
+ * are driven solely by the IPC `ComposeUpResult.kind` discriminator.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComposeLog } from "@shared/schemas/docker.js";
 
 import { useUiStore } from "../../stores/uiStore.js";
-import { NotaryPage } from "../../components/onboarding/NotaryPage.js";
-import { KeyButton } from "../../components/onboarding/KeyButton.js";
-import {
-  COMPOSE_BOOTSTRAP_STEP,
-  COMPOSE_LOG_BUFFER_MAX,
-  TOTAL_ONBOARDING_STEPS,
-} from "./bootstrap/constants.js";
+import { SetupFrame } from "../../components/onboarding/SetupFrame.js";
+import { Button } from "../../components/ui/button.js";
+import { COMPOSE_LOG_BUFFER_MAX } from "./bootstrap/constants.js";
 import type { Phase } from "./bootstrap/types.js";
 import {
   parseComposeLog,
@@ -86,10 +81,7 @@ export function ComposeBootstrap(): JSX.Element {
         switch (data.kind) {
           case "running":
           case "reused":
-            // `celebrate` flag carries the one-shot completion glint
-            // signal explicitly through state (codex post-impl SHOULD-FIX
-            // #4 — render-mutation of a prev-phase ref was non-pure).
-            setPhase({ kind: "ready", result: data, celebrate: true });
+            setPhase({ kind: "ready", result: data });
             return;
           case "port_collision":
             setPhase({
@@ -174,63 +166,66 @@ export function ComposeBootstrap(): JSX.Element {
   );
 
   return (
-    <NotaryPage
+    <SetupFrame
       screen="composeBootstrap"
-      headingId="composebootstrap-heading"
-      title="Starting Services"
-      subline="Postgres + embeddings are coming up locally through Docker."
-      stepNumber={COMPOSE_BOOTSTRAP_STEP}
-      totalSteps={TOTAL_ONBOARDING_STEPS}
+      maxWidth="lg"
+      title="Starting services"
+      subline="Postgres and embeddings are coming up locally through Docker."
     >
-      {/* CASE FILE — the active phase body. */}
-      <div className="mt-6 max-h-[48vh] overflow-y-auto pr-1">
-        {phase.kind === "running" || phase.kind === "cancelling" ? (
-          <RunningBody
-            services={services}
-            onCancel={handleCancel}
-            cancelling={phase.kind === "cancelling"}
-          />
-        ) : phase.kind === "ready" ? (
-          <ReadyBody result={phase.result} celebrate={phase.celebrate} />
-        ) : phase.kind === "error.port_collision" ? (
-          <PortCollisionBody
-            message={phase.message}
-            previousInstallHoldingPorts={
-              phase.previousInstallHoldingPorts
-            }
-            stoppingPreviousInstall={stopPreviousInstall.isPending}
-            stopPreviousInstallError={
-              stopPreviousInstall.data?.ok === false
-                ? stopPreviousInstall.data.error.message
-                : (stopPreviousInstall.error?.message ?? null)
-            }
-            onStopPreviousInstall={handleStopPreviousInstall}
-            onRetry={handleRetry}
-          />
-        ) : phase.kind === "error.unhealthy" ? (
-          <UnhealthyBody message={phase.message} onRetry={handleRetry} />
-        ) : phase.kind === "error.failed" ? (
-          <FailedBody
-            message={phase.message}
-            recentLogs={recentLogLines}
-            onRetry={handleRetry}
-          />
-        ) : phase.kind === "error.cancelled" ? (
-          <CancelledBody onRetry={handleRetry} />
-        ) : null}
+      {/* THE BODY — the active phase, directly on the plate (AMENDMENT
+       * A3: the container card and its inner scroll well are retired;
+       * the page column scrolls). */}
+      <div className="vex-rise vex-rise-d1">
+          {phase.kind === "running" || phase.kind === "cancelling" ? (
+            <RunningBody
+              services={services}
+              onCancel={handleCancel}
+              cancelling={phase.kind === "cancelling"}
+            />
+          ) : phase.kind === "ready" ? (
+            <ReadyBody result={phase.result} />
+          ) : phase.kind === "error.port_collision" ? (
+            <PortCollisionBody
+              message={phase.message}
+              previousInstallHoldingPorts={
+                phase.previousInstallHoldingPorts
+              }
+              stoppingPreviousInstall={stopPreviousInstall.isPending}
+              stopPreviousInstallError={
+                stopPreviousInstall.data?.ok === false
+                  ? stopPreviousInstall.data.error.message
+                  : (stopPreviousInstall.error?.message ?? null)
+              }
+              onStopPreviousInstall={handleStopPreviousInstall}
+              onRetry={handleRetry}
+            />
+          ) : phase.kind === "error.unhealthy" ? (
+            <UnhealthyBody message={phase.message} onRetry={handleRetry} />
+          ) : phase.kind === "error.failed" ? (
+            <FailedBody
+              message={phase.message}
+              recentLogs={recentLogLines}
+              onRetry={handleRetry}
+            />
+          ) : phase.kind === "error.cancelled" ? (
+            <CancelledBody onRetry={handleRetry} />
+          ) : null}
       </div>
 
-      {/* KEY PLINTH — the armed CONTINUE key appears only when the
-       * stack is ready (body CTAs carry the action everywhere else). */}
+      {/* FOOTER — the paper-pill Continue appears only when the stack
+       * is ready (body CTAs carry the action everywhere else). */}
       {phase.kind === "ready" ? (
-        <div className="mt-9">
-          <KeyButton
-            armed
+        <div className="vex-rise vex-rise-d2 mt-6 flex justify-center">
+          <Button
+            size="lg"
+            className="min-w-[208px]"
             onClick={handleContinue}
-            ariaLabel="Continue to database migrations"
-          />
+            aria-label="Continue to database migrations"
+          >
+            Continue
+          </Button>
         </div>
       ) : null}
-    </NotaryPage>
+    </SetupFrame>
   );
 }

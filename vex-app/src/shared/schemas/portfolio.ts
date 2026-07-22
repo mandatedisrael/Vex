@@ -30,10 +30,17 @@
  * never an aggregation key), so a spoofed token sharing a legitimate symbol
  * never coalesces into that token's line;
  * the renderer uses the address (never the self-declared symbol) to decide
- * whether a brand icon is authorized.
+ * whether a brand icon is authorized. Token lines also carry `tokenName`
+ * (nullable, optional/additive) — the human-readable name ("USD Coin"),
+ * sanitized in MAIN through `sanitizeTokenName` before the DTO is built; the
+ * renderer falls back to the sanitized `symbol` when `tokenName` is absent.
  */
 
 import { z } from "zod";
+import {
+  TOKEN_NAME_MAX_LENGTH,
+  sanitizeTokenName,
+} from "../token-name-sanitizer.js";
 
 /**
  * Token contract/mint address — the identity key that disambiguates two
@@ -91,6 +98,25 @@ export const portfolioReadInputSchema = z.discriminatedUnion("scope", [
 export type PortfolioReadInput = z.infer<typeof portfolioReadInputSchema>;
 
 /**
+ * Human-readable token NAME (e.g. `"USD Coin"`) — display-only metadata from
+ * `proj_balances.token_name`, exactly as attacker-influenceable as `symbol`
+ * (any on-chain token can self-declare arbitrary metadata). MAIN sanitizes
+ * the raw column through `sanitizeTokenName` (ASCII allowlist covering
+ * letters, digits, internal spaces, and ordinary name punctuation — wider
+ * than the symbol grammar, which would reject "USD Coin" outright) before
+ * building the DTO; this schema is a VALIDATION GATE on that already-clean
+ * shape (`.refine`, no transform) so a main-side sanitization bug fails the
+ * whole response closed (`registerHandler`'s output-schema defense-in-depth)
+ * instead of leaking an unsanitized name to the renderer.
+ */
+const safeTokenNameSchema = z
+  .string()
+  .max(TOKEN_NAME_MAX_LENGTH)
+  .refine((value) => sanitizeTokenName(value) === value, {
+    message: "Token name failed the safe-display grammar.",
+  });
+
+/**
  * One aggregated position line — a single (chain, token, address) bucket
  * summed across every wallet in the resolved allow-list. `chainId` is `null`
  * when the DB chain id is absent or could not be coerced to a finite JS
@@ -102,12 +128,15 @@ export type PortfolioReadInput = z.infer<typeof portfolioReadInputSchema>;
  * `tokenAddress` is additive and OPTIONAL (not defaulted): an older payload
  * missing the key entirely still parses, and the renderer treats a missing
  * key the same as an explicit `null` (no brand icon, symbol-only display).
+ * `tokenName` is likewise additive and OPTIONAL: `null`/absent means the
+ * renderer falls back to the sanitized `symbol` for display.
  */
 export const positionTokenDtoSchema = z
   .object({
     chainId: z.number().nullable(),
     symbol: z.string().max(64).nullable(),
     tokenAddress: tokenAddressSchema.nullable().optional(),
+    tokenName: safeTokenNameSchema.nullable().optional(),
     balanceUsd: z.number().nullable(),
     amount: z.number().nullable().default(null),
   })
@@ -118,13 +147,14 @@ export type PositionTokenDto = z.infer<typeof positionTokenDtoSchema>;
  * One token line inside a per-chain breakdown — like `positionTokenDtoSchema`
  * but WITHOUT `chainId` (the parent chain carries it). `balanceUsd` is
  * strictly positive when priced (the breakdown query drops priced-at-zero
- * lines) and `null` for an unpriced holding; `amount`/`tokenAddress` mirror
- * the flat line (see `positionTokenDtoSchema`).
+ * lines) and `null` for an unpriced holding; `amount`/`tokenAddress`/`tokenName`
+ * mirror the flat line (see `positionTokenDtoSchema`).
  */
 export const chainTokenDtoSchema = z
   .object({
     symbol: z.string().max(64).nullable(),
     tokenAddress: tokenAddressSchema.nullable().optional(),
+    tokenName: safeTokenNameSchema.nullable().optional(),
     balanceUsd: z.number().positive().nullable(),
     amount: z.number().nullable().default(null),
   })

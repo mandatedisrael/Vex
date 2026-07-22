@@ -34,7 +34,7 @@ export function ApiKeysCard({
     <SummaryCard
       title="API keys"
       status={status}
-      statusLabel={status === "ok" ? "Configured" : "Jupiter optional"}
+      statusLabel={status === "ok" ? "Configured" : "Jupiter not set"}
       onEdit={onEdit}
       editDisabled={editDisabled}
       testId="apiKeys"

@@ -52,6 +52,14 @@ function catalog(pricing: Record<string, string>) {
   return { data: [{ id: MODEL_ID, pricing }] };
 }
 
+/** Same, but with an explicit `supportedParameters` tag list (D6). */
+function catalogWithParameters(
+  pricing: Record<string, string>,
+  supportedParameters: string[],
+) {
+  return { data: [{ id: MODEL_ID, pricing, supportedParameters }] };
+}
+
 const PRICING_A = {
   prompt: "0.000001",
   completion: "0.000002",
@@ -218,6 +226,49 @@ describe("OpenRouterProvider.loadConfig caching (F4)", () => {
     expect(listMock).toHaveBeenCalledTimes(1);
     expect(second?.inputPricePerM).toBeCloseTo(1, 9);
     expect(second?.model).toBe(MODEL_ID);
+  });
+
+  // ── supportsReasoningEffort derivation (D6) ──────────────────────────────
+
+  it("(i) supportsReasoningEffort is true when the catalog advertises reasoning_effort", async () => {
+    listMock.mockResolvedValue(
+      catalogWithParameters(PRICING_A, ["tools", "reasoning", "reasoning_effort"]),
+    );
+    const provider = new OpenRouterProvider();
+    const config = await provider.loadConfig();
+    expect(config?.supportsReasoningEffort).toBe(true);
+  });
+
+  it("(j1) supportsReasoningEffort is true for the bare `reasoning` OBJECT tag (the param we actually emit) — a visible selector's choice must never be dropped by this gate", async () => {
+    listMock.mockResolvedValue(catalogWithParameters(PRICING_A, ["tools", "reasoning"]));
+    const provider = new OpenRouterProvider();
+    const config = await provider.loadConfig();
+    expect(config?.supportsReasoningEffort).toBe(true);
+  });
+
+  it("(j2) supportsReasoningEffort is false when NEITHER reasoning tag is advertised", async () => {
+    listMock.mockResolvedValue(catalogWithParameters(PRICING_A, ["tools", "max_tokens"]));
+    const provider = new OpenRouterProvider();
+    const config = await provider.loadConfig();
+    expect(config?.supportsReasoningEffort).toBe(false);
+  });
+
+  it("(k) supportsReasoningEffort defaults to false when supportedParameters is missing entirely (untrusted response)", async () => {
+    listMock.mockResolvedValue(catalog(PRICING_A)); // no `supportedParameters` field at all
+    const provider = new OpenRouterProvider();
+    const config = await provider.loadConfig();
+    expect(config?.supportsReasoningEffort).toBe(false);
+  });
+
+  it("(l) supportsReasoningEffort is independent of reasoningPricePerM (capability tag, not pricing)", async () => {
+    const { internalReasoning: _omit, ...pricingWithoutReasoning } = PRICING_A;
+    listMock.mockResolvedValue(
+      catalogWithParameters(pricingWithoutReasoning, ["reasoning_effort"]),
+    );
+    const provider = new OpenRouterProvider();
+    const config = await provider.loadConfig();
+    expect(config?.reasoningPricePerM).toBeNull();
+    expect(config?.supportsReasoningEffort).toBe(true);
   });
 
   // ── api_unreachable diagnostics (error-diagnostics D-RUNTIME) ────────────

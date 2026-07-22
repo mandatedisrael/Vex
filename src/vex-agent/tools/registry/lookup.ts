@@ -22,7 +22,6 @@ import { PORTFOLIO_TOOLS } from "./portfolio.js";
 import { SETUP_TOOLS } from "./setup.js";
 import { MISSION_TOOLS } from "./mission.js";
 import { AUTONOMY_TOOLS } from "./autonomy.js";
-import { SUBAGENT_TOOLS } from "./subagents.js";
 import { EVM_TOOLS } from "./evm.js";
 import { WALLET_TOOLS } from "./wallet.js";
 import { COMPACT_TOOLS } from "./compact.js";
@@ -45,7 +44,6 @@ export const TOOLS: readonly ToolDef[] = [
   ...SETUP_TOOLS,
   ...MISSION_TOOLS,
   ...AUTONOMY_TOOLS,
-  ...SUBAGENT_TOOLS,
   ...EVM_TOOLS,
   ...WALLET_TOOLS,
   ...COMPACT_TOOLS,

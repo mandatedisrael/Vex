@@ -75,7 +75,7 @@ describe("resolveSelectedAddress — address only, never decrypts", () => {
     );
   });
 
-  it("invalid policy → SCOPE_MISMATCH (mission drift). Enforced from the policy, NOT sessionKind — so a subagent with sessionKind 'agent' that inherited an invalid mission policy also fails closed.", () => {
+  it("invalid policy → SCOPE_MISMATCH (mission drift). Enforced from the policy, NOT sessionKind — any session carrying an invalid mission policy fails closed.", () => {
     selectedIs();
     const policy: WalletPolicy = { kind: "invalid", reason: "empty_allowed_wallets" };
     expect(codeOf(() => resolveSelectedAddress(SESSION, policy, "eip155"))).toBe(

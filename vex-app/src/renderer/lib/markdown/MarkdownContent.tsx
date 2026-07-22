@@ -71,18 +71,51 @@ export function safeImgSrc(_raw: string): string | null {
   return null;
 }
 
+/**
+ * Local BUNDLED-asset image gate for the `article` variant ONLY (static repo
+ * markdown such as the "How Vex works" guide — never model output; chat stays
+ * on `safeImgSrc`, which rejects everything). Accepts exactly one shape: a
+ * root-relative path into the renderer's own public/ assets. No scheme, no
+ * host, no `..`, no query/fragment — a same-origin GET to a bundled file
+ * cannot reach an attacker host, so the W1 exfiltration channel stays closed.
+ */
+export function safeArticleImgSrc(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (hasControlChars(trimmed)) return null;
+  if (!/^\/[A-Za-z0-9_/-]+\.(?:png|svg|jpg|jpeg|webp)$/.test(trimmed)) {
+    return null;
+  }
+  // The character class above already excludes "." path segments; the "//"
+  // check closes the protocol-relative shape a doubled separator would allow.
+  if (trimmed.includes("//")) return null;
+  return trimmed;
+}
+
+/**
+ * Render options threaded through the token walk. `chat` (default) is the
+ * hardened assistant-output path — behavior unchanged. `article` restyles
+ * headings for long-form static docs (serif h2s) and allows local bundled
+ * images via `safeArticleImgSrc`.
+ */
+interface RenderOptions {
+  readonly variant: "chat" | "article";
+}
+
 function tokenText(token: Token): string {
   if ("text" in token && typeof token.text === "string") return token.text;
   return token.raw;
 }
 
-function renderInline(tokens: readonly Token[] | undefined): ReactNode[] {
+function renderInline(
+  tokens: readonly Token[] | undefined,
+  opts: RenderOptions,
+): ReactNode[] {
   if (tokens === undefined) return [];
   return tokens.map((token, i) => {
     switch (token.type) {
       case "text":
         return token.tokens !== undefined ? (
-          <span key={i}>{renderInline(token.tokens)}</span>
+          <span key={i}>{renderInline(token.tokens, opts)}</span>
         ) : (
           token.text
         );
@@ -91,17 +124,17 @@ function renderInline(tokens: readonly Token[] | undefined): ReactNode[] {
       case "strong":
         return (
           <strong key={i} className="font-semibold">
-            {renderInline(token.tokens)}
+            {renderInline(token.tokens, opts)}
           </strong>
         );
       case "em":
         return (
           <em key={i} className="italic">
-            {renderInline(token.tokens)}
+            {renderInline(token.tokens, opts)}
           </em>
         );
       case "del":
-        return <del key={i}>{renderInline(token.tokens)}</del>;
+        return <del key={i}>{renderInline(token.tokens, opts)}</del>;
       case "codespan":
         return (
           <code
@@ -115,7 +148,7 @@ function renderInline(tokens: readonly Token[] | undefined): ReactNode[] {
         return <br key={i} />;
       case "link": {
         const href = safeHref(token.href);
-        const children = renderInline(token.tokens);
+        const children = renderInline(token.tokens, opts);
         return href !== null ? (
           <a
             key={i}
@@ -136,8 +169,13 @@ function renderInline(tokens: readonly Token[] | undefined): ReactNode[] {
         // closes the CSP img-src exfiltration channel (a hostile model could
         // otherwise smuggle a wallet address/portfolio out via an <img> GET).
         // The `MarkdownImage` branch is intentionally DORMANT (kept for the
-        // post-launch tool-sourced-URL allowlist restore), not dead code.
-        const safe = safeImgSrc(token.href);
+        // post-launch tool-sourced-URL allowlist restore), not dead code — for
+        // CHAT. The `article` variant (static repo docs only, never model
+        // output) renders local bundled assets through `safeArticleImgSrc`.
+        const safe =
+          opts.variant === "article"
+            ? safeArticleImgSrc(token.href)
+            : safeImgSrc(token.href);
         const alt = token.text ?? "";
         return safe !== null ? (
           <MarkdownImage key={i} src={safe} alt={alt} />
@@ -153,15 +191,65 @@ function renderInline(tokens: readonly Token[] | undefined): ReactNode[] {
   });
 }
 
-function renderBlock(token: Token, key: number): ReactNode {
+function renderBlock(token: Token, key: number, opts: RenderOptions): ReactNode {
   switch (token.type) {
     case "space":
       return null;
     case "paragraph":
-      return <p key={key}>{renderInline(token.tokens)}</p>;
-    case "heading":
-      // Semantic decision unchanged (no h-tags in chat prose) — S3 restyles
-      // the document scale only: h1/h2-level lead, h3+ subordinate.
+      return <p key={key}>{renderInline(token.tokens, opts)}</p>;
+    case "heading": {
+      // Article variant: long-form static docs earn REAL heading elements in
+      // the Chronos editorial voice (serif h2s). Chat keeps its original
+      // semantic decision (no h-tags in chat prose) — S3 restyles the
+      // document scale only: h1/h2-level lead, h3+ subordinate.
+      if (opts.variant === "article") {
+        if (token.depth <= 2) {
+          return (
+            <h2 key={key} className="mt-8 font-serif text-[22px] font-normal text-foreground">
+              {renderInline(token.tokens, opts)}
+            </h2>
+          );
+        }
+        // Protocol-entry heading — "### ![Name](/protocols/x.png) Name":
+        // a leading LOCAL bundled logo renders as a trustworthy card head
+        // (44px rounded-lg mark + serif name beside it), never a raw inline
+        // image dump (owner correction 2026-07-20). The logo stays behind
+        // `safeArticleImgSrc`; a rejected source falls through to the plain
+        // text heading below.
+        const inline = token.tokens ?? [];
+        const lead = inline[0];
+        if (lead !== undefined && lead.type === "image") {
+          const logoSrc = safeArticleImgSrc(lead.href);
+          if (logoSrc !== null) {
+            return (
+              <h3
+                key={key}
+                className="mt-9 flex items-center gap-3.5 text-foreground"
+              >
+                {/* aria-hidden: the name text beside the mark carries the
+                 * accessible heading; alt would duplicate it. */}
+                <img
+                  src={logoSrc}
+                  alt=""
+                  aria-hidden
+                  draggable={false}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-11 w-11 shrink-0 rounded-lg border border-[var(--vex-line)] object-cover"
+                />
+                <span className="font-serif text-[21px] font-normal leading-tight">
+                  {renderInline(inline.slice(1), opts)}
+                </span>
+              </h3>
+            );
+          }
+        }
+        return (
+          <h3 key={key} className="mt-5 text-[15.5px] font-semibold text-foreground">
+            {renderInline(token.tokens, opts)}
+          </h3>
+        );
+      }
       return (
         <p
           key={key}
@@ -171,9 +259,10 @@ function renderBlock(token: Token, key: number): ReactNode {
               : "text-[15px] font-semibold text-foreground"
           }
         >
-          {renderInline(token.tokens)}
+          {renderInline(token.tokens, opts)}
         </p>
       );
+    }
     case "code":
       return (
         <CodeBlock key={key} lang={codeLang(token.lang)} code={token.text} />
@@ -184,7 +273,7 @@ function renderBlock(token: Token, key: number): ReactNode {
           key={key}
           className="border-l-2 border-[var(--vex-line-strong)] pl-3 text-[var(--vex-text-2)]"
         >
-          {renderBlocks(token.tokens)}
+          {renderBlocks(token.tokens, opts)}
         </blockquote>
       );
     case "list": {
@@ -203,11 +292,14 @@ function renderBlock(token: Token, key: number): ReactNode {
               className="mt-1.5 accent-[var(--vex-accent)]"
             />
             <span className="min-w-0">
-              {renderBlocks(item.tokens.filter((t) => t.type !== "checkbox"))}
+              {renderBlocks(
+                item.tokens.filter((t) => t.type !== "checkbox"),
+                opts,
+              )}
             </span>
           </li>
         ) : (
-          <li key={i}>{renderBlocks(item.tokens)}</li>
+          <li key={i}>{renderBlocks(item.tokens, opts)}</li>
         ),
       );
       const hasTask = token.items.some((item) => item.task);
@@ -231,7 +323,7 @@ function renderBlock(token: Token, key: number): ReactNode {
       return (
         <p key={key}>
           {token.tokens !== undefined
-            ? renderInline(token.tokens)
+            ? renderInline(token.tokens, opts)
             : tokenText(token)}
         </p>
       );
@@ -255,7 +347,7 @@ function renderBlock(token: Token, key: number): ReactNode {
                     key={i}
                     className={`border-b border-[var(--vex-line-strong)] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--vex-text-2)] ${alignClass(i)}`}
                   >
-                    {renderInline(cell.tokens)}
+                    {renderInline(cell.tokens, opts)}
                   </th>
                 ))}
               </tr>
@@ -268,7 +360,7 @@ function renderBlock(token: Token, key: number): ReactNode {
                       key={c}
                       className={`border-b border-[var(--vex-line)] px-2 py-1 align-top ${alignClass(c)}`}
                     >
-                      {renderInline(cell.tokens)}
+                      {renderInline(cell.tokens, opts)}
                     </td>
                   ))}
                 </tr>
@@ -288,8 +380,8 @@ function renderBlock(token: Token, key: number): ReactNode {
   }
 }
 
-function renderBlocks(tokens: readonly Token[]): ReactNode[] {
-  return tokens.map((token, i) => renderBlock(token, i));
+function renderBlocks(tokens: readonly Token[], opts: RenderOptions): ReactNode[] {
+  return tokens.map((token, i) => renderBlock(token, i, opts));
 }
 
 /** First word of the fence info string ("ts foo" → "ts"); "code" when absent. */
@@ -398,9 +490,18 @@ function CodeBlock({
 
 export function MarkdownContent({
   text,
+  variant = "chat",
 }: {
   readonly text: string;
+  /**
+   * `chat` (default) = hardened assistant-output rendering, unchanged.
+   * `article` = long-form STATIC repo markdown (e.g. the "How Vex works"
+   * guide): serif h2 headings + local bundled images. Never pass `article`
+   * for model output — the image gate difference is the whole point.
+   */
+  readonly variant?: "chat" | "article";
 }): JSX.Element {
+  const opts: RenderOptions = { variant };
   let tokens: readonly Token[];
   try {
     tokens = lexer(text);
@@ -408,6 +509,8 @@ export function MarkdownContent({
     return <p className="whitespace-pre-wrap break-words">{text}</p>;
   }
   return (
-    <div className="flex flex-col gap-2 break-words">{renderBlocks(tokens)}</div>
+    <div className="flex flex-col gap-2 break-words">
+      {renderBlocks(tokens, opts)}
+    </div>
   );
 }

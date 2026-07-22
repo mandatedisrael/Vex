@@ -137,7 +137,6 @@ export async function runPreparedMissionStart(
     const baseVisibility: ToolVisibilityBase = {
       sessionId: prepared.sessionId,
       permission: prepared.permission,
-      role: "parent",
       sessionKind: "mission",
       missionRunActive: true,
       planMode: hydrated.context.planMode ?? false,
@@ -263,7 +262,6 @@ export async function resumePreparedMissionRun(
     const baseVisibility: ToolVisibilityBase = {
       sessionId: prepared.run.sessionId,
       permission,
-      role: "parent",
       sessionKind: "mission",
       missionRunActive: true,
       planMode: hydrated.context.planMode ?? false,

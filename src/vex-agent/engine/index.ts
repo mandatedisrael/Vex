@@ -1,8 +1,8 @@
 /**
  * Engine — public API.
  *
- * Entry points for agent turn, mission setup, mission run, approval resume,
- * and subagent execution. Transport layer imports from here.
+ * Entry points for agent turn, mission setup, mission run, and approval
+ * resume. Transport layer imports from here.
  */
 
 export {
@@ -36,8 +36,6 @@ export {
   type PreparedContinuation,
   type SweepResult,
 } from "./core/approval-runtime.js";
-
-export { runSubagentEngine } from "./subagents/runner.js";
 
 export { routeUserMessage, submitOperatorInstruction } from "./ingress.js";
 export type { TurnRequestOptions } from "./core/runner.js";

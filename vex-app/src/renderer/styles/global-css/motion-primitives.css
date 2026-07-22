@@ -1,0 +1,110 @@
+/* ============================================================ *
+ *  MOTION PRIMITIVES (CSP-safe build-time keyframes)            *
+ *  Brand curves from the landing GSAP engine:                   *
+ *    Out   = cubic-bezier(0.25, 1, 0.5, 1)                      *
+ *    InOut = cubic-bezier(0.76, 0, 0.24, 1)                     *
+ * ============================================================ */
+
+/* Desk entry settle — a live-appended transcript row settles onto the page.
+ * One-shot, applied ONLY to rows appended after mount (history pagination
+ * mounts at the final frame — see S3). */
+@keyframes vex-entry-settle {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.vex-entry-settle {
+  animation: vex-entry-settle 180ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+/* Needle Bloom-and-Resolve. The signature motion: at reasoning-end /
+ * answer-start the live gutter node fires ONE accent bloom (asymmetric —
+ * peaks ~38% then decays, a resolve arc not a blink) and the answer body
+ * resolves in beneath it. One-shot, `both`, rests perfectly still: the only
+ * cobalt flare outside a continuous in-flight needle. CSP-safe (build-time
+ * @keyframes; the bloom is a one-shot animated drop-shadow, never a resting
+ * glow). Gated in StreamingBubble so it does NOT fire while a pending
+ * approval freezes the strip (trust = stillness). */
+@keyframes vex-signal-resolve {
+  0% {
+    filter: drop-shadow(0 0 0 transparent);
+    transform: scale(0.92);
+    opacity: 0.65;
+  }
+  38% {
+    filter: drop-shadow(
+      0 0 6px color-mix(in oklab, var(--vex-accent) 80%, transparent)
+    );
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    filter: drop-shadow(0 0 0 transparent);
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.vex-signal-resolve {
+  animation: vex-signal-resolve 520ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+@keyframes vex-answer-resolve {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.vex-answer-resolve {
+  animation: vex-answer-resolve 260ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+/* BOOK panel slide-in — one-shot on mount (the panel is mounted/unmounted by
+ * bookOpen, so this plays when it opens). */
+@keyframes vex-book-enter {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.vex-book-enter {
+  animation: vex-book-enter 240ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+/* PremiumBadge "awaiting your action" shimmer — applied ONLY to a badge in the
+ * `ready` state (the mission/plan is prepared and waiting for the host to
+ * accept). Opacity pulse only (no transform, no moving stripe), so the global
+ * prefers-reduced-motion rule (global-css/base.css) collapses it to a stable resting frame
+ * rather than a flash. The pulse loops while the badge stays in `ready`;
+ * the badge drops the class on accept, so the only looping motion is bound
+ * to a real pending action. */
+@keyframes vex-badge-shimmer {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.vex-badge--shimmer {
+  animation: vex-badge-shimmer 2.5s ease-in-out infinite;
+}
+

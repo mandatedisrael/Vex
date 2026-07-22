@@ -1,19 +1,22 @@
 /**
- * VEX TOKEN CARD — COMPACT rail widget (T1, moved off the welcome stage).
+ * VEX TOKEN CARD — COMPACT rail widget (Chronos slim cut, 2026-07-20).
  *
- * The full welcome-stage card was pulled to keep the welcome screen clean; the
- * live $VEX signal now rides the sessions rail between BROWSE ALL and the
- * footer registry (`SessionsList`). Same data hook (`useVexMarket`) and the
- * same shared formatters — only the layout is re-flowed for the ~272px rail:
- * a header row [mark · $VEX · price · 24h delta], a tight full-width sparkline,
- * and a 2×2 micro-grid [MCAP / LIQ / 24H VOL / HOLDERS].
+ * The live $VEX signal rides the sessions rail between BROWSE ALL and the
+ * profile footer (`SessionsList`). Slimmed by owner decree: a header row
+ * [mark · $VEX · price · 24h delta] and a tight full-width sparkline — the
+ * old 2×2 stat micro-grid (MCAP / LIQ / 24H VOL / HOLDERS) is gone.
  *
- * Speaks the Signal Tape grammar strictly: solid-luminance surface + hairline
- * (never glass/glow), `--vex-*` tokens ONLY (the shell design-guard enforces
- * no raw hexes), font-display numerals with `tabular-nums`, mono micro-labels.
- * The 24h delta is a SEMANTIC status tone (success up / danger down), which the
- * theme deliberately leaves untouched — so it stays a bordered tint on ink in
- * both themes and never needs the accent-contrast flip.
+ * Speaks the Signal Tape grammar: solid-luminance surface + hairline,
+ * `--vex-*` tokens ONLY (the shell design-guard enforces no raw hexes),
+ * display numerals with `tabular-nums`, mono micro-labels. The 24h delta is
+ * a BORDERLESS figure in the SEMANTIC status tone (success up / danger
+ * down) always wearing the `.vex-delta-shimmer` sweep (owner-decreed
+ * decorative exception; reduced motion stills it). Stale data keeps its own
+ * honest marker next to the $VEX label.
+ *
+ * The data card (only the data card — loading/error states stay inert) is a
+ * whole-card link out to the $VEX DexScreener pair, opened in the system
+ * browser via main's external-URL allowlist.
  *
  * Every state resolves to a visible surface so the rail is never blank —
  * loading skeleton, error line, stale marker, or the data card.
@@ -24,14 +27,20 @@ import type { VexMarketSnapshot } from "@shared/schemas/market.js";
 import { useVexMarket } from "../../../lib/api/market.js";
 import { cn } from "../../../lib/utils.js";
 import {
-  formatCompactCount,
   formatPercentDelta,
   formatTokenPriceUsd,
-  formatUsd,
 } from "../../../lib/format.js";
 
 const CARD_CLASS =
   "rounded-xl border border-[var(--vex-line)] bg-[var(--vex-surface-1)] px-3 py-2.5";
+
+// The $VEX DexScreener pair — a renderer-local literal by design: the
+// market IPC schema (`@shared/schemas/market.js`) deliberately carries no
+// addresses or URLs. `dexscreener.com` is already in main's external-URL
+// allowlist (`main-window.ts`), so target=_blank routes through
+// `shell.openExternal`, never a child window.
+const DEXSCREENER_VEX_PAIR_URL =
+  "https://dexscreener.com/robinhood/0x817f16f5d8da83d1b089b082c0172af3923618da";
 
 export function VexTokenCardCompact(): JSX.Element {
   const query = useVexMarket();
@@ -107,48 +116,49 @@ function CompactBody({
       aria-label={`VEX token price ${priceLabel}, 24 hour change ${deltaLabel}${
         snapshot.stale ? ", data delayed" : ""
       }`}
-      className={CARD_CLASS}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <VexMark />
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]">
-              $VEX
-              {snapshot.stale ? <StaleMarker /> : null}
-            </span>
-            <span className="truncate font-display text-[15px] font-extrabold leading-none tracking-[-0.02em] tabular-nums text-[var(--vex-text)]">
-              {priceLabel}
-            </span>
+      {/* target=_blank never opens a child window: main's
+       * setWindowOpenHandler denies + routes allowlisted hosts (dexscreener.com
+       * is already listed) through shell.openExternal. Only the data card
+       * links out — loading/error states stay inert. */}
+      <a
+        href={DEXSCREENER_VEX_PAIR_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Open $VEX on DexScreener"
+        className={cn(
+          CARD_CLASS,
+          "block transition-colors hover:border-[var(--vex-accent-border)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]",
+        )}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <VexMark />
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]">
+                $VEX
+                {snapshot.stale ? <StaleMarker /> : null}
+              </span>
+              <span className="truncate font-display text-[15px] font-extrabold leading-none tracking-[-0.02em] tabular-nums text-[var(--vex-text)]">
+                {priceLabel}
+              </span>
+            </div>
           </div>
+          <DeltaFigure change={snapshot.priceChange.h24} label={deltaLabel} />
         </div>
-        <DeltaBadge change={snapshot.priceChange.h24} label={deltaLabel} />
-      </div>
 
-      <Sparkline closes={closes} />
-
-      <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-[var(--vex-line)] pt-2.5">
-        <Stat label="MCAP" value={formatUsd(snapshot.marketCap)} />
-        <Stat label="LIQ" value={formatUsd(snapshot.liquidityUsd)} />
-        <Stat label="24H VOL" value={formatUsd(snapshot.volumeH24)} />
-        <Stat
-          label="HOLDERS"
-          value={
-            snapshot.holderCount === null
-              ? "—"
-              : formatCompactCount(snapshot.holderCount)
-          }
-        />
-      </div>
+        <Sparkline closes={closes} />
+      </a>
     </section>
   );
 }
 
-/** The bundled VEX token logo — provenance: Virtuals CDN (committed once). */
+/** The Vex mark — the SAME `/icon.png` the profile row below wears (owner
+ * decree: one identity image up and down the rail). */
 function VexMark(): JSX.Element {
   return (
     <img
-      src="/logo/vex-token.png"
+      src="/icon.png"
       alt="VEX token"
       className="h-6 w-6 shrink-0 rounded-full"
     />
@@ -172,12 +182,17 @@ function StaleMarker(): JSX.Element {
 }
 
 /**
- * 24h delta pill — a bordered tint in the SEMANTIC status tone (up = success,
- * down = danger, flat/null = muted). Status colours are a product contract the
- * theme never re-tints, so this reads on ink in both cobalt and Robinhood modes
- * and stays independent of the brand accent.
+ * 24h delta figure — BORDERLESS (owner decree: no pill chrome), set in the
+ * SEMANTIC status tone (up = success, down = danger, flat/null = muted).
+ * Status colours are a product contract the theme never re-tints. The figure
+ * stays a SOLID direction color at all times (owner feedback: background-clip
+ * on the number washed the text out); `.vex-delta-shimmer` now only drives an
+ * `::after` overlay — a near-white band sweeping over a duplicate of the text
+ * (via `data-shimmer-text`) — so the shine never dims the live figure. Always
+ * on (owner-decreed decorative exception to the live-state motion law); OS
+ * reduced motion drops the overlay and the solid figure stays.
  */
-function DeltaBadge({
+function DeltaFigure({
   change,
   label,
 }: {
@@ -188,38 +203,17 @@ function DeltaBadge({
   const down = change !== null && Number.isFinite(change) && change < 0;
   return (
     <span
+      data-vex-area="vex-token-delta"
+      data-shimmer-text={label}
       className={cn(
-        "inline-flex shrink-0 items-center rounded-[5px] border px-1.5 py-px font-mono text-[10px] tabular-nums",
-        up &&
-          "border-[color-mix(in_oklab,var(--color-success)_40%,transparent)] text-[var(--color-success)]",
-        down &&
-          "border-[color-mix(in_oklab,var(--vex-warn-text)_40%,transparent)] text-[var(--vex-warn-text)]",
-        !up &&
-          !down &&
-          "border-[var(--vex-line-strong)] text-[var(--vex-text-3)]",
+        "vex-delta-shimmer inline-flex shrink-0 items-center font-mono text-[11px] font-medium tabular-nums",
+        up && "text-[var(--color-success)]",
+        down && "text-[var(--vex-warn-text)]",
+        !up && !down && "text-[var(--vex-text-3)]",
       )}
     >
       {label}
     </span>
-  );
-}
-
-function Stat({
-  label,
-  value,
-}: {
-  readonly label: string;
-  readonly value: string;
-}): JSX.Element {
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="font-mono text-[8.5px] uppercase tracking-[0.14em] text-[var(--vex-text-3)]">
-        {label}
-      </span>
-      <span className="truncate font-mono text-[11px] tabular-nums text-[var(--vex-text-2)]">
-        {value}
-      </span>
-    </div>
   );
 }
 

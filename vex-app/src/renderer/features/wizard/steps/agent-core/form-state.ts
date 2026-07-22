@@ -29,24 +29,12 @@ export interface FormState {
   contextLimit: FieldState;
   maxOutputTokens: FieldState;
   temperature: FieldState;
-  subMaxConcurrent: FieldState;
-  subContextLimit: FieldState;
-  subMaxOutputTokens: FieldState;
-  subTemperature: FieldState;
-  subMaxIterations: FieldState;
-  subTimeoutMs: FieldState;
 }
 
 export const INITIAL_FORM_STATE: FormState = {
   contextLimit: { kind: "unchanged" },
   maxOutputTokens: { kind: "unchanged" },
   temperature: { kind: "unchanged" },
-  subMaxConcurrent: { kind: "unchanged" },
-  subContextLimit: { kind: "unchanged" },
-  subMaxOutputTokens: { kind: "unchanged" },
-  subTemperature: { kind: "unchanged" },
-  subMaxIterations: { kind: "unchanged" },
-  subTimeoutMs: { kind: "unchanged" },
 };
 
 type FieldOutcome =
@@ -84,12 +72,6 @@ export const FIELD_LABELS: Record<keyof FormState, string> = {
   contextLimit: "Agent context limit",
   maxOutputTokens: "Agent max output tokens",
   temperature: "Agent temperature",
-  subMaxConcurrent: "SUBAGENT_MAX_CONCURRENT",
-  subContextLimit: "SUBAGENT_CONTEXT_LIMIT",
-  subMaxOutputTokens: "SUBAGENT_MAX_OUTPUT_TOKENS",
-  subTemperature: "SUBAGENT_TEMPERATURE",
-  subMaxIterations: "SUBAGENT_MAX_ITERATIONS",
-  subTimeoutMs: "SUBAGENT_TIMEOUT_MS",
 };
 
 export function buildPayload(form: FormState): BuildResult {
@@ -110,47 +92,13 @@ export function buildPayload(form: FormState): BuildResult {
   const ctxLimit = collect("contextLimit", parseInteger);
   const maxOut = collect("maxOutputTokens", parseInteger);
   const temp = collect("temperature", parseFloatStrict);
-  const subMaxConc = collect("subMaxConcurrent", parseInteger);
-  const subCtx = collect("subContextLimit", parseInteger);
-  const subMaxOut = collect("subMaxOutputTokens", parseInteger);
-  const subTemp = collect("subTemperature", parseFloatStrict);
-  const subMaxIter = collect("subMaxIterations", parseInteger);
-  const subTimeout = collect("subTimeoutMs", parseInteger);
 
   if (invalid.length > 0) return { ok: false, invalidLabels: invalid };
-
-  const subagent: NonNullable<AgentCoreConfigureInput["subagent"]> = {};
-  let subagentTouched = false;
-  if (subMaxConc !== undefined) {
-    subagent.maxConcurrent = subMaxConc as never;
-    subagentTouched = true;
-  }
-  if (subCtx !== undefined) {
-    subagent.contextLimit = subCtx as never;
-    subagentTouched = true;
-  }
-  if (subMaxOut !== undefined) {
-    subagent.maxOutputTokens = subMaxOut as never;
-    subagentTouched = true;
-  }
-  if (subTemp !== undefined) {
-    subagent.temperature = subTemp as never;
-    subagentTouched = true;
-  }
-  if (subMaxIter !== undefined) {
-    subagent.maxIterations = subMaxIter as never;
-    subagentTouched = true;
-  }
-  if (subTimeout !== undefined) {
-    subagent.timeoutMs = subTimeout as never;
-    subagentTouched = true;
-  }
 
   const input: AgentCoreConfigureInput = {
     ...(ctxLimit !== undefined ? { contextLimit: ctxLimit } : {}),
     ...(maxOut !== undefined ? { maxOutputTokens: maxOut } : {}),
     ...(temp !== undefined ? { temperature: temp } : {}),
-    ...(subagentTouched ? { subagent } : {}),
   };
   return { ok: true, input };
 }

@@ -26,7 +26,6 @@ import {
   getAllTools,
   getVisibleToolDefs,
   getOpenAITools,
-  isToolBlockedForRole,
   TOOL_MAP_CATEGORIES,
   getVisibleToolsByCategory,
 } from "../../../vex-agent/tools/registry.js";
@@ -51,7 +50,6 @@ describe("registry façade — public surface", () => {
     expect(typeof getAllTools).toBe("function");
     expect(typeof getVisibleToolDefs).toBe("function");
     expect(typeof getOpenAITools).toBe("function");
-    expect(typeof isToolBlockedForRole).toBe("function");
     expect(typeof getVisibleToolsByCategory).toBe("function");
     expect(Array.isArray(TOOL_MAP_CATEGORIES)).toBe(true);
   });
@@ -66,7 +64,6 @@ describe("registry façade — public surface", () => {
     expect(registryFacade.getAllTools).toBe(getAllTools);
     expect(registryFacade.getVisibleToolDefs).toBe(getVisibleToolDefs);
     expect(registryFacade.getOpenAITools).toBe(getOpenAITools);
-    expect(registryFacade.isToolBlockedForRole).toBe(isToolBlockedForRole);
     expect(registryFacade.TOOL_MAP_CATEGORIES).toBe(TOOL_MAP_CATEGORIES);
     expect(registryFacade.getVisibleToolsByCategory).toBe(getVisibleToolsByCategory);
   });
@@ -86,7 +83,6 @@ describe("registry façade — public surface", () => {
         "getVisibleToolsByCategory",
         "isInternalTool",
         "isMutatingTool",
-        "isToolBlockedForRole",
       ].sort(),
     );
   });
@@ -97,14 +93,13 @@ describe("registry façade — public surface", () => {
     const ctx: ToolVisibilityContext = defaultVisibilityContext();
     const base: ToolVisibilityBase = {
       permission: ctx.permission,
-      role: ctx.role,
       sessionKind: ctx.sessionKind,
       missionRunActive: ctx.missionRunActive,
       planMode: ctx.planMode,
     };
     const cat: ToolMapCategory = TOOL_MAP_CATEGORIES[0]!;
     const visible: VisibleToolMapCategory = { label: cat.label, toolNames: cat.toolNames };
-    expect(base.role).toBe("parent");
+    expect(base.permission).toBe(ctx.permission);
     expect(typeof visible.label).toBe("string");
   });
 });

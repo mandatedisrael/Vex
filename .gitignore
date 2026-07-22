@@ -48,6 +48,10 @@ audit/
 TEAM/
 agents_dm/
 /docs/
+# Local repo-map docs (moved out of /docs/ to repo root; keep local, not tracked)
+/vex-index.md
+/vex-how-it-works.md
+/chronos-update.md
 .cursor/plans/
 .cursor/agent-transcripts/
 agent-transcripts/

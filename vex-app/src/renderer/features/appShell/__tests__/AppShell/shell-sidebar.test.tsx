@@ -1,4 +1,4 @@
-import { StrictMode, act } from "react";
+import { StrictMode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +14,7 @@ import type {
   SessionListItem,
 } from "@shared/schemas/sessions.js";
 import type { HealthReport } from "@shared/schemas/system.js";
+import type { UserProfile } from "@shared/schemas/user-profile.js";
 import { sessionKeys } from "../../../../lib/api/sessions.js";
 import { createQueryClient } from "../../../../app/queryClient.js";
 import { useUiStore } from "../../../../stores/uiStore.js";
@@ -38,10 +39,16 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   ArrowLeft01Icon: "ArrowLeft01Icon",
   ArrowRight01Icon: "ArrowRight01Icon",
   ArrowUp01Icon: "ArrowUp01Icon",
+  ArrowDataTransferHorizontalIcon: "ArrowDataTransferHorizontalIcon",
+  ArrowUpRight01Icon: "ArrowUpRight01Icon",
+  CoinsSwapIcon: "CoinsSwapIcon",
   BitcoinWalletIcon: "BitcoinWalletIcon",
+  // Chronos: SidebarProfile's "How Vex works" menu entry.
+  BookOpen01Icon: "BookOpen01Icon",
   BridgeIcon: "BridgeIcon",
   BubbleChatSparkIcon: "BubbleChatSparkIcon",
   Bug02Icon: "Bug02Icon",
+  Cancel01Icon: "Cancel01Icon",
   ChartCandlestickIcon: "ChartCandlestickIcon",
   CheckmarkCircle02Icon: "CheckmarkCircle02Icon",
   Clock03Icon: "Clock03Icon",
@@ -64,7 +71,19 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   StarIcon: "StarIcon",
   Target02Icon: "Target02Icon",
   PercentSquareIcon: "PercentSquareIcon",
+  // Chronos: SidebarProfile's "Personalize" menu entry (opens VexSetupDialog).
+  UserEdit01Icon: "UserEdit01Icon",
+  // Welcome Portfolio tab (BookPanel's welcome stage): handle + card icons.
+  Wallet01Icon: "Wallet01Icon",
   ZapIcon: "ZapIcon",
+}));
+
+// Phase 2b: the Settings ShellScreen hosts the wizard step forms, whose
+// module graph (icons, RHF, brand marks) is far beyond this suite's
+// partial mocks. The screen has its own suite; a stub keeps THIS suite's
+// AppShell import light.
+vi.mock("../../screens/SettingsScreen.js", () => ({
+  SettingsScreen: () => null,
 }));
 
 vi.mock("@thesvg/react", () => ({
@@ -80,6 +99,10 @@ vi.mock("@thesvg/react", () => ({
   Circle: () => null,
   Chainlink: () => null,
   Postgresql: () => null,
+  Bitcoin: () => null,
+  Bnb: () => null,
+  DaiStablecoin: () => null,
+  Usdc: () => null,
 }));
 
 // Stage 4: the always-mounted BookPanel renders SessionRuntimeBar (in the
@@ -110,6 +133,8 @@ const chatSubmitMock = vi.fn<
   (input: ChatSubmitInput) => AbortableInvocation<ChatSubmitResult>
 >();
 const healthMock = vi.fn<() => Promise<Result<HealthReport>>>();
+const getUserProfileMock = vi.fn<() => Promise<Result<UserProfile>>>();
+const setUserProfileMock = vi.fn<(profile: UserProfile) => Promise<Result<UserProfile>>>();
 const messagesListMock = vi.fn();
 const missionGetDraftMock = vi.fn();
 const runtimeGetStateMock = vi.fn();
@@ -161,6 +186,8 @@ beforeEach(() => {
   sessionsDeleteMock.mockReset();
   chatSubmitMock.mockReset();
   healthMock.mockReset();
+  getUserProfileMock.mockReset();
+  setUserProfileMock.mockReset();
   missionGetDraftMock.mockReset();
   runtimeGetStateMock.mockReset();
   // SessionComposer queries mission.getDraft + runtime.getState as soon as a
@@ -169,7 +196,7 @@ beforeEach(() => {
   missionGetDraftMock.mockResolvedValue({ ok: true, data: null });
   runtimeGetStateMock.mockResolvedValue({ ok: true, data: { status: null } });
   useUiStore.setState({
-    theme: "vex",
+    theme: "chronos",
     sidebarOpen: true,
     currentView: "appShell",
     wizardEntryMode: "setup",
@@ -177,10 +204,9 @@ beforeEach(() => {
     logBuffer: [],
     sessionModeFilter: "all",
     activeSessionId: null,
-    appShellView: "session",
+    shellRoute: { kind: "none" },
     createSessionOpen: false,
-    createSessionInitialMessage: null,
-    pendingFirstMessage: null,
+    createSessionInitialTurn: null,
   });
   sessionsListMock.mockResolvedValue({ ok: true, data: [] });
   sessionsGetMock.mockResolvedValue({ ok: true, data: null });
@@ -230,6 +256,12 @@ beforeEach(() => {
     cancel: vi.fn(),
   });
   healthMock.mockResolvedValue({ ok: true, data: makeHealthReport("ok") });
+  // Chronos: SidebarProfile reads the "Vex setup" user profile to decide the
+  // name-line ask vs. the saved displayName. Default = no profile saved yet.
+  getUserProfileMock.mockResolvedValue({
+    ok: true,
+    data: { displayName: null, instructionsMd: null, workDescription: null },
+  });
   messagesListMock.mockResolvedValue({
     ok: true,
     data: { items: [], nextCursor: null, hasMore: false },
@@ -256,6 +288,10 @@ beforeEach(() => {
       system: {
         health: healthMock,
       },
+      settings: {
+        getUserProfile: getUserProfileMock,
+        setUserProfile: setUserProfileMock,
+      },
       // Stage 8-2b: a selected-session SessionPanel mounts SessionTranscript,
       // which pages through window.vex.messages.list. Default = empty page.
       messages: {
@@ -278,20 +314,169 @@ beforeEach(() => {
         getVexSnapshot: () => Promise.resolve({ ok: true, data: null }),
         onVexUpdate: () => () => {},
       },
+      // Chronos: the SidebarProfile menu gates its Memory entry on the
+      // capabilities feature flag.
+      capabilities: {
+        get: () =>
+          Promise.resolve({ ok: true, data: { features: { memory: true } } }),
+      },
     },
   });
 });
 
 describe("AppShell", () => {
-  it("renders the Vex shell hero and local runtime footer", async () => {
+  it("renders the Vex shell hero and the profile footer with the night-shift hallmark", async () => {
     renderShell();
 
+    // The H1 display statement is DELETED (owner decree 2026-07-21): the
+    // welcome crown is the [sigil + PREVIEW wordmark] logo row, pinned
+    // close-range in SessionWelcomeHero.test.tsx and via the badge below.
     expect(
-      screen.getByRole("heading", { name: /What should I execute\?/i }),
-    ).not.toBeNull();
+      screen.queryByRole("heading", { name: /What should I execute\?/i }),
+    ).toBeNull();
     expect(screen.getAllByRole("button", { name: /New session/i }).length).toBeGreaterThan(0);
-    await screen.findByText("Connected to local runtime");
-    expect(screen.getByText("v0.0.0-test")).not.toBeNull();
+    // Healthy runtime → the profile subtitle speaks the Chronos hallmark.
+    await screen.findByText("The night shift is active.");
+    // The bare version stamp lives in the SESSION rail's collapse header;
+    // on the welcome stage the right edge is the floating Portfolio tab
+    // (no version chrome) and the hero's PREVIEW badge carries the version.
+    expect(screen.queryByText("v0.0.0-test")).toBeNull();
+    expect(screen.getByText("PREVIEW · v0.0.0-test")).not.toBeNull();
+  });
+
+  it("profile menu carries exactly five entries (no Missions — Sessions covers it)", async () => {
+    renderShell();
+    await screen.findByText("The night shift is active.");
+
+    fireEvent.click(screen.getByRole("button", { name: /Open menu/i }));
+    // The status row speaks ONE short word (the long RuntimeLedger strings
+    // are retired), beside the Docker/Postgres marks.
+    expect(screen.getByText("Connected")).not.toBeNull();
+    expect(screen.queryByText("Connected to local runtime")).toBeNull();
+
+    // The five menu entries (each screen row with its hint subline) — the
+    // Missions entry/screen is retired (owner: Sessions covers it).
+    for (const entry of [
+      "Personalize",
+      "Memory",
+      "Sessions",
+      "How Vex works",
+      "Settings",
+    ]) {
+      expect(
+        screen.getByRole("menuitem", { name: new RegExp(entry, "i") }),
+      ).not.toBeNull();
+    }
+    expect(screen.getAllByRole("menuitem")).toHaveLength(5);
+    expect(screen.queryByRole("menuitem", { name: /Missions/i })).toBeNull();
+    expect(screen.queryByText("Results ledger")).toBeNull();
+    expect(screen.getByText("What Vex has learned")).not.toBeNull();
+    expect(screen.getByText("Find any conversation")).not.toBeNull();
+    expect(screen.getByText("Start here — the five-minute tour")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Memory/i }));
+    expect(useUiStore.getState().shellRoute.kind).toBe("memory");
+    useUiStore.getState().setShellRoute({ kind: "none" });
+
+    // Settings opens the in-shell Settings ShellScreen (Phase 2b — the
+    // reconfigure-wizard door is retired): the route carries the row's
+    // rect origin and a null section (the landing register), and the
+    // view machine never leaves the shell.
+    fireEvent.click(screen.getByRole("button", { name: /Open menu/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Settings/i }));
+    const settingsRoute = useUiStore.getState().shellRoute;
+    expect(settingsRoute.kind).toBe("settings");
+    if (settingsRoute.kind !== "settings") throw new Error("route kind mismatch");
+    expect(settingsRoute.section).toBeNull();
+    expect(useUiStore.getState().currentView).not.toBe("wizard");
+    useUiStore.getState().setShellRoute({ kind: "none" });
+  });
+
+  it("Sessions menu entry opens the Sessions screen mounting the sessions library", async () => {
+    renderShell();
+    await screen.findByText("The night shift is active.");
+
+    fireEvent.click(screen.getByRole("button", { name: /Open menu/i }));
+    // Accessible row name = label + hint subline, so anchor on the label.
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Sessions/i }));
+
+    expect(useUiStore.getState().shellRoute.kind).toBe("sessions");
+    // The full-app screen chrome + the library register inside it.
+    const overlay = await screen.findByRole("dialog", { name: "Sessions" });
+    expect(
+      overlay.querySelector("[data-vex-screen='sessions-library']"),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("searchbox", { name: /Search session titles/i }),
+    ).not.toBeNull();
+
+    // Escape closes the screen.
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(useUiStore.getState().shellRoute).toEqual({ kind: "none" });
+  });
+
+  it("shows no pulsing dots anywhere — status is color + words, never motion", async () => {
+    const view = renderShell();
+    await screen.findByText("The night shift is active.");
+    fireEvent.click(screen.getByRole("button", { name: /Open menu/i }));
+    expect(view.container.querySelectorAll(".vex-pulse-dot")).toHaveLength(0);
+  });
+
+  it("retires the sidebar Browse-all row (the Sessions screen replaces it)", async () => {
+    sessionsListMock.mockResolvedValueOnce({ ok: true, data: makeSessionRows() });
+    renderShell();
+    await screen.findByText("Portfolio Check");
+    expect(
+      screen.queryByRole("button", { name: /Browse all|Open sessions library/i }),
+    ).toBeNull();
+  });
+
+  it("profile row asks what to call the user when no display name is saved yet", async () => {
+    renderShell();
+    // Default mock: displayName null → the gentle ask, not the "Vex" fallback.
+    await screen.findByText("What should Vex call you?");
+  });
+
+  it("profile row shows the saved display name once one is set", async () => {
+    getUserProfileMock.mockResolvedValue({
+      ok: true,
+      data: { displayName: "Kuba", instructionsMd: null, workDescription: null },
+    });
+    renderShell();
+    await screen.findByText("Kuba");
+  });
+
+  it("profile menu offers Personalize, opening the Vex setup dialog", async () => {
+    renderShell();
+    await screen.findByText("What should Vex call you?");
+
+    fireEvent.click(screen.getByRole("button", { name: /Open menu/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Personalize/i }));
+
+    expect(screen.getByText("Instructions for Vex")).not.toBeNull();
+  });
+
+  it("opens the rail search from the magnifier and filters session titles live", async () => {
+    sessionsListMock.mockResolvedValueOnce({
+      ok: true,
+      data: makeSessionRows(),
+    });
+
+    renderShell();
+    await screen.findByText("Portfolio Check");
+
+    fireEvent.click(screen.getByRole("button", { name: /Search sessions/i }));
+    const input = screen.getByRole("searchbox", { name: /Search sessions/i });
+    fireEvent.change(input, { target: { value: "arbitrum" } });
+    expect(screen.getAllByText("Arbitrum LP Rebalance").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Portfolio Check")).toBeNull();
+
+    // Escape closes the field AND clears the filter.
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(
+      screen.queryByRole("searchbox", { name: /Search sessions/i }),
+    ).toBeNull();
+    expect(screen.getByText("Portfolio Check")).not.toBeNull();
   });
 
   it("groups recent sessions into Today, Yesterday, and Older", async () => {
@@ -324,26 +509,24 @@ describe("AppShell", () => {
     expect(screen.queryByText("Portfolio Check")).toBeNull();
   });
 
-  it("mounts the Signal Sky background layer", () => {
+  it("mounts the Eclipse photo backdrop layer behind the columns", () => {
     const view = renderShell();
 
-    // jsdom has no WebGL, so the sky renders its static-gradient fallback —
-    // either selector proves the z-0 layer is mounted behind the columns.
+    const backdrop = view.container.querySelector(
+      "[data-vex-area='shell-backdrop']",
+    );
+    expect(backdrop).not.toBeNull();
+    // Welcome/idle stage → the light veil (artwork is the protagonist).
+    expect(backdrop?.getAttribute("data-vex-backdrop-dimmed")).toBe("false");
     expect(
-      view.container.querySelector("[data-vex-sky], [data-vex-sky-fallback]"),
-    ).not.toBeNull();
+      backdrop?.querySelector("img")?.getAttribute("src"),
+    ).toBe("/backdrops/eclipse-meadow.webp");
   });
 
-  it("applies the persisted theme to the shell root as data-vex-theme", () => {
+  it("applies the Chronos theme to the shell root as data-vex-theme", () => {
     const view = renderShell();
     const root = view.container.querySelector('[data-vex-screen="appShell"]');
-    expect(root?.getAttribute("data-vex-theme")).toBe("vex");
-
-    // Flipping the store re-tints the whole shell via the root attribute.
-    act(() => {
-      useUiStore.setState({ theme: "robinhood" });
-    });
-    expect(root?.getAttribute("data-vex-theme")).toBe("robinhood");
+    expect(root?.getAttribute("data-vex-theme")).toBe("chronos");
   });
 
   it("collapses and expands the glass sidebar", async () => {

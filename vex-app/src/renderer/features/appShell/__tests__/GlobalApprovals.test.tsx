@@ -112,11 +112,15 @@ beforeEach(() => {
   mockRejectMutate.mockReset();
   refetchIntervals.length = 0;
   pendingState = { data: undefined };
-  useUiStore.setState({ activeSessionId: null, appShellView: "memory" });
+  // A full-app screen is open, so "Open session" must also close it.
+  useUiStore.setState({
+    activeSessionId: null,
+    shellRoute: { kind: "memory", origin: null },
+  });
 });
 
 afterEach(() => {
-  useUiStore.setState({ activeSessionId: null, appShellView: "session" });
+  useUiStore.setState({ activeSessionId: null, shellRoute: { kind: "none" } });
 });
 
 describe("GlobalApprovals — badge visibility", () => {
@@ -204,7 +208,8 @@ describe("GlobalApprovals — panel", () => {
     fireEvent.click(getBadge());
     fireEvent.click(screen.getByRole("button", { name: /open session/i }));
     expect(useUiStore.getState().activeSessionId).toBe(SESSION_A);
-    expect(useUiStore.getState().appShellView).toBe("session");
+    // Any covering full-app screen closes so the jump lands on the transcript.
+    expect(useUiStore.getState().shellRoute).toEqual({ kind: "none" });
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 

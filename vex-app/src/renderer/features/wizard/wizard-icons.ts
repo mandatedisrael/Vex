@@ -1,8 +1,8 @@
 /**
  * Wizard step metadata — single source of truth for per-step icon,
- * label, and description used by both `HorizontalStepper`
- * (`StepperNode`) and `WizardStepPanel` (glass panel header). Adding
- * or removing a wizard step is one edit in `@shared/schemas/wizard.ts`
+ * label, and description used by both `HorizontalStepper` (rail
+ * labels) and `WizardStepPanel` (card header). Adding or removing a
+ * wizard step is one edit in `@shared/schemas/wizard.ts`
  * (`WIZARD_STEP_IDS`) plus one entry here.
  *
  * Icons come from `@hugeicons/core-free-icons` — generic UI vocabulary
@@ -58,7 +58,7 @@ export const WIZARD_STEP_META: Readonly<Record<WizardStepId, WizardStepMeta>> = 
     icon: CpuIcon,
     label: "Agent core",
     description:
-      "Tune context limits, output tokens, and subagent behaviour. All optional.",
+      "Tune context and output-token limits, plus sampling temperature. All optional.",
   },
   provider: {
     icon: ConnectIcon,

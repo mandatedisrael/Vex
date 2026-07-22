@@ -61,8 +61,8 @@ export async function insertMessage(
   const rows = await query<{ id: number }>(
     `INSERT INTO messages
        (session_id, role, content, tool_call_id, tool_calls, created_at,
-        source, message_type, visibility, origin_session_id, subagent_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        source, message_type, visibility, origin_session_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING id`,
     [
       sessionId,
@@ -75,7 +75,6 @@ export async function insertMessage(
       opts.metadata?.messageType ?? null,
       opts.metadata?.visibility ?? null,
       opts.metadata?.originSessionId ?? null,
-      opts.metadata?.subagentId ?? null,
     ],
   );
   await execute(

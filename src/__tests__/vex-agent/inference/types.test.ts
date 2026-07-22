@@ -29,6 +29,7 @@ describe("types - structural integrity", () => {
       cachePricePerM: 1.5,
       cacheWritePricePerM: 3.75,
       reasoningPricePerM: 15.0,
+      supportsReasoningEffort: true,
     };
     expect(config.provider).toBe("openrouter");
     expect(config.temperature).toBeUndefined();
@@ -47,6 +48,7 @@ describe("types - structural integrity", () => {
       cachePricePerM: null,
       cacheWritePricePerM: null,
       reasoningPricePerM: null,
+      supportsReasoningEffort: false,
     };
     expect(config.temperature).toBe(0.7);
   });

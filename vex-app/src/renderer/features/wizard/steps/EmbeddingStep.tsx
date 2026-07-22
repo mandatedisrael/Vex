@@ -42,6 +42,8 @@ import {
   type WizardStepId,
 } from "@shared/schemas/wizard.js";
 import { Button } from "../../../components/ui/button.js";
+import { cn } from "../../../lib/utils.js";
+import { RAIL_WARNING_CHROME } from "./step-chrome.js";
 import { useEnvState } from "../../../lib/api/onboarding.js";
 import { useEmbeddingConfigure } from "../../../lib/api/embedding.js";
 import {
@@ -164,15 +166,16 @@ export function EmbeddingStep({
     <WizardStepPanel
       panelDataAttr={{ kind: "embedding", value: "form" }}
       icon={meta.icon}
+      flowMode={flowMode}
       title="Embedding configuration"
       description={
         <>
-          Embeddings are optional — you can configure them later in
-          Settings. They power long-term memory recall via an
-          OpenAI-compatible endpoint. The bundled stack runs
-          llama.cpp:server with EmbeddingGemma 300M on{" "}
-          <code>127.0.0.1:{DEFAULT_EMBED_PORT}</code> — point this at
-          your own OpenAI / Ollama / remote endpoint if you prefer.
+          Embeddings power Vex&apos;s long-term memory. The bundled model
+          (EmbeddingGemma 300M) runs entirely on this machine at{" "}
+          <code>127.0.0.1:{DEFAULT_EMBED_PORT}</code> — nothing leaves it.
+          Point Base URL at your own OpenAI-compatible endpoint only if
+          you&apos;re comfortable sending memory content there. Optional;
+          you can configure this later.
         </>
       }
       formProps={{
@@ -205,7 +208,7 @@ export function EmbeddingStep({
               : stepAdvance.isPending
                 ? "Continuing…"
                 : flowMode === "back-edit"
-                  ? "Save and return to review"
+                  ? "Save changes"
                   : "Save and continue"}
           </Button>
         </>
@@ -216,7 +219,10 @@ export function EmbeddingStep({
           <p
             role="status"
             data-vex-embedding-configure-later-alert
-            className="rounded-md border border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_10%,transparent)] px-3 py-2 text-sm text-[var(--color-warning)]"
+            className={cn(
+              "py-0.5 text-sm text-[var(--color-warning)]",
+              RAIL_WARNING_CHROME,
+            )}
           >
             Without an embedding endpoint, long-term memory and semantic
             search stay unavailable until you configure one. You can set this

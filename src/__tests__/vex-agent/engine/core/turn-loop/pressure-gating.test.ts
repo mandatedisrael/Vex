@@ -233,7 +233,6 @@ describe("turn-loop", () => {
       sessionPermission: "restricted" as const,
       missionId: null,
       missionRunId: null,
-      isSubagent: false,
       selectedEvmWallet: null,
       selectedSolanaWallet: null,
       walletPolicy: { kind: "none" as const },
@@ -431,7 +430,7 @@ describe("turn-loop", () => {
         {
           ...defaultLoopConfig,
           maxIterations: 1,
-          baseVisibility: { permission: "restricted", role: "parent", sessionKind: "mission", missionRunActive: true },
+          baseVisibility: { permission: "restricted", sessionKind: "mission", missionRunActive: true },
         },
       );
 
@@ -677,7 +676,7 @@ describe("turn-loop", () => {
           ...defaultLoopConfig,
           maxIterations: 2,
           contextLimit: 1000,
-          baseVisibility: { permission: "restricted", role: "parent", sessionKind: "mission", missionRunActive: true },
+          baseVisibility: { permission: "restricted", sessionKind: "mission", missionRunActive: true },
         },
       );
 

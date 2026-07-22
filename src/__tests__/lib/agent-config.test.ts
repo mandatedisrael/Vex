@@ -7,9 +7,6 @@
  *    accepted; trailing garbage rejected via Number() (not parseFloat);
  *    out-of-range reported with min/max detail; ALL agent errors
  *    aggregated (no early-return).
- *  - parseSubagentEnv: inheritance from agent effective values when
- *    SUBAGENT_* unset OR invalid; SUBAGENT explicit override wins;
- *    errors collected without throwing (consumer decides).
  *  - formatParseErrors stable shape.
  */
 
@@ -20,13 +17,6 @@ import {
   AGENT_TEMPERATURE,
   formatParseErrors,
   parseAgentEnv,
-  parseSubagentEnv,
-  SUBAGENT_CONTEXT_LIMIT,
-  SUBAGENT_MAX_CONCURRENT,
-  SUBAGENT_MAX_ITERATIONS,
-  SUBAGENT_MAX_OUTPUT_TOKENS,
-  SUBAGENT_TEMPERATURE,
-  SUBAGENT_TIMEOUT_MS,
 } from "../../lib/agent-config.js";
 
 describe("agent-config field metadata", () => {
@@ -41,18 +31,6 @@ describe("agent-config field metadata", () => {
   it("AGENT_TEMPERATURE has null default (no fixed value)", () => {
     expect(AGENT_TEMPERATURE.kind).toBe("float");
     expect(AGENT_TEMPERATURE.default).toBeNull();
-  });
-
-  it("SUBAGENT_MAX_OUTPUT_TOKENS inherits from agent.maxOutputTokens", () => {
-    expect(SUBAGENT_MAX_OUTPUT_TOKENS.fallbackFrom).toBe("agent.maxOutputTokens");
-  });
-
-  it("SUBAGENT_TEMPERATURE inherits from agent.temperature", () => {
-    expect(SUBAGENT_TEMPERATURE.fallbackFrom).toBe("agent.temperature");
-  });
-
-  it("SUBAGENT_MAX_CONCURRENT has fixed default 5 (no inheritance)", () => {
-    expect(SUBAGENT_MAX_CONCURRENT.default).toBe(5);
   });
 });
 
@@ -143,81 +121,6 @@ describe("parseAgentEnv", () => {
     });
     expect(r.errors).toEqual([]);
     expect(r.value.contextLimit).toBe(128_000);
-    expect(r.value.temperature).toBeNull();
-  });
-});
-
-describe("parseSubagentEnv (inheritance)", () => {
-  const AGENT_DEFAULTS = { contextLimit: 128_000, maxOutputTokens: 16_384, temperature: null };
-
-  it("SUBAGENT_MAX_OUTPUT_TOKENS unset inherits agent.maxOutputTokens", () => {
-    const agent = { ...AGENT_DEFAULTS, maxOutputTokens: 20_000 };
-    const r = parseSubagentEnv({}, agent);
-    expect(r.errors).toEqual([]);
-    expect(r.value.maxOutputTokens).toBe(20_000);
-  });
-
-  it("SUBAGENT_TEMPERATURE unset inherits agent.temperature", () => {
-    const agent = { ...AGENT_DEFAULTS, temperature: 0.5 };
-    const r = parseSubagentEnv({}, agent);
-    expect(r.value.temperature).toBe(0.5);
-  });
-
-  it("SUBAGENT explicit override wins over inheritance", () => {
-    const agent = { ...AGENT_DEFAULTS, maxOutputTokens: 20_000, temperature: 0.7 };
-    const r = parseSubagentEnv(
-      { SUBAGENT_MAX_OUTPUT_TOKENS: "8000", SUBAGENT_TEMPERATURE: "0.3" },
-      agent,
-    );
-    expect(r.value.maxOutputTokens).toBe(8000);
-    expect(r.value.temperature).toBeCloseTo(0.3);
-  });
-
-  it("invalid SUBAGENT_MAX_OUTPUT_TOKENS falls back to agent value (errors collected)", () => {
-    const agent = { ...AGENT_DEFAULTS, maxOutputTokens: 20_000 };
-    const r = parseSubagentEnv({ SUBAGENT_MAX_OUTPUT_TOKENS: "abc" }, agent);
-    expect(r.value.maxOutputTokens).toBe(20_000); // fallback
-    expect(r.errors).toHaveLength(1);
-    expect(r.errors[0]?.key).toBe("SUBAGENT_MAX_OUTPUT_TOKENS");
-    expect(r.errors[0]?.reason).toBe("not_a_number");
-  });
-
-  it("out-of-range SUBAGENT falls back + collects error", () => {
-    const agent = { ...AGENT_DEFAULTS, temperature: 0.7 };
-    const r = parseSubagentEnv({ SUBAGENT_TEMPERATURE: "5.0" }, agent);
-    expect(r.value.temperature).toBe(0.7);
-    expect(r.errors).toHaveLength(1);
-    expect(r.errors[0]?.reason).toBe("out_of_range");
-  });
-
-  it("non-inheriting SUBAGENT field uses fixed default when unset", () => {
-    const r = parseSubagentEnv({}, AGENT_DEFAULTS);
-    expect(r.value.maxConcurrent).toBe(SUBAGENT_MAX_CONCURRENT.default);
-    expect(r.value.contextLimit).toBe(SUBAGENT_CONTEXT_LIMIT.default);
-    expect(r.value.maxIterations).toBe(SUBAGENT_MAX_ITERATIONS.default);
-    expect(r.value.timeoutMs).toBe(SUBAGENT_TIMEOUT_MS.default);
-  });
-
-  it("aggregates multiple SUBAGENT errors", () => {
-    const r = parseSubagentEnv(
-      {
-        SUBAGENT_MAX_CONCURRENT: "0",
-        SUBAGENT_TIMEOUT_MS: "huge",
-        SUBAGENT_TEMPERATURE: "5.0",
-      },
-      AGENT_DEFAULTS,
-    );
-    expect(r.errors.length).toBeGreaterThanOrEqual(3);
-  });
-
-  it("blank SUBAGENT = inherits / fixed default (engine contract)", () => {
-    const agent = { ...AGENT_DEFAULTS, maxOutputTokens: 9000 };
-    const r = parseSubagentEnv(
-      { SUBAGENT_MAX_OUTPUT_TOKENS: "", SUBAGENT_TEMPERATURE: "  " },
-      agent,
-    );
-    expect(r.errors).toEqual([]);
-    expect(r.value.maxOutputTokens).toBe(9000);
     expect(r.value.temperature).toBeNull();
   });
 });

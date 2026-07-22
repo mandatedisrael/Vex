@@ -10,11 +10,6 @@
  *  - absent → no change to .env.
  *  - Cross-field on EFFECTIVE: existing CONTEXT=1000, submitted only
  *    maxOutputTokens=2000 → REJECTED.
- *  - SUBAGENT inheritance: AGENT_MAX_OUTPUT_TOKENS=20000, no SUBAGENT
- *    override → effective subagent.maxOutputTokens === 20000 (no
- *    cross-field violation against SUBAGENT context default 16384).
- *    Wait — that IS a violation (20000 > 16384). Test that it
- *    correctly fails.
  *  - Selective write: submitting AGENT_TEMPERATURE only does NOT
  *    touch other AGENT_* keys.
  */
@@ -109,35 +104,14 @@ describe("writeAgentCoreConfig", () => {
     expect(readDotenvFileValue("AGENT_MAX_OUTPUT_TOKENS", envFile)).toBeNull();
   });
 
-  it("rejects subagent effective violation when AGENT_MAX_OUTPUT exceeds SUBAGENT_CONTEXT default", async () => {
-    // AGENT max=20000 inherits to SUBAGENT max=20000. Default SUBAGENT
-    // context=16384. 20000 > 16384 → reject.
+  it("accepts maxOutputTokens within the agent context limit", async () => {
+    // AGENT max=20000 is within the agent context default (128000) → OK.
     const r = await writeAgentCoreConfig(
       { maxOutputTokens: 20_000 },
       { envFile },
     );
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.error.code).toBe("validation.invalid_input");
-      // Could be either max_output_exceeds_context (agent) or subagent
-      // variant. Agent is checked first; agent.maxOut=20000 vs
-      // agent.context default=128000 → OK. Then subagent: maxOut
-      // inherits 20000, context default=16384 → subagent violation.
-      expect(r.error.details?.violation).toBe(
-        "subagent_max_output_exceeds_subagent_context",
-      );
-    }
-  });
-
-  it("subagent override + matching subagent context passes", async () => {
-    const r = await writeAgentCoreConfig(
-      {
-        maxOutputTokens: 20_000,
-        subagent: { contextLimit: 32_000 },
-      },
-      { envFile },
-    );
     expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.fieldsWritten).toEqual(["AGENT_MAX_OUTPUT_TOKENS"]);
   });
 
   it("selective write: submitting only temperature does not touch other keys", async () => {

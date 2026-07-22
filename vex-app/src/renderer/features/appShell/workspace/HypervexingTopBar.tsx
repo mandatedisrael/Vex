@@ -93,11 +93,6 @@ export function HypervexingTopBar({
       aria-busy={exitPending}
       className="relative flex h-full items-center gap-4 px-4"
     >
-      {/* The desk-rule accent tick, recolored to mint by token. */}
-      <span
-        aria-hidden
-        className="absolute bottom-0 left-4 h-px w-6 bg-[var(--vex-accent)]"
-      />
       <img
         src="/protocols/hl.png"
         alt=""

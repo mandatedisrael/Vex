@@ -28,7 +28,7 @@
  * in the shell-design-guard ban list.
  *
  * Motion contract: prefers-reduced-motion → NO assembly, NO shimmer — the
- * fully-assembled mark is painted exactly once (matches SignalSky's
+ * fully-assembled mark is painted exactly once (matches the retired SignalSky's
  * full-stop posture). All drawing is JS on a canvas — zero inline style
  * attributes, zero new keyframes (CSP style-src 'self' safe).
  *
@@ -50,7 +50,7 @@ const SIGIL_SRC = "/logo_clean.png";
 
 /** Fixed offscreen sampling width — particle count is DPR-independent. */
 const SAMPLE_WIDTH = 220;
-/** Landing engine caps devicePixelRatio at 1.5 (same as SignalSky). */
+/** Landing engine caps devicePixelRatio at 1.5. */
 const DPR_CAP = 1.5;
 /** A pixel is part of the mark when its alpha clears this (of 255). */
 const ALPHA_THRESHOLD = 128;
@@ -85,16 +85,6 @@ export const DEFAULT_SIGIL_PALETTE: SigilPalette = [
   PAPER_RGB,
   "139,162,255",
   "125,146,255",
-];
-
-/** Robinhood mode — the SAME paper body sparked with neon lime #ccff00 /
- * #b6e600 instead of cobalt, sampled from the feather source so the theme
- * flip re-forms the constellation into the Robinhood quill. */
-export const ROBINHOOD_SIGIL_SRC = "/logo/robinhood-feather.png";
-export const ROBINHOOD_SIGIL_PALETTE: SigilPalette = [
-  PAPER_RGB,
-  "204,255,0",
-  "182,230,0",
 ];
 
 /** dim / base / bright — the shimmer flips between the outer two. */
@@ -276,8 +266,7 @@ export interface VexSigilProps {
    * fixed frame (no layout shift). */
   readonly className?: string;
   /** Image sampled for the constellation SHAPE (alpha mask only — colors come
-   * from `palette`). Defaults to the VEX monogram; Robinhood mode passes the
-   * feather. */
+   * from `palette`). Defaults to the VEX monogram. */
   readonly src?: string;
   /** Body + two spark channels. Defaults to the VEX cobalt palette. */
   readonly palette?: SigilPalette;
@@ -307,7 +296,7 @@ export function VexSigil({
     const canvasEl = canvasRef.current;
     if (canvasEl === null) return undefined;
     // Re-declared with the narrowed type so the hoisted closures below see a
-    // non-null canvas (narrowing does not flow into them) — SignalSky's idiom.
+    // non-null canvas (narrowing does not flow into them) — the repo canvas idiom.
     const canvas: HTMLCanvasElement = canvasEl;
 
     // jsdom returns null (logging "not implemented"); some environments
@@ -507,7 +496,7 @@ export function VexSigil({
     }
 
     // jsdom lacks ResizeObserver — the current frame simply stays (same
-    // guard as SignalSky). A running assembly repaints at the new size on
+    // guard as the retired SignalSky). A running assembly repaints at the new size on
     // its next rAF; static/idle frames repaint here.
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {

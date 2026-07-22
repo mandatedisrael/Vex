@@ -1,14 +1,23 @@
 /**
  * Starter chips — one horizontal row of three compact hairline chips DETACHED
- * below the Signal Console (on the stage, not inside the glass card). Each chip
- * pairs a small intent icon with a mono label; picking a chip seeds the draft
- * via the parent's `onPick`. The 01–03 numbering was dropped in the redesign —
- * these are three parallel starters, not an ordered sequence, so a number
- * would encode order that isn't there. Real buttons → keyboard focusable.
+ * below the Signal Console. Each chip pairs a small intent icon with a mono
+ * label; picking a chip seeds the draft via the parent's `onPick`. The 01–03
+ * numbering was dropped in the redesign — these are three parallel starters,
+ * not an ordered sequence, so a number would encode order that isn't there.
+ * Real buttons → keyboard focusable.
  *
- * The row only ever renders on the welcome/idle stage (empty conversation) and
- * while the "+" toggle keeps it revealed, so it carries the stage's one-shot
- * rise choreography at the d3 stagger (status → H1 → console → chips).
+ * The row only ever renders on the welcome/idle stage (empty conversation)
+ * while the draft is EMPTY — the parent (`SessionComposer`) fades it out the
+ * moment the user starts typing and brings it back when the field clears
+ * (owner decree 2026-07-21). It carries the stage's one-shot rise
+ * choreography at the d3 stagger (logo row → console → chips), which also
+ * replays on each return.
+ *
+ * Owner-decreed glass legibility assist (2026-07-21): the row now joins the
+ * Chronos glass family as a slim pill-band (design-guard whitelisted) —
+ * translucent ink (--vex-rail) + backdrop-blur + a --vex-line hairline,
+ * rounded-2xl to harmonize with the console pill above it — so the chips stay
+ * readable over the bright regions of the Eclipse photo backdrop.
  */
 
 import type { JSX } from "react";
@@ -21,13 +30,20 @@ export function ComposerQuickActions({
   readonly onPick: (prompt: string) => void;
 }): JSX.Element {
   return (
-    <div className="vex-rise vex-rise-d3 mt-4 flex flex-wrap items-center justify-center gap-2">
+    // w-fit + mx-auto: the glass band hugs the three chips instead of
+    // spanning the composer's full width (owner report 2026-07-21 — the
+    // empty glass margins read as a stray bar); max-w-full keeps the
+    // wrap behavior on narrow windows.
+    <div className="vex-rise vex-rise-d3 mx-auto mt-4 flex w-fit max-w-full flex-wrap items-center justify-center gap-2 rounded-2xl border border-[var(--vex-line)] bg-[var(--vex-rail)] p-1.5 backdrop-blur-xl">
       {QUICK_ACTIONS.map((action) => (
         <button
           key={action.label}
           type="button"
           onClick={() => onPick(action.prompt)}
-          className="inline-flex min-w-0 items-center gap-2 rounded-lg border border-[var(--vex-line)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--vex-text-2)] transition-colors hover:border-[var(--vex-accent-border)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]"
+          // macOS-grade micro-interaction (motion pass, 2026-07-20): a 1.02
+          // hover lift + press settle on the Tailwind transition — transform
+          // only, stilled by the global reduced-motion rule.
+          className="inline-flex min-w-0 items-center gap-2 rounded-lg border border-[var(--vex-line)] px-3 py-1.5 font-sans text-[10px] uppercase tracking-[0.12em] text-[var(--vex-text-2)] transition duration-150 hover:scale-[1.02] hover:border-[var(--vex-accent-border)] hover:text-foreground active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-accent)]"
         >
           {/* Intent glyph — decorative accent mark, not part of the label. */}
           <HugeiconsIcon

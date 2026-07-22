@@ -28,7 +28,6 @@ function makeCtx(sessionId = "s1") {
     loadedDocuments: new Map<string, string>(),
     sessionPermission: "restricted" as const,
     approved: false,
-    role: "parent" as const,
     missionRunId: null,
     missionId: null,
     sessionKind: "mission" as const,

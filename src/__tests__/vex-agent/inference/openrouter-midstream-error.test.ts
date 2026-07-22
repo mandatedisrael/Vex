@@ -59,6 +59,7 @@ function makeConfig(): InferenceConfig {
     cachePricePerM: null,
     cacheWritePricePerM: null,
     reasoningPricePerM: null,
+    supportsReasoningEffort: false,
   };
 }
 

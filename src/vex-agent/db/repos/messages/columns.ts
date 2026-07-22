@@ -29,7 +29,6 @@ export const MESSAGE_DB_COLUMNS = [
   "message_type",
   "visibility",
   "origin_session_id",
-  "subagent_id",
   "metadata",
 ] as const;
 

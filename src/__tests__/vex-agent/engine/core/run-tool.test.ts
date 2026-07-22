@@ -84,7 +84,6 @@ describe("runTool", () => {
     expect(callArg.toolCallId).toMatch(/^direct-/);
 
     expect(ctxArg.sessionId).toBe("sess-1");
-    expect(ctxArg.role).toBe("parent");
     expect(ctxArg.approved).toBe(true);
     expect(ctxArg.sessionKind).toBe("mission");
     expect(ctxArg.sessionPermission).toBe("restricted");

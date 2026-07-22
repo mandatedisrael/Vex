@@ -58,7 +58,7 @@ export function SentryConsentCard({
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5"
+      className="flex flex-col gap-3 border-b border-white/[0.10] pb-3 last:border-0"
       data-vex-review-card="sentry-consent"
     >
       <label className="flex cursor-pointer items-start gap-3">
@@ -74,7 +74,7 @@ export function SentryConsentCard({
             Send anonymous error reports to help improve Vex
           </span>
           <span className="text-xs text-[var(--color-text-secondary)]">
-            Default: off. You can change this any time from Settings (Phase 2).
+            Default: off. Nothing is sent unless you tick this box.
           </span>
         </span>
       </label>
@@ -82,7 +82,7 @@ export function SentryConsentCard({
       <details
         open={showDetails}
         onToggle={(e) => setShowDetails((e.target as HTMLDetailsElement).open)}
-        className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3"
+        className="border-y border-white/[0.12] py-3"
       >
         <summary className="cursor-pointer text-xs font-medium text-[var(--color-text-primary)]">
           What we collect / never collect

@@ -109,7 +109,7 @@ const WHITELIST: readonly WhitelistEntry[] = [
     pattern: "backdrop-blur (glass)",
     reason:
       "User-sanctioned glass rail: the sessions sidebar floats as translucent " +
-      "ink (--vex-glass) with backdrop-blur over the Signal Sky WebGL canvas. " +
+      "ink (--vex-glass) with backdrop-blur over the Eclipse photo backdrop. " +
       "Glass is allowed ONLY on the two side rails.",
   },
   {
@@ -117,12 +117,12 @@ const WHITELIST: readonly WhitelistEntry[] = [
     pattern: "backdrop-blur (glass)",
     reason:
       "User-sanctioned glass rail: the BOOK panel floats as translucent ink " +
-      "(--vex-glass) with backdrop-blur over the Signal Sky WebGL canvas. " +
+      "(--vex-glass) with backdrop-blur over the Eclipse photo backdrop. " +
       "Glass is allowed ONLY on the two side rails.",
   },
   {
     // Owner-decreed THIRD sanctioned glass surface (Signal Console redesign):
-    // the composer floats over the Signal Sky exactly like the two rails, so
+    // the composer floats over the Eclipse backdrop exactly like the two rails, so
     // it wears the same translucent ink (--vex-glass / --vex-glass-strong on
     // focus) + backdrop-blur. This is the ONLY expansion of the glass law —
     // the guard still reddens on backdrop-blur ANYWHERE else in the shell.
@@ -131,21 +131,94 @@ const WHITELIST: readonly WhitelistEntry[] = [
     reason:
       "Owner-sanctioned glass instrument: the Signal Console composer floats " +
       "as translucent ink (--vex-glass / --vex-glass-strong) with " +
-      "backdrop-blur over the Signal Sky WebGL canvas, like the two rails. " +
+      "backdrop-blur over the Eclipse photo backdrop, like the two rails. " +
       "Glass is allowed on the two side rails AND this composer — nowhere else.",
   },
   {
     // Owner-decreed FOURTH sanctioned glass family (Hypervexing v2 redesign,
     // 2026-07-12: "glass soft jedność" — the trading room must read as one
-    // liquid surface with the Signal Sky showing through the grid gaps).
+    // liquid surface with the backdrop showing through the grid gaps).
     // Deliberately scoped to the SINGLE HvZone wrapper: every workspace zone
     // composes it, and no other workspace file may carry backdrop-blur.
     file: "features/appShell/workspace/HvZone.tsx",
     pattern: "backdrop-blur (glass)",
     reason:
       "Owner-sanctioned Hypervexing glass: all workspace grid zones wear " +
-      "translucent ink (--vex-glass) with backdrop-blur over the Signal Sky " +
+      "translucent ink (--vex-glass) with backdrop-blur over the Eclipse " +
       "via this one wrapper. The normal shell's glass law is unchanged.",
+  },
+  {
+    // Owner decree 2026-07-20, Chronos glass law: every full-app ShellScreen
+    // overlay (Memory / Sessions / How Vex works) is a floating glass
+    // surface — ink glass + backdrop-blur for legibility over the Eclipse,
+    // a static grain overlay (.vex-noise) on top. The prior DistortedGlass
+    // SVG displacement filter is retired (it warped screen content).
+    file: "features/appShell/screens/ShellScreen.tsx",
+    pattern: "backdrop-blur (glass)",
+    reason:
+      "Owner-decreed Chronos glass surface (2026-07-20 law): the full-app " +
+      "overlay screens float as translucent ink (--vex-glass-strong) with " +
+      "backdrop-blur over the Eclipse backdrop, carrying a static grain " +
+      "overlay. One whitelisted wrapper for every screen.",
+  },
+  {
+    // Owner decree 2026-07-20, Chronos glass law: the profile side-panel
+    // menu floats over the rail as the same Chronos glass surface family.
+    file: "features/appShell/SidebarProfile.tsx",
+    pattern: "backdrop-blur (glass)",
+    reason:
+      "Owner-decreed Chronos glass surface (2026-07-20 law): the profile " +
+      "side-panel menu floats as translucent ink (--vex-glass-strong) with " +
+      "backdrop-blur + a static grain overlay, matching the approved " +
+      "profile-menu mock.",
+  },
+  {
+    // Owner decree 2026-07-20, Chronos glass law: the shared Dialog base
+    // (a shell primitive also scanned here) wears the same floating glass
+    // chrome — every modal is a Chronos glass surface per the approved
+    // Personalize mock.
+    file: "components/ui/dialog.tsx",
+    pattern: "backdrop-blur (glass)",
+    reason:
+      "Owner-decreed Chronos glass surface (2026-07-20 law): the Dialog " +
+      "base is a floating glass panel (translucent ink + backdrop-blur + " +
+      "grain, white/10 hairline, rounded-2xl). The ::backdrop dim itself " +
+      "stays blur-free (backdrop:backdrop-blur-none).",
+  },
+  {
+    // Welcome Portfolio tab (approved harness plan v6, 2026-07-20): the
+    // welcome stage's floating card stack (Overview / Wallets / Balances)
+    // joins the Chronos glass family. Deliberately scoped to the SINGLE
+    // PortfolioCard chrome every card composes (the HvZone precedent) — no
+    // other portfolio file may carry backdrop-blur; the round handle button
+    // is intentionally blur-free ink.
+    file: "features/appShell/book/portfolio/PortfolioCard.tsx",
+    pattern: "backdrop-blur (glass)",
+    reason:
+      "Approved welcome Portfolio tab (plan v6, 2026-07-20): the floating " +
+      "portfolio cards wear translucent ink (--vex-rail) with " +
+      "backdrop-blur + static grain over the Eclipse backdrop, via this " +
+      "one card chrome that every card composes.",
+  },
+  {
+    // Owner decree 2026-07-21: the starter chips row under the Signal
+    // Console needs a legibility assist over the bright regions of the
+    // Eclipse sky, so it joins the Chronos glass family as a slim
+    // pill-band (lighter furniture than a card) — translucent ink
+    // (--vex-rail) + backdrop-blur + a --vex-line hairline, rounded-2xl to
+    // harmonize with the console pill above it. Full sanctioned glass
+    // roster after this entry: the two side rails, the composer, HvZone,
+    // the ShellScreen overlays, the profile menu, the Dialog base, the
+    // portfolio cards, and this quick-actions chip row — nowhere else.
+    file: "features/appShell/ComposerQuickActions.tsx",
+    pattern: "backdrop-blur (glass)",
+    reason:
+      "Owner-decreed glass legibility assist (2026-07-21): the starter " +
+      "chips row wears translucent ink (--vex-rail) with backdrop-blur + " +
+      "a --vex-line hairline as a slim pill-band, so the chips stay " +
+      "readable over bright regions of the Eclipse backdrop — matching " +
+      "the Chronos glass family used by the console pill and portfolio " +
+      "cards.",
   },
 ];
 

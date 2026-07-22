@@ -42,7 +42,7 @@ export function ApiKeysFormFooter({
         {submitting || advancePending
           ? "Saving…"
           : flowMode === "back-edit"
-            ? "Save and return to review"
+            ? "Save changes"
             : "Save and continue"}
       </Button>
     </>

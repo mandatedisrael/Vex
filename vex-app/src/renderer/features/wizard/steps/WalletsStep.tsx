@@ -30,8 +30,10 @@
 import { useCallback, useState, type JSX } from "react";
 import { Ethereum, Solana } from "@thesvg/react";
 
+import { cn } from "../../../lib/utils.js";
+import { RAIL_WARNING_CHROME } from "./step-chrome.js";
 import { Button } from "../../../components/ui/button.js";
-import { DotmSquare3 } from "../../../components/ui/dotm-square-3.js";
+import { VexLoader } from "../../../components/ui/vex-loader.js";
 import {
   Tabs,
   TabsContent,
@@ -130,18 +132,19 @@ export function WalletsStep({
       <WizardStepPanel
         panelDataAttr={{ kind: "wallets", value: "loading" }}
         icon={meta.icon}
+        flowMode={flowMode}
         title="Set up wallets"
         description="Loading wallet status…"
         footer={null}
       >
-        {/* Brand loading language — DotMatrix (role="status" lives on the
-            loader root), never a generic pulse bar. */}
+        {/* Brand loading language — the VexLoader ring (role="status"
+            lives on the loader root), never a generic pulse bar. */}
         <div className="flex justify-center py-4">
-          <DotmSquare3
+          <VexLoader
             size={24}
-            dotSize={3}
-            colorPreset="grad-cobalt"
-            ariaLabel="Loading wallet status…"
+            stroke={2}
+            tone="paper"
+            label="Loading wallet status…"
           />
         </div>
       </WizardStepPanel>
@@ -166,6 +169,7 @@ export function WalletsStep({
       <WizardStepPanel
         panelDataAttr={{ kind: "wallets", value: "setup" }}
         icon={meta.icon}
+        flowMode={flowMode}
         title="Couldn't load wallets"
         description="Your wallets exist but couldn't be loaded right now."
         footer={
@@ -176,7 +180,7 @@ export function WalletsStep({
               }}
               disabled={stepAdvance.isPending}
             >
-              Return to review
+              Done
             </Button>
           ) : null
         }
@@ -193,8 +197,9 @@ export function WalletsStep({
       <WizardStepPanel
         panelDataAttr={{ kind: "wallets", value: "ready" }}
         icon={meta.icon}
+        flowMode={flowMode}
         title="Wallets configured"
-        description="Both wallets are set up. Continue to configure API keys."
+        description="Both wallets are set up and encrypted on this machine. Continue to connect API keys."
         footer={
           <Button
             onClick={() => {
@@ -208,7 +213,7 @@ export function WalletsStep({
       >
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3">
-            <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
+            <div className="border-b border-white/[0.10] pb-3">
               <div className="flex items-center gap-2">
                 <Ethereum width={14} height={14} aria-hidden />
                 <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
@@ -223,7 +228,7 @@ export function WalletsStep({
                 </p>
               )}
             </div>
-            <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
+            <div>
               <div className="flex items-center gap-2">
                 <Solana width={14} height={14} aria-hidden />
                 <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
@@ -268,8 +273,9 @@ export function WalletsStep({
     <WizardStepPanel
       panelDataAttr={{ kind: "wallets", value: "setup" }}
       icon={meta.icon}
+      flowMode={flowMode}
       title={flowMode === "back-edit" ? "Manage wallets" : "Set up wallets"}
-      description="Wallets are optional — you can add them later in Settings. Vex supports an EVM wallet (Ethereum + L2s) and a Solana wallet. Generate fresh keys, import existing ones, or restore from a backup keystore file. Each chain is encrypted with the master password from Step 1."
+      description="Vex is self-custodial: wallet keys are generated and encrypted on this machine, under your master password, and never leave it. Add an EVM wallet (Ethereum + L2s), a Solana wallet, or both — generate fresh keys, import existing ones, or restore a backup. Wallets are optional; you can come back to this any time."
       footer={
         flowMode === "back-edit" ? (
           <Button
@@ -278,7 +284,7 @@ export function WalletsStep({
             }}
             disabled={stepAdvance.isPending}
           >
-            {stepAdvance.isPending ? "Returning…" : "Return to review"}
+            {stepAdvance.isPending ? "Closing…" : "Done"}
           </Button>
         ) : showConfigureLater ? (
           <Button
@@ -298,7 +304,10 @@ export function WalletsStep({
         <p
           role="status"
           data-vex-wallets-configure-later-alert
-          className="mb-4 rounded-md border border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_10%,transparent)] px-3 py-2 text-sm text-[var(--color-warning)]"
+          className={cn(
+            "mb-4 py-0.5 text-sm text-[var(--color-warning)]",
+            RAIL_WARNING_CHROME,
+          )}
         >
           {anyWallet
             ? "With only one chain, Vex can only trade or act on that chain. "
@@ -335,7 +344,7 @@ export function WalletsStep({
           />
         </TabsContent>
       </Tabs>
-      <div className="mt-4 flex flex-col gap-3 border-t border-white/[0.08] pt-4">
+      <div className="mt-4 flex flex-col gap-3 border-t border-white/[0.12] pt-4">
         {anyWallet ? <ExportAllWallets /> : null}
         <RestoreFromArchive />
       </div>

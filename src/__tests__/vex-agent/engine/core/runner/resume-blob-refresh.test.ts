@@ -47,7 +47,7 @@ const { resumeMissionRun } = await import(
   "../../../../../vex-agent/engine/core/runner/mission.js"
 );
 
-const config = { provider: "test", model: "m", contextLimit: 1000, maxOutputTokens: 512, inputPricePerM: 0, outputPricePerM: 0, priceCurrency: "USD" as const, cachePricePerM: null, cacheWritePricePerM: null, reasoningPricePerM: null };
+const config = { provider: "test", model: "m", contextLimit: 1000, maxOutputTokens: 512, inputPricePerM: 0, outputPricePerM: 0, priceCurrency: "USD" as const, cachePricePerM: null, cacheWritePricePerM: null, reasoningPricePerM: null, supportsReasoningEffort: false };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -59,7 +59,6 @@ beforeEach(() => {
       sessionPermission: "restricted",
       missionId: "m1",
       missionRunId: "run-1",
-      isSubagent: false,
       loadedDocuments: new Map(),
     },
     messages: [],

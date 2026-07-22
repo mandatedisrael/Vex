@@ -39,7 +39,6 @@ import type {
   MissionGetDraftResult,
   MissionGetRenewableSourceResult,
   MissionGetResultForRunResult,
-  MissionListResultsResult,
   MissionRecoverInput,
   MissionRecoverResult,
   MissionRenewInput,
@@ -120,26 +119,6 @@ export function useRenewableMissionSource(
   sessionId: string | null,
 ): UseQueryResult<Result<MissionGetRenewableSourceResult>> {
   return useQuery(renewableSourceOptions(sessionId ?? ""));
-}
-
-/**
- * WP-J — per-wallet mission results ledger, newest first. The Mission
- * History panel resolves the wallet address itself (primary wallet by
- * default); this hook is a thin per-wallet read, never "list every wallet".
- */
-function missionResultsOptions(walletAddress: string) {
-  return queryOptions({
-    queryKey: missionKeys.results(walletAddress),
-    queryFn: () => window.vex.mission.listResults({ walletAddress }),
-    staleTime: STALE_MS,
-    enabled: walletAddress.length > 0,
-  });
-}
-
-export function useMissionResults(
-  walletAddress: string | null,
-): UseQueryResult<Result<MissionListResultsResult>> {
-  return useQuery(missionResultsOptions(walletAddress ?? ""));
 }
 
 /**

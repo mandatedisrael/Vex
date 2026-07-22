@@ -11,8 +11,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "../logger/index.js";
 import { preferencesStore } from "../preferences/store.js";
-import { loadPersona } from "@vex-lib/persona.js";
-import { CONFIG_DIR } from "../paths/config-dir.js";
 import { APP_ORIGIN } from "../protocol/app-protocol.js";
 import {
   isAllowedExternalUrl,
@@ -67,8 +65,11 @@ const ALLOWED_EXTERNAL: ReadonlyArray<ExternalAllowEntry> = [
   // Hyperliquid/HyperEVM/Robinhood hosts are path-scoped there. https-only and
   // path-boundary matching are enforced upstream in `isAllowedExternalUrl`.
   ...EXPLORER_EXTERNAL_ALLOW,
-  // GitHub: restrict to Vex Foundation org + Electron releases (specific repos only)
-  { host: "github.com", pathPrefix: "/Vex-Foundation/" },
+  // Vex release notes (updater toast CTA) — path-scoped per owner decision
+  // 2026-07-22. The former github.com/Vex-Foundation/ entry died with this
+  // repoint (it existed solely for the release-notes CTA; zero remaining
+  // consumers). Electron releases stay for the auto-updater doc links.
+  { host: "projectvex.ai", pathPrefix: "/releases" },
   { host: "github.com", pathPrefix: "/electron/electron/releases" },
   // Rettiwt = the privacy-respecting Twitter/X API client the agent uses for
   // authenticated timeline/tweet reads (src/tools/twitter-account). Its
@@ -163,11 +164,6 @@ export async function createMainWindow(): Promise<BrowserWindow> {
     ? path.join(__dirname, "../renderer/icon.png")
     : path.resolve(__dirname, "../../src/renderer/public/icon.png");
 
-  // Window title from the local-first persona (defaults to "Vex"). Read here in
-  // the privileged main process — never via the renderer. Persona name changes
-  // apply on the next app start (configure-at-startup).
-  const personaName = loadPersona(path.join(CONFIG_DIR, "persona.md")).name;
-
   const win = new BrowserWindow({
     width: normalized.width,
     height: normalized.height,
@@ -177,7 +173,9 @@ export async function createMainWindow(): Promise<BrowserWindow> {
     minHeight,
     show: false,
     backgroundColor: "#0A0E27",
-    title: personaName,
+    // Window title is the fixed product name — the agent's display name is
+    // no longer user-configurable (retired persona.md mechanism).
+    title: "Vex",
     icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.cjs"),

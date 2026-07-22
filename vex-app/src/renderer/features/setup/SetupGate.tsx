@@ -1,0 +1,137 @@
+/**
+ * SETUP GATE — the Chronos Gate cold open (PR1 of the setup rebrand).
+ *
+ * A full-window cobalt plate (the app icon at room scale) covers the
+ * window from the first paint. While it holds, `useSetupOrchestrator`
+ * runs the real launch pipeline (probes → compose → migrate → wizard
+ * entry) and the particle sigil signs itself inside the VexLoader ring.
+ * When the pipeline resolves, the gate applies the handoff to the view
+ * machine BENEATH itself, then the plate splits into two curtain panels
+ * that slide off the top and bottom edges (`EASE_INOUT`, the landing
+ * full-surface reveal curve), unveiling whichever screen the launch
+ * landed on — for a healthy returning user that is the shell itself,
+ * with zero clicks.
+ *
+ * Layering: `z-50`, mounted BELOW `UpdateLayer` (`z-[60]`) so a critical
+ * update toast stays visible over the boot ritual — parity with the old
+ * intro screen which UpdateLayer also covered.
+ *
+ * Choreography (content and panels are separate layers so the sigil
+ * never straddles a moving seam): content fades (0.22s) → panels slide
+ * (0.62s, 0.18s delay) → `dismissSetupGate()` unmounts the gate for the
+ * rest of the process. Reduced motion: both durations collapse to ~0 —
+ * the gate simply disappears once the pipeline resolves.
+ */
+
+import { useEffect, useState, type JSX } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { VexLoader } from "../../components/ui/vex-loader.js";
+import { VexSigil } from "../appShell/VexSigil.js";
+import { EASE_INOUT, EASE_STANDARD } from "../../lib/motion.js";
+import { useUiStore } from "../../stores/uiStore.js";
+import { GATE_SIGIL_PALETTE } from "./gate-sigil-palette.js";
+import { useSetupOrchestrator } from "./useSetupOrchestrator.js";
+
+const CURTAIN_MS = 0.62;
+const CURTAIN_DELAY_MS = 0.18;
+
+export function SetupGate(): JSX.Element | null {
+  const active = useUiStore((s) => s.setupGateActive);
+  const dismissSetupGate = useUiStore((s) => s.dismissSetupGate);
+  const setCurrentView = useUiStore((s) => s.setCurrentView);
+  const openUnlock = useUiStore((s) => s.openUnlock);
+  const reduced = useReducedMotion() === true;
+
+  const { status, handoff } = useSetupOrchestrator();
+  const [revealing, setRevealing] = useState(false);
+
+  // Apply the handoff to the view machine beneath the plate, give React
+  // one frame to mount the target screen, then start the curtain.
+  useEffect(() => {
+    if (handoff === null || revealing) return;
+    if (handoff.kind === "unlock") {
+      openUnlock(handoff.returnView);
+    } else {
+      setCurrentView(handoff.view);
+    }
+    const raf = requestAnimationFrame(() => setRevealing(true));
+    return () => cancelAnimationFrame(raf);
+  }, [handoff, revealing, openUnlock, setCurrentView]);
+
+  // Reduced motion: dismiss via effect, not the panel's animation
+  // callback — a zero-duration animation's completion is not a contract
+  // (same rationale as CurtainExit). One frame so the unveiled view
+  // paints beneath the plate first. The callback below stays as a
+  // harmless duplicate (dismissSetupGate is idempotent).
+  useEffect(() => {
+    if (!reduced || !revealing) return;
+    const raf = requestAnimationFrame(() => dismissSetupGate());
+    return () => cancelAnimationFrame(raf);
+  }, [reduced, revealing, dismissSetupGate]);
+
+  if (!active) return null;
+
+  const panelTransition = reduced
+    ? { duration: 0 }
+    : { duration: CURTAIN_MS, ease: EASE_INOUT, delay: CURTAIN_DELAY_MS };
+
+  return (
+    <div
+      data-vex-screen="setup-gate"
+      data-vex-gate-phase={revealing ? "reveal" : "hold"}
+      className="fixed inset-0 z-50 overflow-hidden"
+    >
+      {/* Curtain panels — one solid plate until the reveal splits it. */}
+      <motion.div
+        aria-hidden
+        className="vex-gate-plate absolute inset-x-0 top-0 h-1/2"
+        initial={false}
+        animate={{ y: revealing ? "-101%" : "0%" }}
+        transition={panelTransition}
+        onAnimationComplete={() => {
+          if (revealing) dismissSetupGate();
+        }}
+      >
+        <div className="vex-gate-vignette absolute inset-0" />
+        <div className="vex-noise pointer-events-none absolute inset-0" />
+      </motion.div>
+      <motion.div
+        aria-hidden
+        className="vex-gate-plate absolute inset-x-0 bottom-0 h-1/2"
+        initial={false}
+        animate={{ y: revealing ? "101%" : "0%" }}
+        transition={panelTransition}
+      >
+        <div className="vex-gate-vignette absolute inset-0" />
+        <div className="vex-noise pointer-events-none absolute inset-0" />
+      </motion.div>
+
+      {/* Content layer — fades out before the panels move. */}
+      <motion.div
+        className="absolute inset-0 flex flex-col items-center justify-center"
+        initial={false}
+        animate={{ opacity: revealing ? 0 : 1 }}
+        transition={reduced ? { duration: 0 } : { duration: 0.22, ease: EASE_STANDARD }}
+      >
+        <VexLoader
+          size={200}
+          stroke={2}
+          tone="paper"
+          label={status.label}
+          className="shrink-0"
+        >
+          <VexSigil className="h-full w-full" palette={GATE_SIGIL_PALETTE} />
+        </VexLoader>
+        <p
+          aria-hidden
+          className="mt-8 font-mono text-[10px] uppercase tracking-[0.18em] text-[rgba(243,244,247,0.85)]"
+        >
+          {status.label}
+        </p>
+        <span className="absolute bottom-7 font-mono text-[10px] uppercase tracking-[0.18em] text-[rgba(243,244,247,0.6)]">
+          v{__VEX_APP_VERSION__}
+        </span>
+      </motion.div>
+    </div>
+  );
+}

@@ -1,15 +1,20 @@
 /**
- * Token mark — a best-effort visual for a token SYMBOL in the POSITION
- * per-chain holdings rows.
+ * Token mark — best-effort visuals for a token holding, in two flavors:
  *
- * Well-known symbols map to `@thesvg/react` brand marks (verified present in
- * the installed package); everything else — memecoins, LP shares, unknowns —
- * gets a neutral mono monogram ring (first glyph). Deliberately OFFLINE and
- * deterministic: no network logo fetching, no provider URLs (the renderer
- * stays free of third-party image loads).
+ *  - `TokenIcon` (legacy, symbol-keyed) — used by `MovesBlock`'s captured
+ *    trade symbols, which authorize a brand mark through their OWN
+ *    `KNOWN_MINTS`-style verification, not `resolveTokenMark`. Kept exactly
+ *    as-is for that caller.
+ *  - `TokenMark` (current) — renders an already-resolved
+ *    `TokenMarkResolution` from `lib/token-marks.ts`'s chain-aware
+ *    `resolveTokenMark`: a verified brand `<svg>`, a bundled local `<img>`,
+ *    the chain-family mark, or the neutral monogram ring. Used by
+ *    `PositionChains` and any later BOOK token row.
  *
- * Marks are decorative (`aria-hidden`) — the adjacent symbol text is the
- * accessible content.
+ * Both flavors are deliberately OFFLINE and deterministic: no network logo
+ * fetching, no provider URLs (the renderer stays free of third-party image
+ * loads). Marks are decorative (`aria-hidden`) — the caller's adjacent
+ * symbol/name text is the accessible content.
  */
 
 import type { JSX } from "react";
@@ -24,6 +29,7 @@ import {
   Tether,
 } from "@thesvg/react";
 import { cn } from "../../lib/utils.js";
+import type { TokenMarkResolution } from "../../lib/token-marks.js";
 
 type BrandIcon = typeof Ethereum;
 
@@ -88,6 +94,80 @@ export function TokenIcon({
       )}
     >
       {symbol !== null && symbol.length > 0 ? symbol.charAt(0) : "?"}
+    </span>
+  );
+}
+
+/** Family fallback mark — the SAME chain mark used for the family's native
+ * asset, shown for a genuine-but-unverified holding on a familiar chain. */
+const FAMILY_ICON: Readonly<Record<"evm" | "solana", BrandIcon>> = {
+  evm: Ethereum,
+  solana: Solana,
+};
+
+/**
+ * Renders a `resolveTokenMark` resolution (see `lib/token-marks.ts`): a
+ * verified brand `<svg>`, a bundled local `<img>`, the chain-family mark, or
+ * the neutral monogram ring — in that order of trust. Always decorative
+ * (`aria-hidden`); the caller's adjacent symbol/name text carries the
+ * accessible identity.
+ */
+export function TokenMark({
+  mark,
+  size = 13,
+  className,
+}: {
+  readonly mark: TokenMarkResolution;
+  readonly size?: number;
+  readonly className?: string;
+}): JSX.Element {
+  if (mark.kind === "brand") {
+    const Icon = mark.icon;
+    return (
+      <Icon
+        width={size}
+        height={size}
+        aria-hidden
+        focusable={false}
+        className={cn("shrink-0", className)}
+      />
+    );
+  }
+  if (mark.kind === "local") {
+    return (
+      <img
+        src={mark.src}
+        alt=""
+        aria-hidden
+        width={size}
+        height={size}
+        draggable={false}
+        className={cn("block shrink-0", className)}
+      />
+    );
+  }
+  if (mark.kind === "family") {
+    const Icon = FAMILY_ICON[mark.family];
+    return (
+      <Icon
+        width={size}
+        height={size}
+        aria-hidden
+        focusable={false}
+        className={cn("shrink-0", className)}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.55) }}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-full border border-[var(--vex-line-strong)] font-mono uppercase leading-none text-[var(--vex-text-3)]",
+        className,
+      )}
+    >
+      ?
     </span>
   );
 }

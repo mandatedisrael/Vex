@@ -45,6 +45,8 @@
 
 import { useCallback, useRef, useState, type JSX } from "react";
 import { type WizardStepId } from "@shared/schemas/wizard.js";
+import { cn } from "../../../lib/utils.js";
+import { RAIL_WARNING_CHROME } from "./step-chrome.js";
 import { useEnvState } from "../../../lib/api/onboarding.js";
 import {
   setApiKeys,
@@ -78,7 +80,7 @@ export interface ApiKeysStepProps {
 }
 
 const JUPITER_MISSING_WARNING =
-  "Jupiter is required to swap tokens on Solana — without it Solana swaps are unavailable; you can add it later in Settings.";
+  "Without a Jupiter key, Solana swaps stay unavailable. Everything else still works — you can add the key later in Settings.";
 
 export function ApiKeysStep({
   completedSteps,
@@ -207,8 +209,9 @@ export function ApiKeysStep({
     <WizardStepPanel
       panelDataAttr={{ kind: "apikeys", value: "form" }}
       icon={meta.icon}
+      flowMode={flowMode}
       title="Connect your API keys"
-      description="All API keys are optional — you can add them later in Settings. Jupiter powers Solana swaps; the others (Tavily, Rettiwt, Polymarket) unlock specific tools later. Keys are stored on this machine in your local config and sent only to the matching provider when you invoke a tool that needs them."
+      description="Each key unlocks one tool, and every one of them is optional. Keys are stored on this machine and sent only to their own provider when a tool that needs them runs — never anywhere else."
       formProps={{
         onSubmit: (e) => {
           void onSubmit(e);
@@ -231,7 +234,10 @@ export function ApiKeysStep({
           <p
             role="status"
             data-vex-apikeys-warning="jupiter-missing"
-            className="rounded-md border border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_10%,transparent)] px-3 py-2 text-sm text-[var(--color-warning)]"
+            className={cn(
+              "py-0.5 text-sm text-[var(--color-warning)]",
+              RAIL_WARNING_CHROME,
+            )}
           >
             {JUPITER_MISSING_WARNING}
           </p>

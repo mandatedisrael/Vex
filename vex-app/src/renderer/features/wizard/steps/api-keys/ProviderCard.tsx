@@ -1,28 +1,25 @@
 /**
- * ProviderCard — per-provider section primitive used by ApiKeysStep.
+ * ProviderCard — per-provider section primitive used by ApiKeysStep
+ * (Chronos Phase 2b redesign: one calm card per provider).
  *
- * Renders a flat hairline card with:
- *   - 36×36 icon tile (slot — caller passes a brand SVG / `<img>`)
- *   - provider name + required/optional + Set/Partial/Not-set badges
- *   - description (ReactNode — caller can embed inline links / warnings)
- *   - optional "Get key" CTA-style link (target="_blank", rel="noopener
- *     noreferrer"; rendered with an up-right arrow glyph)
- *   - body slot (children) — the actual input or auto-setup button
+ * Renders a hairline card with:
+ *   - 36×36 icon slot (caller passes a brand SVG / `<img>`)
+ *   - provider name + a STATUS WORD (mono micro-label in the status
+ *     color — the design law says state is a colored word, never a
+ *     dot, glyph, or pill)
+ *   - one-line "what Vex uses it for" sentence (`description`)
+ *   - optional longer how-to / caveat copy (`detail`)
+ *   - optional "Get key" link (target="_blank", rel="noopener noreferrer")
+ *   - body slot (children) — the actual input or auto-setup section
  *
  * Kept generic on purpose: the four providers (Jupiter / Tavily /
  * Rettiwt / Polymarket) differ in iconography and CTA wiring, but the
  * outer chrome is identical so this primitive avoids a 4× duplication
  * inside ApiKeysStep (rule 18 — "stop duplication early").
  *
- * Visual contract:
- *   - card root: `rounded-xl border-white/[0.06] bg-white/[0.02] p-4`,
- *     stack-spacing 3 (header / description / body).
- *   - icon slot: 36×36 sizing-only box (flex centering, no bg, no
- *     border, no border-radius) so the brand icon / PNG sits directly
- *     on the card surface. Caller's icon should be ~20px.
- *   - badges: small inline pills with semantic palette tokens.
- *   - data attributes: `data-vex-apikeys-card` set from the `slug` prop
- *     so tests can address each card individually.
+ * Colors ride the gate/shell token re-projection (`--color-text-*`),
+ * so the same card reads correctly on the cobalt plate and inside the
+ * ink-glass Settings screen.
  */
 
 import type { JSX, ReactNode } from "react";
@@ -48,61 +45,40 @@ export interface ProviderCardProps {
   readonly slug: ProviderCardSlug;
   readonly iconSlot: ReactNode;
   readonly name: string;
-  readonly required?: boolean;
   readonly status: ProviderCardStatus;
+  /** One quiet sentence: what Vex uses this key for. */
   readonly description: ReactNode;
+  /** Optional longer how-to / caveat copy under the description. */
+  readonly detail?: ReactNode;
   readonly getKey?: ProviderCardGetKey;
   readonly children: ReactNode;
 }
 
 const CARD_CHROME = cn(
-  "flex flex-col gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4",
+  // A3 boxless: one hairline-separated section per provider, no tile.
+  "flex flex-col gap-3 border-t border-white/[0.10] pt-5",
 );
 
 const ICON_TILE_CHROME = cn(
   "flex h-9 w-9 shrink-0 items-center justify-center",
-  "text-[var(--vex-onboarding-accent)]",
+  "text-[var(--color-text-primary)]",
 );
 
-const BADGE_CHROME = cn(
-  "inline-flex items-center rounded-full px-2 py-0.5",
-  "font-mono text-[10px] uppercase tracking-[0.14em]",
-);
+const STATUS_WORD_COLOR: Record<ProviderCardStatusTone, string> = {
+  set: "text-[var(--color-success)]",
+  partial: "text-[var(--color-warning)]",
+  unset: "text-[var(--color-text-muted)]",
+};
 
-function StatusPill({ status }: { status: ProviderCardStatus }): JSX.Element {
-  const toneClass =
-    status.tone === "set"
-      ? "border border-[color-mix(in_oklab,var(--color-success)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-success)_14%,transparent)] text-[var(--color-success)]"
-      : status.tone === "partial"
-        ? "border border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_14%,transparent)] text-[var(--color-warning)]"
-        : "border border-white/[0.08] bg-white/[0.03] text-[var(--color-text-muted)]";
-  return <span className={cn(BADGE_CHROME, toneClass)}>{status.label}</span>;
-}
-
-function RequiredPill(): JSX.Element {
+function StatusWord({ status }: { status: ProviderCardStatus }): JSX.Element {
   return (
     <span
       className={cn(
-        BADGE_CHROME,
-        "border border-[color-mix(in_oklab,var(--vex-onboarding-accent)_40%,transparent)]",
-        "bg-[color-mix(in_oklab,var(--vex-onboarding-accent)_12%,transparent)]",
-        "text-[var(--vex-onboarding-accent)]",
+        "shrink-0 font-mono text-[10px] uppercase tracking-[0.18em]",
+        STATUS_WORD_COLOR[status.tone],
       )}
     >
-      Required
-    </span>
-  );
-}
-
-function OptionalPill(): JSX.Element {
-  return (
-    <span
-      className={cn(
-        BADGE_CHROME,
-        "border border-white/[0.06] bg-white/[0.02] text-[var(--color-text-muted)]",
-      )}
-    >
-      Optional
+      {status.label}
     </span>
   );
 }
@@ -115,9 +91,9 @@ function GetKeyLink({ getKey }: { getKey: ProviderCardGetKey }): JSX.Element {
       rel="noopener noreferrer"
       className={cn(
         "inline-flex w-fit items-center gap-1.5 text-xs font-medium",
-        "text-[var(--vex-onboarding-accent)] transition-colors",
-        "hover:text-[color-mix(in_oklab,var(--vex-onboarding-accent)_80%,white)]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]",
+        "text-[var(--color-text-primary)] underline underline-offset-2 transition-colors",
+        "hover:text-[var(--color-text-secondary)]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
       )}
     >
       {getKey.label}
@@ -130,9 +106,9 @@ export function ProviderCard({
   slug,
   iconSlot,
   name,
-  required = false,
   status,
   description,
+  detail,
   getKey,
   children,
 }: ProviderCardProps): JSX.Element {
@@ -147,19 +123,23 @@ export function ProviderCard({
           {iconSlot}
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <h3
               id={`vex-apikeys-card-${slug}-name`}
               className="text-sm font-semibold text-[var(--color-text-primary)]"
             >
               {name}
             </h3>
-            {required ? <RequiredPill /> : <OptionalPill />}
-            <StatusPill status={status} />
+            <StatusWord status={status} />
           </div>
-          <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">
+          <p className="text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
             {description}
           </p>
+          {detail ? (
+            <p className="text-xs leading-relaxed text-[var(--color-text-muted)]">
+              {detail}
+            </p>
+          ) : null}
           {getKey ? <GetKeyLink getKey={getKey} /> : null}
         </div>
       </header>

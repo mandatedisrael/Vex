@@ -12,11 +12,14 @@
  *      bridged surface matches the `VexBridge` contract — if the
  *      preload `satisfies VexBridge` check ever drifts, this catches
  *      it).
- *   5. The intro screen renders, the user clicks Begin (no auto-
- *      dismiss — that is the documented UX contract in IntroScreen.tsx),
- *      and the SystemCheck view mounts within the expect timeout
- *      (proves the Zustand uiStore + the intro click handler run in
- *      the renderer).
+ *   5. The Chronos Gate boot overlay renders first, its orchestrator
+ *      runs the launch probes, and — because the per-spec CONFIG_DIR is
+ *      fresh (first run, `setupCompleteFlag === false`) — it hands off
+ *      to the SystemCheck view with NO user interaction (proves the
+ *      Zustand uiStore + the setup orchestrator run in the renderer).
+ *      The first-run handoff deliberately never auto-starts compose,
+ *      so this assertion stays deterministic on CI runners that DO
+ *      have a Docker daemon.
  *
  * What we INTENTIONALLY do NOT assert:
  *   - Anything past SystemCheck. Docker bootstrap, compose up,
@@ -29,7 +32,7 @@
 import path from "node:path";
 import { test, expect } from "./fixtures/electron-app.js";
 
-test("boots through intro to SystemCheck with the bridged window.vex surface", async ({
+test("boots through the setup gate to SystemCheck with the bridged window.vex surface", async ({
   vexApp,
 }) => {
   const { app, firstWindow, configDir } = vexApp;
@@ -59,24 +62,25 @@ test("boots through intro to SystemCheck with the bridged window.vex surface", a
   expect(bridgeShape.vexType).toBe("object");
   expect(bridgeShape.healthType).toBe("function");
 
-  // 3. The intro screen renders first.
-  // `data-vex-screen` is set on every top-level screen container and
-  // is stable across refactors (Codex S2 turn 2 selector strategy).
+  // 3. The Chronos Gate cold-open renders first — but unlike the old
+  // click-gated intro it self-dismisses once the probes resolve, so on a
+  // fast runner the curtain may already have revealed SystemCheck by the
+  // time this line runs. Accept either surface as the first paint to keep
+  // the smoke deterministic (review lens finding, 2026-07-22); step 4
+  // still pins the final SystemCheck state.
   await expect(
-    firstWindow.locator('[data-vex-screen="intro"]')
+    firstWindow
+      .locator(
+        '[data-vex-screen="setup-gate"], [data-vex-screen="systemCheck"]'
+      )
+      .first()
   ).toBeVisible();
 
-  // 4. The loader animates 0→100% (~3.5s real time) and Begin appears.
-  // Use an explicit `toBeVisible()` assertion before clicking so the
-  // wait is bounded by `expect.timeout: 15_000` (playwright.config.ts)
-  // and failures are reported as "Begin button did not become visible"
-  // rather than a generic click timeout. No auto-dismiss: clicking
-  // Begin is the only exit (documented UX contract in IntroScreen.tsx).
-  const beginButton = firstWindow.getByRole("button", { name: /begin/i });
-  await expect(beginButton).toBeVisible();
-  await beginButton.click();
-
-  // 5. Click advances uiStore.currentView to systemCheck.
+  // 4. The orchestrator's probes resolve (system.health + docker.detect
+  // + envState — real IPC, bounded by `expect.timeout: 15_000` from
+  // playwright.config.ts; docker.detect's own subprocess timeout is 8s).
+  // Fresh CONFIG_DIR ⇒ first run ⇒ the gate hands off to SystemCheck
+  // and curtain-reveals it — no clicks, no Begin button anymore.
   await expect(
     firstWindow.locator('[data-vex-screen="systemCheck"]')
   ).toBeVisible();

@@ -30,7 +30,6 @@ const RUNTIME_PAUSES = new Set<string>([
   "checkpoint_pause",
   "iteration_limit",
   "timeout",
-  "waiting_for_parent",
   "waiting_for_wake",
   "waiting_for_compact_commit",
   "compact_unable_at_critical",
@@ -48,7 +47,7 @@ const RUNTIME_PAUSES = new Set<string>([
  * the wake executor, and `checkpoint_pause` by checkpoint auto-resume.
  * `iteration_limit` and `timeout` are converted by autonomous runners into
  * `waiting_for_wake`; they are not direct ingress-resume statuses.
- * `system_error` and `waiting_for_parent` remain non-resumable here.
+ * `system_error` remains non-resumable here.
  */
 const RESUMABLE_STOPS = new Set<string>([
   "approval_required",

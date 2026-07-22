@@ -10,7 +10,7 @@
  *      message covers "missing both" and "both present".
  *   2. Runtime defense-in-depth — `ctx.sessionKind` and (for mission)
  *      `ctx.missionRunId` must match the visibility gate. Even though
- *      `getOpenAITools` hides the tool in chat / setup / subagent, the
+ *      `getOpenAITools` hides the tool in chat / setup, the
  *      dispatcher also runs on operator-resume and script paths where the
  *      visibility filter is bypassed, so the handler re-checks.
  *
@@ -145,6 +145,5 @@ export async function handleLoopDefer(
 }
 
 function isMissionRunContext(ctx: InternalToolContext): boolean {
-  if (ctx.role === "subagent") return false;
   return ctx.sessionKind === "mission" && ctx.missionRunId !== null;
 }

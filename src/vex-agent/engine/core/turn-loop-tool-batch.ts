@@ -18,8 +18,7 @@
  *   - `approval_break` → caller returns immediately.
  *   - `waiting_for_wake` → caller runs forced-compact-before-wait +
  *     `missionRunsRepo.updateStatus("paused_wake")` + returns.
- *   - `engine_stop` (stop_mission, complete_subagent, waiting_for_parent)
- *     → caller returns.
+ *   - `engine_stop` (stop_mission) → caller returns.
  *   - `compact_committed` → caller runs `handlePostCompactBookkeeping`
  *     then continues to the next iteration.
  *   - `normal_complete` → caller runs `mergeOperatorInstructions` then
@@ -183,15 +182,10 @@ export async function processTurnToolBatch(args: {
     // ── Engine signals: result tracked, then stop ──
     if (resultForTranscript.engineSignal) {
       const sig = resultForTranscript.engineSignal;
-      if (sig.type === "stop_mission" || sig.type === "complete_subagent") {
+      if (sig.type === "stop_mission") {
         batchStopReason = sig.reason as StopReason;
         batchStopOutput = resultForTranscript.output;
         batchStopPayload = { summary: sig.summary, evidence: sig.evidence };
-        break;
-      }
-      if (sig.type === "wait_for_parent") {
-        batchStopReason = "waiting_for_parent";
-        batchStopOutput = resultForTranscript.output;
         break;
       }
       if (sig.type === "plan_pause") {

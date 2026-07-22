@@ -43,7 +43,6 @@ describe("bug-reports-db — unavailable contract", () => {
         sessionId: null,
         missionId: null,
         missionRunId: null,
-        subagentId: null,
         toolName: null,
         toolCallId: null,
         protocolNamespace: null,

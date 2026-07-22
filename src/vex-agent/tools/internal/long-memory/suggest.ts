@@ -322,7 +322,7 @@ export async function handleLongMemorySuggest(
       const ins = await insertCandidate(
         {
           sessionId: context.sessionId,
-          proposedBy: context.role,
+          proposedBy: "parent",
           kind: input.kind,
           title: redacted.title,
           summary: redacted.summary,

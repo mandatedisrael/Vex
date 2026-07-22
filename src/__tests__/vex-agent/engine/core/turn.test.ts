@@ -50,7 +50,6 @@ describe("turn", () => {
       sessionPermission: "restricted" as const,
       missionId: null,
       missionRunId: null,
-      isSubagent: false,
       selectedEvmWallet: null,
       selectedSolanaWallet: null,
       walletPolicy: { kind: "none" as const },

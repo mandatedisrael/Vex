@@ -162,7 +162,6 @@ describe("getAllMessages dedup (giant-tool fork guard)", () => {
         message_type: "tool_result",
         visibility: "internal",
         origin_session_id: null,
-        subagent_id: null,
       },
     ]);
 

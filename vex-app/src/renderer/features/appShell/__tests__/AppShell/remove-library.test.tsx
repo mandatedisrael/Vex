@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Result } from "@shared/ipc/result.js";
 import type {
@@ -38,10 +38,14 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   ArrowLeft01Icon: "ArrowLeft01Icon",
   ArrowRight01Icon: "ArrowRight01Icon",
   ArrowUp01Icon: "ArrowUp01Icon",
+  ArrowDataTransferHorizontalIcon: "ArrowDataTransferHorizontalIcon",
+  ArrowUpRight01Icon: "ArrowUpRight01Icon",
+  CoinsSwapIcon: "CoinsSwapIcon",
   BitcoinWalletIcon: "BitcoinWalletIcon",
   BridgeIcon: "BridgeIcon",
   BubbleChatSparkIcon: "BubbleChatSparkIcon",
   Bug02Icon: "Bug02Icon",
+  Cancel01Icon: "Cancel01Icon",
   ChartCandlestickIcon: "ChartCandlestickIcon",
   CheckmarkCircle02Icon: "CheckmarkCircle02Icon",
   Clock03Icon: "Clock03Icon",
@@ -64,7 +68,17 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   StopCircleIcon: "StopCircleIcon",
   Target02Icon: "Target02Icon",
   PercentSquareIcon: "PercentSquareIcon",
+  // Welcome Portfolio tab (BookPanel's welcome stage): handle + card icons.
+  Wallet01Icon: "Wallet01Icon",
   ZapIcon: "ZapIcon",
+}));
+
+// Phase 2b: the Settings ShellScreen hosts the wizard step forms, whose
+// module graph (icons, RHF, brand marks) is far beyond this suite's
+// partial mocks. The screen has its own suite; a stub keeps THIS suite's
+// AppShell import light.
+vi.mock("../../screens/SettingsScreen.js", () => ({
+  SettingsScreen: () => null,
 }));
 
 vi.mock("@thesvg/react", () => ({
@@ -80,6 +94,10 @@ vi.mock("@thesvg/react", () => ({
   Circle: () => null,
   Chainlink: () => null,
   Postgresql: () => null,
+  Bitcoin: () => null,
+  Bnb: () => null,
+  DaiStablecoin: () => null,
+  Usdc: () => null,
 }));
 
 // Stage 4: the always-mounted BookPanel renders SessionRuntimeBar (in the
@@ -176,10 +194,9 @@ beforeEach(() => {
     logBuffer: [],
     sessionModeFilter: "all",
     activeSessionId: null,
-    appShellView: "session",
+    shellRoute: { kind: "none" },
     createSessionOpen: false,
-    createSessionInitialMessage: null,
-    pendingFirstMessage: null,
+    createSessionInitialTurn: null,
   });
   sessionsListMock.mockResolvedValue({ ok: true, data: [] });
   sessionsGetMock.mockResolvedValue({ ok: true, data: null });
@@ -295,26 +312,26 @@ beforeEach(() => {
 });
 
 describe("AppShell", () => {
-  it("switches to the library view via Browse all and returns to session on row select", async () => {
-    sessionsListMock.mockResolvedValueOnce({
+  it("opens a session from the Sessions screen: row click closes the screen and selects it", async () => {
+    sessionsListMock.mockResolvedValue({
       ok: true,
       data: makeSessionRows(),
     });
 
     renderShell();
-    const browseBtn = await screen.findByRole("button", {
-      name: /Open sessions library|Browse all/i,
-    });
-    fireEvent.click(browseBtn);
-    expect(useUiStore.getState().appShellView).toBe("sessionsLibrary");
+    await screen.findAllByText("Arbitrum LP Rebalance");
+    // The menu-click open path is pinned in shell-sidebar.test.tsx; here the
+    // store drives the screen so the row-select contract stays isolated.
+    useUiStore.getState().setShellRoute({ kind: "sessions", origin: null });
 
-    // Selecting any row from the sidebar (which is still visible) must
-    // return the panel area to the session view (codex turn 1 P4).
-    const arbitrumRows = await screen.findAllByText("Arbitrum LP Rebalance");
+    const overlay = await screen.findByRole("dialog", { name: "Sessions" });
+    const libraryRows = await within(overlay).findAllByText(
+      "Arbitrum LP Rebalance",
+    );
     // Climb to the enclosing <button> — fireEvent.click on the inner text
     // triggers React's synthetic system regardless of the target tag.
-    fireEvent.click(arbitrumRows[0]!);
-    expect(useUiStore.getState().appShellView).toBe("session");
+    fireEvent.click(libraryRows[0]!);
+    expect(useUiStore.getState().shellRoute).toEqual({ kind: "none" });
     expect(useUiStore.getState().activeSessionId).toBe(
       "fb7bf453-df76-43e9-b756-02c3b717f242",
     );
@@ -438,15 +455,15 @@ describe("AppShell", () => {
     await waitFor(() => expect(useUiStore.getState().activeSessionId).toBeNull());
   });
 
-  it("Library view removes through the same dialog + IPC path", async () => {
+  it("Sessions screen removes through the same dialog + IPC path", async () => {
     const row = makeAgentRow("Library-resident");
     sessionsListMock.mockResolvedValue({ ok: true, data: [row] });
 
     renderShell();
-    useUiStore.setState({ appShellView: "sessionsLibrary" });
+    useUiStore.getState().setShellRoute({ kind: "sessions", origin: null });
 
-    // After switching to the library, both sidebar and library render the
-    // same row → two trash buttons total. Click the library one (last).
+    // With the Sessions screen open, both the sidebar and the library render
+    // the same row → two trash buttons total. Click the library one (last).
     const trashButtons = await screen.findAllByRole("button", { name: "Remove session" });
     expect(trashButtons.length).toBeGreaterThanOrEqual(2);
     fireEvent.click(trashButtons[trashButtons.length - 1]!);

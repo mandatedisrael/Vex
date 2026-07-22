@@ -29,7 +29,7 @@ import type {
   ProviderPersistResult,
   ProviderListModelsResult,
 } from "@shared/schemas/provider.js";
-import { onboardingKeys } from "./queryKeys.js";
+import { modelsKeys, onboardingKeys, sessionModelKeys } from "./queryKeys.js";
 
 export async function persistProvider(
   input: ProviderPersistInput,
@@ -61,5 +61,16 @@ export function useInvalidateEnvStateAfterProviderWrite(): () => void {
     void queryClient.invalidateQueries({
       queryKey: onboardingKeys.envState(),
     });
+    // Reconfigure staleness (S6 round 2): a provider/model write makes the
+    // GLOBAL model query's cached reasoning capability wrong for the NEW
+    // model. RESET (not merely invalidate) both caches sharing that global
+    // fact so an immediate read after this write never flashes the OLD
+    // model's capability while a background refetch is in flight —
+    // `invalidateQueries` keeps serving the stale cache until the refetch
+    // settles; `resetQueries` clears it first. `sessionModelKeys` still
+    // needs the same reset even though `sessions.getModel` is no longer the
+    // composer's capability source (SessionRuntimeBar reads it directly).
+    void queryClient.resetQueries({ queryKey: modelsKeys.all });
+    void queryClient.resetQueries({ queryKey: sessionModelKeys.all });
   };
 }

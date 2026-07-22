@@ -7,6 +7,8 @@
  *   4. localStorage persist whitelist contains ONLY sidebarOpen — never
  *      logBuffer (would leak), never currentView (transient).
  *   5. clearLogs zeros the buffer.
+ *   6. `hideDustBalances` (Portfolio tab dust filter) defaults true, has a
+ *      setter, and persists.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -16,21 +18,23 @@ const STORAGE_KEY = "vex-ui";
 
 function resetStoreToDefaults(): void {
   useUiStore.setState({
-    theme: "vex",
+    theme: "chronos",
     workspaceMode: "normal",
     sidebarOpen: true,
     bookOpen: true,
     currentView: "splash",
+    setupGateActive: true,
+    unlockCurtainActive: false,
     wizardEntryMode: "setup",
     unlockReturnView: "appShell",
     logBuffer: [],
     sessionModeFilter: "all",
     activeSessionId: null,
-    appShellView: "session",
+    shellRoute: { kind: "none" },
     createSessionOpen: false,
-    createSessionInitialMessage: null,
-    pendingFirstMessage: null,
+    createSessionInitialTurn: null,
     reviewModal: "none",
+    hideDustBalances: true,
   });
 }
 
@@ -47,20 +51,22 @@ describe("uiStore", () => {
 
   it("starts with the expected defaults", () => {
     const state = useUiStore.getState();
-    expect(state.theme).toBe("vex");
+    expect(state.theme).toBe("chronos");
     expect(state.workspaceMode).toBe("normal");
     expect(state.sidebarOpen).toBe(true);
     expect(state.currentView).toBe("splash");
+    expect(state.setupGateActive).toBe(true);
+    expect(state.unlockCurtainActive).toBe(false);
     expect(state.wizardEntryMode).toBe("setup");
     expect(state.unlockReturnView).toBe("appShell");
     expect(state.sessionModeFilter).toBe("all");
     expect(state.activeSessionId).toBeNull();
-    expect(state.appShellView).toBe("session");
+    expect(state.shellRoute).toEqual({ kind: "none" });
     expect(state.logBuffer).toEqual([]);
     expect(state.createSessionOpen).toBe(false);
-    expect(state.createSessionInitialMessage).toBeNull();
-    expect(state.pendingFirstMessage).toBeNull();
+    expect(state.createSessionInitialTurn).toBeNull();
     expect(state.reviewModal).toBe("none");
+    expect(state.hideDustBalances).toBe(true);
   });
 
   it("setReviewModal mutates and reflects new value, without persisting it", () => {
@@ -79,17 +85,12 @@ describe("uiStore", () => {
     expect(parsed.state.reviewModal).toBeUndefined();
   });
 
-  it("setTheme + toggleTheme flip the persisted Robinhood-mode theme", () => {
-    expect(useUiStore.getState().theme).toBe("vex");
-    useUiStore.getState().toggleTheme();
-    expect(useUiStore.getState().theme).toBe("robinhood");
-    useUiStore.getState().toggleTheme();
-    expect(useUiStore.getState().theme).toBe("vex");
-    useUiStore.getState().setTheme("robinhood");
-    expect(useUiStore.getState().theme).toBe("robinhood");
-    // Theme is in the persist whitelist so the choice survives relaunch.
+  it("theme defaults to 'chronos' and stays in the persist whitelist", () => {
+    expect(useUiStore.getState().theme).toBe("chronos");
+    // The slot persists (so the planned `celeris` lands migration-free).
+    useUiStore.getState().setSidebarOpen(false);
     const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY)!);
-    expect(parsed.state.theme).toBe("robinhood");
+    expect(parsed.state.theme).toBe("chronos");
   });
 
   it("setWorkspaceMode flips the transient Hypervexing flag without persisting it", () => {
@@ -108,106 +109,258 @@ describe("uiStore", () => {
     expect(raw).not.toContain("hypervexing");
   });
 
-  it("migrate v2→v3 seeds the cobalt theme without disturbing v2 fields", async () => {
+  it("migrate v2→v5 collapses the retired theme pair to 'chronos' without disturbing v2 fields", async () => {
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        state: { sidebarOpen: false, bookOpen: false },
+        state: { sidebarOpen: false, bookOpen: false, theme: "robinhood" },
         version: 2,
       }),
     );
     await useUiStore.persist.rehydrate();
-    expect(useUiStore.getState().theme).toBe("vex");
+    expect(useUiStore.getState().theme).toBe("chronos");
     // v2 fields are preserved (bookOpen is only forced open on the v1→v2 hop).
     expect(useUiStore.getState().sidebarOpen).toBe(false);
     expect(useUiStore.getState().bookOpen).toBe(false);
   });
 
-  it("coerces an off-union persisted theme to 'vex' on rehydrate (tampered localStorage must not crash the shell)", async () => {
+  it("migrate v5→v6 seeds hideDustBalances TRUE for a pre-v6 install (no field yet)", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: { sidebarOpen: true, bookOpen: true, theme: "chronos" },
+        version: 5,
+      }),
+    );
+    await useUiStore.persist.rehydrate();
+    expect(useUiStore.getState().hideDustBalances).toBe(true);
+  });
+
+  it("coerces a non-boolean persisted hideDustBalances to true on rehydrate (tampered localStorage must not crash the shell)", async () => {
+    // Current version + invalid value: `migrate` is skipped (no version hop),
+    // so only the rehydrate-time `merge` coercion stands between a
+    // hand-edited payload and the checkbox's `checked` prop.
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: { theme: "chronos", hideDustBalances: "yes" },
+        version: 6,
+      }),
+    );
+    await useUiStore.persist.rehydrate();
+    expect(useUiStore.getState().hideDustBalances).toBe(true);
+  });
+
+  it("coerces an off-union persisted theme to 'chronos' on rehydrate (tampered localStorage must not crash the shell)", async () => {
     // Current version + invalid theme: `migrate` is skipped (no version hop),
     // so only the rehydrate-time `merge` coercion stands between a hand-edited
-    // payload and SignalSky's `SKY_ACCENTS[theme]` lookup.
+    // payload and the `data-vex-theme` attribute on the shell root.
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         state: { theme: "neon-hack", sidebarOpen: false, bookOpen: true },
-        version: 3,
+        version: 5,
       }),
     );
     await useUiStore.persist.rehydrate();
-    expect(useUiStore.getState().theme).toBe("vex");
+    expect(useUiStore.getState().theme).toBe("chronos");
     // Other persisted prefs still hydrate normally.
     expect(useUiStore.getState().sidebarOpen).toBe(false);
     expect(useUiStore.getState().bookOpen).toBe(true);
   });
 
-  it("openCreateSession seeds + trims the first message; the sidebar path clears it", () => {
+  it("openCreateSession seeds + trims the first message with no effort by default; the sidebar path clears it", () => {
     useUiStore.getState().openCreateSession("  research TAO  ");
     expect(useUiStore.getState().createSessionOpen).toBe(true);
-    expect(useUiStore.getState().createSessionInitialMessage).toBe("research TAO");
+    expect(useUiStore.getState().createSessionInitialTurn).toEqual({
+      message: "research TAO",
+      reasoningEffort: null,
+    });
     // Sidebar "New session" passes no message → clears any prior seed.
     useUiStore.getState().openCreateSession();
     expect(useUiStore.getState().createSessionOpen).toBe(true);
-    expect(useUiStore.getState().createSessionInitialMessage).toBeNull();
+    expect(useUiStore.getState().createSessionInitialTurn).toBeNull();
   });
 
-  it("openCreateSession with whitespace-only text stores null", () => {
-    useUiStore.getState().openCreateSession("   ");
-    expect(useUiStore.getState().createSessionInitialMessage).toBeNull();
-  });
-
-  it("closeCreateSession clears modal state but NOT the pending hand-off", () => {
-    useUiStore.getState().openCreateSession("seed");
-    useUiStore
-      .getState()
-      .setPendingFirstMessage({ sessionId: "s1", message: "seed" });
-    useUiStore.getState().closeCreateSession();
-    expect(useUiStore.getState().createSessionOpen).toBe(false);
-    expect(useUiStore.getState().createSessionInitialMessage).toBeNull();
-    // Create success closes the modal AFTER setting the hand-off — it must survive.
-    expect(useUiStore.getState().pendingFirstMessage).toEqual({
-      sessionId: "s1",
-      message: "seed",
+  it("openCreateSession snapshots the reasoning effort argument verbatim", () => {
+    useUiStore.getState().openCreateSession("research TAO", "high");
+    expect(useUiStore.getState().createSessionInitialTurn).toEqual({
+      message: "research TAO",
+      reasoningEffort: "high",
     });
   });
 
-  it("clearPendingFirstMessage drops the hand-off", () => {
-    useUiStore
-      .getState()
-      .setPendingFirstMessage({ sessionId: "s1", message: "x" });
-    useUiStore.getState().clearPendingFirstMessage();
-    expect(useUiStore.getState().pendingFirstMessage).toBeNull();
+  it("openCreateSession with whitespace-only text stores null regardless of effort", () => {
+    useUiStore.getState().openCreateSession("   ", "high");
+    expect(useUiStore.getState().createSessionInitialTurn).toBeNull();
+  });
+
+  it("closeCreateSession (Cancel/Escape/backdrop) clears the modal AND discards the pending hand-off", () => {
+    useUiStore.getState().openCreateSession("seed", "medium");
+    useUiStore.getState().closeCreateSession();
+    expect(useUiStore.getState().createSessionOpen).toBe(false);
+    // Discarded, not merely closed — an abandoned draft must never ride into
+    // whichever session the operator opens next (the wrong-session leak the
+    // hand-off effect's sessionless struct depends on this store action to
+    // prevent).
+    expect(useUiStore.getState().createSessionInitialTurn).toBeNull();
+  });
+
+  it("completeSessionCreate installs the gated effort, closes the modal, and activates the session in one transition", () => {
+    useUiStore.getState().openCreateSession("seed", "high");
+    useUiStore.getState().completeSessionCreate("session-1", "high");
+    const state = useUiStore.getState();
+    expect(state.activeSessionId).toBe("session-1");
+    expect(state.createSessionOpen).toBe(false);
+    // The message survives untouched; the effort field is (re)installed with
+    // whatever the caller passed (SessionCreator has already mode-gated it).
+    expect(state.createSessionInitialTurn).toEqual({
+      message: "seed",
+      reasoningEffort: "high",
+    });
+    // Does NOT seed reasoningEffortBySession itself — that is the new
+    // composer's own hand-off effect's job once it consumes the turn.
+    expect(state.reasoningEffortBySession["session-1"]).toBeUndefined();
+  });
+
+  it("completeSessionCreate installs null when the caller mode-gates a mission create, even if the raw pick was non-null", () => {
+    useUiStore.getState().openCreateSession("seed", "high");
+    useUiStore.getState().completeSessionCreate("session-1", null);
+    expect(useUiStore.getState().createSessionInitialTurn).toEqual({
+      message: "seed",
+      reasoningEffort: null,
+    });
+  });
+
+  it("completeSessionCreate is a no-op on createSessionInitialTurn when there was no pending message", () => {
+    useUiStore.getState().completeSessionCreate("session-1", "high");
+    expect(useUiStore.getState().createSessionInitialTurn).toBeNull();
+    expect(useUiStore.getState().activeSessionId).toBe("session-1");
+  });
+
+  it("clearCreateSessionInitialTurn drops the hand-off", () => {
+    useUiStore.getState().openCreateSession("seed", "medium");
+    useUiStore.getState().clearCreateSessionInitialTurn();
+    expect(useUiStore.getState().createSessionInitialTurn).toBeNull();
   });
 
   it("never persists create-modal state or the first message text", () => {
-    useUiStore.getState().openCreateSession("super secret first message");
-    useUiStore.getState().setPendingFirstMessage({
-      sessionId: "s1",
-      message: "super secret first message",
-    });
+    useUiStore.getState().openCreateSession("super secret first message", "high");
     const raw = window.localStorage.getItem(STORAGE_KEY);
     expect(raw).not.toBeNull();
     const parsed = JSON.parse(raw!);
     expect(parsed.state).toEqual({
-      theme: "vex",
+      theme: "chronos",
       sidebarOpen: true,
       bookOpen: true,
       hlFavorites: [],
+      hideDustBalances: true,
     });
     expect(parsed.state.createSessionOpen).toBeUndefined();
-    expect(parsed.state.createSessionInitialMessage).toBeUndefined();
-    expect(parsed.state.pendingFirstMessage).toBeUndefined();
+    expect(parsed.state.createSessionInitialTurn).toBeUndefined();
     expect(raw).not.toContain("super secret first message");
   });
 
-  it("setAppShellView mutates and reflects new value", () => {
-    useUiStore.getState().setAppShellView("sessionsLibrary");
-    expect(useUiStore.getState().appShellView).toBe("sessionsLibrary");
+  it("setShellRoute opens a screen with its trigger origin and closes atomically", () => {
+    useUiStore.getState().setShellRoute({
+      kind: "sessions",
+      origin: { x: 12, y: 640, width: 240, height: 44 },
+    });
+    expect(useUiStore.getState().shellRoute).toEqual({
+      kind: "sessions",
+      origin: { x: 12, y: 640, width: 240, height: 44 },
+    });
+    // Opening with a null origin = the centered expand.
+    useUiStore.getState().setShellRoute({ kind: "memory", origin: null });
+    expect(useUiStore.getState().shellRoute).toEqual({
+      kind: "memory",
+      origin: null,
+    });
+    // Closing replaces the WHOLE route — no origin/payload can linger.
+    useUiStore.getState().setShellRoute({ kind: "none" });
+    expect(useUiStore.getState().shellRoute).toEqual({ kind: "none" });
+  });
+
+  it("setShellRoute carries the token-history payload (token identity + returnTo) atomically", () => {
+    useUiStore.getState().setShellRoute({
+      kind: "tokenHistory",
+      origin: { x: 5, y: 6, width: 20, height: 20 },
+      token: {
+        chainId: 8453,
+        tokenAddress: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        symbol: "USDC",
+        tokenName: "USD Coin",
+      },
+      returnTo: "assets",
+    });
+    const route = useUiStore.getState().shellRoute;
+    expect(route.kind).toBe("tokenHistory");
+    if (route.kind !== "tokenHistory") throw new Error("route kind mismatch");
+    expect(route.token).toEqual({
+      chainId: 8453,
+      tokenAddress: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+      symbol: "USDC",
+      tokenName: "USD Coin",
+    });
+    expect(route.returnTo).toBe("assets");
+    // Closing drops the payload with the route — nothing to clear separately.
+    useUiStore.getState().setShellRoute({ kind: "none" });
+    expect(useUiStore.getState().shellRoute).toEqual({ kind: "none" });
+  });
+
+  it("setShellRoute carries the settings section payload atomically (deep-link + register)", () => {
+    // Deep-link (welcome Portfolio "Add wallet") lands straight on Wallets.
+    useUiStore.getState().setShellRoute({
+      kind: "settings",
+      origin: { x: 12, y: 640, width: 240, height: 44 },
+      section: "wallets",
+    });
+    const route = useUiStore.getState().shellRoute;
+    expect(route.kind).toBe("settings");
+    if (route.kind !== "settings") throw new Error("route kind mismatch");
+    expect(route.section).toBe("wallets");
+    // The profile-menu row opens the landing register (section null).
+    useUiStore.getState().setShellRoute({
+      kind: "settings",
+      origin: null,
+      section: null,
+    });
+    expect(useUiStore.getState().shellRoute).toEqual({
+      kind: "settings",
+      origin: null,
+      section: null,
+    });
+    useUiStore.getState().setShellRoute({ kind: "none" });
+    expect(useUiStore.getState().shellRoute).toEqual({ kind: "none" });
+  });
+
+  it("dismissSetupGate is the one-way boot-gate flip (defaults active)", () => {
+    expect(useUiStore.getState().setupGateActive).toBe(true);
+    useUiStore.getState().dismissSetupGate();
+    expect(useUiStore.getState().setupGateActive).toBe(false);
+  });
+
+  it("beginUnlockCurtain / dismissUnlockCurtain arm and clear the exit curtain", () => {
+    expect(useUiStore.getState().unlockCurtainActive).toBe(false);
+    useUiStore.getState().beginUnlockCurtain();
+    expect(useUiStore.getState().unlockCurtainActive).toBe(true);
+    useUiStore.getState().dismissUnlockCurtain();
+    expect(useUiStore.getState().unlockCurtainActive).toBe(false);
   });
 
   it("setSidebarOpen mutates and reflects new value", () => {
     useUiStore.getState().setSidebarOpen(false);
     expect(useUiStore.getState().sidebarOpen).toBe(false);
+  });
+
+  it("setHideDustBalances mutates, defaults true, and persists the choice", () => {
+    expect(useUiStore.getState().hideDustBalances).toBe(true);
+    useUiStore.getState().setHideDustBalances(false);
+    expect(useUiStore.getState().hideDustBalances).toBe(false);
+    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY)!);
+    expect(parsed.state.hideDustBalances).toBe(false);
+    useUiStore.getState().setHideDustBalances(true);
+    expect(useUiStore.getState().hideDustBalances).toBe(true);
   });
 
   it("setSessionModeFilter mutates and reflects new value", () => {
@@ -216,9 +369,9 @@ describe("uiStore", () => {
   });
 
   it("openWizard sets the wizard view and entry mode together", () => {
-    useUiStore.getState().openWizard("reconfigure");
+    useUiStore.getState().openWizard("setup");
     expect(useUiStore.getState().currentView).toBe("wizard");
-    expect(useUiStore.getState().wizardEntryMode).toBe("reconfigure");
+    expect(useUiStore.getState().wizardEntryMode).toBe("setup");
   });
 
   it("openUnlock sets the unlock view and return target together", () => {
@@ -260,8 +413,18 @@ describe("uiStore", () => {
     useUiStore.getState().setCurrentView("systemCheck");
     useUiStore.getState().setSessionModeFilter("mission");
     useUiStore.getState().setActiveSessionId("64dd70f7-0ff6-462e-90c0-e528681d7e5d");
-    useUiStore.getState().setAppShellView("sessionsLibrary");
-    useUiStore.getState().openWizard("reconfigure");
+    useUiStore.getState().setShellRoute({
+      kind: "tokenHistory",
+      origin: { x: 12, y: 640, width: 240, height: 44 },
+      token: {
+        chainId: 8453,
+        tokenAddress: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        symbol: "USDC",
+        tokenName: "USD Coin",
+      },
+      returnTo: "shell",
+    });
+    useUiStore.getState().openWizard("setup");
     useUiStore.getState().openUnlock("wizard");
     useUiStore.getState().appendLog({
       id: "secret-log",
@@ -275,10 +438,11 @@ describe("uiStore", () => {
     const parsed = JSON.parse(raw!);
 
     expect(parsed.state).toEqual({
-      theme: "vex",
+      theme: "chronos",
       sidebarOpen: false,
       bookOpen: true,
       hlFavorites: [],
+      hideDustBalances: true,
     });
     expect(parsed.state.logBuffer).toBeUndefined();
     expect(parsed.state.currentView).toBeUndefined();
@@ -286,9 +450,13 @@ describe("uiStore", () => {
     expect(parsed.state.unlockReturnView).toBeUndefined();
     expect(parsed.state.sessionModeFilter).toBeUndefined();
     expect(parsed.state.activeSessionId).toBeUndefined();
-    expect(parsed.state.appShellView).toBeUndefined();
-    // Belt-and-braces: the message text must not appear anywhere serialized.
+    expect(parsed.state.shellRoute).toBeUndefined();
+    // Belt-and-braces: the message text must not appear anywhere serialized —
+    // and neither may the token-history route payload (route state is
+    // launch-ephemeral; a wallet's token interest never lands in localStorage).
     expect(raw).not.toContain("private payload");
     expect(raw).not.toContain("secret-log");
+    expect(raw).not.toContain("tokenHistory");
+    expect(raw).not.toContain("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
   });
 });

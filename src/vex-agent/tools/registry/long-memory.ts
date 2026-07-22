@@ -16,8 +16,7 @@
  * - `pressureSafety: "mutating"` — still blocked at barrier/critical so the
  *   agent does not suggest while compaction is urgent.
  * - `actionKind: "local_write"` — a Vex-local DB write (candidate staging).
- * - `visibility: {}` — always visible to parent AND subagent
- *   (`memory_candidates.proposed_by` supports both roles).
+ * - `visibility: {}` — always visible in every session context.
  *
  * The three READ tools (S3) — `long_memory_search` / `long_memory_get` /
  * `long_memory_history` — are the cross-session RECALL door. All are

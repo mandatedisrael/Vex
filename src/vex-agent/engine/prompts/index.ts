@@ -6,7 +6,7 @@
  *   (system, cacheHint "static_prefix"), in authority-first order (P3
  *   decomposition): identity → execution policy → session wallets → safety
  *   contract → tool model → protocol namespaces → memory & learning →
- *   research → response formatting → mode-core → subagent → Loaded Content
+ *   research → response formatting → mode-core → Loaded Content
  *   (END of the prefix — a new load busts only from here).
  * - TURN layers — volatile per-call state, joined into the TRAILING system
  *   message (cacheHint "turn_state", placed AFTER history): runtime clock,
@@ -38,7 +38,6 @@ import {
   buildMissionTurnState,
   type MissionRunContext,
 } from "./mission-run.js";
-import { buildSubagentPrompt, type SubagentContext } from "./subagent.js";
 import { buildWalletStateBanner } from "./wallet-state.js";
 import {
   buildRuntimeClockPrompt,
@@ -49,16 +48,8 @@ import {
 export interface PromptStackOptions {
   missionSetupContext?: MissionSetupContext;
   missionRunContext?: MissionRunContext;
-  subagentContext?: SubagentContext;
   /** Optional test/host override; production builds this from EngineContext. */
   runtimeClock?: RuntimeClockSnapshot;
-  /**
-   * Optional one-time persona setup hint. Set by the agent runner ONLY on the
-   * first reply of a session that has no configured persona (transcript-gated
-   * so it never repeats). Prompts the agent to briefly offer to personalize its
-   * name/tone. Empty/undefined omits it.
-   */
-  personaSetupHint?: string;
   /**
    * Pre-formatted "# Active Plan" layer — the session's accepted action plan
    * (sanitised + length-capped) rendered as ADVISORY HOW guidance. Built in
@@ -194,11 +185,6 @@ export function buildPromptStack(
     staticLayers.push(buildMissionRunPrompt(context, options.missionRunContext));
   }
 
-  // ── SUBAGENT — override ───────────────────────────────────
-  if (context.isSubagent) {
-    staticLayers.push(buildSubagentPrompt(context, options.subagentContext));
-  }
-
   // Loaded Content sits at the END of the static prefix so a new
   // `long_memory_get`-style load busts the cache only from this point.
   const loadedContent = buildLoadedContentLayer(context);
@@ -259,10 +245,9 @@ export function buildPromptStack(
   }
 
   // One-shots last: transcript-gated / consume-once notes whose semantics do
-  // not depend on layer position.
-  if (options.personaSetupHint && options.personaSetupHint.length > 0) {
-    turnLayers.push(options.personaSetupHint);
-  }
+  // not depend on layer position. (The persona-setup hint was retired
+  // 2026-07-20: persona editing is the user's job via the app UI, never a
+  // model-driven offer.)
   if (options.planOffNotice && options.planOffNotice.length > 0) {
     turnLayers.push(options.planOffNotice);
   }
@@ -308,4 +293,3 @@ export {
   buildMissionTurnState,
   type MissionRunContext,
 } from "./mission-run.js";
-export { buildSubagentPrompt, type SubagentContext } from "./subagent.js";

@@ -24,6 +24,12 @@ export interface NumericRowProps {
   readonly state: FieldState;
   readonly onChange: (next: FieldState) => void;
   readonly defaultLabel: string;
+  /**
+   * The raw .env key behind this field, shown as a tiny mono caption so
+   * power users can still map the humanized label to their `.env` —
+   * the label itself stays plain English (Phase 2b copy law).
+   */
+  readonly envName?: string;
 }
 
 export function NumericRow({
@@ -34,12 +40,25 @@ export function NumericRow({
   state,
   onChange,
   defaultLabel,
+  envName,
 }: NumericRowProps): JSX.Element {
   const value = state.kind === "set" ? state.raw : "";
   const cleared = state.kind === "clear";
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor={id}>{label}</Label>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <Label htmlFor={id} className="text-[13px] font-medium">
+          {label}
+        </Label>
+        {envName ? (
+          <span
+            aria-hidden
+            className="font-mono text-[10px] tracking-[0.08em] text-[var(--color-text-muted)]"
+          >
+            {envName}
+          </span>
+        ) : null}
+      </div>
       <div className="flex items-center gap-2">
         <Input
           id={id}
@@ -49,6 +68,7 @@ export function NumericRow({
           placeholder={placeholder}
           value={value}
           disabled={cleared}
+          className="h-11"
           onChange={(e) =>
             onChange(
               e.target.value.length === 0

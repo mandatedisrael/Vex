@@ -4,12 +4,10 @@
  * All configurable values come from .env — validated on load, fail fast.
  * Internal technical constants (timeouts, retry params) are NOT from ENV.
  *
- * M9 refactor: AGENT_ and SUBAGENT_ range plus default constants
- * moved to `src/lib/agent-config.ts` (single source of truth, shared
- * with vex-app onboarding writers). Engine
- * behavior preserved:
+ * M9 refactor: AGENT_ range plus default constants moved to
+ * `src/lib/agent-config.ts` (single source of truth, shared with
+ * vex-app onboarding writers). Engine behavior preserved:
  *  - AGENT_ keys: parse errors aggregated and thrown (combined message).
- *  - SUBAGENT_ keys: parse errors fall back silently with `logger.warn`.
  *
  * @see Team Standards §16.1 Config as code, §16.2 Validation at startup
  */
@@ -18,9 +16,7 @@ import {
   AGENT_CONTEXT_LIMIT,
   AGENT_MAX_OUTPUT_TOKENS,
   AGENT_TEMPERATURE,
-  formatParseErrors,
   parseAgentEnv,
-  parseSubagentEnv,
 } from "../../lib/agent-config.js";
 import logger from "@utils/logger.js";
 
@@ -98,34 +94,6 @@ export function loadEnvConfig(): EnvConfig {
     temperature: agentParse.value.temperature,
     maxOutputTokens: agentParse.value.maxOutputTokens,
   };
-}
-
-// ── Subagent config (ENV with fallbacks from AGENT_*) ───────────
-
-export interface SubagentConfig {
-  maxConcurrent: number;
-  contextLimit: number;
-  maxOutputTokens: number;
-  temperature: number | null;
-  maxIterations: number;
-  timeoutMs: number;
-}
-
-export function loadSubagentConfig(agentConfig: EnvConfig): SubagentConfig {
-  const result = parseSubagentEnv(process.env, {
-    contextLimit: agentConfig.contextLimit,
-    maxOutputTokens: agentConfig.maxOutputTokens,
-    temperature: agentConfig.temperature,
-  });
-  if (result.errors.length > 0) {
-    // Engine contract: SUBAGENT_* invalid values fall back silently
-    // (parseSubagentEnv already returned the fallback in `value`).
-    // Log warnings so ops can see misconfiguration without breaking
-    // agent startup. vex-app onboarding writer enforces strict
-    // validation at the write boundary.
-    logger.warn(formatParseErrors("SUBAGENT_* env values invalid (using fallback):", result.errors));
-  }
-  return result.value;
 }
 
 // ── Re-exports of public field metadata ──────────────────────────

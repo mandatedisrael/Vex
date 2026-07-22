@@ -72,9 +72,9 @@ describe("engine types", () => {
     it("covers all runtime stop reasons", () => {
       const values: RuntimeStopReason[] = [
         "approval_required", "checkpoint_pause", "iteration_limit",
-        "timeout", "waiting_for_parent", "waiting_for_wake", "system_error",
+        "timeout", "waiting_for_wake", "system_error",
       ];
-      expect(values).toHaveLength(7);
+      expect(values).toHaveLength(6);
     });
   });
 
@@ -91,8 +91,8 @@ describe("engine types", () => {
 
   describe("MessageSource", () => {
     it("covers all sources", () => {
-      const values: MessageSource[] = ["user", "assistant", "engine", "tool", "subagent", "system"];
-      expect(values).toHaveLength(6);
+      const values: MessageSource[] = ["user", "assistant", "engine", "tool", "system"];
+      expect(values).toHaveLength(5);
     });
   });
 
@@ -100,9 +100,9 @@ describe("engine types", () => {
     it("covers all message types", () => {
       const values: MessageType[] = [
         "chat", "mission_setup", "mission_summary", "approval_pause",
-        "continue", "checkpoint", "subagent_relay", "tool_result",
+        "continue", "checkpoint", "tool_result",
       ];
-      expect(values).toHaveLength(8);
+      expect(values).toHaveLength(7);
     });
   });
 
@@ -192,11 +192,12 @@ describe("engine types", () => {
         sessionPermission: "restricted",
         missionId: null,
         missionRunId: null,
-        isSubagent: false,
+        selectedEvmWallet: null,
+        selectedSolanaWallet: null,
+        walletPolicy: { kind: "none" },
         loadedDocuments: new Map(),
       };
       expect(ctx.sessionId).toBe("session-1");
-      expect(ctx.isSubagent).toBe(false);
     });
 
     it("supports mission context", () => {
@@ -206,24 +207,13 @@ describe("engine types", () => {
         sessionPermission: "restricted",
         missionId: "mission-1",
         missionRunId: "run-1",
-        isSubagent: false,
+        selectedEvmWallet: { id: "w-evm", address: "0xabc" },
+        selectedSolanaWallet: { id: "w-sol", address: "So1abc" },
+        walletPolicy: { kind: "mission_allowed", allowedWallets: ["w-evm", "w-sol"] },
         loadedDocuments: new Map([["doc/strategy", "# Strategy"]]),
       };
       expect(ctx.missionId).toBe("mission-1");
       expect(ctx.loadedDocuments.size).toBe(1);
-    });
-
-    it("supports subagent context", () => {
-      const ctx: EngineContext = {
-        sessionId: "session-3",
-        sessionKind: "mission",
-        sessionPermission: "restricted",
-        missionId: "mission-1",
-        missionRunId: "run-1",
-        isSubagent: true,
-        loadedDocuments: new Map(),
-      };
-      expect(ctx.isSubagent).toBe(true);
     });
   });
 
@@ -328,7 +318,6 @@ describe("engine types", () => {
         messageType: "continue",
         visibility: "internal",
         originSessionId: "session-parent",
-        subagentId: "subagent-1",
       };
       expect(meta.source).toBe("engine");
       expect(meta.visibility).toBe("internal");

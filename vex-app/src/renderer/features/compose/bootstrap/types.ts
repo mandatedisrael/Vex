@@ -17,7 +17,7 @@ export type Phase =
   | { kind: "idle" }
   | { kind: "running" }
   | { kind: "cancelling" }
-  | { kind: "ready"; result: ComposeUpResult; celebrate: boolean }
+  | { kind: "ready"; result: ComposeUpResult }
   | {
       kind: "error.port_collision";
       message: string;

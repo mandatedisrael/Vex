@@ -1,7 +1,7 @@
 /**
  * Hypervexing workspace (design spec §3 grid + §5 transition). The 5-zone
  * trading room that replaces the normal shell columns while the mode is active,
- * mounted above the SignalSky (which morphs its palette navy→bottle-green for
+ * mounted above the Eclipse backdrop (the hypervexing theme scope re-tints for
  * transition phase 1 "for free" via its uniform crossfade).
  *
  * Zones: top bar · left (markets + earn) · center chart · right copilot dock ·
@@ -38,7 +38,7 @@ import { findPositionByCoin, sumUnrealizedPnl } from "./workspacePositions.js";
 import { buildWorkspaceTransition } from "./workspaceTransition.js";
 
 /** The glass grid (design spec §13.1). Zones are HvZone glass islands; the
- * Signal Sky shows through the gaps, which is what unifies the room. Widths
+ * backdrop shows through the gaps, which is what unifies the room. Widths
  * carried as CSS vars so a later responsive fold-order pass can override them
  * per breakpoint. Below the wide-room edge the order-book column folds away
  * (the chart keeps the space); the pane unmounts so its poll stops. */

@@ -3,20 +3,27 @@
  * chain switcher's per-chain top holdings (WP-H: the same protection
  * MovesBlock applies to captured symbols, applied here to the portfolio's
  * provider-supplied `token.symbol`, which carries NO mitigation upstream) AND
- * the address-correct branding gate (position branding stream): a brand icon
- * requires `verifiedBrandTicker` to confirm the line's `tokenAddress`, never
- * the self-declared symbol alone.
+ * the chain-aware verified-mark resolver (`resolveTokenMark`, shared
+ * `lib/token-marks.ts`): a brand `<svg>` requires BOTH the line's
+ * `(chainId, tokenAddress)` and its expected on-chain symbol to match a
+ * verified row, never the self-declared symbol alone.
  *
  * `token.symbol` is UNTRUSTED: any on-chain token can self-declare arbitrary
  * metadata, including a symbol that impersonates a well-known ticker or
  * embeds deceptive Unicode (confusables, bidi controls, zero-width
  * characters). Every symbol must pass through the shared
- * `sanitizeTokenSymbol` allowlist before it becomes display text or reaches
- * `TokenIcon`'s symbol-keyed brand-mark lookup — a rejected symbol renders
- * the existing "—" placeholder and the neutral monogram, never a brand name
- * or logo. A plain-ASCII brand impersonation (e.g. literally "ETH") survives
- * sanitization as TEXT but is denied the brand `<svg>` mark unless its
- * `tokenAddress` is one of the handful of independently-verified addresses.
+ * `sanitizeTokenSymbol` allowlist before it becomes display text — a
+ * rejected symbol renders the existing "—" placeholder, never a brand name.
+ *
+ * DELIBERATE v2 behavior (approved): an unverified-but-familiar-chain
+ * holding — including a plain-ASCII brand impersonation like literally
+ * "ETH", or any genuine non-catalogued token — now renders the chain's
+ * FAMILY mark (Ethereum/Solana), never the bare monogram. The monogram is
+ * reserved for a genuinely unresolvable chain. Tests below distinguish the
+ * family mark from a verified brand mark by asserting on each `@thesvg`
+ * icon's unique brand fill color (Usdc `#2775ca`, Ethereum `#627EEA`, Solana
+ * `#181E33`) since, for the EVM/Solana native assets themselves, the family
+ * mark and a genuine brand match render the SAME icon.
  */
 
 import { describe, it, expect } from "vitest";
@@ -124,14 +131,41 @@ describe("PositionChains token-symbol trust boundary", () => {
   });
 });
 
-describe("PositionChains address-correct branding gate", () => {
-  it("withholds the brand icon for a spoofed 'ETH' symbol at an unverified address", () => {
+describe("PositionChains chain-aware verified-mark resolver", () => {
+  // Unique @thesvg/react brand fill colors — the only reliable way to tell
+  // "verified brand mark" apart from "family fallback mark" in a DOM test
+  // when both would otherwise render the identical Ethereum/Solana icon.
+  const USDC_BRAND_FILL = "#2775ca";
+  const ETHEREUM_FILL = "#627EEA";
+  const SOLANA_FILL = "#181E33";
+
+  it("grants the Usdc brand mark for the verified mainnet USDC address", () => {
     const { container } = render(
       <PositionChains
         chains={[
           chain(ETHEREUM_CHAIN_ID, "evm", 100, [
             {
-              symbol: "ETH",
+              symbol: "USDC",
+              tokenAddress: "0xA0b86991c6218b36c1d19d4A2e9Eb0cE3606eB48",
+              balanceUsd: 100,
+              amount: 1,
+            },
+          ]),
+        ]}
+        hasEvmWallet
+        hasSolanaWallet={false}
+      />,
+    );
+    expect(container.innerHTML).toContain(USDC_BRAND_FILL);
+  });
+
+  it("withholds the Usdc brand mark for a fake 'USDC' at an unverified address — shows the Ethereum FAMILY mark instead", () => {
+    const { container } = render(
+      <PositionChains
+        chains={[
+          chain(ETHEREUM_CHAIN_ID, "evm", 100, [
+            {
+              symbol: "USDC",
               tokenAddress: "0x0000000000000000000000000000000000ffff",
               balanceUsd: 100,
               amount: 1,
@@ -143,10 +177,10 @@ describe("PositionChains address-correct branding gate", () => {
       />,
     );
     // The sanitized text still renders (no deception in the label itself)...
-    expect(screen.getByText("ETH")).not.toBeNull();
-    // ...but the row's icon is the neutral fallback, never the brand `<svg>`.
-    const row = container.querySelector("li");
-    expect(row?.querySelector("svg")).toBeNull();
+    expect(screen.getByText("USDC")).not.toBeNull();
+    // ...but the mark is the chain FAMILY fallback, never the Usdc brand.
+    expect(container.innerHTML).not.toContain(USDC_BRAND_FILL);
+    expect(container.innerHTML).toContain(ETHEREUM_FILL);
   });
 
   it("grants the brand icon for a native ETH holding at the verified EVM sentinel address", () => {
@@ -170,7 +204,9 @@ describe("PositionChains address-correct branding gate", () => {
     expect(row?.querySelector("svg")).not.toBeNull();
   });
 
-  it("withholds the brand icon when a symbol has no tokenAddress at all", () => {
+  it("shows the Ethereum FAMILY mark (never a bare monogram) for an ETH symbol with no tokenAddress at all", () => {
+    // DELIBERATE v2 behavior: a familiar EVM chain always gets its family
+    // mark, even with no address to verify against.
     const { container } = render(
       <PositionChains
         chains={[
@@ -183,16 +219,17 @@ describe("PositionChains address-correct branding gate", () => {
       />,
     );
     const row = container.querySelector("li");
-    expect(row?.querySelector("svg")).toBeNull();
+    expect(row?.querySelector("svg")).not.toBeNull();
+    expect(container.innerHTML).toContain(ETHEREUM_FILL);
   });
 
-  it("withholds the brand icon for a spoofed 'SOL' symbol at an unverified Solana address", () => {
+  it("withholds the Usdc brand mark for a fake Solana 'USDC' at an unverified mint — shows the Solana FAMILY mark instead", () => {
     const { container } = render(
       <PositionChains
         chains={[
           chain(SOLANA_CHAIN_ID, "solana", 100, [
             {
-              symbol: "SOL",
+              symbol: "USDC",
               tokenAddress: "9jk8UbH339rCgnohpBvqiss4a7bXWmicMPCUCFmDrmYK",
               balanceUsd: 100,
               amount: 1,
@@ -203,9 +240,9 @@ describe("PositionChains address-correct branding gate", () => {
         hasSolanaWallet
       />,
     );
-    expect(screen.getByText("SOL")).not.toBeNull();
-    const row = container.querySelector("li");
-    expect(row?.querySelector("svg")).toBeNull();
+    expect(screen.getByText("USDC")).not.toBeNull();
+    expect(container.innerHTML).not.toContain(USDC_BRAND_FILL);
+    expect(container.innerHTML).toContain(SOLANA_FILL);
   });
 
   it("grants the brand icon for the verified Solana native mint", () => {
@@ -222,9 +259,13 @@ describe("PositionChains address-correct branding gate", () => {
     );
     const row = container.querySelector("li");
     expect(row?.querySelector("svg")).not.toBeNull();
+    expect(container.innerHTML).toContain(SOLANA_FILL);
   });
 
-  it("never gates a non-brand symbol on an address (no impersonation risk to guard)", () => {
+  it("shows the chain FAMILY mark (never a bare monogram) for a genuine non-brand token at an unverified address", () => {
+    // DELIBERATE v2 behavior: PEPE was never a brand claim, but an
+    // unverified holding on a familiar chain now gets the family mark
+    // instead of the old neutral monogram.
     const { container } = render(
       <PositionChains
         chains={[
@@ -241,10 +282,9 @@ describe("PositionChains address-correct branding gate", () => {
         hasSolanaWallet={false}
       />,
     );
-    // Non-brand symbols were never gated — TokenIcon just renders its own
-    // neutral monogram (no svg either way), and the text is unaffected.
     expect(screen.getByText("PEPE")).not.toBeNull();
     const row = container.querySelector("li");
-    expect(row?.querySelector("svg")).toBeNull();
+    expect(row?.querySelector("svg")).not.toBeNull();
+    expect(container.innerHTML).toContain(ETHEREUM_FILL);
   });
 });

@@ -24,7 +24,6 @@ function makeContext(overrides: Partial<EngineContext> = {}): EngineContext {
     sessionPermission: "restricted",
     missionId: null,
     missionRunId: null,
-    isSubagent: false,
     selectedEvmWallet: null,
     selectedSolanaWallet: null,
     walletPolicy: { kind: "none" },
@@ -60,7 +59,7 @@ describe("prompt-stack", () => {
 
           // Identity layer markers (P3 decomposition: split out of base.ts).
           expect(joined).toContain("# Identity");
-          // Default persona name (no persona.md configured in tests).
+          // The agent's own name is the fixed literal "Vex" (no more persona.md concept).
           expect(joined).toContain("Vex");
           expect(joined).toContain("## Your current aspect"); // P3 style contract: sole H1 per layer
           // Memory & Learning layer (P3: `# Memory and self-learning` +
@@ -103,7 +102,6 @@ describe("prompt-stack", () => {
       memorySection: "# Memory\n\n[Session memories: 2 chunk(s) across 1 compact(s). Tool: session_memory_search(semantic_intent, k≤5).]\n\n## Memory Routing\n\n- routing line",
       activePlanBlock: "# Active Plan\n\n1. do the thing",
       toolCatalogPrompt: "# Available Tool Map\n\n- wallet_balances",
-      personaSetupHint: "# Personalize me (optional)\n\noffer text",
       planOffNotice: "[Plan mode was switched off]",
     };
 
@@ -125,7 +123,6 @@ describe("prompt-stack", () => {
       // Active-plan LAYER body absent (tool-usage legitimately NAMES the
       // `# Active Plan` heading in its reuse rule, so match the body).
       expect(staticJoined).not.toContain("1. do the thing");
-      expect(staticJoined).not.toContain("# Personalize me");
       // Loaded Content absent when no documents are loaded.
       expect(staticJoined).not.toContain("# Loaded Content");
     });
@@ -148,7 +145,6 @@ describe("prompt-stack", () => {
         "# Active Plan",
         "# Available Tool Map",
         "Iteration: 5",
-        "# Personalize me (optional)",
         "[Plan mode was switched off]",
       ];
       let lastIdx = -1;
@@ -413,11 +409,6 @@ describe("prompt-stack", () => {
       expect(joined).not.toContain("Execution lock (standing rule)");
     });
 
-    it("subagent includes subagent prompt", () => {
-      const joined = joinedStack(makeContext({ isSubagent: true }));
-      expect(joined).toContain("# Subagent Role");
-    });
-
     it("mission setup with context shows draft state", () => {
       const joined = joinedStack(
         makeContext({ sessionKind: "mission" }),
@@ -456,66 +447,6 @@ describe("prompt-stack", () => {
       expect(joined).toContain("Iteration: 5");
     });
 
-    it("subagent with context shows task and restrictions", () => {
-      const joined = joinedStack(
-        makeContext({ isSubagent: true }),
-        {
-          subagentContext: {
-            task: "Research SOL/USDC liquidity on Jupiter",
-            allowTrades: false,
-            childPermission: "restricted",
-          },
-        },
-      );
-      expect(joined).toContain("Research SOL/USDC liquidity");
-      expect(joined).toContain("NO TRADES");
-      expect(joined).toContain("restricted");
-    });
-
-    it("subagent briefing includes parent summary snapshot when provided", () => {
-      const joined = joinedStack(
-        makeContext({ isSubagent: true }),
-        {
-          subagentContext: {
-            task: "Research L2 gas costs",
-            allowTrades: false,
-            childPermission: "restricted",
-            parentSummarySnapshot:
-              "User opened a SOL long at 145 USD, closed BTC short at 62500, portfolio +4.2% 7d.",
-          },
-        },
-      );
-      expect(joined).toContain("## Parent context (snapshot at spawn)");
-      expect(joined).toContain("SOL long at 145 USD");
-      expect(joined).toContain("portfolio +4.2%");
-    });
-
-    it("subagent briefing omits parent context block when snapshot is empty or absent", () => {
-      const withoutSnapshot = joinedStack(
-        makeContext({ isSubagent: true }),
-        {
-          subagentContext: {
-            task: "T",
-            allowTrades: false,
-            childPermission: "restricted",
-          },
-        },
-      );
-      expect(withoutSnapshot).not.toContain("## Parent context");
-
-      const withEmptySnapshot = joinedStack(
-        makeContext({ isSubagent: true }),
-        {
-          subagentContext: {
-            task: "T",
-            allowTrades: false,
-            childPermission: "restricted",
-            parentSummarySnapshot: "   \n   ",
-          },
-        },
-      );
-      expect(withEmptySnapshot).not.toContain("## Parent context");
-    });
   });
 
   // ── Base prompt ─────────────────────────────────────────────
@@ -604,13 +535,6 @@ describe("prompt-stack", () => {
       expect(joined).not.toContain("teacher, collaborator");
       expect(joined).not.toContain("planner");
     });
-
-    it("SUBAGENT aspect overrides sessionKind and narrates delegated task", () => {
-      const joined = joinedStack(makeContext({ isSubagent: true, sessionKind: "agent" }));
-      expect(joined).toContain("SUBAGENT");
-      expect(joined).toContain("delegated");
-      expect(joined).not.toContain("teacher, collaborator");
-    });
   });
 
   // ── DeFi safety rules ──────────────────────────────────────
@@ -670,7 +594,6 @@ describe("prompt-stack", () => {
       { name: "agent/full", ctx: makeContext({ sessionKind: "agent", sessionPermission: "full" }) },
       { name: "mission-setup", ctx: makeContext({ sessionKind: "mission", sessionPermission: "restricted", missionId: "m-1" }) },
       { name: "mission-run", ctx: makeContext({ sessionKind: "mission", sessionPermission: "full", missionId: "m-1", missionRunId: "run-1" }) },
-      { name: "subagent", ctx: makeContext({ isSubagent: true, sessionKind: "agent", sessionPermission: "restricted" }) },
     ];
 
     for (const { name, ctx } of variants) {
@@ -716,9 +639,9 @@ describe("prompt-stack", () => {
       });
     }
 
-    it("identity layer emits exactly ONE top-level heading even with a persona block", () => {
+    it("identity layer emits exactly ONE top-level heading even with a user profile section", () => {
       const { staticLayers } = buildPromptStack(
-        makeContext({ personaBlock: "Tone: concise, dry, no emoji." }),
+        makeContext({ userInstructionsMd: "Tone: concise, dry, no emoji." }),
       );
       const identityH1s = staticLayers[0]
         .split("\n")
@@ -751,23 +674,6 @@ describe("prompt-stack", () => {
       expect(joined).toContain(
         "Do not turn an agent answer into autonomous monitoring, mission drafting, or multi-step research unless the user asks for that workflow",
       );
-    });
-  });
-
-  // The dead subagent tool-call instructions were removed as an intentional
-  // behavior fix (P2 locked requirement 2 + Codex add f): the layer must stop
-  // instructing calls to the unwired subagent handoff tools.
-  describe("dead subagent tool-call instructions removed (P3 requirement 2/f)", () => {
-    it("subagent prefix no longer references the unwired handoff tools", () => {
-      const staticJoined = buildPromptStack(
-        makeContext({ isSubagent: true, sessionKind: "agent" }),
-        { subagentContext: { task: "T", allowTrades: false, childPermission: "restricted" } },
-      ).staticLayers.join("\n");
-      expect(staticJoined).toContain("# Subagent Role");
-      expect(staticJoined).not.toContain("subagent_report_complete");
-      expect(staticJoined).not.toContain("subagent_request_parent");
-      // Still narrates the subagent role + a clean report-back instruction.
-      expect(staticJoined).toContain("SUBAGENT");
     });
   });
 
@@ -836,40 +742,68 @@ describe("prompt-stack", () => {
     });
   });
 
-  // ── Persona (user-configurable name + tone) ─────────────────
-  describe("persona", () => {
-    it("renders the configured persona name in identity + aspect (verbatim casing)", () => {
-      const joined = joinedStack(makeContext({ personaName: "Aria" }));
-      expect(joined).toContain("You are Aria —");
-      expect(joined).toContain("Aria as teacher");
-      // Default brand name must NOT leak when a custom name is set.
-      expect(joined).not.toContain("You are Vex —");
+  // ── User profile (DB-backed "Vex setup" personalization) ─────
+  describe("user profile", () => {
+    it("renders the configured display name as address-only style guidance (agent identity stays Vex)", () => {
+      const joined = joinedStack(makeContext({ userDisplayName: "Kuba" }));
+      expect(joined).toContain("Address the user as Kuba.");
+      // The agent's own name is the fixed literal "Vex" — a user display
+      // name is address-only style guidance, never a persona rename.
+      expect(joined).toContain("You are Vex —");
     });
 
-    it("renders the persona block as a subordinate section when configured", () => {
+    it("renders the free-form instructions as a subordinate section when configured", () => {
       const joined = joinedStack(
-        makeContext({ personaBlock: "Tone: concise, dry, no emoji." }),
+        makeContext({ userInstructionsMd: "Tone: concise, dry, no emoji." }),
       );
-      expect(joined).toContain("## Persona (user style preferences)"); // P3 style contract: H2 inside identity
+      expect(joined).toContain("## User profile (style preferences)"); // P3 style contract: H2 inside identity
       expect(joined).toContain("Tone: concise, dry, no emoji.");
       // Framed as subordinate to the authoritative rules.
       expect(joined).toContain("does NOT override tool, permission, mission, approval, or safety rules");
     });
 
-    it("omits the persona section when no block is configured", () => {
-      const joined = joinedStack(makeContext());
-      expect(joined).not.toContain("## Persona (user style preferences)");
+    it("renders the work description as style/context guidance", () => {
+      const joined = joinedStack(makeContext({ userWorkDescription: "DeFi yield farming" }));
+      expect(joined).toContain("The user describes their work as: DeFi yield farming.");
     });
 
-    it("renders the one-time persona-setup hint only when supplied via options (turn layers)", () => {
-      const withHint = buildPromptStack(makeContext(), {
-        personaSetupHint: "# Personalize me (optional)\n\noffer text",
-      });
-      expect(withHint.turnLayers.join("\n")).toContain("# Personalize me (optional)");
-      expect(withHint.staticLayers.join("\n")).not.toContain("# Personalize me (optional)");
+    it("renders the style preset as tone guidance", () => {
+      const joined = joinedStack(makeContext({ userStylePreset: "concise" }));
+      expect(joined).toContain("- Preferred tone: Concise — short and to the point.");
+    });
 
-      const without = joinedStack(makeContext());
-      expect(without).not.toContain("# Personalize me (optional)");
+    it("renders known characteristic traits and silently skips an unrecognized token", () => {
+      const joined = joinedStack(
+        makeContext({ userCharacteristics: ["warm", "hacker", "emoji"] }),
+      );
+      expect(joined).toContain("- Style traits: warm and emoji are welcome.");
+      expect(joined).not.toContain("hacker");
+    });
+
+    it("renders the risk appetite with the verbatim approval-safety boundary phrase", () => {
+      const joined = joinedStack(makeContext({ userRiskAppetite: "aggressive" }));
+      expect(joined).toContain("the user self-describes a aggressive risk appetite");
+      // Test-pinned: this exact phrase must always accompany risk-appetite
+      // guidance — it never changes approval/permission/safety behavior.
+      expect(joined).toContain("it NEVER changes approval requirements, limits, or safety behavior.");
+    });
+
+    it("omits the user profile section when nothing is configured", () => {
+      const joined = joinedStack(makeContext());
+      expect(joined).not.toContain("## User profile");
+    });
+
+    it("omits the user profile section when the new fields are explicitly unset/empty", () => {
+      const joined = joinedStack(
+        makeContext({ userStylePreset: null, userCharacteristics: [], userRiskAppetite: null }),
+      );
+      expect(joined).not.toContain("## User profile");
+    });
+
+    it("never renders a persona-setup offer (retired 2026-07-20: persona editing is the app UI's job)", () => {
+      const joined = joinedStack(makeContext());
+      expect(joined).not.toContain("persona.md");
+      expect(joined).not.toContain("Internal onboarding behavior");
     });
   });
 

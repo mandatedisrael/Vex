@@ -50,6 +50,19 @@ describe("ComposerQuickActions", () => {
     expect(container.textContent).not.toMatch(/\b0[123]\b/);
   });
 
+  it("wears the Chronos glass legibility assist on its root", () => {
+    const { container } = render(<ComposerQuickActions onPick={() => {}} />);
+
+    // The row's own root (not a new wrapper) carries the glass surface so
+    // the chips stay readable over the bright regions of the Eclipse photo
+    // backdrop: ink tint + backdrop-blur + hairline border.
+    const root = container.firstElementChild;
+    expect(root).not.toBeNull();
+    expect(root?.className).toContain("bg-[var(--vex-rail)]");
+    expect(root?.className).toMatch(/backdrop-blur/);
+    expect(root?.className).toContain("border-[var(--vex-line)]");
+  });
+
   it("seeds the draft with the chip's full prompt", () => {
     const onPick = vi.fn();
     render(<ComposerQuickActions onPick={onPick} />);

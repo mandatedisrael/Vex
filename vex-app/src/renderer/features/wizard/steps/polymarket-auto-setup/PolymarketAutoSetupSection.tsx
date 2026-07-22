@@ -9,7 +9,7 @@
  * Polymarket credentials.
  *
  * Per-wallet (B-UI): a picker lists every EVM wallet from the config-backed
- * inventory (`useAvailableWallets`) with a ✓ configured / ◦ not badge derived
+ * inventory (`useAvailableWallets`) with a Configured / Not-set status word derived
  * from `useConfiguredPolymarketAddresses()`. The selection defaults to the
  * primary (first EVM). The CTA targets the SELECTED wallet and threads its
  * `walletId` into the IPC call.
@@ -139,7 +139,7 @@ export function PolymarketAutoSetupSection({
   // must surface a reason.
   let helperText: string | null = null;
   if (!evmWalletPresent) {
-    helperText = "EVM wallet required — finish Step 2 first.";
+    helperText = "EVM wallet required — add one in the Wallets step first; Polymarket signs with it.";
   } else if (!vaultUnlocked) {
     helperText = "Unlock Vex first.";
   }
@@ -200,10 +200,10 @@ export function PolymarketAutoSetupSection({
   return (
     // Hairline inner well — luminance step + hairline (landing ink grammar).
     <div
-      className="flex flex-col gap-2 rounded-lg border border-white/[0.08] bg-white/[0.02] p-3"
+      className="flex flex-col gap-2"
       data-vex-polymarket-auto="root"
     >
-      {/* EVM wallet picker — per-wallet ✓ configured / ◦ not badge. */}
+      {/* EVM wallet picker — per-wallet Configured / Not-set status word. */}
       <fieldset
         className="flex flex-col gap-1.5"
         data-vex-polymarket-auto-picker="root"
@@ -235,7 +235,7 @@ export function PolymarketAutoSetupSection({
             return (
               <label
                 key={wallet.id}
-                className="flex cursor-pointer items-center gap-2 rounded-md border border-white/[0.08] px-2 py-1.5 text-sm hover:bg-white/[0.04] has-[:checked]:border-[color-mix(in_oklab,var(--color-accent-primary)_55%,transparent)] has-[:checked]:bg-[color-mix(in_oklab,var(--color-accent-primary)_8%,transparent)]"
+                className="flex cursor-pointer items-center gap-2 border-b border-l-2 border-white/[0.10] border-l-transparent px-2 py-2 text-sm last:border-b-0 hover:bg-white/[0.04] has-[:checked]:border-l-[var(--color-text-primary)]"
                 data-vex-polymarket-auto-wallet={wallet.id}
                 data-vex-polymarket-auto-wallet-selected={
                   isSelected ? "true" : "false"
@@ -262,8 +262,8 @@ export function PolymarketAutoSetupSection({
                 <span
                   className={
                     isConfigured
-                      ? "shrink-0 text-xs font-medium text-[var(--color-success)]"
-                      : "shrink-0 text-xs text-muted-foreground"
+                      ? "shrink-0 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-success)]"
+                      : "shrink-0 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground"
                   }
                   aria-label={
                     isConfigured
@@ -271,7 +271,7 @@ export function PolymarketAutoSetupSection({
                       : "Polymarket not configured"
                   }
                 >
-                  {isConfigured ? "✓ Configured" : "◦ Not configured"}
+                  {isConfigured ? "Configured" : "Not set"}
                 </span>
               </label>
             );

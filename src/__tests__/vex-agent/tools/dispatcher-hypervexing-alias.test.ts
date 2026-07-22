@@ -30,7 +30,6 @@ function context(overrides: Record<string, unknown> = {}) {
     loadedDocuments: new Map(),
     sessionPermission: "restricted",
     approved: false,
-    role: "parent",
     missionRunId: null,
     missionId: null,
     sessionKind: "agent",

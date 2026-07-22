@@ -1,11 +1,16 @@
 /**
- * PlanDisplayModal — the relocated plan review surface.
+ * PlanDisplayModal — the legacy Plan Mode recovery surface.
  *
- * Mirrors `SessionPlanCard.test.tsx`: the API hooks are mocked so the modal's
- * display/accept/resume logic is exercised directly. Pins:
+ * The API hooks are mocked so the modal's display/accept/resume/disable logic
+ * is exercised directly. Pins:
  *   - read-only under suppressAccept (no standalone Accept),
  *   - standalone "Accept plan" echoes the reviewed markdown as expectedPlanMd,
- *   - "Resume mission" when accepted but parked for acceptance.
+ *   - "Resume mission" when accepted but parked for acceptance,
+ *   - "Turn off Plan Mode" — the legacy-recovery exit ramp — renders whenever
+ *     `plan.enabled === true` and calls `setEnabled(false)`, never composing
+ *     a silent accept; every `plan.setEnabled` outcome (updated /
+ *     blocked_pending_acceptance / not_found / failed Result / rejected
+ *     mutation) surfaces distinct copy.
  *
  * The native <dialog> is polyfilled (jsdom has no showModal/close).
  */
@@ -23,9 +28,21 @@ const mockAcceptPlan: {
 } = { mutate: vi.fn(), isPending: false, isError: false, data: undefined };
 const mockRequestResume = { mutate: vi.fn(), isPending: false };
 
+type SetEnabledData =
+  | { ok: true; data: { outcome: string } }
+  | { ok: false; error: { code: string; message: string; correlationId: string } }
+  | undefined;
+const mockSetPlanMode: {
+  mutate: ReturnType<typeof vi.fn>;
+  isPending: boolean;
+  isError: boolean;
+  data: SetEnabledData;
+} = { mutate: vi.fn(), isPending: false, isError: false, data: undefined };
+
 vi.mock("../../../lib/api/sessions.js", () => ({
   useSessionPlan: (...a: unknown[]) => mockUseSessionPlan(...a),
   useAcceptPlan: () => mockAcceptPlan,
+  useSetPlanMode: () => mockSetPlanMode,
 }));
 vi.mock("../../../lib/api/runtime.js", () => ({
   useRequestResume: () => mockRequestResume,
@@ -76,6 +93,9 @@ beforeEach(() => {
   mockAcceptPlan.isError = false;
   mockAcceptPlan.data = undefined;
   mockRequestResume.isPending = false;
+  mockSetPlanMode.isPending = false;
+  mockSetPlanMode.isError = false;
+  mockSetPlanMode.data = undefined;
   mockUseSessionPlan.mockReturnValue(planQuery({}));
 });
 
@@ -107,7 +127,7 @@ describe("PlanDisplayModal", () => {
     });
   });
 
-  it("withholds the standalone Accept under suppressAccept (read-only)", () => {
+  it("withholds the standalone Accept under suppressAccept (read-only) but keeps Turn off Plan Mode", () => {
     mockUseSessionPlan.mockReturnValue(
       planQuery({ enabled: true, planMd: "# Plan\nstep one", accepted: false }),
     );
@@ -118,6 +138,9 @@ describe("PlanDisplayModal", () => {
     expect(
       screen.queryByText(/Accept this plan together with the contract/i),
     ).not.toBeNull();
+    // The disable exit ramp never conflicts with the unified mission accept,
+    // so it stays available even in the suppressed (mission-setup) surface.
+    expect(screen.getByText("Turn off Plan Mode")).toBeTruthy();
   });
 
   it("offers Resume when accepted but the run is still parked", () => {
@@ -180,5 +203,118 @@ describe("PlanDisplayModal", () => {
     mockAcceptPlan.data = { ok: true, data: { outcome: "stale" } };
     renderModal({ suppressAccept: true });
     expect(screen.queryByText(/Plan changed — review again/i)).toBeNull();
+  });
+});
+
+describe("PlanDisplayModal — legacy recovery (Turn off Plan Mode)", () => {
+  it("shows Turn off Plan Mode whenever a plan is enabled, even with nothing authored yet", () => {
+    mockUseSessionPlan.mockReturnValue(planQuery({ enabled: true, planMd: "" }));
+    renderModal();
+    expect(screen.getByText("Turn off Plan Mode")).toBeTruthy();
+  });
+
+  it("never advertises Plan Mode as a supported feature", () => {
+    mockUseSessionPlan.mockReturnValue(
+      planQuery({ enabled: true, planMd: "# Plan", accepted: false }),
+    );
+    renderModal();
+    expect(screen.getByText(/Plan Mode has been retired/i)).toBeTruthy();
+  });
+
+  it("calls setEnabled(false) and never composes a silent accept", () => {
+    mockUseSessionPlan.mockReturnValue(
+      planQuery({ enabled: true, planMd: "# Plan", accepted: false }),
+    );
+    renderModal();
+    fireEvent.click(screen.getByText("Turn off Plan Mode"));
+    expect(mockSetPlanMode.mutate).toHaveBeenCalledWith({
+      sessionId: SESSION,
+      enabled: false,
+    });
+    expect(mockAcceptPlan.mutate).not.toHaveBeenCalled();
+  });
+
+  it("keeps Accept available alongside Turn off for an unaccepted plan", () => {
+    mockUseSessionPlan.mockReturnValue(
+      planQuery({ enabled: true, planMd: "# Plan", accepted: false }),
+    );
+    renderModal();
+    expect(screen.getByText("Accept plan")).toBeTruthy();
+    expect(screen.getByText("Turn off Plan Mode")).toBeTruthy();
+  });
+
+  it("offers Turn off for an accepted plan with no active pause — the otherwise-stranded case", () => {
+    mockUseSessionPlan.mockReturnValue(
+      planQuery({ enabled: true, planMd: "# Plan", accepted: true }),
+    );
+    renderModal({ missionStatus: "running" });
+    expect(screen.getByText("Turn off Plan Mode")).toBeTruthy();
+  });
+
+  it("surfaces the blocked_pending_acceptance guidance and does NOT auto-accept", () => {
+    mockUseSessionPlan.mockReturnValue(
+      planQuery({ enabled: true, planMd: "# Plan", accepted: false }),
+    );
+    mockSetPlanMode.data = {
+      ok: true,
+      data: { outcome: "blocked_pending_acceptance" },
+    };
+    renderModal();
+    expect(screen.getByText(/stop the mission first/i)).toBeTruthy();
+    expect(mockAcceptPlan.mutate).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a not_found notice", () => {
+    mockUseSessionPlan.mockReturnValue(
+      planQuery({ enabled: true, planMd: "# Plan", accepted: false }),
+    );
+    mockSetPlanMode.data = { ok: true, data: { outcome: "not_found" } };
+    renderModal();
+    expect(screen.getByText(/no longer exists/i)).toBeTruthy();
+  });
+
+  it("surfaces a notice for a failed Result envelope (ok:false)", () => {
+    mockUseSessionPlan.mockReturnValue(
+      planQuery({ enabled: true, planMd: "# Plan", accepted: false }),
+    );
+    mockSetPlanMode.data = {
+      ok: false,
+      error: {
+        code: "session.plan_write_failed",
+        message: "boom",
+        correlationId: "t",
+      },
+    };
+    renderModal();
+    expect(
+      screen.getByText(/Couldn't turn off Plan Mode — something went wrong/i),
+    ).toBeTruthy();
+  });
+
+  it("surfaces a notice when the disable mutation rejects (transport error)", () => {
+    mockUseSessionPlan.mockReturnValue(
+      planQuery({ enabled: true, planMd: "# Plan", accepted: false }),
+    );
+    mockSetPlanMode.isError = true;
+    renderModal();
+    expect(
+      screen.getByText(/Couldn't turn off Plan Mode — something went wrong/i),
+    ).toBeTruthy();
+  });
+
+  it("shows no disable notice on a successful update", () => {
+    mockUseSessionPlan.mockReturnValue(
+      planQuery({ enabled: true, planMd: "# Plan", accepted: false }),
+    );
+    mockSetPlanMode.data = {
+      ok: true,
+      data: { outcome: "updated" },
+    };
+    const { container } = render(
+      <PlanDisplayModal sessionId={SESSION} open onOpenChange={() => {}} />,
+    );
+    expect(
+      container.querySelector('[data-vex-state="plan-disable-notice"]'),
+    ).toBeNull();
   });
 });

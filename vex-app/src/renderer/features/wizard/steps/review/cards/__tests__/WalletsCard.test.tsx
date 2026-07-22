@@ -23,16 +23,13 @@ afterEach(() => {
 });
 
 describe("WalletsCard address copy", () => {
-  it("copies a public address inline without entering Edit or export", async () => {
+  it("copies a public address inline without entering Edit", async () => {
     const onEdit = vi.fn();
-    const onExport = vi.fn();
     render(
       <WalletsCard
         envState={makeEnvState()}
         onEdit={onEdit}
         editDisabled={false}
-        mode="reconfigure"
-        onExport={onExport}
       />,
     );
 
@@ -48,21 +45,14 @@ describe("WalletsCard address copy", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(EVM_ADDRESS));
     expect(await screen.findByText("Address copied")).toBeTruthy();
     expect(onEdit).not.toHaveBeenCalled();
-    expect(onExport).not.toHaveBeenCalled();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Export EVM private key" }),
-    );
-    expect(onExport).toHaveBeenCalledWith("evm");
   });
 
-  it("offers address copy during setup while keeping private-key export gated", () => {
+  it("never renders a private-key export action (export lives only in Settings)", () => {
     render(
       <WalletsCard
         envState={makeEnvState()}
         onEdit={() => {}}
         editDisabled={false}
-        mode="setup"
       />,
     );
 
@@ -74,6 +64,9 @@ describe("WalletsCard address copy", () => {
     ).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Export EVM private key" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Export Solana private key" }),
     ).toBeNull();
   });
 

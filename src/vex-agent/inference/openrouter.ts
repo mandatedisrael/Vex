@@ -275,6 +275,26 @@ export class OpenRouterProvider implements InferenceProvider {
       reasoningPricePerM = parsePricePerM(found.pricing.internalReasoning);
     }
 
+    // D6: the reasoning-EFFORT request gate is the catalog's own
+    // `supported_parameters` tag, independent of pricing — a model can be
+    // free to reason (no `internalReasoning` price) yet still accept an
+    // explicit effort, and vice versa. Untrusted provider response: guard
+    // for a missing/non-array field rather than trusting the SDK's type.
+    const supportedParameters: ReadonlyArray<string> = Array.isArray(
+      found.supportedParameters,
+    )
+      ? found.supportedParameters
+      : [];
+    // The request we emit is the `reasoning` OBJECT param, whose catalog tag
+    // is "reasoning"; some models additionally (or only) tag the flat
+    // "reasoning_effort" param. Either tag means the model accepts an effort
+    // choice — the OR keeps this gate symmetric with the app catalog's
+    // capability predicate, so a visible selector can never have its choice
+    // dropped here (coordinator fix, 2026-07-21).
+    const supportsReasoningEffort =
+      supportedParameters.includes("reasoning") ||
+      supportedParameters.includes("reasoning_effort");
+
     logger.info("inference.openrouter.config_loaded", {
       model: this.model,
       contextLimit: this.contextLimit,
@@ -282,6 +302,7 @@ export class OpenRouterProvider implements InferenceProvider {
       outputPricePerM: outputPricePerM.toFixed(4),
       hasCachePrice: cachePricePerM !== null,
       hasReasoningPrice: reasoningPricePerM !== null,
+      supportsReasoningEffort,
     });
 
     return {
@@ -298,6 +319,7 @@ export class OpenRouterProvider implements InferenceProvider {
         cachePricePerM,
         cacheWritePricePerM,
         reasoningPricePerM,
+        supportsReasoningEffort,
       },
     };
   }

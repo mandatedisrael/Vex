@@ -46,7 +46,7 @@ export function ExportAllWallets(): JSX.Element {
         </p>
       ) : null}
       {error !== null ? (
-        <p className="text-xs text-destructive" role="alert">
+        <p className="text-xs text-[var(--color-danger)]" role="alert">
           {error}
         </p>
       ) : null}

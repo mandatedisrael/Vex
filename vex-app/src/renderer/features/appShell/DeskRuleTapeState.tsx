@@ -10,15 +10,16 @@
  * then a mission run reads PAUSED (paused_*) or RUNNING; IDLE at rest. Blue is
  * rationed to the non-idle states.
  *
- * Landing hero-status treatment: the dot carries the `.vex-pulse-dot` ring
- * ONLY while the state is verifiably in flight (awaiting / live / running —
- * the same law as vex-sign-stroke); PAUSED holds a still warning dot, IDLE a
- * still muted one.
+ * Owner decree — no pulsing dots anywhere: the dot is a STILL color mark.
+ * State is carried by color + the label text alone, never motion; PAUSED
+ * holds a warning dot, IDLE a muted one, everything else in flight the
+ * accent dot.
  *
- * Renders nothing off the session view / with no active session. All data
- * hooks accept a null id and self-gate (no IPC when idle); the pending +
- * runtime queries share ApprovalsRegion's / MissionControls' keys, so this adds
- * no extra polling load.
+ * Renders nothing with no active session (the center panel is always the
+ * session panel since the Chronos screens redesign). All data hooks accept a
+ * null id and self-gate (no IPC when idle); the pending + runtime queries
+ * share ApprovalsRegion's / MissionControls' keys, so this adds no extra
+ * polling load.
  */
 
 import type { JSX } from "react";
@@ -31,13 +32,12 @@ import { cn } from "../../lib/utils.js";
 
 export function DeskRuleTapeState(): JSX.Element | null {
   const activeSessionId = useUiStore((s) => s.activeSessionId);
-  const appShellView = useUiStore((s) => s.appShellView);
   const preview = useStreamPreview(activeSessionId);
   const chatSubmitting = useIsChatSubmitting(activeSessionId);
   const pending = usePendingApprovals(activeSessionId);
   const runtime = useRuntimeState(activeSessionId);
 
-  if (appShellView !== "session" || activeSessionId === null) return null;
+  if (activeSessionId === null) return null;
 
   const pendingData = pending.data;
   const hasPending =
@@ -68,11 +68,6 @@ export function DeskRuleTapeState(): JSX.Element | null {
             ? "Running"
             : "Idle";
   const lit = state !== "idle";
-  // A loop may only bind to verifiable in-flight work: awaiting (frozen on a
-  // signature ask), live (streaming), running (active run). PAUSED is a held
-  // state — a still warning dot, no ring.
-  const pulsing =
-    state === "awaiting" || state === "live" || state === "running";
 
   return (
     <span
@@ -91,7 +86,6 @@ export function DeskRuleTapeState(): JSX.Element | null {
         aria-hidden
         className={cn(
           "h-1.5 w-1.5 rounded-full",
-          pulsing && "vex-pulse-dot",
           state === "paused"
             ? "bg-warning"
             : lit

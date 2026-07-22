@@ -31,6 +31,7 @@ function makeConfig(overrides: Partial<InferenceConfig> = {}): InferenceConfig {
     cachePricePerM: 0.3,
     cacheWritePricePerM: 3.75,
     reasoningPricePerM: null,
+    supportsReasoningEffort: false,
     ...overrides,
   };
 }

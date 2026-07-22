@@ -122,7 +122,6 @@ export async function createBugReport(
     sessionId: safeRefs.sessionId ?? null,
     missionId: safeRefs.missionId ?? null,
     missionRunId: safeRefs.missionRunId ?? null,
-    subagentId: safeRefs.subagentId ?? null,
     toolName: safeRefs.toolName ?? null,
     toolCallId: safeRefs.toolCallId ?? null,
     protocolNamespace: safeRefs.protocolNamespace ?? null,

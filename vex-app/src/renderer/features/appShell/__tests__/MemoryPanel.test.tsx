@@ -9,22 +9,17 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
 
-const mockSetAppShellView = vi.hoisted(() => vi.fn());
 const uiState = vi.hoisted(() => ({ activeSessionId: null as string | null }));
 
 vi.mock("../../../stores/uiStore.js", () => ({
   useUiStore: (
-    selector: (s: {
-      setAppShellView: typeof mockSetAppShellView;
-      activeSessionId: string | null;
-    }) => unknown,
+    selector: (s: { activeSessionId: string | null }) => unknown,
   ) =>
     selector({
-      setAppShellView: mockSetAppShellView,
       activeSessionId: uiState.activeSessionId,
     }),
 }));
@@ -363,14 +358,6 @@ describe("MemoryPanel", () => {
     expect(listHistoryMock).toHaveBeenCalled();
   });
 
-  it("Back returns to the chat view", async () => {
-    longMemoryListMock.mockResolvedValue(ok([]));
-    setVex();
-    render(createElement(MemoryPanel), { wrapper: makeWrapper(freshClient()) });
-    fireEvent.click(screen.getByRole("button", { name: /Back to chat/i }));
-    expect(mockSetAppShellView).toHaveBeenCalledWith("session");
-  });
-
   it("explains the Track-2 remote path and names the configured model (7-4)", async () => {
     longMemoryListMock.mockResolvedValue(ok([]));
     modelsListMock.mockResolvedValue(
@@ -385,6 +372,7 @@ describe("MemoryPanel", () => {
             contextLength: null,
             pricingInputPerMillion: null,
             pricingOutputPerMillion: null,
+            reasoning: null,
           },
         ],
         fetchedAt: null,

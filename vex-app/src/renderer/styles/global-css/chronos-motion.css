@@ -1,0 +1,216 @@
+/* ============================================================ *
+ *  CHRONOS MOTION — Focused · Quiet · Precise                   *
+ * ============================================================ */
+
+/* Eclipse backdrop drift — a glacial scale breath (90s alternate) on the
+ * full-window photo so the night sky feels alive without ever announcing
+ * itself. Slow enough that no single glance perceives motion; the global
+ * reduced-motion rule collapses it to a still frame. */
+@keyframes vex-backdrop-drift {
+  from {
+    transform: scale(1);
+  }
+  to {
+    /* 1.02, was 1.05 — the drift zoom renders the artwork ABOVE its native
+     * pixels and the 5% peak visibly cost sharpness on large displays
+     * (owner report 2026-07-21); 2% keeps the breath, halves the tax. */
+    transform: scale(1.02);
+  }
+}
+.vex-backdrop-drift {
+  animation: vex-backdrop-drift 90s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* Delta shimmer — a light band sweeping OVER the $VEX 24h percentage. The
+ * figure itself stays a SOLID direction color at all times (owner feedback:
+ * no background-clip on the number — it washed the text out); the shine is
+ * an ::after overlay duplicating the text via data-shimmer-text, transparent
+ * except for a narrow near-white band clipped to the glyphs. Owner-decreed
+ * decorative exception to the "loops ride live state" motion law. */
+@keyframes vex-delta-shimmer {
+  from {
+    background-position: 175% 0;
+  }
+  to {
+    background-position: -75% 0;
+  }
+}
+.vex-delta-shimmer {
+  position: relative;
+}
+.vex-delta-shimmer::after {
+  content: attr(data-shimmer-text);
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  pointer-events: none;
+  color: transparent;
+  background-image: linear-gradient(
+    100deg,
+    transparent 42%,
+    rgba(255, 255, 255, 0.9) 50%,
+    transparent 58%
+  );
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: vex-delta-shimmer 2.6s ease-in-out infinite;
+}
+/* Reduced motion: no sweep — the overlay vanishes, the solid figure stays. */
+@media (prefers-reduced-motion: reduce) {
+  .vex-delta-shimmer::after {
+    animation: none;
+    background-image: none;
+  }
+}
+
+/* Preview-badge shimmer — the welcome crown's PREVIEW · v{n} wordmark
+ * (SessionWelcomeHero's Grok-style logo row, owner decree 2026-07-21). Same
+ * overlay grammar as `.vex-delta-shimmer` above: the base text stays SOLID
+ * (never background-clip the text itself); an ::after duplicate via
+ * data-shimmer-text paints a narrow translucent white band clipped to the
+ * glyphs. Reuses the vex-delta-shimmer sweep keyframes on a slower, more
+ * ceremonial loop (~3.2s) fitting a hallmark rather than a live market
+ * figure. The SECOND owner-decreed decorative exception to the "loops ride
+ * live state" motion law. */
+.vex-preview-shimmer {
+  position: relative;
+}
+.vex-preview-shimmer::after {
+  content: attr(data-shimmer-text);
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  pointer-events: none;
+  color: transparent;
+  /* Owner tune 2026-07-21 rounds 3-4: slower sweep (3.2s → 7s), and the
+   * band is now the BRAND accent (the NEW SESSION cobalt) instead of
+   * white — token-based via color-mix so any future theme recolors it. */
+  background-image: linear-gradient(
+    100deg,
+    transparent 44%,
+    color-mix(in oklab, var(--vex-accent) 85%, white 15%) 50%,
+    transparent 56%
+  );
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: vex-delta-shimmer 7s ease-in-out infinite;
+}
+
+/* Reduced motion: stilled — the overlay vanishes, the solid wordmark stays. */
+@media (prefers-reduced-motion: reduce) {
+  .vex-preview-shimmer::after {
+    animation: none;
+    background-image: none;
+  }
+}
+
+/* Session-enter — the SessionPanel welcome↔session (and session↔session)
+ * fluid resolve, owner-decreed removal of the distorted-glass regression
+ * (2026-07-20): the previous round's SVG feDisplacementMap filter warped
+ * CONTENT (profile menu + dialog text) into illegible squiggles, so the
+ * whole displacement/dither system is retired in favor of plain blur +
+ * static grain (`.vex-noise`, global-css/landing-motifs.css). This is the SessionPanel idiom's
+ * one-shot enter, replayed on every session switch via a `key` remount
+ * (same idiom as `.vex-rise` / `.vex-book-enter`). */
+@keyframes vex-session-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.vex-session-enter {
+  animation: vex-session-enter 520ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+/* Composer growth glide — the Grok pill's auto-grow made macOS-smooth
+ * (owner smoothness decree 2026-07-22). The textarea SNAPS to its measured
+ * height (text layout + caret need real geometry immediately); the field
+ * slot wearing this class receives the SAME measured px height from the
+ * same SessionComposer layout effect and TRANSITIONS it — on the exact
+ * 220ms clock and curve of `.vex-console`'s border-radius relax, so pill
+ * height and radius move as ONE gesture. `overflow: clip` masks the
+ * pre-sized textarea while the slot catches up: growth reveals the new
+ * caret line downward; shrink closes the bottom edge upward — the top
+ * (anchored) text line never moves. The first write always lands on an
+ * auto height (non-interpolable → applies instantly), so mount never
+ * flashes. A property transition, not a keyframe loop — the global
+ * reduced-motion catch-all collapses it to an instant step. */
+.vex-composer-grow {
+  overflow: clip;
+  transition: height 220ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Dissolves the oldest visible line of the working strip's reasoning tail
+ * (S4) — a mask, not a painted gradient. */
+.vex-fade-top {
+  mask-image: linear-gradient(to bottom, transparent, black 18px);
+}
+
+/* The signing stroke — ink drawing the signature line inside the
+ * New-session key (S1). Base span scales from the left on hover (CSS
+ * transition on a class toggle); while a session is being created the
+ * `--signing` modifier runs this loop: ink enters left, travels the slot,
+ * exits right (the origin flips while scaleX=1, so the flip is invisible).
+ * The only infinite animations in the shell are this stroke and DotMatrix —
+ * both bound to verifiable in-flight work or live status (the pulse dot is
+ * retired: state is color + words, never looping motion). */
+.vex-sign-stroke {
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 240ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@keyframes vex-stroke-signing {
+  0% {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  45% {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  55% {
+    transform: scaleX(1);
+    transform-origin: right;
+  }
+  100% {
+    transform: scaleX(0);
+    transform-origin: right;
+  }
+}
+
+.vex-sign-stroke--signing {
+  animation: vex-stroke-signing 1100ms cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+
+/* Reduced motion: a steady half-ink line still reads "in progress".
+ * `animation: none` clears animation-name (the global 0.01ms rule only
+ * forces duration/iteration), so the loop never runs and the static
+ * transform/opacity below carry the intent. */
+@media (prefers-reduced-motion: reduce) {
+  .vex-sign-stroke--signing {
+    animation: none;
+    transform: scaleX(1);
+    opacity: 0.55;
+  }
+}
+
+/* Hover/focus draws the signature line; a plain Tailwind group-hover
+ * utility would lose the cascade to .vex-sign-stroke (same specificity,
+ * later source order in this sheet), so the draw lives here. */
+.vex-sign-key:hover .vex-sign-stroke,
+.vex-sign-key:focus-visible .vex-sign-stroke {
+  transform: scaleX(1);
+}
+

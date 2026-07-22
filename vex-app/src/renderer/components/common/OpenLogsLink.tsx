@@ -14,7 +14,11 @@ export function OpenLogsLink({ className }: OpenLogsLinkProps): JSX.Element {
         void window.vex.support.openLogsFolder().catch(() => undefined);
       }}
       className={cn(
-        "self-start font-mono text-[11px] text-[color-mix(in_oklab,var(--vex-onboarding-accent)_55%,white)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]",
+        // Token-driven, not hardcoded accent: on the cobalt continuum the
+        // [data-vex-gate] scope re-projects --color-primary/--color-ring to
+        // paper (an accent link/ring would vanish on the plate — A2 review
+        // finding); on ink scopes both resolve to the cobalt accent.
+        "self-start font-mono text-[11px] text-[var(--color-primary)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]",
         className,
       )}
     >

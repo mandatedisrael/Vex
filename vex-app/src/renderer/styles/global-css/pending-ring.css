@@ -1,0 +1,67 @@
+/* ============================================================ *
+ *  PENDING RING — the console's traveling accent arc, generalized  *
+ * ------------------------------------------------------------ *
+ *  A masked 1px conic arc circling any host's border, for cards *
+ *  parked on a real pending decision (the Hyperliquid risk-setup *
+ *  proposal awaiting the user's confirm). Same motion law as the *
+ *  console ring: the loop is bound to a verifiable pending state, *
+ *  and the consumer DROPS the class on approve/dismiss. The host  *
+ *  must set its own border-radius (the ring inherits it) and be   *
+ *  a positioned/rounded box; no glass, no glow — the arc is a     *
+ *  clip-masked border band, not a shadow. Reduced motion collapses *
+ *  it to a static faint accent hairline. Token-only: the arc reads *
+ *  var(--vex-accent), so both themes recolor automatically.       *
+ * ============================================================ */
+@property --vex-ring-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.vex-ring-pending {
+  position: relative;
+}
+.vex-ring-pending::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background:
+    conic-gradient(
+      from var(--vex-ring-angle),
+      transparent 0deg,
+      transparent 205deg,
+      color-mix(in oklab, var(--vex-accent) 45%, transparent) 300deg,
+      var(--vex-accent) 342deg,
+      transparent 360deg
+    ),
+    linear-gradient(var(--vex-line), var(--vex-line));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: vex-ring-travel 7s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes vex-ring-travel {
+  to {
+    --vex-ring-angle: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vex-ring-pending::before {
+    animation: none;
+    background: linear-gradient(
+      color-mix(in oklab, var(--vex-accent) 26%, transparent),
+      color-mix(in oklab, var(--vex-accent) 26%, transparent)
+    );
+  }
+}
+

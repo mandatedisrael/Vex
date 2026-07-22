@@ -203,7 +203,7 @@ export function PolymarketSudoModal({
             className="flex flex-col gap-4"
           >
             <p
-              className="rounded-md border border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_10%,transparent)] p-3 text-sm text-foreground"
+              className="border-l-2 border-[color-mix(in_oklab,var(--color-warning)_45%,transparent)] py-1 pl-3 text-sm text-foreground"
               role="alert"
             >
               Vex will use your EVM wallet to sign a Polymarket
@@ -247,7 +247,7 @@ export function PolymarketSudoModal({
 
             {error !== null ? (
               <p
-                className="text-sm text-destructive"
+                className="text-sm text-[var(--color-danger)]"
                 role="alert"
                 data-vex-polymarket-sudo-error
               >

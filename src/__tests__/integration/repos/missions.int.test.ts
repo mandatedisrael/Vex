@@ -32,7 +32,6 @@ describe("mission draft persistence (integration)", () => {
         loadedDocuments: new Map(),
         sessionPermission: "full",
         approved: false,
-        role: "parent",
         missionRunId: null,
         missionId: draft.missionId,
         sessionKind: "mission",

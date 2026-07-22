@@ -67,7 +67,7 @@ afterEach(() => {
 });
 
 describe("VexTokenCardCompact", () => {
-  it("renders the data card with price, delta, the 2x2 stat grid, and a filled sparkline", async () => {
+  it("renders the slim data card: price, borderless shimmer delta, filled sparkline — NO stat grid", async () => {
     setMarket(vi.fn().mockResolvedValue({ ok: true, data: snapshot() }));
     const { container } = render(createElement(VexTokenCardCompact), {
       wrapper: makeWrapper(freshClient()),
@@ -82,12 +82,19 @@ describe("VexTokenCardCompact", () => {
     });
     expect(container.textContent).toContain("$0.0005430");
     expect(container.textContent).toContain("+113.00%");
-    // The 2×2 micro-grid carries all four figures.
-    expect(container.textContent).toContain("MCAP");
-    expect(container.textContent).toContain("LIQ");
-    expect(container.textContent).toContain("24H VOL");
-    expect(container.textContent).toContain("HOLDERS");
-    expect(container.textContent).toContain("354");
+    // Chronos slim cut: the 2×2 micro-grid is retired.
+    expect(container.textContent).not.toContain("MCAP");
+    expect(container.textContent).not.toContain("LIQ");
+    expect(container.textContent).not.toContain("24H VOL");
+    expect(container.textContent).not.toContain("HOLDERS");
+    // The delta figure is borderless, wears the shimmer overlay, and stays a
+    // SOLID direction color (no background-clip on the number itself).
+    const delta = container.querySelector('[data-vex-area="vex-token-delta"]');
+    expect(delta).not.toBeNull();
+    expect(delta?.classList.contains("vex-delta-shimmer")).toBe(true);
+    expect(delta?.getAttribute("data-shimmer-text")).toBe("+113.00%");
+    expect(delta?.className).toContain("text-[var(--color-success)]");
+    expect(delta?.className).not.toContain("border");
     expect(
       container.querySelector(
         '[data-vex-area="vex-token-sparkline"][data-empty="false"]',
@@ -96,6 +103,29 @@ describe("VexTokenCardCompact", () => {
     expect(
       container.querySelector('[data-vex-area="vex-token-stale"]'),
     ).toBeNull();
+  });
+
+  it("wraps the data card in a whole-card link to the $VEX DexScreener pair", async () => {
+    setMarket(vi.fn().mockResolvedValue({ ok: true, data: snapshot() }));
+    const { container } = render(createElement(VexTokenCardCompact), {
+      wrapper: makeWrapper(freshClient()),
+    });
+
+    await waitFor(() => {
+      expect(
+        container.querySelector(
+          '[data-vex-area="vex-token-compact"][data-state="data"]',
+        ),
+      ).not.toBeNull();
+    });
+    const link = container.querySelector("a");
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute("href")).toBe(
+      "https://dexscreener.com/robinhood/0x817f16f5d8da83d1b089b082c0172af3923618da",
+    );
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(link?.getAttribute("aria-label")).toBe("Open $VEX on DexScreener");
   });
 
   it("shows a loading skeleton before the first snapshot arrives (ok(null))", async () => {
@@ -113,6 +143,8 @@ describe("VexTokenCardCompact", () => {
     });
     // Never blank — the $VEX label is always present.
     expect(container.textContent).toContain("$VEX");
+    // Only the data card links out — the loading skeleton stays inert.
+    expect(container.querySelector("a")).toBeNull();
   });
 
   it("shows an error line when the bridge returns an error", async () => {
@@ -144,7 +176,7 @@ describe("VexTokenCardCompact", () => {
     expect(container.textContent).toContain("Market data unavailable.");
   });
 
-  it("surfaces the stale marker on a delayed snapshot", async () => {
+  it("surfaces the stale marker on a delayed snapshot (the shimmer stays — decorative)", async () => {
     setMarket(
       vi.fn().mockResolvedValue({ ok: true, data: snapshot({ stale: true }) }),
     );
@@ -162,15 +194,19 @@ describe("VexTokenCardCompact", () => {
     expect(
       container.querySelector('[data-vex-area="vex-token-stale"]'),
     ).not.toBeNull();
+    // Owner decree: the shimmer is decorative and always on; staleness is
+    // carried honestly by the marker, not by stilling the figure.
+    const delta = container.querySelector('[data-vex-area="vex-token-delta"]');
+    expect(delta?.classList.contains("vex-delta-shimmer")).toBe(true);
   });
 
-  it("renders the same token-driven card under the robinhood theme (sparkline re-tints via --vex-accent)", async () => {
+  it("keeps the card token-driven (the sparkline stroke reads --vex-accent)", async () => {
     setMarket(vi.fn().mockResolvedValue({ ok: true, data: snapshot() }));
     const client = freshClient();
     const { container } = render(
       createElement(
         "div",
-        { "data-vex-shell": "true", "data-vex-theme": "robinhood" },
+        { "data-vex-shell": "true" },
         createElement(
           QueryClientProvider,
           { client },
@@ -186,8 +222,8 @@ describe("VexTokenCardCompact", () => {
         ),
       ).not.toBeNull();
     });
-    // The card carries no raw colour — the sparkline stroke is the theme token,
-    // so it becomes neon lime in Robinhood mode with no component change.
+    // The card carries no raw colour — the sparkline stroke is the theme
+    // token, so any future theme re-tints it with no component change.
     const path = container.querySelector(
       '[data-vex-area="vex-token-sparkline"] path',
     );

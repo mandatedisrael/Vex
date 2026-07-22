@@ -57,7 +57,6 @@ describe("messages column-list parity for archive and restore", () => {
       "message_type",
       "visibility",
       "origin_session_id",
-      "subagent_id",
       "metadata",
     ]);
   });

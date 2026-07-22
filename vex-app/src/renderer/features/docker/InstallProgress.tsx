@@ -4,12 +4,12 @@
  * the renderer never tries to keep a long log of progress lines (the
  * main process is the source of truth, skill §11).
  *
- * Embedded inside the BootstrapPanel case file (no surrounding card
- * frame), replacing the status tile while `desktop_download` is in
- * flight. Visual: a flat hairline strip in the NOTARY document language —
- * no glass, no inset highlight; the 2px accent bar is the landing
- * preloader's progress line. The bar respects reduced motion (CSS
- * transition-width is disabled via the global media query).
+ * Embedded inside the BootstrapPanel card, replacing the status stanza
+ * while `desktop_download` is in flight. Visual: a flat hairline strip
+ * on the ink-glass card (cobalt continuum) — no blur, no inset
+ * highlight; the accent bar is the landing preloader's progress line.
+ * The bar respects reduced motion (CSS transition-width is disabled
+ * via the global media query).
  */
 
 import { useEffect, useState } from "react";
@@ -39,9 +39,11 @@ export function InstallProgressStrip({ active }: InstallProgressProps): JSX.Elem
   const isFailure = phase === "failed";
 
   return (
-    <div className="flex flex-col gap-2.5 rounded-lg border border-white/[0.08] bg-white/[0.02] px-4 py-3">
+    // Open strip (AMENDMENT A3 — no filled box): phase word, percent, and
+    // the progress bar sit directly on the surface.
+    <div className="flex flex-col gap-2.5 py-1">
       <div className="flex items-baseline justify-between gap-2 text-xs">
-        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--color-text-secondary)]">
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[rgba(243,244,247,0.78)]">
           {phase}
         </span>
         {percent !== null ? (
@@ -50,19 +52,19 @@ export function InstallProgressStrip({ active }: InstallProgressProps): JSX.Elem
           </span>
         ) : null}
       </div>
-      <div className="h-0.5 w-full overflow-hidden bg-white/[0.06]">
+      <div className="h-0.5 w-full overflow-hidden bg-white/[0.08]">
         <div
           className={cn(
             "h-full transition-[width] duration-150 ease-out",
             isFailure
               ? "bg-[var(--color-danger)]"
-              : "bg-[var(--dockerbootstrap-accent,var(--color-accent-primary))]",
+              : "bg-[var(--color-accent-primary)]",
           )}
           style={{ width: percent !== null ? `${percent}%` : "33%" }}
         />
       </div>
       {progress?.message ? (
-        <p className="text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+        <p className="text-[11px] leading-relaxed text-[rgba(243,244,247,0.78)]">
           {progress.message}
         </p>
       ) : null}

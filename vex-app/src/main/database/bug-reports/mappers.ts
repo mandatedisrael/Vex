@@ -39,7 +39,6 @@ export interface BugReportRow {
   readonly session_id: string | null;
   readonly mission_id: string | null;
   readonly mission_run_id: string | null;
-  readonly subagent_id: string | null;
   readonly tool_name: string | null;
   readonly tool_call_id: string | null;
   readonly protocol_namespace: string | null;
@@ -64,7 +63,7 @@ export const BUG_REPORT_COLUMNS = `
   upload_state, upload_attempt_count, next_upload_at, last_upload_error,
   remote_report_id, uploaded_at,
   app_version, os_platform, install_id,
-  correlation_id, session_id, mission_id, mission_run_id, subagent_id,
+  correlation_id, session_id, mission_id, mission_run_id,
   tool_name, tool_call_id, protocol_namespace, compact_job_id,
   stop_reason, runtime_status,
   context_pressure_band, context_pressure_fraction,
@@ -124,7 +123,6 @@ export function mapRow(row: BugReportRow): BugReport {
     sessionId: row.session_id,
     missionId: row.mission_id,
     missionRunId: row.mission_run_id,
-    subagentId: row.subagent_id,
     toolName: row.tool_name,
     toolCallId: row.tool_call_id,
     protocolNamespace: row.protocol_namespace,

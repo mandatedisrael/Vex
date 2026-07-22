@@ -1,7 +1,7 @@
 /**
  * `buildToolCatalogPrompt` regression — Tool Map renders the right
- * categories + names for each of the 4 modes (agent / mission setup /
- * mission run / subagent) and the 4 pressure bands (normal / warning /
+ * categories + names for each of the 3 modes (agent / mission setup /
+ * mission run) and the 4 pressure bands (normal / warning /
  * barrier / critical).
  *
  * Codex PR3 GREEN LIGHT verification: visibility-aware, empty categories
@@ -16,7 +16,6 @@ import type { ToolVisibilityContext } from "../../../../vex-agent/tools/registry
 function makeCtx(overrides: Partial<ToolVisibilityContext> = {}): ToolVisibilityContext {
   return {
     permission: "full",
-    role: "parent",
     sessionKind: "agent",
     missionRunActive: false,
     contextUsageBand: "normal",
@@ -126,35 +125,6 @@ describe("buildToolCatalogPrompt — visibility-aware Tool Map", () => {
     });
   });
 
-  describe("subagent role", () => {
-    it("excludes mission control + setup + compact_now (excluded by role)", () => {
-      const out = buildToolCatalogPrompt(makeCtx({
-        role: "subagent",
-        sessionKind: "mission",
-        missionRunActive: true,
-      }));
-
-      // All four mission/compact categories rely on `excludeRoles: ["subagent"]`
-      expect(out).not.toContain("Mission setup draft");
-      expect(out).not.toContain("Mission run stop");
-      expect(out).not.toContain("Mission run scheduling");
-      expect(out).not.toContain("Context compaction");
-      expect(out).not.toContain("Setup/onboarding");
-    });
-
-    it("retains memory + reads", () => {
-      const out = buildToolCatalogPrompt(makeCtx({
-        role: "subagent",
-        sessionKind: "mission",
-        missionRunActive: true,
-      }));
-
-      expect(out).toContain("Session memory");
-      expect(out).toContain("Long-term memory recall");
-      expect(out).toContain("Live state reads");
-    });
-  });
-
   describe("ordering preservation", () => {
     it("renders categories in TOOL_MAP_CATEGORIES declared order", () => {
       const out = buildToolCatalogPrompt(makeCtx());
@@ -178,12 +148,6 @@ describe("buildToolCatalogPrompt — visibility-aware Tool Map", () => {
     it("at agent normal band the Context compaction category is dropped (compact_now hidden below barrier)", () => {
       const out = buildToolCatalogPrompt(makeCtx());
       expect(out).not.toContain("Context compaction");
-    });
-
-    it("at subagent role the mission categories are all dropped", () => {
-      const out = buildToolCatalogPrompt(makeCtx({ role: "subagent" }));
-      expect(out).not.toContain("Mission setup");
-      expect(out).not.toContain("Mission run");
     });
   });
 

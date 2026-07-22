@@ -147,7 +147,6 @@ export async function buildTurnPromptStack(args: {
   const base: ToolVisibilityBase = args.baseVisibility ?? {
     sessionId: args.context.sessionId,
     permission: args.context.sessionPermission,
-    role: args.context.isSubagent ? "subagent" : "parent",
     sessionKind: args.context.sessionKind,
     missionRunActive: args.context.missionRunId !== null,
     planMode: args.context.planMode ?? false,

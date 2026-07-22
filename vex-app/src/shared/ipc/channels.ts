@@ -260,6 +260,12 @@ export const CH = {
   portfolio: {
     read: "vex:portfolio:read",
     listMoves: "vex:portfolio:listMoves",
+    // Chronos-shell — read-only, global-scope per-token TX history (the
+    // click-through screen from a Balances/Assets token row). Server resolves
+    // the GLOBAL configured wallet inventory (same allow-list as `read`'s
+    // `scope: "global"`); the renderer supplies only `{chainId, tokenAddress,
+    // cursor}`, never an address.
+    listTokenHistory: "vex:portfolio:listTokenHistory",
   },
 
   // Market — read-only live VEX token metrics for the welcome-screen price
@@ -304,6 +310,10 @@ export const CH = {
     getPreferences: "vex:settings:getPreferences",
     setTelemetryConsent: "vex:settings:setTelemetryConsent",
     setHyperliquidPolicy: "vex:settings:setHyperliquidPolicy",
+    // "Vex setup" user profile (display name, instructions, work
+    // description) — DB-backed (soul singleton), replaces persona.md.
+    getUserProfile: "vex:settings:getUserProfile",
+    setUserProfile: "vex:settings:setUserProfile",
   },
 
   // Updater — user-triggered in-app update flow (M13). `check` may run on

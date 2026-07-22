@@ -3,13 +3,14 @@
  *
  * Six crypto orders tied to Vex's real system utilities (swap routing, cross
  * -chain bridge, DexScreener trends, the $VEX token, a gas-watch mission, and
- * a plan-first portfolio rebalance) cycle through the DEFAULT composer
- * placeholder so the resting instrument suggests what the operator can
- * actually ask for. Mission-mode and plan-mode placeholders are owned
- * elsewhere (`composer-helpers.placeholderFor` / the plan copy) — this rotator
- * ONLY drives the welcome/agent default.
+ * a portfolio rebalance) cycle through the DEFAULT composer prompt so the
+ * resting instrument suggests what the operator can actually ask for.
+ * Copy sweep 2026-07-21 round 2: no phrase may reference the retired Plan
+ * Mode ("show the plan first" is gone). Mission-mode placeholders are owned
+ * elsewhere (`composer-helpers.placeholderFor`) — this rotator ONLY drives
+ * the welcome/agent default.
  *
- * Mechanics mirror SessionWelcomeHero's TaglineRotator: a ~6s cadence that
+ * Mechanics mirror the retired welcome TaglineRotator: a ~6s cadence that
  * pauses while the document is hidden (visibilitychange) and never starts
  * under prefers-reduced-motion (the first phrase renders statically, read once
  * at first render — mid-session preference flips are not tracked, same
@@ -19,9 +20,10 @@
  * placeholder never shuffles under an operator mid-thought and rotation
  * resumes on a fresh read window once the field is idle again.
  *
- * Hard swap: a `placeholder` attribute can't cross-fade, so each phrase
- * replaces the previous with no transition (deliberate — a soft fade would
- * need a faux-placeholder overlay this pill does not want).
+ * This hook only OWNS the current phrase. The soft crossfade between
+ * phrases lives in the composer's aria-hidden faux-placeholder overlay
+ * (SessionComposer keys a motion span per phrase) — the earlier hard
+ * attribute swap was owner-rejected (2026-07-21 round 2).
  */
 
 import { useEffect, useState } from "react";
@@ -34,13 +36,13 @@ export const WELCOME_PLACEHOLDERS = [
   "What's trending on DexScreener right now?",
   "How is $VEX doing today?",
   "Watch gas on Base and report daily.",
-  "Rebalance my portfolio — show the plan first.",
+  "Rebalance my portfolio.",
 ] as const;
 
 /** ~6s per phrase — long enough to read, matched to the pill's calm cadence. */
 export const PLACEHOLDER_ROTATE_MS = 6000;
 
-/** jsdom-safe read — mirrors SessionWelcomeHero / SignalSky. */
+/** jsdom-safe read — mirrors SessionWelcomeHero. */
 function prefersReducedMotion(): boolean {
   if (
     typeof window === "undefined" ||

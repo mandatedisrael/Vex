@@ -44,7 +44,6 @@ function makeContext(sessionId: string): InternalToolContext {
     loadedDocuments: new Map<string, string>(),
     sessionPermission: "full",
     approved: true,
-    role: "parent",
     missionRunId: null,
     missionId: null,
     sessionKind: "agent",

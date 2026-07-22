@@ -26,7 +26,6 @@ import {
   EVM_QUICK_CHAIN_IDS,
   SOLANA_CHAIN_ID,
   chainDisplay,
-  familyForChainId,
 } from "@shared/chains/display.js";
 import {
   Dialog,
@@ -38,65 +37,11 @@ import {
 } from "../../../components/ui/dialog.js";
 import { sanitizeTokenSymbol } from "@shared/token-symbol-sanitizer.js";
 import { ChainIcon } from "../../../components/common/ChainIcon.js";
-import { BRAND_ICON_SYMBOLS, TokenIcon } from "../../../components/common/TokenIcon.js";
+import { TokenMark } from "../../../components/common/TokenIcon.js";
+import { resolveTokenMark } from "../../../lib/token-marks.js";
 import { formatTokenQuantity, formatUsd } from "../../../lib/format.js";
 import { cn } from "../../../lib/utils.js";
-
-/**
- * Smallest |USD| `formatUsd` renders as non-zero (same rounding threshold as
- * PositionBlock's legacy rows) — a top-3 line below it would print "$0.00".
- */
-const MIN_DISPLAY_USD = 0.005;
-
-/**
- * Solana mint → ticker — the EXACT SAME three verified constants
- * `MovesBlock`'s `KNOWN_MINTS` already trusts. Base58 is case-SENSITIVE (no
- * `.toLowerCase()` anywhere near this map — unlike EVM hex, a differently
- * cased Solana address is a DIFFERENT address).
- */
-const KNOWN_SOLANA_MINTS: ReadonlyMap<string, string> = new Map([
-  ["So11111111111111111111111111111111111111112", "SOL"],
-  ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "USDC"],
-  ["Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", "USDT"],
-]);
-
-/**
- * The EVM native-gas placeholder (`NATIVE_TOKEN_ADDRESS` in
- * `src/tools/kyberswap/constants.ts`) — not a deployable contract address, so
- * no token can spoof it; used across every EVM chain to mean "this wallet's
- * native balance". Lower-cased for comparison: EVM checksum casing is
- * cosmetic, unlike Solana base58.
- */
-const NATIVE_EVM_SENTINEL = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
-
-/**
- * The ONLY thing that authorizes `TokenIcon`'s brand mark for a holding
- * whose sanitized symbol claims a brand ticker (mirrors the Moves feed's
- * `KNOWN_MINTS` invariant — an address, never a self-declared symbol, proves
- * identity). Solana holdings are verified against the same three canonical
- * mints Moves already trusts; the EVM native sentinel is independently
- * verifiable and always denotes "ETH" — a same-address BNB/MATIC/other
- * native holding fails this exact-ticker match (no per-chain native registry
- * exists here) and correctly falls back to a non-brand render rather than
- * borrowing the wrong mark. Any other address, or no address at all, yields
- * `null` — no icon, even if the symbol would otherwise match a brand key.
- */
-function verifiedBrandTicker(
-  family: "evm" | "solana",
-  tokenAddress: string | null,
-  symbol: string,
-): string | null {
-  if (tokenAddress === null) return null;
-  const known =
-    family === "solana"
-      ? (KNOWN_SOLANA_MINTS.get(tokenAddress) ?? null)
-      : tokenAddress.toLowerCase() === NATIVE_EVM_SENTINEL
-        ? "ETH"
-        : null;
-  return known !== null && known.toLowerCase() === symbol.toLowerCase()
-    ? known
-    : null;
-}
+import { MIN_DISPLAY_USD } from "./portfolio/TokenHoldingRow.js";
 
 export function PositionChains({
   chains,
@@ -291,11 +236,13 @@ function ChainTotalFigure({
  * zero-width characters, and Unicode confusables) BEFORE it reaches display
  * text, so a homoglyph/control-character spoof never renders at all. A
  * PLAIN-ASCII brand impersonation (e.g. a scam token literally named "ETH")
- * survives sanitization as text, so `TokenIcon`'s brand mark additionally
- * requires `verifiedBrandTicker` to confirm the line's `tokenAddress` is one
- * of the few independently-verified addresses above — an unverified address
- * still shows the sanitized symbol as text, just with no borrowed logo (the
- * same trade-off `MovesBlock` makes for captured symbols).
+ * survives sanitization as text, so the mark itself goes through
+ * `resolveTokenMark` (shared `lib/token-marks.ts`, chain-aware verified
+ * matrix) — a brand `<svg>` is granted only when BOTH the line's
+ * `(chainId, tokenAddress)` AND its expected on-chain symbol match a
+ * verified row; anything else renders the chain-FAMILY mark (Ethereum/
+ * Solana), never a fabricated brand and never a bare monogram for a
+ * holding on a recognized chain.
  */
 function ChainTokenList({
   chainId,
@@ -304,7 +251,6 @@ function ChainTokenList({
   readonly chainId: number;
   readonly tokens: readonly PositionChainDto["tokens"][number][];
 }): JSX.Element {
-  const family = familyForChainId(chainId);
   const displayable = tokens.filter((t) =>
     t.balanceUsd === null
       ? t.amount !== null && t.amount > 0
@@ -323,21 +269,14 @@ function ChainTokenList({
         const symbol = sanitizeTokenSymbol(token.symbol);
         const quantity = formatTokenQuantity(token.amount, symbol);
         const tokenAddress = token.tokenAddress ?? null;
-        // A brand-colliding symbol needs address verification; a non-brand
-        // symbol carries no impersonation risk and passes through as-is
-        // (TokenIcon renders its neutral monogram either way).
-        const isBrandClaim =
-          symbol !== null && BRAND_ICON_SYMBOLS.has(symbol.toLowerCase());
-        const iconSymbol = isBrandClaim
-          ? verifiedBrandTicker(family, tokenAddress, symbol)
-          : symbol;
+        const mark = resolveTokenMark(chainId, tokenAddress, symbol);
         return (
           <li
             key={`${chainId}:${tokenAddress ?? "x"}:${symbol ?? "—"}:${index}`}
             className="flex items-center justify-between gap-3 border-b border-[var(--vex-line)] py-1.5 last:border-b-0"
           >
             <span className="flex min-w-0 flex-1 items-center gap-2">
-              <TokenIcon symbol={iconSymbol} size={13} />
+              <TokenMark mark={mark} size={13} />
               <span className="truncate font-mono text-[11px] text-[var(--vex-text-2)]">
                 {symbol !== null && symbol.length > 0 ? symbol : "—"}
               </span>

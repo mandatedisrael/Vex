@@ -12,7 +12,7 @@
  * semantics baked into ids (the ids are opaque by construction).
  *
  * ── DISJOINT AUTHORSHIP (the firewall) ───────────────────────────────────────
- * The 134 predictions are authored by THREE DISJOINT subagent clusters, each in
+ * The 134 predictions are authored by THREE DISJOINT agent clusters, each in
  * its own `_judge-oracle-{a,b,c}.ts` file, reasoning ONLY from the agent-facing
  * text (`judgeItemFacing`) — never the corpus cluster files, predecessor text,
  * author intent, or the `stratum` runner hint. The `stratum` is now structurally

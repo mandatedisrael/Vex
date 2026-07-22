@@ -45,7 +45,11 @@ export function EmbeddingFields({
           value={form.baseUrl}
           onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
           autoFocus
+          className="h-11"
         />
+        <p className="text-xs text-[var(--color-text-muted)]">
+          A non-local URL sends memory content to that endpoint.
+        </p>
       </div>
 
       <div className="flex flex-col gap-2">
@@ -57,6 +61,7 @@ export function EmbeddingFields({
           autoComplete="off"
           value={form.model}
           onChange={(e) => setForm({ ...form, model: e.target.value })}
+          className="h-11"
         />
       </div>
 
@@ -72,9 +77,12 @@ export function EmbeddingFields({
             placeholder={String(EMBEDDING_DIM)}
             value={form.dim}
             onChange={(e) => setForm({ ...form, dim: e.target.value })}
+            className="h-11"
           />
           <p className="text-xs text-[var(--color-text-muted)]">
-            {MIN_EMBEDDING_DIM}–{MAX_EMBEDDING_DIM}. Common: 384, 768, 1024, 1536.
+            {MIN_EMBEDDING_DIM}–{MAX_EMBEDDING_DIM}. Common: 384, 768, 1024,
+            1536. Locks once memories exist — changing it later would
+            strand them.
           </p>
         </div>
         <div className="flex flex-col gap-2">
@@ -86,6 +94,7 @@ export function EmbeddingFields({
             autoComplete="off"
             value={form.provider}
             onChange={(e) => setForm({ ...form, provider: e.target.value })}
+            className="h-11"
           />
         </div>
       </div>

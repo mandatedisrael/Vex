@@ -196,22 +196,10 @@ vi.mock("@vex-agent/db/client.js", () => ({
   execute: vi.fn(),
 }));
 
-vi.mock("@vex-agent/db/repos/subagents.js", () => ({
-  insert: vi.fn().mockResolvedValue(undefined),
-  getById: vi.fn().mockResolvedValue(null),
-  getActive: vi.fn().mockResolvedValue([]),
-  getRecent: vi.fn().mockResolvedValue([]),
-  updateStatus: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock("@vex-agent/db/repos/sessions.js", () => ({
   createSession: vi.fn().mockResolvedValue(undefined),
   setScope: vi.fn().mockResolvedValue(undefined),
   getSession: vi.fn().mockResolvedValue(null),
-}));
-
-vi.mock("@vex-agent/db/repos/session-links.js", () => ({
-  linkSessions: vi.fn().mockResolvedValue({ id: 1 }),
 }));
 
 vi.mock("@vex-agent/db/repos/executions.js", () => ({
