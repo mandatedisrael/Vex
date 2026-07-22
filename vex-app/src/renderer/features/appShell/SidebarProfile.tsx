@@ -29,7 +29,8 @@
  * attention dot while no display name is set), Memory / Sessions / How Vex
  * works open their full-app ShellScreens (measuring the row rect as the
  * screen's expand origin; Missions is retired — Sessions covers it), and
- * Settings keeps the reconfigure-wizard door. The footer status row speaks
+ * Settings opens the in-shell Settings ShellScreen (Phase 2b — the
+ * reconfigure-wizard door is retired). The footer status row speaks
  * one short word ("Connected" / "Connecting" / …) beside the Docker/Postgres
  * provenance marks — no dots anywhere (the pulse-dot law is retired).
  */
@@ -118,7 +119,6 @@ export function SidebarProfile({
   readonly sidebarOpen: boolean;
 }): JSX.Element {
   const setShellRoute = useUiStore((s) => s.setShellRoute);
-  const openWizard = useUiStore((s) => s.openWizard);
   const memoryEnabled = useMemoryFeatureEnabled();
   const healthQuery = useSystemHealth();
   const runtime = getRuntimeStatus({
@@ -193,10 +193,21 @@ export function SidebarProfile({
     setSetupOpen(true);
   }, []);
 
-  const openSettings = useCallback((): void => {
-    setOpen(false);
-    openWizard("reconfigure");
-  }, [openWizard]);
+  // Settings expands out of its own row too — same rect capture as the
+  // screen rows, but the settings route carries a deep-link `section`
+  // payload (null here: the profile row lands on the register).
+  const openSettings = useCallback(
+    (event: MouseEvent<HTMLButtonElement>): void => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setOpen(false);
+      setShellRoute({
+        kind: "settings",
+        origin: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        section: null,
+      });
+    },
+    [setShellRoute],
+  );
 
   return (
     <div
@@ -331,7 +342,7 @@ export function SidebarProfile({
               icon={Settings02Icon}
               label="Settings"
               hint="Wallets, keys, model"
-              onSelect={() => openSettings()}
+              onSelect={(event) => openSettings(event)}
             />
             <motion.div
               variants={rowVariants}

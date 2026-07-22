@@ -22,7 +22,7 @@ const mockOpenUnlock = vi.fn();
 const mockSecretsStatus = vi.fn();
 const mockReviewStep = vi.fn();
 const mockOpenLogsFolder = vi.fn();
-let mockWizardEntryMode: "setup" | "reconfigure" = "setup";
+let mockWizardEntryMode: "setup" = "setup";
 
 vi.mock("../../../lib/api/wizard.js", async () => {
   const actual =
@@ -40,7 +40,7 @@ vi.mock("../../../stores/uiStore.js", () => ({
     selector: (s: {
       setCurrentView: typeof mockSetCurrentView;
       openUnlock: typeof mockOpenUnlock;
-      wizardEntryMode: "setup" | "reconfigure";
+      wizardEntryMode: "setup";
     }) => unknown
   ) =>
     selector({
@@ -103,6 +103,11 @@ function makeQueryResult(
 }
 
 beforeEach(() => {
+  // Hermetic against local dev flags: a developer's gitignored
+  // `.env.local` may carry VITE_VEX_SETUP_TOUR=1 (decree D diagnostic
+  // tour), which pins the wizard to its persisted step and disables the
+  // routing under test here. These suites pin the NON-tour baseline.
+  vi.stubEnv("VITE_VEX_SETUP_TOUR", "0");
   mockUseWizardState.mockReset();
   mockSetCurrentView.mockReset();
   mockOpenUnlock.mockReset();
@@ -130,6 +135,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllEnvs();
   Reflect.deleteProperty(window, "vex");
 });
 
@@ -343,34 +349,6 @@ describe("WizardShell", () => {
     });
   });
 
-  it("opens ReviewStep in reconfigure mode when completed wizard is explicitly re-entered", async () => {
-    mockWizardEntryMode = "reconfigure";
-    mockUseWizardState.mockReturnValue(
-      makeQueryResult({
-        ok: true,
-        data: {
-          schemaVersion: 2,
-          currentStepId: "review",
-          completedSteps: [
-            "keystore",
-            "wallets",
-            "apiKeys",
-            "embedding",
-            "agentCore",
-            "provider",
-          ],
-          completed: true,
-        },
-      })
-    );
-    const { findByTestId } = renderWithQuery(<WizardShell />);
-    await findByTestId("review-step");
-    expect(mockSetCurrentView).not.toHaveBeenCalledWith("appShell");
-    expect(mockReviewStep).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: "reconfigure" })
-    );
-  });
-
   // ── Completion watcher (Finalize-on-Review in-session flip) ────────
   //
   // Reproduces the stuck-on-Review bug: the wizard mounts on Review with
@@ -434,18 +412,6 @@ describe("WizardShell", () => {
     await waitFor(() => {
       expect(mockSetCurrentView).toHaveBeenCalledWith("appShell");
     });
-  });
-
-  it("(b) completion watcher: does NOT flip to appShell in reconfigure mode", async () => {
-    mockWizardEntryMode = "reconfigure";
-    // In reconfigure mode the init effect parks on Review and the watcher
-    // must skip. Mount directly completed — the watcher must not fire.
-    mockUseWizardState.mockReturnValue(makeQueryResult(reviewState(true)));
-    const { findByTestId } = renderWithQuery(<WizardShell />);
-    await findByTestId("review-step");
-    // Give any pending async route() a tick to settle.
-    await new Promise((r) => setTimeout(r, 0));
-    expect(mockSetCurrentView).not.toHaveBeenCalledWith("appShell");
   });
 
   it("(c) SECURITY: completion watcher opens unlock (not appShell) when vault is locked", async () => {

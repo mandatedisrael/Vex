@@ -7,10 +7,8 @@
  */
 
 import { useState } from "react";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { AlertCircleIcon, Refresh01Icon } from "@hugeicons/core-free-icons";
-import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
-import { PrimaryButton } from "../../../../components/onboarding/PrimaryButton.js";
+import { Button } from "../../../../components/ui/button.js";
+import { SetupStatusCard } from "../../../../components/onboarding/SetupStatusCard.js";
 import { OpenLogsLink } from "../../../../components/common/OpenLogsLink.js";
 
 interface FailedBodyProps {
@@ -27,23 +25,18 @@ export function FailedBody({
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="flex flex-col gap-4">
-      <StatusTile
-        tone="danger"
-        icon={<HugeiconsIcon icon={AlertCircleIcon} size={20} aria-hidden />}
-        title="Compose up failed"
-        detail={message}
-      />
+      <SetupStatusCard tone="error" title="Compose up failed" detail={message} />
 
       {recentLogs.length > 0 ? (
         expanded ? (
-          <pre className="max-h-40 overflow-auto rounded-lg border border-white/[0.08] bg-black/40 p-3 font-mono text-[10px] leading-relaxed text-[var(--color-text-primary)]">
+          <pre className="max-h-40 overflow-auto rounded-lg border border-white/[0.14] bg-black/40 p-3 font-mono text-[10px] leading-relaxed text-[var(--color-text-primary)]">
             <code>{recentLogs.join("\n")}</code>
           </pre>
         ) : (
           <button
             type="button"
             onClick={() => setExpanded(true)}
-            className="self-start font-mono text-[11px] text-[color-mix(in_oklab,var(--vex-onboarding-accent)_55%,white)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]"
+            className="self-start font-mono text-[11px] text-[color-mix(in_oklab,var(--vex-onboarding-accent,var(--color-accent-primary))_55%,white)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
           >
             Show recent logs ({recentLogs.length} line
             {recentLogs.length === 1 ? "" : "s"})
@@ -51,7 +44,9 @@ export function FailedBody({
         )
       ) : null}
 
-      <PrimaryButton icon={Refresh01Icon} label="Try again" onClick={onRetry} />
+      <Button size="lg" className="w-full" onClick={onRetry}>
+        Try again
+      </Button>
       <OpenLogsLink />
     </div>
   );

@@ -1,28 +1,33 @@
 /**
  * Branch: loading — Docker probe hasn't returned data yet, OR engine is
- * missing and the platform health probe is still resolving. The waiting
- * indicator is the brand's DotMatrix (same machine language as the
- * SystemCheck CHECKING… stamps); the orchestrator disables the footer
- * Recheck key while this branch is active.
+ * missing and the platform health probe is still resolving. The hero
+ * VexLoader ring (paper tone) announces the wait; the orchestrator
+ * disables the footer Recheck while this branch is active.
  */
 
-import { DotmSquare3 } from "../../../../components/ui/dotm-square-3.js";
-import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
+import { VexLoader } from "../../../../components/ui/vex-loader.js";
 
 export function LoadingBody(): JSX.Element {
   return (
-    <StatusTile
-      tone="muted"
-      icon={
-        <DotmSquare3
-          size={16}
-          dotSize={2}
-          className="text-[var(--vex-onboarding-accent)]"
-          ariaLabel="Checking"
-        />
-      }
-      title="Detecting Docker…"
-      detail="Probing the Docker endpoint and platform. This should take a few seconds."
-    />
+    <div className="flex flex-col items-center gap-5 py-6">
+      {/* Loader label deliberately does NOT repeat "Detecting Docker" —
+       * the visible line below carries it, and tests getByText the
+       * phrase (a duplicate sr-only match would be ambiguous). */}
+      <VexLoader
+        size={72}
+        stroke={2}
+        tone="paper"
+        label="Probing the Docker endpoint"
+      />
+      <div className="flex flex-col items-center gap-1">
+        <p className="text-sm font-medium text-[var(--color-text-primary)]">
+          Detecting Docker…
+        </p>
+        <p className="text-xs text-[rgba(243,244,247,0.58)]">
+          Probing the Docker endpoint and platform. This should take a few
+          seconds.
+        </p>
+      </div>
+    </div>
   );
 }

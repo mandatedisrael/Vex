@@ -1,15 +1,8 @@
 /**
- * Constants for the compose bootstrap surface — step counter formula
- * shared with SystemCheck / DockerBootstrap and the bounded log buffer
- * size.
+ * Constants for the compose bootstrap surface — the bounded log buffer
+ * size. (The NOTARY-era "Step X of N" counter is retired with the
+ * Chronos rebrand.)
  */
-
-import { WIZARD_STEP_IDS } from "@shared/schemas/wizard.js";
-
-const SETUP_VIEWS_BEFORE_WIZARD = 4;
-export const TOTAL_ONBOARDING_STEPS =
-  SETUP_VIEWS_BEFORE_WIZARD + (WIZARD_STEP_IDS.length - 1);
-export const COMPOSE_BOOTSTRAP_STEP = 3;
 
 /**
  * Bounded log retention. The renderer pulls a circular buffer from the

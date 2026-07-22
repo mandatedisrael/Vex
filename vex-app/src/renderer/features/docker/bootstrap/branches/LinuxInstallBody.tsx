@@ -4,7 +4,7 @@
  * "linux_manual_instructions" })` and passes the resulting state in.
  *
  * Rendering matrix:
- *   loading — "Loading install instructions…" placeholder
+ *   loading — inline VexLoader + "Loading install instructions…"
  *   error   — message + "Retry instructions fetch" (separate from main
  *             footer Recheck; this retries the fetch only)
  *   ready   — `<LinuxManualInstructions>` with copy-paste block
@@ -15,12 +15,11 @@
  * path per codex review).
  */
 
-import { HugeiconsIcon } from "@hugeicons/react";
-import { TerminalIcon } from "@hugeicons/core-free-icons";
-import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
+import { VexLoader } from "../../../../components/ui/vex-loader.js";
+import { Button } from "../../../../components/ui/button.js";
+import { SetupStatusCard } from "../../../../components/onboarding/SetupStatusCard.js";
 import { DocsLink } from "../../../../components/onboarding/DocsLink.js";
 import { LinuxManualInstructions } from "../../LinuxManualInstructions.js";
-import { cn } from "../../../../lib/utils.js";
 import { OpenLogsLink } from "../../../../components/common/OpenLogsLink.js";
 import {
   DOCKER_ENGINE_LINUX_URL,
@@ -39,40 +38,45 @@ export function LinuxInstallBody({
 }: LinuxInstallBodyProps): JSX.Element {
   return (
     <div className="flex flex-col gap-4">
-      <StatusTile
+      <SetupStatusCard
         tone="info"
-        icon={<HugeiconsIcon icon={TerminalIcon} size={20} aria-hidden />}
+        word="Install"
         title="Docker Engine is not installed"
         detail="Linux — install via your package manager."
       />
 
       {state.kind === "loading" ? (
-        <p className="text-xs text-[var(--color-text-secondary)]">
-          Loading install instructions…
-        </p>
+        <div className="flex items-center gap-2.5">
+          <VexLoader
+            size={16}
+            stroke={2}
+            tone="paper"
+            label="Loading install instructions"
+          />
+          <p aria-hidden className="text-xs text-[rgba(243,244,247,0.78)]">
+            Loading install instructions…
+          </p>
+        </div>
       ) : state.kind === "error" ? (
         <div className="flex flex-col gap-2">
           <p className="text-xs leading-relaxed text-[var(--color-danger)]">
             Couldn&rsquo;t fetch install instructions: {state.message}
           </p>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onRetryFetch}
-            className={cn(
-              "self-start rounded-full border border-white/[0.12] bg-transparent px-3.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-secondary)]",
-              "hover:border-white/[0.2] hover:text-[var(--color-text-primary)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dockerbootstrap-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--vex-onboarding-bg)]",
-              "transition-colors duration-150",
-            )}
+            className="self-start text-[rgba(243,244,247,0.78)]"
           >
             Retry instructions fetch
-          </button>
+          </Button>
         </div>
       ) : state.kind === "ready" ? (
         <LinuxManualInstructions instructions={state.instructions} />
       ) : null}
 
-      <div className="rounded-[3px] border border-[color-mix(in_oklab,var(--color-warning)_30%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_8%,transparent)] px-3 py-2 text-xs leading-relaxed">
+      {/* Warning RAIL (A3 alert grammar — no fill, no box). */}
+      <div className="border-l-2 border-[color-mix(in_oklab,var(--color-warning)_45%,transparent)] pl-3 text-xs leading-relaxed text-[rgba(243,244,247,0.78)]">
         <strong className="font-semibold text-[var(--color-warning)]">
           Heads up:
         </strong>{" "}
@@ -84,7 +88,7 @@ export function LinuxInstallBody({
           href={DOCKER_ROOTLESS_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[color-mix(in_oklab,var(--dockerbootstrap-accent)_55%,white)] underline-offset-4 hover:underline"
+          className="text-[color-mix(in_oklab,var(--vex-onboarding-accent,var(--color-accent-primary))_55%,white)] underline-offset-4 hover:underline"
         >
           Docker&rsquo;s rootless mode
         </a>{" "}

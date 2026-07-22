@@ -8,7 +8,8 @@
  * forwarded onto the panel root.
  */
 
-import type { JSX, ReactNode } from "react";
+import type { JSX } from "react";
+import type { IconSvgElement } from "@hugeicons/react";
 import { EMBEDDING_DIM } from "@shared/embedding-defaults.js";
 import { type WizardFlowMode } from "../../../../lib/api/wizard.js";
 import { Button } from "../../../../components/ui/button.js";
@@ -20,7 +21,7 @@ interface EmbeddingsState {
 }
 
 export interface EmbeddingSkipCardProps {
-  readonly icon: ReactNode;
+  readonly icon: IconSvgElement;
   readonly embeddingsState: EmbeddingsState | null;
   readonly flowMode: WizardFlowMode;
   readonly isPending: boolean;
@@ -42,15 +43,24 @@ export function EmbeddingSkipCard({
     <WizardStepPanel
       panelDataAttr={{ kind: "embedding", value: "skip" }}
       icon={icon}
+      flowMode={flowMode}
       title="Embedding configuration is set"
       description={
         embeddingsState?.baseUrlRedacted ? (
           <>
             Vex is using <code>{embeddingsState.baseUrlRedacted}</code>{" "}
-            (bundled EmbeddingGemma 300M, dim {EMBEDDING_DIM}){" "}
-            {embeddingsState.reachable
-              ? "— reachable ✓"
-              : "— not reachable yet; the runtime may still be loading the model."}
+            (bundled EmbeddingGemma 300M, dim {EMBEDDING_DIM}) —{" "}
+            {embeddingsState.reachable ? (
+              <span className="text-[var(--color-success)]">reachable</span>
+            ) : (
+              <>
+                <span className="text-[var(--color-warning)]">
+                  not reachable
+                </span>{" "}
+                yet; the runtime may still be loading the model
+              </>
+            )}
+            .
           </>
         ) : (
           "Bundled EmbeddingGemma 300M is configured."
@@ -72,7 +82,7 @@ export function EmbeddingSkipCard({
             {isPending
               ? "Continuing…"
               : flowMode === "back-edit"
-                ? "Return to review"
+                ? "Done"
                 : "Continue"}
           </Button>
         </>

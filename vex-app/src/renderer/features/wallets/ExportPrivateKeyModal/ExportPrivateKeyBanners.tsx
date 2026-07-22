@@ -3,7 +3,7 @@
  * scrub in {N}s" warning banner (phase === "copied") and the "scrub attempted —
  * closing" success banner (phase === "cleared" | "closing"). Tones ride the
  * semantic tokens (--color-warning / --color-success) via the repo's
- * color-mix hairline recipe (StatusTile/ReviewStep pattern).
+ * color-mix hairline recipe (SetupStatusCard/ReviewStep pattern).
  *
  * Extracted verbatim from `ExportPrivateKeyModal.tsx`. Purely presentational:
  * it shows only the countdown integer — never any secret material.

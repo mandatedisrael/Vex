@@ -1,7 +1,12 @@
 /**
- * Document-panel chrome for each wizard step — a flat hairline sheet in
- * the landing ink grammar, matching the onboarding aesthetic shared with
- * SystemCheck, BootstrapPanel, ComposeBootstrap, and Migrations.
+ * Open page section for each wizard step — AMENDMENT A3 (boxless
+ * composition): the screen-level card is retired. Content sits DIRECTLY
+ * on the hosting surface (cobalt plate in the wizard, ShellScreen glass
+ * in Settings): quiet hairline icon badge + serif sentence-case title +
+ * one human description, then the step content in flow, then actions
+ * right-aligned in flow, then a quiet trailing meta line. Separation is
+ * spacing and at most a hairline divider — no borders-as-boxes, no
+ * grain overlay, no inner scroll well (the page scrolls).
  *
  * Three important contracts:
  *
@@ -13,21 +18,21 @@
  *
  *   2. When the step needs a `<form>` (KeystoreStep, ApiKeysStep,
  *      EmbeddingStep, AgentCoreStep, ProviderStep), the form wraps
- *      BOTH the scrollable body AND the footer so the submit button
- *      stays a descendant of `<form>` — preserves Enter-submit and the
+ *      BOTH the body AND the actions row so the submit button stays a
+ *      descendant of `<form>` — preserves Enter-submit and the
  *      existing testing-library form selectors (codex round 1 BLOCKED #2).
  *
- *   3. The footer chip ("Step X / 7 · Your data stays yours →") is
+ *   3. The trailing meta ("Step X / 7 · Your data stays yours →") is
  *      derived from `panelDataAttr.kind` via a typed `PANEL_KIND_TO_STEP_ID`
- *      map. Each step does NOT pass `stepIndex` / `totalSteps` props —
- *      one source of truth, fewer mistakes (codex review V2 #3).
+ *      map; the step counter renders only in the first-pass wizard flow
+ *      (`flowMode`), never when the same form hosts in Settings/back-edit.
  *
  * Motion is NOT applied here — the outer `WizardShell` owns
- * `AnimatePresence` keyed by the current step id; the panel itself
- * is a plain `<div>` so transitions are not double-wrapped.
+ * `AnimatePresence` keyed by the current step id; this section is a
+ * plain `<div>` so transitions are not double-wrapped.
  */
 
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent, JSX, ReactNode } from "react";
 
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { HugeiconsIconProps } from "@hugeicons/react";
@@ -37,6 +42,7 @@ import {
   type WizardStepId,
 } from "@shared/schemas/wizard.js";
 
+import type { WizardFlowMode } from "../../lib/api/wizard.js";
 import { cn } from "../../lib/utils.js";
 
 type IconDescriptor = HugeiconsIconProps["icon"];
@@ -69,6 +75,13 @@ export interface WizardStepPanelProps {
   readonly footer: ReactNode;
   readonly children: ReactNode;
   readonly formProps?: WizardStepPanelFormProps;
+  /**
+   * The hosting flow. In `"back-edit"` the trailing meta omits the
+   * "Step X / 7" counter — the same form components host inside the
+   * in-shell Settings screen (and Review back-edit), where a wizard
+   * step counter is meaningless. Defaults to the wizard journey.
+   */
+  readonly flowMode?: WizardFlowMode;
 }
 
 type PanelKind = WizardPanelDataAttr["kind"];
@@ -95,57 +108,44 @@ function stepIndexFor(kind: PanelKind): number {
   return WIZARD_STEP_IDS.indexOf(PANEL_KIND_TO_STEP_ID[kind]);
 }
 
-/*
- * `max-h-[calc(100vh-13rem)]` derives from the shell layout: pt-24
- * (96px) + stepper (~56px) + gap-6 (24px) + pb-8 (32px) ≈ 208px =
- * 13rem of fixed chrome around the panel. Keeps the body scrollable
- * inside the 1024×720 BrowserWindow floor (codex final review V2 P1).
- */
-/* NOTARY document panel — a hairline-bounded sheet one tonal step above
- * the canvas (forms need containment, not glass). No blur, no shadows. */
-const PANEL_CHROME = cn(
-  "flex w-full max-h-[calc(100vh-13rem)] flex-col overflow-hidden rounded-xl",
-  "border border-white/[0.08] bg-white/[0.02]",
+/* Quiet hairline icon circle — a glyph badge, not an accent tile. The
+ * serif title is the section's one statement; everything else stays
+ * quiet. */
+const ICON_CIRCLE_CHROME = cn(
+  "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+  "border border-white/[0.16] text-[var(--color-text-primary)]",
 );
 
-const HEADER_CHROME = cn(
-  "flex shrink-0 items-start gap-3 border-b border-white/[0.06] px-6 py-5",
+const META_CHROME = cn(
+  "flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[rgba(243,244,247,0.58)]",
 );
 
-/* Accent-tinted icon tile — the landing's cobalt-fill treatment (hairline
- * border at 35% mix + 10% tint fill). The ONE accent moment in the panel
- * header; title stays a mono stamp, description stays quiet. */
-const ICON_TILE_CHROME = cn(
-  "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-  "border border-[color-mix(in_oklab,var(--vex-onboarding-accent)_35%,transparent)]",
-  "bg-[color-mix(in_oklab,var(--vex-onboarding-accent)_10%,transparent)]",
-  "text-[var(--vex-onboarding-accent)]",
-);
-
-const BODY_CHROME = cn("flex-1 overflow-y-auto px-5 py-5");
-const FOOTER_CHROME = cn(
-  "flex shrink-0 items-center justify-between gap-3 border-t border-white/[0.06] px-6 py-4",
-);
-const FOOTER_META_CHROME = cn(
-  "flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-muted)]",
-);
-
-function FooterMeta({ kind }: { kind: PanelKind }): JSX.Element {
+function TrailingMeta({
+  kind,
+  showStepCount,
+}: {
+  kind: PanelKind;
+  showStepCount: boolean;
+}): JSX.Element {
   const stepIndex = stepIndexFor(kind);
   return (
-    <div className={FOOTER_META_CHROME}>
-      <span>
-        Step {stepIndex + 1} / {TOTAL_WIZARD_STEPS}
-      </span>
-      <span aria-hidden>·</span>
+    <div className={META_CHROME}>
+      {showStepCount ? (
+        <>
+          <span>
+            Step {stepIndex + 1} / {TOTAL_WIZARD_STEPS}
+          </span>
+          <span aria-hidden>·</span>
+        </>
+      ) : null}
       <a
         href="https://docs.vex.ai/security/local-vault"
         target="_blank"
         rel="noopener noreferrer"
         className={cn(
-          "inline-flex items-center gap-1 text-[var(--color-text-secondary)] transition-colors",
-          "hover:text-[var(--vex-onboarding-accent)]",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--vex-onboarding-bg)]",
+          "inline-flex items-center gap-1 text-[rgba(243,244,247,0.78)] transition-colors",
+          "hover:text-[var(--color-text-primary)]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
         )}
       >
         Your data stays yours
@@ -163,6 +163,7 @@ export function WizardStepPanel({
   footer,
   children,
   formProps,
+  flowMode = "first-pass",
 }: WizardStepPanelProps): JSX.Element {
   const dataAttrKey = `data-vex-wizard-${panelDataAttr.kind}` as const;
   // Mapping the discriminated union to a single dynamic-key spread keeps
@@ -171,25 +172,31 @@ export function WizardStepPanel({
   const dataAttrs = { [dataAttrKey]: panelDataAttr.value };
 
   const headerNode = (
-    <header className={HEADER_CHROME}>
-      <span aria-hidden className={ICON_TILE_CHROME}>
-        <HugeiconsIcon icon={icon} size={22} aria-hidden />
+    <header className="flex items-start gap-4">
+      <span aria-hidden className={ICON_CIRCLE_CHROME}>
+        <HugeiconsIcon icon={icon} size={20} aria-hidden />
       </span>
-      <div className="flex flex-col gap-1.5">
-        <h1 className="font-mono text-[13px] font-medium uppercase tracking-[0.3em] text-[var(--color-text-primary)]">
+      <div className="flex flex-col gap-1.5 pt-0.5">
+        <h1 className="font-serif text-2xl font-normal leading-tight text-[var(--color-text-primary)]">
           {title}
         </h1>
-        <p className="text-xs text-[var(--color-text-secondary)]">
+        <p className="text-[13px] leading-relaxed text-[rgba(243,244,247,0.78)]">
           {description}
         </p>
       </div>
     </header>
   );
 
-  const footerNode = (
-    <div className={FOOTER_CHROME}>
-      <FooterMeta kind={panelDataAttr.kind} />
-      <div className="flex items-center gap-3">{footer}</div>
+  const actionsNode = footer ? (
+    <div className="mt-8 flex items-center justify-end gap-3">{footer}</div>
+  ) : null;
+
+  const metaNode = (
+    <div className="mt-6 border-t border-white/[0.12] pt-4">
+      <TrailingMeta
+        kind={panelDataAttr.kind}
+        showStepCount={flowMode !== "back-edit"}
+      />
     </div>
   );
 
@@ -199,31 +206,28 @@ export function WizardStepPanel({
       ? { "data-vex-wizard-provider-form": providerFormAttr }
       : {};
     return (
-      <div {...dataAttrs} className={PANEL_CHROME}>
+      <div {...dataAttrs} className="flex w-full flex-col">
         {headerNode}
-        {/*
-          `min-h-0` allows the inner overflow body to actually shrink
-          inside the flex column (without it the scroll container grows
-          past the panel's max-h on long forms).
-        */}
         <form
           onSubmit={onSubmit}
           noValidate={noValidate ?? false}
           {...formExtraAttrs}
-          className="flex min-h-0 flex-1 flex-col"
+          className="mt-7 flex flex-col"
         >
-          <div className={BODY_CHROME}>{children}</div>
-          {footerNode}
+          {children}
+          {actionsNode}
         </form>
+        {metaNode}
       </div>
     );
   }
 
   return (
-    <div {...dataAttrs} className={PANEL_CHROME}>
+    <div {...dataAttrs} className="flex w-full flex-col">
       {headerNode}
-      <div className={BODY_CHROME}>{children}</div>
-      {footerNode}
+      <div className="mt-7 flex flex-col">{children}</div>
+      {actionsNode}
+      {metaNode}
     </div>
   );
 }

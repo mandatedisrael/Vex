@@ -19,6 +19,7 @@ import { MemoryScreen } from "./MemoryScreen.js";
 import { SessionsScreen } from "./SessionsScreen.js";
 import { HowVexWorksScreen } from "./HowVexWorksScreen.js";
 import { AssetsScreen } from "./AssetsScreen.js";
+import { SettingsScreen } from "./SettingsScreen.js";
 import { TokenHistoryScreen } from "./TokenHistoryScreen.js";
 
 export function ShellScreens(): JSX.Element {
@@ -46,6 +47,13 @@ export function ShellScreens(): JSX.Element {
         <HowVexWorksScreen key="howItWorks" origin={route.origin} onClose={close} />
       ) : route.kind === "assets" ? (
         <AssetsScreen key="assets" origin={route.origin} onClose={close} />
+      ) : route.kind === "settings" ? (
+        <SettingsScreen
+          key="settings"
+          origin={route.origin}
+          section={route.section}
+          onClose={close}
+        />
       ) : route.kind === "tokenHistory" ? (
         <TokenHistoryScreen
           // Identity-keyed so switching tokens always remounts a fresh screen.

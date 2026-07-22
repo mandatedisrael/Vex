@@ -2,7 +2,9 @@
  * Wizard Review & Finalize step (M11, Phase 2 refactor — Mode + Wake
  * removed from the wizard; PR6 redesign — onboarding glass).
  *
- * Two visual modes:
+ * Always the first-pass setup surface since Decision C retired the
+ * reconfigure-wizard entry (Settings owns every post-setup back-edit, and
+ * per-chain key export lives only there). Two visual states:
  *   - default: read-only summary tiles + Sentry consent + Finalize
  *     button, all inside a single `WizardStepPanel`.
  *   - back-edit: renders the selected sub-step DIRECTLY (its own
@@ -24,13 +26,11 @@ import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import type { Result } from "@shared/ipc/result.js";
 import type { Capabilities } from "@shared/schemas/capabilities.js";
 import { type WizardStepId } from "@shared/schemas/wizard.js";
-import type { WalletChain } from "@shared/schemas/wallets.js";
 import { Button } from "../../../../components/ui/button.js";
-import { DotmSquare3 } from "../../../../components/ui/dotm-square-3.js";
+import { VexLoader } from "../../../../components/ui/vex-loader.js";
 import { cn } from "../../../../lib/utils.js";
 import { useEnvState } from "../../../../lib/api/onboarding.js";
 import { useCompleteSetup } from "../../../../lib/api/finalize.js";
-import { ExportPrivateKeyModal } from "../../../wallets/ExportPrivateKeyModal.js";
 import { WIZARD_STEP_META } from "../../wizard-icons.js";
 import { WizardStepPanel } from "../../WizardStepPanel.js";
 import { AgentCoreStep } from "../AgentCoreStep.js";
@@ -49,9 +49,7 @@ import { SentryConsentCard } from "./SentryConsentCard.js";
 
 export interface ReviewStepProps {
   readonly completedSteps: ReadonlyArray<WizardStepId>;
-  readonly mode?: "setup" | "reconfigure";
   readonly onAdvance: (next: WizardStepId) => void;
-  readonly onExitReconfigure?: () => void;
 }
 
 type EditableStep = Exclude<WizardStepId, "review">;
@@ -84,16 +82,12 @@ function renderEditPanel(
 
 export function ReviewStep({
   completedSteps,
-  mode = "setup",
   onAdvance,
-  onExitReconfigure,
 }: ReviewStepProps): JSX.Element {
   const envQuery = useEnvState();
-  const isReconfigure = mode === "reconfigure";
   const capabilitiesQuery = useQuery({
     queryKey: ["capabilities"] as const,
     queryFn: () => window.vex.capabilities.get(),
-    enabled: !isReconfigure,
     staleTime: 60_000,
   });
   const completeSetup = useCompleteSetup();
@@ -102,21 +96,13 @@ export function ReviewStep({
   const [telemetryConsent, setTelemetryConsent] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
-  /**
-   * Export-private-key target chain. Non-null while the modal is open.
-   * Gated to `mode === "reconfigure"` via `WalletsCard.onExport` being
-   * absent when in setup mode.
-   */
-  const [exportingChain, setExportingChain] = useState<WalletChain | null>(
-    null,
-  );
 
   const env = envQuery.data?.ok === true ? envQuery.data.data : null;
   const caps =
     capabilitiesQuery.data?.ok === true
       ? (capabilitiesQuery.data as Result<Capabilities> & { ok: true }).data
       : null;
-  const telemetryAvailable = !isReconfigure && (caps?.telemetryAvailable ?? false);
+  const telemetryAvailable = caps?.telemetryAvailable ?? false;
 
   const onReturnFromEdit = useCallback(
     (_next: WizardStepId) => {
@@ -153,9 +139,9 @@ export function ReviewStep({
       <div className="flex w-full flex-col gap-3">
         <div
           className={cn(
-            // Flat hairline banner — luminance step + hairline, no glass.
-            "flex items-center justify-between gap-3 rounded-xl",
-            "border border-white/[0.1] bg-white/[0.04] px-4 py-2.5",
+            // A3 boxless: a quiet row above the sub-step, hairline only.
+            "flex items-center justify-between gap-3",
+            "border-b border-white/[0.12] pb-3",
             "text-xs text-[var(--color-text-secondary)]",
           )}
           data-vex-wizard-review-editing={editingStep}
@@ -168,11 +154,11 @@ export function ReviewStep({
             onClick={() => setEditingStep(null)}
             className={cn(
               "inline-flex items-center gap-1 rounded-md",
-              "border border-white/[0.1] bg-white/[0.04] px-2 py-1",
+              "border border-white/[0.16] bg-white/[0.08] px-2 py-1",
               "font-mono text-[10px] uppercase tracking-[0.18em]",
               "text-[var(--color-text-secondary)]",
               "hover:border-white/[0.2] hover:text-[var(--color-text-primary)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
             )}
           >
             <HugeiconsIcon icon={ArrowLeft01Icon} size={11} aria-hidden />
@@ -195,14 +181,14 @@ export function ReviewStep({
         description="Gathering current configuration…"
         footer={null}
       >
-        {/* Brand loading language — DotMatrix (role="status" lives on the
-            loader root), never a generic pulse bar. */}
+        {/* Brand loading language — the VexLoader ring (role="status"
+            lives on the loader root), never a generic pulse bar. */}
         <div className="flex justify-center py-4">
-          <DotmSquare3
+          <VexLoader
             size={24}
-            dotSize={3}
-            colorPreset="grad-cobalt"
-            ariaLabel="Loading review…"
+            stroke={2}
+            tone="paper"
+            label="Loading review…"
           />
         </div>
       </WizardStepPanel>
@@ -216,33 +202,19 @@ export function ReviewStep({
     <WizardStepPanel
       panelDataAttr={{ kind: "review", value: "form" }}
       icon={reviewMeta.icon}
-      title={isReconfigure ? "Edit infrastructure" : "Review your setup"}
-      description={
-        isReconfigure
-          ? "Review current infrastructure settings and edit only the section you need."
-          : "Confirm everything below, choose whether to share anonymous error reports, and finalize. Vex will back up your wallets before marking setup complete."
-      }
+      title="Review your setup"
+      description="Confirm everything below, choose whether to share anonymous error reports, and finalize. Vex will back up your wallets before marking setup complete."
       footer={
-        isReconfigure ? (
-          <Button
-            type="button"
-            onClick={onExitReconfigure}
-            data-vex-wizard-review-exit
-          >
-            Back to sessions
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            onClick={() => {
-              void onFinalize();
-            }}
-            disabled={submitting}
-            data-vex-wizard-review-finalize
-          >
-            {submitting ? "Finalizing…" : "Finalize setup"}
-          </Button>
-        )
+        <Button
+          type="button"
+          onClick={() => {
+            void onFinalize();
+          }}
+          disabled={submitting}
+          data-vex-wizard-review-finalize
+        >
+          {submitting ? "Finalizing…" : "Finalize setup"}
+        </Button>
       }
     >
       <div className="flex flex-col gap-3">
@@ -255,10 +227,6 @@ export function ReviewStep({
           envState={env}
           onEdit={() => setEditingStep("wallets")}
           editDisabled={editDisabled}
-          mode={mode}
-          {...(isReconfigure
-            ? { onExport: (chain: WalletChain) => setExportingChain(chain) }
-            : {})}
         />
         <ApiKeysCard
           envState={env}
@@ -279,14 +247,12 @@ export function ReviewStep({
           onEdit={() => setEditingStep("provider")}
           editDisabled={editDisabled}
         />
-        {isReconfigure ? null : (
-          <SentryConsentCard
-            telemetryAvailable={telemetryAvailable}
-            checked={telemetryConsent}
-            onChange={setTelemetryConsent}
-            disabled={submitting}
-          />
-        )}
+        <SentryConsentCard
+          telemetryAvailable={telemetryAvailable}
+          checked={telemetryConsent}
+          onChange={setTelemetryConsent}
+          disabled={submitting}
+        />
 
         {serverError ? (
           <p className="text-sm text-[var(--color-danger)]" role="alert">
@@ -295,7 +261,7 @@ export function ReviewStep({
         ) : null}
         {warning ? (
           <p
-            className="rounded-md border border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_10%,transparent)] px-3 py-2 text-sm text-[var(--color-warning)]"
+            className="border-l-2 border-[color-mix(in_oklab,var(--color-warning)_45%,transparent)] py-0.5 pl-3 text-sm text-[var(--color-warning)]"
             role="status"
           >
             {warning}
@@ -313,13 +279,6 @@ export function ReviewStep({
       <span className="sr-only" data-vex-onadvance-stub>
         {typeof onAdvance === "function" ? "" : ""}
       </span>
-
-      {exportingChain !== null ? (
-        <ExportPrivateKeyModal
-          chain={exportingChain}
-          onClose={() => setExportingChain(null)}
-        />
-      ) : null}
     </WizardStepPanel>
   );
 }

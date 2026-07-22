@@ -1,21 +1,9 @@
 /**
- * Constants for the migrations bootstrap surface — step counter + the
- * auto-advance delay for the `noop` (schema already up to date) path.
- *
- * `TOTAL_ONBOARDING_STEPS` matches the formula used by the four
- * preceding onboarding screens (see
- * features/compose/bootstrap/constants.ts). Migrations is step 4 of
- * the pre-wizard sequence (systemCheck 1, dockerBootstrap 2,
- * composeBootstrap 3, migrations 4); intro is excluded from the
- * counter (it's a brand surface, not a setup task).
+ * Constants for the migrations bootstrap surface — the auto-advance
+ * delay for the `noop` (schema already up to date) path and the
+ * bounded applied-history buffer. (The NOTARY-era "Step X of N"
+ * counter is retired with the Chronos rebrand.)
  */
-
-import { WIZARD_STEP_IDS } from "@shared/schemas/wizard.js";
-
-const SETUP_VIEWS_BEFORE_WIZARD = 4;
-export const TOTAL_ONBOARDING_STEPS =
-  SETUP_VIEWS_BEFORE_WIZARD + (WIZARD_STEP_IDS.length - 1);
-export const MIGRATIONS_STEP = 4;
 
 /**
  * Auto-advance delay for the noop branch — visual confirmation tile

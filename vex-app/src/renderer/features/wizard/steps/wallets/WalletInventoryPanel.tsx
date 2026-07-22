@@ -26,6 +26,7 @@ import {
 } from "../../../../lib/api/wallets.js";
 import { useAvailableWallets } from "../../../../lib/api/wallet-inventory.js";
 import type { WalletChain } from "@shared/schemas/wallets.js";
+import { chainLabel, importHint } from "./wallet-copy.js";
 
 const MAX_PER_FAMILY = 3;
 type View = "list" | "import";
@@ -34,14 +35,6 @@ export interface WalletInventoryPanelProps {
   readonly chain: WalletChain;
   readonly primaryAddress: string;
 }
-
-const chainLabel = (chain: WalletChain): string =>
-  chain === "evm" ? "EVM" : "Solana";
-
-const importHint = (chain: WalletChain): string =>
-  chain === "evm"
-    ? "Paste a 0x-prefixed 64-character private key."
-    : "Paste a base58 secret key OR a JSON byte array of 64 integers.";
 
 // EVM addresses are checksum-cased (case-insensitive equality); Solana
 // addresses are base58 (case-sensitive — must compare verbatim).
@@ -118,10 +111,10 @@ export function WalletInventoryPanel({
 
   return (
     <div
-      className="flex flex-col gap-3 border-t border-white/[0.08] pt-4"
+      className="flex flex-col gap-3 border-t border-white/[0.12] pt-4"
       data-vex-wallet-inventory={chain}
     >
-      <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
         {chainLabel(chain)} wallets ({count}/{MAX_PER_FAMILY})
       </p>
       {others.length > 0 ? (
@@ -154,7 +147,7 @@ export function WalletInventoryPanel({
           />
           <p className="text-xs text-muted-foreground">{importHint(chain)}</p>
           {error !== null ? (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-[var(--color-danger)]" role="alert">
               {error}
             </p>
           ) : null}
@@ -203,7 +196,7 @@ export function WalletInventoryPanel({
             </p>
           ) : null}
           {error !== null ? (
-            <p className="text-xs text-destructive" role="alert">
+            <p className="text-xs text-[var(--color-danger)]" role="alert">
               {error}
             </p>
           ) : null}

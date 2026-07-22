@@ -56,6 +56,9 @@ vi.mock("@thesvg/react", () => ({
 vi.mock("../MemoryScreen.js", () => ({ MemoryScreen: () => null }));
 vi.mock("../SessionsScreen.js", () => ({ SessionsScreen: () => null }));
 vi.mock("../HowVexWorksScreen.js", () => ({ HowVexWorksScreen: () => null }));
+// Phase 2b: SettingsScreen hosts the wizard step forms — a heavy module
+// graph this suite's partial mocks do not cover. Own suite covers it.
+vi.mock("../SettingsScreen.js", () => ({ SettingsScreen: () => null }));
 // The token-history screen itself is owned by TokenHistoryScreen.test.tsx;
 // here a stub exposing its `onClose` wire is enough to pin ShellScreens'
 // returnTo routing back into THIS screen.

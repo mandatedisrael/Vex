@@ -73,6 +73,9 @@ vi.mock("@thesvg/react", () => ({
 vi.mock("../MemoryScreen.js", () => ({ MemoryScreen: () => null }));
 vi.mock("../SessionsScreen.js", () => ({ SessionsScreen: () => null }));
 vi.mock("../HowVexWorksScreen.js", () => ({ HowVexWorksScreen: () => null }));
+// Phase 2b: SettingsScreen hosts the wizard step forms — a heavy module
+// graph this suite's partial mocks do not cover. Own suite covers it.
+vi.mock("../SettingsScreen.js", () => ({ SettingsScreen: () => null }));
 vi.mock("../AssetsScreen.js", () => ({ AssetsScreen: () => null }));
 
 const mockUseTokenHistoryInfinite = vi.hoisted(() => vi.fn());

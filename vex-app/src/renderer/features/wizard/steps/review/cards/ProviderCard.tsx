@@ -22,7 +22,7 @@ export function ProviderCard({
       title="Inference provider"
       status={p.configured ? "ok" : "warning"}
       statusLabel={
-        p.configured ? p.name ?? "configured" : "Optional — agent can't run"
+        p.configured ? p.name ?? "configured" : "Agent can't run"
       }
       onEdit={onEdit}
       editDisabled={editDisabled}

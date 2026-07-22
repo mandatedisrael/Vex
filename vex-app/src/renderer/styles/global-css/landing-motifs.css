@@ -30,18 +30,6 @@
   font-family: var(--font-sans);
 }
 
-/* Scanline texture — the landing .scanlines motif inverted for ink surfaces.
- * Paint-only: put it on an absolutely-positioned overlay. Kept extremely
- * faint so text contrast is untouched. */
-.vex-scanlines {
-  pointer-events: none;
-  background-image: repeating-linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.016) 0 1px,
-    transparent 1px 4px
-  );
-}
-
 /* Grain — the landing .noise SVG turbulence, near-invisible. CSP-safe:
  * data: URIs are governed by img-src (which allows data:). */
 .vex-noise {

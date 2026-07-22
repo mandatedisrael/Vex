@@ -176,7 +176,7 @@ describe("Migrations component", () => {
       },
     });
     const { container, findByText } = renderWithQuery(<Migrations />);
-    // Wait for the failure path to land (message in StatusTile detail).
+    // Wait for the failure path to land (message in SetupStatusCard detail).
     await findByText(/Migration v15 failed/);
     // failedAt block lives in a `<p>` with mixed inline children
     // (text + <span>v15</span> + <code>file</code>); RTL's default

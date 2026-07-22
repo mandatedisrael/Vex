@@ -11,7 +11,7 @@
  * (--color-bg-elevated) behind a hairline border, black/70 backdrop with
  * NO blur, no inset shadows; mono-uppercase title; pill actions (quiet
  * hairline Cancel, filled cobalt Continue). Accent tracks
- * `--dockerbootstrap-accent`.
+ * `--vex-onboarding-accent`.
  *
  * No "I have a license" toggle — Vex cannot verify legal state and
  * presenting one would imply a verification it doesn't perform.
@@ -112,7 +112,7 @@ export function LicenseNotice({
       >
         <h2
           id="vex-license-title"
-          className="mb-4 font-mono text-[13px] font-medium uppercase tracking-[0.3em]"
+          className="mb-4 font-mono text-[13px] font-medium uppercase tracking-[0.18em]"
         >
           Docker Desktop license
         </h2>
@@ -129,7 +129,7 @@ export function LicenseNotice({
         <button
           type="button"
           onClick={openDocs}
-          className="mb-5 inline-flex items-center gap-1 text-sm text-[color-mix(in_oklab,var(--dockerbootstrap-accent,var(--color-accent-primary))_55%,white)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dockerbootstrap-accent,var(--color-accent-primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-elevated)]"
+          className="mb-5 inline-flex items-center gap-1 text-sm text-[color-mix(in_oklab,var(--vex-onboarding-accent,var(--color-accent-primary))_55%,white)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent,var(--color-accent-primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-elevated)]"
         >
           Docker Desktop license terms
           <HugeiconsIcon icon={ArrowUpRight01Icon} size={14} aria-hidden />
@@ -141,7 +141,7 @@ export function LicenseNotice({
             className={cn(
               "inline-flex h-9 items-center justify-center rounded-full border border-white/[0.10] bg-transparent px-5 font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--color-text-secondary)]",
               "hover:border-white/[0.2] hover:text-[var(--color-text-primary)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dockerbootstrap-accent,var(--color-accent-primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-elevated)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent,var(--color-accent-primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-elevated)]",
               "transition-colors duration-150",
             )}
           >
@@ -151,9 +151,14 @@ export function LicenseNotice({
             type="button"
             onClick={onAccept}
             className={cn(
-              "inline-flex h-9 items-center justify-center rounded-full bg-[var(--dockerbootstrap-accent,var(--color-accent-primary))] px-5 font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-white",
-              "hover:bg-[color-mix(in_oklab,var(--dockerbootstrap-accent,var(--color-accent-primary))_82%,white)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dockerbootstrap-accent,var(--color-accent-primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-elevated)]",
+              // Gate paper-pill system (Phase 2b): --color-primary is paper
+              // inside [data-vex-gate], so the label must be the deep-cobalt
+              // primary-foreground — the old accent-fill + text-white pair
+              // would render white-on-paper now that the onboarding accent
+              // re-projects to paper.
+              "inline-flex h-9 items-center justify-center rounded-full bg-[var(--color-primary)] px-5 font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--color-primary-foreground)]",
+              "hover:bg-[color-mix(in_oklab,var(--color-primary)_88%,transparent)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-elevated)]",
               "active:scale-[0.98] transition-colors duration-150",
             )}
           >

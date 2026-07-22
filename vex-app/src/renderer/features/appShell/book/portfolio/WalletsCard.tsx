@@ -8,9 +8,11 @@
  * the address against the configured inventory server-side; em-dash while
  * loading/absent, never a fabricated $0).
  *
- * The final row opens the reconfigure wizard through the SAME public store
- * action SidebarProfile's Settings entry uses (`openWizard("reconfigure")`)
- * — never a reach into that component's private callback.
+ * The final row deep-links the in-shell Settings screen's Wallets section
+ * through the SAME public store action SidebarProfile's Settings entry uses
+ * (`setShellRoute({ kind: "settings", … })`) — never a reach into that
+ * component's private callback. The row's own rect rides along as the
+ * screen's expand origin.
  */
 
 import type { JSX } from "react";
@@ -31,7 +33,7 @@ import {
 
 export function WalletsCard(): JSX.Element {
   const walletsQuery = useAvailableWallets();
-  const openWizard = useUiStore((s) => s.openWizard);
+  const setShellRoute = useUiStore((s) => s.setShellRoute);
   const result = walletsQuery.data;
   const inventory = result?.ok ? result.data : null;
   const wallets = inventory !== null ? flattenPortfolioWallets(inventory) : [];
@@ -59,7 +61,19 @@ export function WalletsCard(): JSX.Element {
           )}
           <button
             type="button"
-            onClick={() => openWizard("reconfigure")}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              setShellRoute({
+                kind: "settings",
+                origin: {
+                  x: rect.x,
+                  y: rect.y,
+                  width: rect.width,
+                  height: rect.height,
+                },
+                section: "wallets",
+              });
+            }}
             className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--vex-line)] py-1.5 text-[12px] text-[var(--vex-text-2)] transition-colors hover:border-[var(--vex-line-strong)] hover:bg-white/[0.04] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--vex-accent)]"
           >
             <HugeiconsIcon icon={Add01Icon} size={13} aria-hidden />

@@ -26,7 +26,7 @@ export function EmbeddingCard({
           ? e.reachable
             ? "Configured · reachable"
             : "Configured · not reachable"
-          : "Optional — not configured"
+          : "Not configured"
       }
       onEdit={onEdit}
       editDisabled={editDisabled}

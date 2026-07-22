@@ -20,11 +20,6 @@
   --color-ring: var(--vex-onboarding-accent);
 }
 
-[data-vex-screen="intro"] {
-  --intro-accent: var(--vex-onboarding-accent);
-  --intro-bg: var(--vex-onboarding-bg);
-}
-
 /* Countersign glint — single one-shot flare on the star the mark already
  * carries, fired at 100%. Stylesheet @keyframes (CSP-safe under
  * `style-src 'self'`); the element mounts only when ready, plays once and
@@ -48,43 +43,6 @@
 
 .vex-intro-glint {
   animation: vex-intro-glint 350ms ease-out forwards;
-}
-
-[data-vex-screen="systemCheck"] {
-  --systemcheck-accent: var(--vex-onboarding-accent);
-  --systemcheck-bg: var(--vex-onboarding-bg);
-}
-
-/* NOTARY stamp press — one-shot print of a resolved probe stamp on the
- * SystemCheck ledger (opacity + a slight settle from 1.15: a press, not
- * a bounce). Stylesheet @keyframes (CSP-safe); plays once per resolve,
- * rests still. Reduced motion collapses it to the final frame via the
- * global rule (global-css/base.css). */
-@keyframes vex-stamp-press {
-  from {
-    opacity: 0;
-    transform: scale(1.15);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.vex-stamp-press {
-  animation: vex-stamp-press 180ms ease-out both;
-}
-
-[data-vex-screen="dockerBootstrap"] {
-  --dockerbootstrap-accent: var(--vex-onboarding-accent);
-}
-
-[data-vex-screen="composeBootstrap"] {
-  --composebootstrap-accent: var(--vex-onboarding-accent);
-}
-
-[data-vex-screen="wizard"] {
-  --wizard-accent: var(--vex-onboarding-accent);
 }
 
 /* Custom scrollbar — scoped to every onboarding screen via the
@@ -120,23 +78,5 @@
 [data-vex-onboarding="true"] {
   scrollbar-color: color-mix(in oklab, var(--vex-onboarding-accent) 38%, transparent) transparent;
   scrollbar-width: thin;
-}
-
-/* System Check cascade reveal — JS-driven row insertion triggers fade+slide.
- * CSS-only (no Motion `layout` per MOTION-POLICY); the renderer mounts
- * additional rows over time and each new row plays this single-shot anim. */
-@keyframes vex-cascade-row {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.motion-cascade-row {
-  animation: vex-cascade-row 240ms cubic-bezier(0.25, 1, 0.5, 1) both;
 }
 

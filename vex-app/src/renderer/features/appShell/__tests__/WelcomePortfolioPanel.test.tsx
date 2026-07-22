@@ -15,8 +15,8 @@
  *     and back; the Primary badge rides ONLY family-primary chips (index 0
  *     per family),
  *   - Wallets card: per-wallet USD totals from the wallet-scoped read
- *     (em dash while unresolved), and the "Add wallet" row opens the
- *     reconfigure wizard via the PUBLIC uiStore action.
+ *     (em dash while unresolved), and the "Add wallet" row deep-links the
+ *     Settings screen's Wallets section via the PUBLIC uiStore action.
  *
  * Data hooks are mocked (GlobalWalletSwitcher.test.tsx pattern) — this
  * suite owns the tab's display/selection rules, not the query wiring.
@@ -280,10 +280,17 @@ describe("WelcomePortfolioPanel — wallets card", () => {
     expect(wallets.queryByText("$0.00")).toBeNull();
   });
 
-  it("Add wallet opens the reconfigure wizard via the public store action", () => {
+  it("Add wallet deep-links the Settings screen's Wallets section via the public store action", () => {
     render(<WelcomePortfolioPanel bookOpen onToggle={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /Add wallet/i }));
-    expect(useUiStore.getState().currentView).toBe("wizard");
-    expect(useUiStore.getState().wizardEntryMode).toBe("reconfigure");
+    const route = useUiStore.getState().shellRoute;
+    expect(route.kind).toBe("settings");
+    if (route.kind !== "settings") throw new Error("route kind mismatch");
+    expect(route.section).toBe("wallets");
+    // The row's own rect rides along as the screen's expand origin.
+    expect(route.origin).not.toBeNull();
+    // The view machine never leaves the shell (the reconfigure wizard door
+    // is retired — Phase 2b).
+    expect(useUiStore.getState().currentView).not.toBe("wizard");
   });
 });

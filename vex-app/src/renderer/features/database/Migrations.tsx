@@ -1,11 +1,10 @@
 /**
- * Database migrations orchestrator — 5th onboarding surface in the
- * Vex flow (intro → systemCheck → dockerBootstrap → composeBootstrap →
- * **migrations** → wizard). Visual system: Countersign/NOTARY document
- * page shared with the preceding screens (NotaryPage scaffold,
- * `data-vex-onboarding="true"`, `--vex-onboarding-accent`).
+ * Database migrations orchestrator — the "Database" slide on the cobalt
+ * continuum (intro is gone; the Chronos Gate fast-path skips this
+ * screen for healthy returning users). Visual system: `SetupFrame`
+ * plate + serif title + one ink-glass card (Chronos rebrand, A2).
  *
- * Flow:
+ * Flow (unchanged):
  *   1. Subscribe to the progress bus BEFORE invoking `migrate()`. The
  *      bus replays the latest event to late subscribers, so the
  *      planned/total handshake survives StrictMode double-mount and
@@ -33,13 +32,11 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useUiStore } from "../../stores/uiStore.js";
 import { onboardingKeys } from "../../lib/api/queryKeys.js";
-import { NotaryPage } from "../../components/onboarding/NotaryPage.js";
-import { KeyButton } from "../../components/onboarding/KeyButton.js";
+import { SetupFrame } from "../../components/onboarding/SetupFrame.js";
+import { Button } from "../../components/ui/button.js";
 import {
   APPLIED_HISTORY_MAX,
-  MIGRATIONS_STEP,
   NOOP_AUTO_ADVANCE_MS,
-  TOTAL_ONBOARDING_STEPS,
 } from "./migrations/constants.js";
 import type { Phase } from "./migrations/types.js";
 import { extractFailedAt } from "./migrations/extractFailedAt.js";
@@ -149,44 +146,46 @@ export function Migrations(): JSX.Element {
   }, [openWizard]);
 
   return (
-    <NotaryPage
+    <SetupFrame
       screen="migrations"
-      headingId="migrations-heading"
-      title="Database Migrations"
+      title="Database"
       subline="Bringing your local schema up to date."
-      stepNumber={MIGRATIONS_STEP}
-      totalSteps={TOTAL_ONBOARDING_STEPS}
     >
-      {/* CASE FILE — the active phase body. */}
-      <div className="mt-6 max-h-[48vh] overflow-y-auto pr-1">
-        {phase.kind === "running" ? (
-          <RunningBody current={phase.current} />
-        ) : phase.kind === "noop" ? (
-          <NoopBody />
-        ) : phase.kind === "ready" ? (
-          <ReadyBody appliedCount={phase.appliedCount} celebrate={true} />
-        ) : phase.kind === "error" ? (
-          <ErrorBody
-            message={phase.message}
-            failedAt={phase.failedAt}
-            appliedBeforeFailure={phase.appliedBeforeFailure}
-            onRetry={handleRetry}
-          />
-        ) : null}
+      {/* THE BODY — the active phase, directly on the plate (AMENDMENT
+       * A3: the container card and its inner scroll well are retired;
+       * the page column scrolls). */}
+      <div className="vex-rise vex-rise-d1">
+          {phase.kind === "running" ? (
+            <RunningBody current={phase.current} />
+          ) : phase.kind === "noop" ? (
+            <NoopBody />
+          ) : phase.kind === "ready" ? (
+            <ReadyBody appliedCount={phase.appliedCount} />
+          ) : phase.kind === "error" ? (
+            <ErrorBody
+              message={phase.message}
+              failedAt={phase.failedAt}
+              appliedBeforeFailure={phase.appliedBeforeFailure}
+              onRetry={handleRetry}
+            />
+          ) : null}
       </div>
 
-      {/* KEY PLINTH — the armed CONTINUE key appears only when the
-       * schema is up to date (error offers Retry in the body; noop
+      {/* FOOTER — the paper-pill Continue appears only when the schema
+       * is up to date (error offers Retry in the body; noop
        * auto-advances). */}
       {phase.kind === "ready" ? (
-        <div className="mt-9">
-          <KeyButton
-            armed
+        <div className="vex-rise vex-rise-d2 mt-6 flex justify-center">
+          <Button
+            size="lg"
+            className="min-w-[208px]"
             onClick={handleContinue}
-            ariaLabel="Continue to setup wizard"
-          />
+            aria-label="Continue to setup wizard"
+          >
+            Continue
+          </Button>
         </div>
       ) : null}
-    </NotaryPage>
+    </SetupFrame>
   );
 }

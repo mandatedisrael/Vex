@@ -1,17 +1,16 @@
 /**
- * Docker bootstrap orchestrator — third user-facing surface in the
- * onboarding flow, in the Countersign/NOTARY language: the signed
- * document continues (NotaryPage scaffold — near-black canvas, hallmark,
- * plinth, mono title line), and the Docker case file renders below as
- * the branch body. One CTA per state in the shared 208×44 key slot:
- * the armed CONTINUE key (branch A) or the quiet RECHECK key (all other
- * branches), both resting on the plinth rule.
+ * Docker bootstrap orchestrator — the Docker slide on the cobalt
+ * continuum (Chronos rebrand, AMENDMENT A2): `SetupFrame` paints the
+ * SetupGate plate, a serif "Docker" title sits above one ink-glass
+ * card holding the active branch body, and the footer carries exactly
+ * one CTA per state — the paper-pill Continue (branch A) or the quiet
+ * ghost Recheck (everywhere else).
  *
  * Branch dispatch lives here; the per-branch render is delegated to
- * the body components in `bootstrap/branches/`. Shared visual primitives
- * (status tile, primary button, docs link) live in `components/onboarding/`.
+ * the body components in `bootstrap/branches/`. Shared visual
+ * primitives (SetupStatusCard, DocsLink) live in `components/onboarding/`.
  *
- * State machine:
+ * State machine (unchanged):
  *   loading     — Docker probe in flight, OR engine missing + platform
  *                 still resolving (data wins when platform irrelevant).
  *   A           — engine + daemon running → ReadyBody + Continue.
@@ -20,7 +19,8 @@
  *                 because the main process only attempts the user-mode
  *                 Docker Desktop unit, never sudo).
  *   C-desktop   — mac/win, Docker CLI missing → DesktopInstallBody (in-app
- *                 installer download via LicenseNotice).
+ *                 installer download via LicenseNotice — the license
+ *                 dialog ALWAYS precedes any download IPC).
  *   C-linux     — linux, engine missing → LinuxInstallBody (auto-fetch
  *                 `linux_manual_instructions` IPC).
  *   D           — IPC/Result error, endpoint rejected, or version probe
@@ -41,18 +41,13 @@ import { useSystemHealth } from "../../lib/api/system.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { InstallProgressStrip } from "./InstallProgress.js";
 import { LicenseNotice } from "./LicenseNotice.js";
-import {
-  DOCKER_BOOTSTRAP_STEP,
-  TOTAL_ONBOARDING_STEPS,
-} from "./bootstrap/constants.js";
 import type {
   ActiveInstallMethod,
   Branch,
   ManualFetchState,
 } from "./bootstrap/types.js";
-import { NotaryPage } from "../../components/onboarding/NotaryPage.js";
-import { KeyButton } from "../../components/onboarding/KeyButton.js";
-import { RecheckButton } from "../../components/onboarding/FooterButtons.js";
+import { SetupFrame } from "../../components/onboarding/SetupFrame.js";
+import { Button } from "../../components/ui/button.js";
 import { LoadingBody } from "./bootstrap/branches/LoadingBody.js";
 import { ReadyBody } from "./bootstrap/branches/ReadyBody.js";
 import { DaemonStoppedBody } from "./bootstrap/branches/DaemonStoppedBody.js";
@@ -189,69 +184,74 @@ export function BootstrapPanel(): JSX.Element {
     branch === "loading";
 
   return (
-    <NotaryPage
+    <SetupFrame
       screen="dockerBootstrap"
-      headingId="dockerbootstrap-heading"
-      title="Docker Setup"
-      subline="Vex runs Postgres + embeddings locally through Docker."
-      stepNumber={DOCKER_BOOTSTRAP_STEP}
-      totalSteps={TOTAL_ONBOARDING_STEPS}
+      maxWidth="lg"
+      title="Docker"
+      subline="Vex runs Postgres and embeddings locally through Docker."
     >
-      {/* CASE FILE — the active branch body. Scroll guard keeps long
-       * Linux install instructions inside the document column. */}
-      <div className="mt-6 max-h-[48vh] overflow-y-auto pr-1">
-        {showInstallProgress ? (
-          <InstallProgressStrip active />
-        ) : branch === "loading" ? (
-          <LoadingBody />
-        ) : branch === "A" ? (
-          <ReadyBody
-            status={dockerStatus.data?.ok ? dockerStatus.data.data : null}
-          />
-        ) : branch === "B" ? (
-          <DaemonStoppedBody
-            platform={platform}
-            starting={startMutation.isPending}
-            startMessage={
-              startMutation.data?.ok
-                ? startMutation.data.data.message ?? null
-                : null
-            }
-            onStart={handleStart}
-          />
-        ) : branch === "C-desktop" ? (
-          <DesktopInstallBody
-            platform={platform}
-            installing={installMutation.isPending}
-            onInstall={handleDesktopInstall}
-          />
-        ) : branch === "C-linux" ? (
-          <LinuxInstallBody
-            state={manualFetchState}
-            onRetryFetch={handleRetryInstructionsFetch}
-          />
-        ) : (
-          <FailureBody status={dockerStatus.data} />
-        )}
+      {/* THE BODY — the active branch, directly on the plate (AMENDMENT
+       * A3: the container card and its inner scroll well are retired;
+       * the page column scrolls, so long Linux instructions scroll the
+       * page, not a well). */}
+      <div className="vex-rise vex-rise-d1">
+          {showInstallProgress ? (
+            <InstallProgressStrip active />
+          ) : branch === "loading" ? (
+            <LoadingBody />
+          ) : branch === "A" ? (
+            <ReadyBody
+              status={dockerStatus.data?.ok ? dockerStatus.data.data : null}
+            />
+          ) : branch === "B" ? (
+            <DaemonStoppedBody
+              platform={platform}
+              starting={startMutation.isPending}
+              startMessage={
+                startMutation.data?.ok
+                  ? startMutation.data.data.message ?? null
+                  : null
+              }
+              onStart={handleStart}
+            />
+          ) : branch === "C-desktop" ? (
+            <DesktopInstallBody
+              platform={platform}
+              installing={installMutation.isPending}
+              onInstall={handleDesktopInstall}
+            />
+          ) : branch === "C-linux" ? (
+            <LinuxInstallBody
+              state={manualFetchState}
+              onRetryFetch={handleRetryInstructionsFetch}
+            />
+          ) : (
+            <FailureBody status={dockerStatus.data} />
+          )}
       </div>
 
-      {/* KEY PLINTH — one CTA per state in the shared slot: armed
-       * CONTINUE on branch A, quiet RECHECK everywhere else. */}
-      <div className="mt-9">
+      {/* FOOTER — one CTA per state: paper-pill Continue on branch A,
+       * quiet ghost Recheck everywhere else. */}
+      <div className="vex-rise vex-rise-d2 mt-6 flex justify-center">
         {branch === "A" ? (
-          <KeyButton
-            armed
+          <Button
+            size="lg"
+            className="min-w-[208px]"
             onClick={handleContinue}
-            ariaLabel="Continue to services startup"
-          />
+            aria-label="Continue to services startup"
+          >
+            Continue
+          </Button>
         ) : (
-          <div className="relative flex w-full items-center justify-center">
-            <span
-              aria-hidden
-              className="absolute inset-x-0 top-1/2 h-px bg-white/[0.08]"
-            />
-            <RecheckButton onClick={handleRecheck} disabled={recheckDisabled} />
-          </div>
+          <Button
+            variant="ghost"
+            size="lg"
+            className="min-w-[208px] text-[rgba(243,244,247,0.78)]"
+            onClick={handleRecheck}
+            disabled={recheckDisabled}
+          >
+            Recheck
+          </Button>
         )}
       </div>
 
@@ -260,7 +260,7 @@ export function BootstrapPanel(): JSX.Element {
         onAccept={handleLicenseAccepted}
         onDismiss={handleLicenseDismiss}
       />
-    </NotaryPage>
+    </SetupFrame>
   );
 }
 

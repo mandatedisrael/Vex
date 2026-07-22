@@ -154,8 +154,9 @@ export function KeystoreStep({
       <WizardStepPanel
         panelDataAttr={{ kind: "keystore", value: "skip" }}
         icon={meta.icon}
+        flowMode={flowMode}
         title="Master password already configured"
-        description="Vex has an encrypted local secret vault for this install. Continue to keep using it."
+        description="This install already has an encrypted local vault, sealed with your master password. There is nothing to redo here."
         footer={
           <Button
             onClick={() => {
@@ -166,16 +167,16 @@ export function KeystoreStep({
             {stepAdvance.isPending
               ? "Continuing…"
               : flowMode === "back-edit"
-                ? "Return to review"
+                ? "Done"
                 : "Continue"}
           </Button>
         }
       >
         <div className="flex flex-col gap-4">
           <p className="text-sm text-[var(--color-text-secondary)]">
-            To rotate the password, complete setup and use the future
-            Settings panel. Wallet keystores are not re-encrypted
-            automatically when the password changes.
+            The master password can&apos;t be rotated from this screen.
+            Wallet keystores keep their current encryption — they are not
+            re-encrypted automatically if the password ever changes.
           </p>
           {advanceError ? (
             <p className="text-sm text-[var(--color-danger)]" role="alert">
@@ -195,8 +196,9 @@ export function KeystoreStep({
     <WizardStepPanel
       panelDataAttr={{ kind: "keystore", value: "form" }}
       icon={meta.icon}
+      flowMode={flowMode}
       title="Set your master password"
-      description="This password unlocks the encrypted local vault and protects wallet keystores when you create them in the next step. It stays on this machine."
+      description="One password seals the encrypted vault on this machine — wallet keys, API keys, and the provider key you add later all live behind it. It never leaves this computer, and it can't be recovered if lost, so keep it somewhere safe."
       formProps={{
         onSubmit: (e) => {
           void onSubmit(e);
@@ -208,7 +210,7 @@ export function KeystoreStep({
           {submitting
             ? "Saving…"
             : flowMode === "back-edit"
-              ? "Save and return to review"
+              ? "Save changes"
               : "Save and continue"}
         </Button>
       }

@@ -73,6 +73,14 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   ZapIcon: "ZapIcon",
 }));
 
+// Phase 2b: the Settings ShellScreen hosts the wizard step forms, whose
+// module graph (icons, RHF, brand marks) is far beyond this suite's
+// partial mocks. The screen has its own suite; a stub keeps THIS suite's
+// AppShell import light.
+vi.mock("../../screens/SettingsScreen.js", () => ({
+  SettingsScreen: () => null,
+}));
+
 vi.mock("@thesvg/react", () => ({
   Docker: () => null,
   Ethereum: () => null,

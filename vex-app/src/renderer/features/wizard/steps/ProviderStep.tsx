@@ -189,10 +189,11 @@ export function ProviderStep({
       <WizardStepPanel
         panelDataAttr={{ kind: "provider", value: "skip" }}
         icon={meta.icon}
+        flowMode={flowMode}
         title="Provider is configured"
         description={
           effectiveName === "openrouter"
-            ? "OpenRouter is active. Settings apply on next agent restart."
+            ? "OpenRouter is active. Changes apply the next time the agent starts."
             : "A provider is configured."
         }
         footer={
@@ -213,7 +214,7 @@ export function ProviderStep({
               {stepAdvance.isPending
                 ? "Continuing…"
                 : flowMode === "back-edit"
-                  ? "Return to review"
+                  ? "Done"
                   : "Continue"}
             </Button>
           </>
@@ -221,7 +222,7 @@ export function ProviderStep({
       >
         <div className="flex flex-col gap-4">
           {effectiveModel ? (
-            <div className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5">
+            <div className="flex items-center gap-3 border-t border-white/[0.12] pt-4">
               <ModelBrandIcon modelId={effectiveModel} size={22} />
               <div className="flex min-w-0 flex-col">
                 <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-muted)]">
@@ -253,8 +254,9 @@ export function ProviderStep({
     <WizardStepPanel
       panelDataAttr={{ kind: "provider", value: "form" }}
       icon={meta.icon}
+      flowMode={flowMode}
       title="Inference provider"
-      description="The inference provider is optional here — you can add it later in Settings — but the agent cannot run until one is configured. Provide an OpenRouter key and model id to set it up now."
+      description="OpenRouter is the model backend the agent thinks with. The key buys inference only — your wallet keys and vault contents are never sent to the model provider. Optional here, but the agent cannot run until one is configured."
       formProps={{
         onSubmit: (e) => {
           void onSubmit(e);
@@ -284,9 +286,7 @@ export function ProviderStep({
               ? "Verifying..."
               : stepAdvance.isPending
                 ? "Continuing..."
-                : flowMode === "back-edit"
-                  ? "Verify and return to review"
-                  : "Verify and save"}
+                : "Verify and save"}
           </Button>
         </>
       }
@@ -296,7 +296,7 @@ export function ProviderStep({
           <p
             role="status"
             data-vex-provider-configure-later-alert
-            className="rounded-md border border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_10%,transparent)] px-3 py-2 text-sm text-[var(--color-warning)]"
+            className="border-l-2 border-[color-mix(in_oklab,var(--color-warning)_45%,transparent)] py-0.5 pl-3 text-sm text-[var(--color-warning)]"
           >
             The agent cannot run any inference without a provider — it will
             stay idle until you add an OpenRouter key and model. You can do
@@ -317,7 +317,7 @@ export function ProviderStep({
               href="https://openrouter.ai/keys"
               target="_blank"
               rel="noreferrer"
-              className="text-[var(--vex-onboarding-accent)] underline-offset-2 hover:underline"
+              className="text-[var(--color-text-primary)] underline underline-offset-2 hover:text-[var(--color-text-secondary)]"
             >
               openrouter.ai/keys
             </a>
@@ -353,7 +353,7 @@ export function ProviderStep({
               href="https://openrouter.ai/models"
               target="_blank"
               rel="noreferrer"
-              className="text-[var(--vex-onboarding-accent)] underline-offset-2 hover:underline"
+              className="text-[var(--color-text-primary)] underline underline-offset-2 hover:text-[var(--color-text-secondary)]"
             >
               openrouter.ai/models
             </a>
@@ -371,7 +371,7 @@ export function ProviderStep({
           <div
             role="alert"
             data-vex-provider-error={String(serverError.code)}
-            className="rounded-md border border-[color-mix(in_oklab,var(--color-danger)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-danger)_10%,transparent)] p-4 text-sm text-[var(--color-danger)]"
+            className="border-l-2 border-[color-mix(in_oklab,var(--color-danger)_45%,transparent)] py-1 pl-3 text-sm text-[var(--color-danger)]"
           >
             <strong className="block font-semibold">
               {uiCopyFor(String(serverError.code)).title}
@@ -400,7 +400,7 @@ export function ProviderStep({
                 <button
                   type="button"
                   onClick={openLogsFolder}
-                  className="text-[var(--vex-onboarding-accent)] underline-offset-2 hover:underline"
+                  className="text-[var(--color-text-primary)] underline underline-offset-2 hover:text-[var(--color-text-secondary)]"
                 >
                   Open logs folder
                 </button>
@@ -413,10 +413,10 @@ export function ProviderStep({
           <div
             role="status"
             data-vex-provider-success="true"
-            className="rounded-md border border-[color-mix(in_oklab,var(--color-success)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-success)_10%,transparent)] p-4 text-sm text-[var(--color-success)]"
+            className="text-sm text-[var(--color-success)]"
           >
-            OpenRouter verified ({successLatencyMs}ms). Settings apply on
-            next agent restart.
+            OpenRouter verified ({successLatencyMs}ms). Changes apply the
+            next time the agent starts.
           </div>
         ) : null}
       </div>

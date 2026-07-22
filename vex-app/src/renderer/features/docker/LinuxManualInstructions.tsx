@@ -75,7 +75,7 @@ export function LinuxManualInstructions({
           className={cn(
             "absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-white/[0.12] bg-[var(--vex-onboarding-bg,var(--color-bg-primary))] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--color-text-primary)] transition-colors duration-150",
             "hover:border-white/[0.2] hover:bg-[var(--color-bg-elevated)]",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dockerbootstrap-accent,var(--color-accent-primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]",
             copyState === "ok"
               ? "border-[color-mix(in_oklab,var(--color-success)_45%,transparent)] text-[var(--color-success)]"
               : copyState === "fail"
@@ -88,7 +88,7 @@ export function LinuxManualInstructions({
         </button>
       </div>
 
-      <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">
+      <p className="text-xs leading-relaxed text-[rgba(243,244,247,0.78)]">
         After install: log out and back in (or reboot) so your user joins the{" "}
         <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[var(--color-text-primary)]">
           docker

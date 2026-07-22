@@ -19,6 +19,8 @@
 import type { JSX, RefObject } from "react";
 import { Tavily, X } from "@thesvg/react";
 import type { PolymarketStatus } from "@shared/schemas/api-keys.js";
+import { cn } from "../../../../lib/utils.js";
+import { RAIL_WARNING_CHROME } from "../step-chrome.js";
 import { Label } from "../../../../components/ui/label.js";
 import { PasswordField } from "../../../../components/common/PasswordField.js";
 import { PolymarketAutoSetupSection } from "../polymarket-auto-setup/PolymarketAutoSetupSection.js";
@@ -49,15 +51,15 @@ export function JupiterCard({
       }
       name="Jupiter"
       status={status}
-      description={
+      description="Prices and swaps tokens on Solana."
+      detail={
         <>
-          Needed for Solana token swaps + portfolio tools — optional, add it
-          later in Settings (Solana swaps stay unavailable until you do). Free
-          API key — open the portal, then{" "}
+          The key is free — open the portal, then{" "}
           <span className="font-medium text-[var(--color-text-primary)]">
-            Settings → API Keys → + Create new API key
+            API Keys → Create new API key
           </span>
-          .
+          . Without it, Solana swaps stay unavailable; everything else
+          still works.
         </>
       }
       getKey={{
@@ -76,8 +78,8 @@ export function JupiterCard({
       />
       <p className="text-xs text-[var(--color-text-muted)]">
         {configured
-          ? "Leave blank to keep, or paste a new key to overwrite."
-          : "Optional — leave blank to add later; Solana swaps stay unavailable until you set it."}
+          ? "Leave blank to keep the saved key, or paste a new one to overwrite it."
+          : "Leave blank to add later — Solana swaps stay unavailable until you set it."}
       </p>
     </ProviderCard>
   );
@@ -98,17 +100,14 @@ export function TavilyCard({
       iconSlot={<Tavily width={20} height={20} aria-hidden />}
       name="Tavily"
       status={status}
-      description={
+      description="Lets the agent search and read the web."
+      detail={
         <>
-          Extends your agent with web research / search. Free tier:{" "}
+          Free tier:{" "}
           <span className="font-medium text-[var(--color-text-primary)]">
-            1,000 queries / month
+            1,000 queries a month
           </span>
-          . Open the dashboard, then click the{" "}
-          <span className="font-medium text-[var(--color-text-primary)]">
-            +
-          </span>{" "}
-          next to API Keys.
+          . Open the dashboard, then click the + next to API Keys.
         </>
       }
       getKey={{
@@ -143,10 +142,10 @@ export function RettiwtCard({
       iconSlot={<X width={18} height={18} aria-hidden />}
       name="Rettiwt (X / Twitter)"
       status={status}
-      description={
+      description="Posts and reads from an X (Twitter) account."
+      detail={
         <>
-          Unlocks the X (Twitter) account tool. The key is your X session
-          cookie, so use a{" "}
+          The key is your X session cookie, so use a{" "}
           <span className="font-medium text-[var(--color-text-primary)]">
             secondary X account
           </span>{" "}
@@ -162,7 +161,7 @@ export function RettiwtCard({
           href="https://chromewebstore.google.com/detail/x-auth-helper/igpkhkjmpdecacocghpgkghdcmcmpfhp"
           target="_blank"
           rel="noopener noreferrer"
-          className="font-medium text-[var(--vex-onboarding-accent)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]"
+          className="font-medium text-[var(--color-text-primary)] underline underline-offset-2 hover:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
         >
           Chrome: X Auth Helper ↗
         </a>
@@ -173,7 +172,7 @@ export function RettiwtCard({
           href="https://addons.mozilla.org/en-US/firefox/addon/rettiwt-auth-helper"
           target="_blank"
           rel="noopener noreferrer"
-          className="font-medium text-[var(--vex-onboarding-accent)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]"
+          className="font-medium text-[var(--color-text-primary)] underline underline-offset-2 hover:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
         >
           Firefox: Rettiwt Auth Helper ↗
         </a>
@@ -220,7 +219,10 @@ export function PolymarketCard({
         <div
           role="alert"
           data-vex-apikeys-warning="polymarket-partial"
-          className="rounded-md border border-[color-mix(in_oklab,var(--color-warning)_40%,transparent)] bg-[color-mix(in_oklab,var(--color-warning)_10%,transparent)] p-3 text-sm text-[var(--color-warning)]"
+          className={cn(
+            "py-1 text-sm text-[var(--color-warning)]",
+            RAIL_WARNING_CHROME,
+          )}
         >
           <strong className="font-semibold">
             Polymarket needs all three credentials.
@@ -244,11 +246,12 @@ export function PolymarketCard({
           }
           name="Polymarket"
           status={status}
-          description={
+          description="Trades prediction markets with your EVM wallet."
+          detail={
             <>
-              Prediction-market trading. Auto-setup derives CLOB API
-              credentials from your EVM wallet — no manual key entry,
-              nothing shown on screen. Replaces partial state in-place.
+              Auto-setup signs one authentication request with the selected
+              wallet and derives the API credentials — nothing is typed in
+              or shown on screen. Running it again replaces what is saved.
             </>
           }
         >

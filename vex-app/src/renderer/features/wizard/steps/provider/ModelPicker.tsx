@@ -208,7 +208,7 @@ export function ModelPicker({
               <button
                 type="button"
                 onClick={onRetry}
-                className="inline-flex shrink-0 items-center gap-1 text-xs text-[var(--vex-onboarding-accent)] hover:underline"
+                className="inline-flex shrink-0 items-center gap-1 text-xs text-[var(--color-text-primary)] underline underline-offset-2 hover:text-[var(--color-text-secondary)]"
               >
                 <HugeiconsIcon icon={RefreshIcon} size={12} aria-hidden />
                 Retry

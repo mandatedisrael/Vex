@@ -29,6 +29,9 @@ import {
   useWalletRestore,
 } from "../../../../lib/api/wallets.js";
 import type { WalletChain } from "@shared/schemas/wallets.js";
+import { cn } from "../../../../lib/utils.js";
+import { RAIL_WARNING_CHROME } from "../step-chrome.js";
+import { chainLabel, importHint } from "./wallet-copy.js";
 import { WalletInventoryPanel } from "./WalletInventoryPanel.js";
 
 type View = "menu" | "import";
@@ -43,14 +46,6 @@ export interface ChainActionsProps {
     backupDir: string | null
   ) => void;
 }
-
-const chainLabel = (chain: WalletChain): string =>
-  chain === "evm" ? "EVM" : "Solana";
-
-const importHint = (chain: WalletChain): string =>
-  chain === "evm"
-    ? "Paste a 0x-prefixed 64-character private key."
-    : "Paste a base58 secret key OR a JSON byte array of 64 integers.";
 
 export function ChainActions({
   chain,
@@ -146,13 +141,13 @@ export function ChainActions({
         data-vex-wallet-chain={chain}
       >
         <div>
-          <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+          <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">
             {chainLabel(chain)} wallet
           </p>
           <AddressDisplay address={address} className="mt-1" />
         </div>
         {backupDir !== null ? (
-          <div className="rounded-md border border-warning/40 bg-warning/5 p-3">
+          <div className={cn("py-1", RAIL_WARNING_CHROME)}>
             <p className="text-sm font-medium text-foreground">
               Backup created — save it to a safe location now.
             </p>
@@ -191,7 +186,7 @@ export function ChainActions({
           </Button>
         </div>
         {actionError !== null ? (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-sm text-[var(--color-danger)]" role="alert">
             {actionError}
           </p>
         ) : null}
@@ -210,7 +205,8 @@ export function ChainActions({
         <p className="text-sm text-muted-foreground">
           Set up your {chainLabel(chain)} wallet by generating fresh keys,
           importing an existing private key, or restoring from a backup
-          file.
+          file. Keys are created and encrypted locally — Vex never sends
+          them anywhere.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -235,7 +231,7 @@ export function ChainActions({
           </Button>
         </div>
         {actionError !== null ? (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="text-sm text-[var(--color-danger)]" role="alert">
             {actionError}
           </p>
         ) : null}
@@ -273,7 +269,7 @@ export function ChainActions({
       {importError !== null ? (
         <p
           id={importErrorId}
-          className="text-xs text-destructive"
+          className="text-xs text-[var(--color-danger)]"
           role="alert"
         >
           {importError}

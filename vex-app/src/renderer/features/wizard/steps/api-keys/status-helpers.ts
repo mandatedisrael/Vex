@@ -12,8 +12,9 @@ import type { PolymarketStatus } from "@shared/schemas/api-keys.js";
 import type { ProviderCardStatus } from "./ProviderCard.js";
 
 export function statusFor(configured: boolean): ProviderCardStatus {
+  // Status is a colored WORD (design law) — no checkmark glyphs.
   return configured
-    ? { tone: "set", label: "Set ✓" }
+    ? { tone: "set", label: "Set" }
     : { tone: "unset", label: "Not set" };
 }
 
@@ -22,7 +23,7 @@ export function polymarketStatusBadge(
 ): ProviderCardStatus {
   switch (status) {
     case "configured":
-      return { tone: "set", label: "Set ✓" };
+      return { tone: "set", label: "Set" };
     case "partial":
       return { tone: "partial", label: "Partial" };
     case "missing":

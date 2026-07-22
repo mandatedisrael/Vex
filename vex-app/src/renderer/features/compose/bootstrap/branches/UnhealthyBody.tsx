@@ -5,10 +5,8 @@
  * within the probe budget). Usually a flake; retry resolves it.
  */
 
-import { HugeiconsIcon } from "@hugeicons/react";
-import { AlertCircleIcon, Refresh01Icon } from "@hugeicons/core-free-icons";
-import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
-import { PrimaryButton } from "../../../../components/onboarding/PrimaryButton.js";
+import { Button } from "../../../../components/ui/button.js";
+import { SetupStatusCard } from "../../../../components/onboarding/SetupStatusCard.js";
 import { OpenLogsLink } from "../../../../components/common/OpenLogsLink.js";
 
 interface UnhealthyBodyProps {
@@ -22,17 +20,19 @@ export function UnhealthyBody({
 }: UnhealthyBodyProps): JSX.Element {
   return (
     <div className="flex flex-col gap-4">
-      <StatusTile
-        tone="warning"
-        icon={<HugeiconsIcon icon={AlertCircleIcon} size={20} aria-hidden />}
+      <SetupStatusCard
+        tone="warn"
+        word="Unhealthy"
         title="Service started but health probe failed"
         detail={message}
       />
-      <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">
+      <p className="text-xs leading-relaxed text-[rgba(243,244,247,0.78)]">
         This usually clears after a short wait while the container
         warms up. Click Try again to re-probe the stack.
       </p>
-      <PrimaryButton icon={Refresh01Icon} label="Try again" onClick={onRetry} />
+      <Button size="lg" className="w-full" onClick={onRetry}>
+        Try again
+      </Button>
       <OpenLogsLink />
     </div>
   );

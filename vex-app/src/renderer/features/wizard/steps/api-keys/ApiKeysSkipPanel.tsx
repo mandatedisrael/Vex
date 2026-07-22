@@ -16,13 +16,14 @@
  * from the inlined branch.
  */
 
-import type { JSX, ReactNode } from "react";
+import type { JSX } from "react";
+import type { IconSvgElement } from "@hugeicons/react";
 import type { PolymarketStatus } from "@shared/schemas/api-keys.js";
 import { Button } from "../../../../components/ui/button.js";
 import { WizardStepPanel } from "../../WizardStepPanel.js";
 
 export interface ApiKeysSkipPanelProps {
-  readonly icon: ReactNode;
+  readonly icon: IconSvgElement;
   readonly polymarketStatus: PolymarketStatus;
   readonly formError: string | null;
   readonly advancePending: boolean;
@@ -44,7 +45,7 @@ export function ApiKeysSkipPanel({
       panelDataAttr={{ kind: "apikeys", value: "skip" }}
       icon={icon}
       title="API keys already configured"
-      description="Vex found your JUPITER_API_KEY in this install. Continue to keep using it. You can review or edit the optional integrations (Tavily, Rettiwt, Polymarket) from the Review step before finishing."
+      description="A Jupiter API key is already saved on this install. Continue to keep using it — Tavily, Rettiwt, and Polymarket stay editable from the review at the end, or later in Settings."
       footer={
         <Button
           onClick={() => {
@@ -73,7 +74,7 @@ export function ApiKeysSkipPanel({
               onClick={() => {
                 onConfigurePolymarket();
               }}
-              className="font-medium text-[var(--vex-onboarding-accent)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-primary)]"
+              className="font-medium text-[var(--color-text-primary)] underline underline-offset-2 hover:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
               data-vex-apikeys-skip-polymarket-cta="button"
             >
               Configure Polymarket now

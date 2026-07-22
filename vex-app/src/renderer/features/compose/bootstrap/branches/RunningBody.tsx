@@ -1,20 +1,19 @@
 /**
- * Branch: running — Docker Compose up is in flight. Hero dotmatrix
- * loader (`dotm-circular-8` — pulse bursts from center) anchors the
- * body; the two services (Postgres + Embeddings) render as NOTARY
- * ledger rows reading aggregated substate from the parsed log stream;
- * a subordinate quiet Cancel button closes the body (the armed
- * CONTINUE key appears only once the phase flips to `ready`).
+ * Branch: running — Docker Compose up is in flight. The hero VexLoader
+ * ring (paper tone) anchors the body; the two services (Postgres +
+ * Embeddings) render as quiet hairline rows reading aggregated substate
+ * from the parsed log stream — an inline VexLoader while a service is
+ * starting/probing, then a colored status word once it settles. A
+ * subordinate ghost Cancel closes the body (the paper-pill Continue
+ * appears only once the phase flips to `ready`).
  *
  * The `data-vex-compose-cancel` / `data-vex-compose-cancelling`
  * attribute pair on the Cancel button is a public test contract (PR3
  * cancellation) — do not rename.
  */
 
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon } from "@hugeicons/core-free-icons";
-import { DotmCircular8 } from "../../../../components/ui/dotm-circular-8.js";
-import { DotmSquare3 } from "../../../../components/ui/dotm-square-3.js";
+import { VexLoader } from "../../../../components/ui/vex-loader.js";
+import { Button } from "../../../../components/ui/button.js";
 import { cn } from "../../../../lib/utils.js";
 import type { AggregatedServiceState, ServiceStatus } from "../types.js";
 
@@ -24,19 +23,12 @@ interface RunningBodyProps {
   readonly cancelling: boolean;
 }
 
-/** Status ink for the row's mono stamp text + matrix color. */
+/** Status word ink — paper-alpha while working, tokens once settled. */
 const statusInk: Record<ServiceStatus, string> = {
-  starting: "text-[var(--color-text-secondary)]",
-  probing: "text-[var(--color-accent-secondary)]",
+  starting: "text-[rgba(243,244,247,0.58)]",
+  probing: "text-[rgba(243,244,247,0.85)]",
   ready: "text-[var(--color-success)]",
   failed: "text-[var(--color-danger)]",
-};
-
-const matrixColor: Record<ServiceStatus, string> = {
-  starting: "var(--vex-onboarding-accent)",
-  probing: "var(--vex-onboarding-accent)",
-  ready: "var(--color-success)",
-  failed: "var(--color-danger)",
 };
 
 export function RunningBody({
@@ -46,52 +38,45 @@ export function RunningBody({
 }: RunningBodyProps): JSX.Element {
   return (
     <div className="flex flex-col gap-6">
-      {/* HERO — the machine at work, centered above the ledger. */}
+      {/* HERO — the ring at work, centered above the service rows. */}
       <div className="flex justify-center pt-2">
-        <DotmCircular8
-          size={64}
-          color="var(--vex-onboarding-accent)"
-          ariaLabel="Starting services"
+        <VexLoader
+          size={72}
+          stroke={2}
+          tone="paper"
+          label="Starting services"
         />
       </div>
 
-      {/* SERVICE LEDGER — one hairline row per service; the heavier
-       * bottom border is the closing rule. */}
-      <ul className="flex w-full flex-col border-b border-white/[0.10]">
-        {services.map((s, i) => (
+      {/* SERVICE ROWS — one hairline row per service. */}
+      <ul className="flex w-full flex-col">
+        {services.map((s) => (
           <li
             key={s.service}
-            className="flex items-center gap-3 border-b border-white/[0.06] py-4"
+            className="flex items-center gap-3 border-t border-white/[0.10] py-4 first:border-t-0"
             data-service={s.service}
             data-status={s.status}
           >
-            {/* Ledger index — landing .num voice, same treatment as the
-             * SystemCheck StepRow indexes (on-dark accent). */}
-            <span
-              aria-hidden
-              className="w-7 shrink-0 font-mono text-[10px] tabular-nums tracking-[0.2em] text-[var(--color-accent-secondary)]"
-            >
-              {String(i + 1).padStart(2, "0")}
-            </span>
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="truncate text-sm font-medium text-[var(--color-text-primary)]">
                 {s.service}
               </span>
-              <span className="truncate font-mono text-[11px] text-[var(--color-text-muted)]">
+              <span className="truncate font-mono text-[11px] text-[rgba(243,244,247,0.58)]">
                 {s.detail}
               </span>
             </div>
             <span className="flex shrink-0 items-center gap-2">
-              <DotmSquare3
-                size={16}
-                dotSize={2}
-                animated={s.status === "starting" || s.status === "probing"}
-                color={matrixColor[s.status]}
-                ariaLabel={`${s.service} ${s.status}`}
-              />
+              {s.status === "starting" || s.status === "probing" ? (
+                <VexLoader
+                  size={16}
+                  stroke={2}
+                  tone="paper"
+                  label={`${s.service} ${s.status}`}
+                />
+              ) : null}
               <span
                 className={cn(
-                  "font-mono text-[10px] uppercase tracking-[0.2em]",
+                  "font-mono text-[10px] uppercase tracking-[0.18em]",
                   statusInk[s.status],
                 )}
               >
@@ -102,24 +87,17 @@ export function RunningBody({
         ))}
       </ul>
 
-      <button
-        type="button"
-        onClick={onCancel}
+      <Button
+        variant="ghost"
         disabled={cancelling}
+        onClick={onCancel}
         {...(cancelling
           ? { "data-vex-compose-cancelling": "" }
           : { "data-vex-compose-cancel": "" })}
-        className={cn(
-          "inline-flex items-center gap-1.5 self-center rounded-full border border-white/[0.12] bg-transparent px-3.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-text-secondary)]",
-          "hover:border-white/[0.2] hover:text-[var(--color-text-primary)]",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--vex-onboarding-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--vex-onboarding-bg)]",
-          "disabled:cursor-not-allowed disabled:opacity-60",
-          "transition-colors duration-150",
-        )}
+        className="self-center text-[rgba(243,244,247,0.78)]"
       >
-        <HugeiconsIcon icon={Cancel01Icon} size={12} aria-hidden />
         {cancelling ? "Cancelling…" : "Cancel"}
-      </button>
+      </Button>
     </div>
   );
 }

@@ -83,13 +83,14 @@ export function StrengthMeter({
         <span className="text-muted-foreground">
           10 characters minimum. Must score at least &quot;Good&quot;.
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
           {labelText}
         </span>
       </div>
+      {/* Empty track is a quiet white-alpha well — never an ink slab. */}
       <div
         aria-hidden
-        className="h-1 w-full overflow-hidden rounded-full bg-popover"
+        className="h-1 w-full overflow-hidden rounded-full bg-white/[0.10]"
       >
         <div
           className={cn(

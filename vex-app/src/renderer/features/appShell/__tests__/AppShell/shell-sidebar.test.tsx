@@ -78,6 +78,14 @@ vi.mock("@hugeicons/core-free-icons", () => ({
   ZapIcon: "ZapIcon",
 }));
 
+// Phase 2b: the Settings ShellScreen hosts the wizard step forms, whose
+// module graph (icons, RHF, brand marks) is far beyond this suite's
+// partial mocks. The screen has its own suite; a stub keeps THIS suite's
+// AppShell import light.
+vi.mock("../../screens/SettingsScreen.js", () => ({
+  SettingsScreen: () => null,
+}));
+
 vi.mock("@thesvg/react", () => ({
   Docker: () => null,
   Ethereum: () => null,
@@ -370,10 +378,18 @@ describe("AppShell", () => {
     expect(useUiStore.getState().shellRoute.kind).toBe("memory");
     useUiStore.getState().setShellRoute({ kind: "none" });
 
+    // Settings opens the in-shell Settings ShellScreen (Phase 2b — the
+    // reconfigure-wizard door is retired): the route carries the row's
+    // rect origin and a null section (the landing register), and the
+    // view machine never leaves the shell.
     fireEvent.click(screen.getByRole("button", { name: /Open menu/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /Settings/i }));
-    expect(useUiStore.getState().currentView).toBe("wizard");
-    expect(useUiStore.getState().wizardEntryMode).toBe("reconfigure");
+    const settingsRoute = useUiStore.getState().shellRoute;
+    expect(settingsRoute.kind).toBe("settings");
+    if (settingsRoute.kind !== "settings") throw new Error("route kind mismatch");
+    expect(settingsRoute.section).toBeNull();
+    expect(useUiStore.getState().currentView).not.toBe("wizard");
+    useUiStore.getState().setShellRoute({ kind: "none" });
   });
 
   it("Sessions menu entry opens the Sessions screen mounting the sessions library", async () => {

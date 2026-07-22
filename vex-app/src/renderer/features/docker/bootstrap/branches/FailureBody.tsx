@@ -8,9 +8,7 @@
  * the canonical install docs. Recheck lives in the orchestrator footer.
  */
 
-import { HugeiconsIcon } from "@hugeicons/react";
-import { AlertCircleIcon } from "@hugeicons/core-free-icons";
-import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
+import { SetupStatusCard } from "../../../../components/onboarding/SetupStatusCard.js";
 import { DocsLink } from "../../../../components/onboarding/DocsLink.js";
 import { OpenLogsLink } from "../../../../components/common/OpenLogsLink.js";
 import { DOCKER_ENGINE_LINUX_URL } from "../constants.js";
@@ -40,14 +38,9 @@ export function FailureBody({ status }: FailureBodyProps): JSX.Element {
         : "Docker check did not complete.";
   return (
     <div className="flex flex-col gap-4">
-      <StatusTile
-        tone="danger"
-        icon={<HugeiconsIcon icon={AlertCircleIcon} size={20} aria-hidden />}
-        title={title}
-        detail={message}
-      />
+      <SetupStatusCard tone="error" title={title} detail={message} />
 
-      <ul className="flex list-disc flex-col gap-1 pl-5 text-xs leading-relaxed text-[var(--color-text-secondary)]">
+      <ul className="flex list-disc flex-col gap-1 pl-5 text-xs leading-relaxed text-[rgba(243,244,247,0.78)]">
         <li>Ensure your user has access to the local Docker socket.</li>
         <li>
           Use a local Docker Engine or Docker Desktop endpoint — remote

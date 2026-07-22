@@ -1,6 +1,6 @@
 /**
- * CHRONOS BACKDROP — the shell's back wall: the Eclipse night-sky artwork
- * (`public/backdrops/eclipse.webp`, 3840×2160) as a full-window photo layer
+ * CHRONOS BACKDROP — the shell's back wall: the eclipse-meadow artwork
+ * (`public/backdrops/eclipse-meadow.webp`) as a full-window photo layer
  * at z-0.
  *
  * This deliberately supersedes the retired "zero photography" law (the
@@ -45,8 +45,8 @@ import { cn } from "../../lib/utils.js";
  *     -quality 95 eclipse-meadow.webp
  * A fine static grain overlay (.vex-noise--backdrop) + a whisper of
  * saturate/contrast on the img mask residual interpolation softness as
- * film texture. The prior `/backdrops/eclipse.webp` stays on disk for
- * instant revert until the owner approves the swap visually.
+ * film texture. (The prior eclipse.webp revert copy was deleted on owner
+ * approval, Phase 3 sweep 2026-07-22.)
  */
 const BACKDROP_SRC = "/backdrops/eclipse-meadow.webp";
 

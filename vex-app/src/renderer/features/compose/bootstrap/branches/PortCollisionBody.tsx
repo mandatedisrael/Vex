@@ -6,10 +6,8 @@
  * stop-only action whose success automatically retries compose startup.
  */
 
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon, Refresh01Icon } from "@hugeicons/core-free-icons";
-import { StatusTile } from "../../../../components/onboarding/StatusTile.js";
-import { PrimaryButton } from "../../../../components/onboarding/PrimaryButton.js";
+import { Button } from "../../../../components/ui/button.js";
+import { SetupStatusCard } from "../../../../components/onboarding/SetupStatusCard.js";
 import { OpenLogsLink } from "../../../../components/common/OpenLogsLink.js";
 
 interface PortCollisionBodyProps {
@@ -31,15 +29,15 @@ export function PortCollisionBody({
 }: PortCollisionBodyProps): JSX.Element {
   return (
     <div className="flex flex-col gap-4">
-      <StatusTile
-        tone="danger"
-        icon={<HugeiconsIcon icon={Cancel01Icon} size={20} aria-hidden />}
+      <SetupStatusCard
+        tone="error"
+        word="Blocked"
         title="Port already in use"
         detail={message}
       />
       {previousInstallHoldingPorts ? (
         <>
-          <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">
+          <p className="text-xs leading-relaxed text-[rgba(243,244,247,0.78)]">
             Containers from a previous Vex installation are holding the ports.
             Vex will stop only the inspected containers publishing the required
             ports.
@@ -49,30 +47,28 @@ export function PortCollisionBody({
               {stopPreviousInstallError}
             </p>
           ) : null}
-          <PrimaryButton
-            icon={Cancel01Icon}
-            label={
-              stoppingPreviousInstall
-                ? "Stopping previous Vex services…"
-                : "Stop previous Vex services"
-            }
+          <Button
+            variant="destructive"
+            size="lg"
+            className="w-full"
             disabled={stoppingPreviousInstall}
-            variant="danger"
             onClick={onStopPreviousInstall}
-          />
+          >
+            {stoppingPreviousInstall
+              ? "Stopping previous Vex services…"
+              : "Stop previous Vex services"}
+          </Button>
         </>
       ) : (
         <>
-          <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">
+          <p className="text-xs leading-relaxed text-[rgba(243,244,247,0.78)]">
             Stop the conflicting process (another Postgres or Vex install may be
             holding the port) and click Try again. Vex needs free local ports for
             the bundled Postgres + embeddings runtime.
           </p>
-          <PrimaryButton
-            icon={Refresh01Icon}
-            label="Try again"
-            onClick={onRetry}
-          />
+          <Button size="lg" className="w-full" onClick={onRetry}>
+            Try again
+          </Button>
         </>
       )}
       <OpenLogsLink />

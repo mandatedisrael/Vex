@@ -33,6 +33,7 @@ const mockUnlock =
 const mockResetToFreshVault =
   vi.fn<(input: { confirm: true }) => Promise<Result<ResetToFreshVaultResult>>>();
 const mockSetCurrentView = vi.fn();
+const mockBeginUnlockCurtain = vi.fn();
 const mockOpenLogsFolder = vi.fn();
 let mockUnlockReturnView: UnlockReturnView = "appShell";
 
@@ -41,11 +42,13 @@ vi.mock("../../../stores/uiStore.js", () => ({
     selector: (s: {
       unlockReturnView: UnlockReturnView;
       setCurrentView: typeof mockSetCurrentView;
+      beginUnlockCurtain: typeof mockBeginUnlockCurtain;
     }) => unknown,
   ) =>
     selector({
       unlockReturnView: mockUnlockReturnView,
       setCurrentView: mockSetCurrentView,
+      beginUnlockCurtain: mockBeginUnlockCurtain,
     }),
 }));
 
@@ -80,6 +83,7 @@ beforeEach(() => {
     },
   });
   mockSetCurrentView.mockReset();
+  mockBeginUnlockCurtain.mockReset();
   mockResetToFreshVault.mockReset();
   mockResetToFreshVault.mockResolvedValue({ ok: true, data: { scheduled: true } });
   mockOpenLogsFolder.mockReset().mockResolvedValue({
@@ -238,11 +242,16 @@ describe("UnlockScreen", () => {
     await view.findByText(/Master password is incorrect/i);
     expect(input.value).toBe("wrong-password-12");
     expect(mockSetCurrentView).not.toHaveBeenCalled();
+    expect(mockBeginUnlockCurtain).not.toHaveBeenCalled();
     fireEvent.click(view.getByRole("button", { name: "Open logs folder" }));
     expect(mockOpenLogsFolder).toHaveBeenCalledTimes(1);
   });
 
-  it("clears the password input and flips the view on a successful unlock", async () => {
+  it("clears the password input and arms the exit curtain on a successful unlock", async () => {
+    // Phase 2b (decree C.3): UnlockScreen no longer flips the view itself —
+    // it arms the CurtainExit, which covers the screen with the cobalt
+    // plate, flips to unlockReturnView beneath it, and splits open. The
+    // curtain plays ONLY after the unlock IPC succeeds.
     mockUnlockReturnView = "appShell";
     mockUnlock.mockResolvedValue({ ok: true, data: { unlocked: true } });
     const view = renderUnlockScreen();
@@ -251,9 +260,11 @@ describe("UnlockScreen", () => {
     fireEvent.click(view.getByRole("button", { name: /Unlock/i }));
 
     await waitFor(() => {
-      expect(mockSetCurrentView).toHaveBeenCalledWith("appShell");
+      expect(mockBeginUnlockCurtain).toHaveBeenCalledTimes(1);
     });
     expect(input.value).toBe("");
+    // The view flip is the curtain's job now, mid-cover.
+    expect(mockSetCurrentView).not.toHaveBeenCalled();
   });
 
   it("renders a throttle countdown when unlock returns secrets.unlock_throttled", async () => {
