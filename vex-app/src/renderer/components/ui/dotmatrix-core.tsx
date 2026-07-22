@@ -73,8 +73,4 @@ export {
   remappedOpacityQualifiesForBloom
 } from "./dotmatrix-core/bloom.js";
 
-export {
-  createPathWaveComponent,
-  createPathWaveResolver,
-  DotMatrixBase
-} from "./dotmatrix-core/base.js";
+export { DotMatrixBase } from "./dotmatrix-core/base.js";
