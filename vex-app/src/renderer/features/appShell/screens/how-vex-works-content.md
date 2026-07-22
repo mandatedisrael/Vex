@@ -116,7 +116,6 @@ Beyond the venues, Vex carries internal tools:
 - **Web research** — general internet search for anything outside the built-in venues.
 - **Memory tools** — proposing lessons and searching past ones (see "How Vex learns").
 - **Mission tools** — filling in, checking, and running mission contracts.
-- **Subagents** — helper workers with permissions fixed at creation and never upgradeable. They exist in the architecture but are switched off in the current build, so you won't see one today.
 - **Autonomy timers** — a mission can deliberately sleep and wake when a price or time condition hits, checked every couple of seconds in the background.
 - **Portfolio ledger** — the record of what actually executed, feeding the Moves list in the BOOK panel.
 - **Compaction** — when a long conversation nears the model's limit, Vex archives older messages and writes a summary so it can keep going. Nothing is deleted; old messages move to an archive and become searchable session memory. While this happens, fund-moving tools briefly grey out on purpose, so Vex cannot trade "blind."

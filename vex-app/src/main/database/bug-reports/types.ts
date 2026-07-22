@@ -45,7 +45,6 @@ export interface BugReport {
   readonly sessionId: string | null;
   readonly missionId: string | null;
   readonly missionRunId: string | null;
-  readonly subagentId: string | null;
   readonly toolName: string | null;
   readonly toolCallId: string | null;
   readonly protocolNamespace: string | null;
@@ -80,7 +79,6 @@ export interface BugReportInsert {
   readonly sessionId: string | null;
   readonly missionId: string | null;
   readonly missionRunId: string | null;
-  readonly subagentId: string | null;
   readonly toolName: string | null;
   readonly toolCallId: string | null;
   readonly protocolNamespace: string | null;

@@ -18,7 +18,7 @@ export async function insertBugReport(input: BugReportInsert): Promise<BugReport
       `INSERT INTO bug_reports (
          id, report_kind, source, category, severity, title, description,
          app_version, os_platform, install_id,
-         correlation_id, session_id, mission_id, mission_run_id, subagent_id,
+         correlation_id, session_id, mission_id, mission_run_id,
          tool_name, tool_call_id, protocol_namespace, compact_job_id,
          stop_reason, runtime_status,
          context_pressure_band, context_pressure_fraction,
@@ -29,13 +29,13 @@ export async function insertBugReport(input: BugReportInsert): Promise<BugReport
        VALUES (
          $1, $2, $3, $4, $5, $6, $7,
          $8, $9, $10,
-         $11, $12, $13, $14, $15,
-         $16, $17, $18, $19,
-         $20, $21,
-         $22, $23,
-         $24, $25,
-         $26, $27,
-         $28::jsonb, $29::jsonb, $30
+         $11, $12, $13, $14,
+         $15, $16, $17, $18,
+         $19, $20,
+         $21, $22,
+         $23, $24,
+         $25, $26,
+         $27::jsonb, $28::jsonb, $29
        )
        RETURNING ${BUG_REPORT_COLUMNS}`,
       [
@@ -53,7 +53,6 @@ export async function insertBugReport(input: BugReportInsert): Promise<BugReport
         input.sessionId,
         input.missionId,
         input.missionRunId,
-        input.subagentId,
         input.toolName,
         input.toolCallId,
         input.protocolNamespace,
