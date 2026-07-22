@@ -169,21 +169,6 @@ describe("loop_defer — argument validation", () => {
 // ── Defense-in-depth (runtime context) ─────────────────────────
 
 describe("loop_defer — defense-in-depth", () => {
-  it("rejects subagent role even if sessionKind matches", async () => {
-    const ctx = makeTestContext({
-      sessionKind: "mission",
-      missionRunId: "run-abc",
-      role: "subagent",
-    });
-    const result = await handleLoopDefer(
-      { after_ms: 10_000, reason: "try" },
-      ctx,
-    );
-    expect(result.success).toBe(false);
-    expect(result.output).toMatch(/active mission run/i);
-    expect(mockEnqueue).not.toHaveBeenCalled();
-  });
-
   it("rejects agent sessionKind", async () => {
     const ctx = makeTestContext({
       sessionKind: "agent",
@@ -329,17 +314,6 @@ describe("loop_defer — visibility", () => {
       permission: "restricted",
       sessionKind: "mission",
       missionRunActive: false,
-    }));
-    const names = tools.map((t) => t.function.name);
-    expect(names).not.toContain("loop_defer");
-  });
-
-  it("is hidden from the subagent role even in a mission active run", () => {
-    const tools = getOpenAITools(defaultVisibilityContext({
-      permission: "restricted",
-      role: "subagent",
-      sessionKind: "mission",
-      missionRunActive: true,
     }));
     const names = tools.map((t) => t.function.name);
     expect(names).not.toContain("loop_defer");

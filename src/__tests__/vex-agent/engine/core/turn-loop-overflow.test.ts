@@ -159,7 +159,6 @@ function makeContext(sessionKind: "agent" | "mission" = "mission") {
     sessionPermission: "full" as const,
     missionId: null,
     missionRunId: null,
-    isSubagent: false,
     selectedEvmWallet: null,
     selectedSolanaWallet: null,
     walletPolicy: { kind: "none" as const },

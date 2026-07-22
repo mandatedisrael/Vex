@@ -13,7 +13,6 @@ import * as sessionsRepo from "@vex-agent/db/repos/sessions.js";
 import * as messagesRepo from "@vex-agent/db/repos/messages.js";
 import * as missionsRepo from "@vex-agent/db/repos/missions.js";
 import * as missionRunsRepo from "@vex-agent/db/repos/mission-runs.js";
-import * as sessionLinksRepo from "@vex-agent/db/repos/session-links.js";
 import * as sessionPlansRepo from "@vex-agent/db/repos/session-plans.js";
 import { getUserProfile, type UserProfile } from "@vex-agent/db/repos/soul.js";
 
@@ -98,10 +97,6 @@ export async function hydrateEngineSession(sessionId: string): Promise<HydratedS
   // Load messages
   const messages = await messagesRepo.getLiveMessages(sessionId);
 
-  // Determine if this is a subagent
-  const parentLink = await sessionLinksRepo.getParentSession(sessionId);
-  const isSubagent = parentLink !== null;
-
   // Load active mission (excludes completed/failed/cancelled)
   const mission = await missionsRepo.getActiveMission(sessionId);
   let activeRun: missionRunsRepo.MissionRun | null = null;
@@ -150,7 +145,6 @@ export async function hydrateEngineSession(sessionId: string): Promise<HydratedS
       sessionStartedAt: session.startedAt,
       missionRunStartedAt: activeRun?.startedAt ?? null,
       missionDeadline: extractMissionDeadline(mission?.constraintsJson ?? null),
-      isSubagent,
       selectedEvmWallet: session.selectedEvmWallet,
       selectedSolanaWallet: session.selectedSolanaWallet,
       walletPolicy: resolveWalletPolicy(mission, activeRun),

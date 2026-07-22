@@ -1,10 +1,10 @@
 /**
  * Tool registry visibility — session-aware projection of the master TOOLS
- * array down to the surface a given session/role/pressure context may see.
+ * array down to the surface a given session/pressure context may see.
  *
  * Owns the visibility context types, the per-context filter chain
- * (`getVisibleToolDefs`), the role-block hard gate (`isToolBlockedForRole`),
- * and the private gate helpers (`passesVisibility` / `passesPressureSafety`).
+ * (`getVisibleToolDefs`), and the private gate helpers
+ * (`passesVisibility` / `passesPressureSafety`).
  *
  * Consumes the master array + by-name lookup from `./lookup.js` — it must
  * never import the `registry.js` façade (cycle).
@@ -14,7 +14,7 @@ import type { ToolDef, ToolVisibility } from "../types.js";
 import type { Permission, SessionKind } from "@vex-agent/engine/types.js";
 import type { ContextUsageBand } from "@vex-agent/engine/core/context-band.js";
 
-import { TOOLS, getToolDef } from "./lookup.js";
+import { TOOLS } from "./lookup.js";
 import { getVisibleHypervexingAliasTools } from "../hypervexing-aliases.js";
 
 /**
@@ -37,7 +37,6 @@ export interface ToolVisibilityContext {
    */
   sessionId?: string;
   permission: Permission;
-  role: "parent" | "subagent";
   sessionKind: SessionKind;
   /** True iff `missionRunId !== null`. Mission setup is `false` even when sessionKind="mission". */
   missionRunActive: boolean;
@@ -82,7 +81,6 @@ export function defaultVisibilityContext(
 ): ToolVisibilityContext {
   return {
     permission: "restricted",
-    role: "parent",
     sessionKind: "agent",
     missionRunActive: false,
     planMode: false,
@@ -102,10 +100,9 @@ export function defaultVisibilityContext(
  * Filter chain (order matters):
  *   1. `requiresEnv` / `showOnlyWhenEnvMissing` — env-var gates.
  *   2. `proactive` — hidden when `sessionKind === "agent"`.
- *   3. `excludeRoles` — hard role gate.
- *   4. `passesVisibility` — band gate + mission-setup/run / agent-hidden /
+ *   3. `passesVisibility` — band gate + mission-setup/run / agent-hidden /
  *      mission-setup-hidden / requiresMissionActiveRun gates.
- *   5. `passesPressureSafety` — PR2 cutover catalog-level filter
+ *   4. `passesPressureSafety` — PR2 cutover catalog-level filter
  *      (drops `mutating` at barrier+, drops `compact_only` below barrier).
  */
 export function getVisibleToolDefs(ctx: ToolVisibilityContext): readonly ToolDef[] {
@@ -113,7 +110,6 @@ export function getVisibleToolDefs(ctx: ToolVisibilityContext): readonly ToolDef
     .filter(t => !t.requiresEnv || Boolean(process.env[t.requiresEnv]?.trim()))
     .filter(t => !t.showOnlyWhenEnvMissing || !process.env[t.showOnlyWhenEnvMissing]?.trim())
     .filter(t => ctx.sessionKind === "agent" ? !t.proactive : true)
-    .filter(t => !t.excludeRoles?.includes(ctx.role))
     .filter(t => passesVisibility(t.visibility, ctx))
     .filter(t => passesPressureSafety(t, ctx.contextUsageBand));
   // Hypervexing aliases are a session-mode projection, not permanent ToolDefs.
@@ -198,11 +194,4 @@ function passesVisibility(
   if (v.requiresPlanMode && !ctx.planMode) return false;
 
   return true;
-}
-
-/** Check if a tool is blocked for a given role. Hard enforcement at dispatch time. */
-export function isToolBlockedForRole(name: string, role: "parent" | "subagent"): boolean {
-  const def = getToolDef(name);
-  if (!def) return false;
-  return def.excludeRoles?.includes(role) ?? false;
 }

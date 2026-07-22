@@ -65,7 +65,6 @@ function baseArgs(overrides: Record<string, unknown> = {}) {
       sessionKind: "agent",
       missionRunId: null,
       missionId: null,
-      role: "parent",
       contextUsageBand: "normal",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any,

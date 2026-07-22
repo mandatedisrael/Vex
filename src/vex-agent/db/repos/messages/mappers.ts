@@ -27,7 +27,7 @@ export function toIsoTimestamp(value: string | Date): string {
 
 /**
  * Assemble a `MessageMetadata` envelope from the dedicated columns
- * (`source`, `message_type`, `visibility`, `origin_session_id`, `subagent_id`)
+ * (`source`, `message_type`, `visibility`, `origin_session_id`)
  * + the JSONB `metadata` column (`payload`). Returns `null` when every
  * field is empty so chat turns without engine metadata keep `metadata: null`.
  */
@@ -37,7 +37,6 @@ function assembleMessageMetadata(r: MessageRow): MessageMetadata | null {
   if (r.message_type !== null) metadata.messageType = r.message_type;
   if (r.visibility !== null) metadata.visibility = r.visibility;
   if (r.origin_session_id !== null) metadata.originSessionId = r.origin_session_id;
-  if (r.subagent_id !== null) metadata.subagentId = r.subagent_id;
   if (r.metadata !== null) metadata.payload = r.metadata;
 
   // Defer to `null` when every field is empty so callers that test

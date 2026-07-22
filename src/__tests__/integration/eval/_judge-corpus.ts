@@ -12,7 +12,7 @@
  * Ids are OPAQUE sequential codes `M001`, `M002`, … — they encode NO cluster,
  * verdict, or kind semantics, and neither do any comments visible alongside the
  * agent-facing text. The companion oracle (`_judge-oracle.ts`) and its Wave-2
- * authoring subagents receive only `{ id, kind, agent-facing text, evidence-
+ * authoring agents receive only `{ id, kind, agent-facing text, evidence-
  * shape }` — never the corpus author's intent NOR the `stratum` (which correlates
  * with the expected verdict; it was removed from `judgeItemFacing()` to close that
  * circularity leak) — so corpus and oracle are authored by DISJOINT minds and a

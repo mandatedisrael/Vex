@@ -62,12 +62,11 @@ describe("messages extended (engine metadata)", () => {
       expect(sql).toContain("source");
       expect(sql).toContain("message_type");
       expect(sql).toContain("visibility");
-      // Metadata params should be null (positions 7-11)
+      // Metadata params should be null (positions 7-10)
       expect(params[6]).toBeNull(); // source
       expect(params[7]).toBeNull(); // messageType
       expect(params[8]).toBeNull(); // visibility
       expect(params[9]).toBeNull(); // originSessionId
-      expect(params[10]).toBeNull(); // subagentId
     });
   });
 
@@ -87,18 +86,17 @@ describe("messages extended (engine metadata)", () => {
       expect(params[8]).toBe("internal");
     });
 
-    it("inserts with subagent metadata", async () => {
+    it("inserts with origin-session metadata", async () => {
       await addMessage(
         "session-1",
         { role: "assistant", content: "Research complete", timestamp: "2026-03-28T10:00:00Z" },
-        { source: "subagent", messageType: "subagent_relay", subagentId: "subagent-1", originSessionId: "session-child" },
+        { source: "engine", messageType: "continue", originSessionId: "session-child" },
       );
 
       const [, params] = mockPoolQuery.mock.calls[0];
-      expect(params[6]).toBe("subagent");
-      expect(params[7]).toBe("subagent_relay");
+      expect(params[6]).toBe("engine");
+      expect(params[7]).toBe("continue");
       expect(params[9]).toBe("session-child");
-      expect(params[10]).toBe("subagent-1");
     });
 
     it("handles partial metadata", async () => {

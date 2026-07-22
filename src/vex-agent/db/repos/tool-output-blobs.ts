@@ -12,7 +12,7 @@
  *     bump TTLs for recent messages so long waits don't expire the blobs.
  *
  * Scope: per-session. `session_id` is persisted and handlers enforce the
- * match on read so a subagent can't access the parent's blobs.
+ * match on read so no other session can access a session's blobs.
  */
 
 import { createHash, randomBytes } from "node:crypto";

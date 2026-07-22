@@ -109,7 +109,6 @@ export async function processAgentTurn(
   const baseVisibility: ToolVisibilityBase = {
     sessionId,
     permission: agentContext.sessionPermission,
-    role: "parent",
     sessionKind: "agent",
     missionRunActive: false,
     planMode: agentContext.planMode ?? false,

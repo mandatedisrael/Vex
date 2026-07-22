@@ -12,8 +12,8 @@ import type { SafetyVerdict } from "@vex-agent/db/repos/swap-prequotes.js";
 // ── Tool definition (what LLM sees) ─────────────────────────────
 
 /**
- * Session-aware visibility rules for a tool. Orthogonal to `requiresEnv`,
- * `proactive`, and `excludeRoles` (those stay as-is). When omitted, the tool
+ * Session-aware visibility rules for a tool. Orthogonal to `requiresEnv`
+ * and `proactive` (those stay as-is). When omitted, the tool
  * is visible under the existing filter chain only — no session-context gating.
  *
  * Evaluated inside `getOpenAITools` against a `ToolVisibilityContext`. Handler
@@ -115,11 +115,9 @@ export interface ToolDef {
   requiresEnv?: string;
   /** Show tool ONLY when this env var is NOT set. Inverse of requiresEnv. For setup/config tools. */
   showOnlyWhenEnvMissing?: string;
-  /** Roles that should NOT see/use this tool. Hard-enforced at dispatch time. */
-  excludeRoles?: string[];
   /**
    * Session-aware visibility rules. When omitted, the tool is subject only
-   * to the existing filter chain (requiresEnv, proactive, excludeRoles).
+   * to the existing filter chain (requiresEnv, proactive).
    * See `ToolVisibility` for the individual gates.
    */
   visibility?: ToolVisibility;
@@ -267,8 +265,6 @@ export interface PreparedActionFollowUp {
  * Structured signal from an internal tool to the engine runtime.
  *
  * - stop_mission: parent mission stop (business stop reason)
- * - wait_for_parent: child pauses for parent help (subagent_request_parent)
- * - complete_subagent: child finished task (subagent_report_complete)
  * - defer_until: the agent wants to sleep until a wake time (loop_defer)
  * - compact_committed: `compact_now` archived the conversation prefix, updated
  *   the rolling summary, and enqueued a Track 2 chunking job (PR2). Turn-loop
@@ -287,16 +283,12 @@ export interface PreparedActionFollowUp {
 export interface EngineSignal {
   type:
     | "stop_mission"
-    | "wait_for_parent"
-    | "complete_subagent"
     | "defer_until"
     | "compact_committed"
     | "plan_pause";
   reason: string;
   summary: string;
   evidence?: Record<string, unknown>;
-  /** For wait_for_parent: the subagent message ID to track the request */
-  messageId?: number;
   /** For defer_until: ISO8601 timestamp when the wake executor should resume the session. */
   dueAt?: string;
   /** For compact_committed: the freshly-bumped sessions.checkpoint_generation value. */

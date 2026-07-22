@@ -30,8 +30,11 @@
 import { z } from "zod";
 
 // ── proposed_by ─────────────────────────────────────────────────
-// Which agent role proposed the candidate. Mirrors the registry role model
-// (`tools/registry/visibility.ts`): only `parent` | `subagent` exist.
+// Which agent role proposed the candidate. Locked in lockstep with the
+// `mc_proposed_by_valid` DB CHECK (001_initial.sql). `"subagent"` is a
+// dormant legal value retained for CHECK parity — the subagent subsystem
+// was removed (S1b) and nothing writes it; narrowing this array requires
+// a matching CHECK migration.
 export const CANDIDATE_PROPOSED_BY = ["parent", "subagent"] as const;
 
 export const candidateProposedBySchema = z.enum(CANDIDATE_PROPOSED_BY);

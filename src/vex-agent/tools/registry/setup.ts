@@ -19,7 +19,6 @@ import type { ToolDef } from "../types.js";
 export const SETUP_TOOLS: readonly ToolDef[] = [
   {
     name: "polymarket_setup", kind: "internal", mutating: true, pressureSafety: "mutating", actionKind: "local_write",
-    excludeRoles: ["subagent"],
     description: "Derive and save Polymarket CLOB API credentials for THIS SESSION's selected EVM wallet. Run this to enable Polymarket trading (buy/sell/cancel) for the active wallet. Idempotent — returns 'already configured' if the selected wallet already has credentials. No parameters.",
     parameters: { type: "object", properties: {}, required: [] },
   },

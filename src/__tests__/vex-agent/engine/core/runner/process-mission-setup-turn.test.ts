@@ -90,10 +90,6 @@ vi.mock("@vex-agent/db/repos/sessions.js", () => ({
   createSession: vi.fn(),
 }));
 
-vi.mock("@vex-agent/db/repos/session-links.js", () => ({
-  getParentSession: vi.fn().mockResolvedValue(null),
-}));
-
 vi.mock("@utils/logger.js", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -180,7 +176,6 @@ function makeHydratedSession(overrides = {}) {
       sessionPermission: "restricted",
       missionId: null,
       missionRunId: null,
-      isSubagent: false,
       loadedDocuments: new Map(),
       ...overrides,
     },

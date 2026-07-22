@@ -19,11 +19,6 @@ import { HYPERVEXING_ALIAS_NAMES } from "../hypervexing-aliases.js";
  * before writes within each substrate; runtime safety nets like
  * `compact_now` next to the substrate they protect). Do NOT alphabetize
  * within categories — the declaration order is the LLM-facing order.
- *
- * Subagent tools (`registry/subagents.ts`) are dormant (empty array); if
- * re-enabled in the future, add a `Subagent control` category here and
- * extend the integrity test in
- * `__tests__/vex-agent/tools/registry-tool-map.test.ts`.
  */
 export interface ToolMapCategory {
   /** Visible label rendered before the comma-separated tool names. */

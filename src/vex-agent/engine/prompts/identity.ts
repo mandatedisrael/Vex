@@ -140,7 +140,6 @@ export function buildIdentityPrompt(context: EngineContext): string {
   lines.push(`Mode: ${context.sessionKind} / permission=${context.sessionPermission}`);
   if (context.missionId) lines.push(`Mission: ${context.missionId}`);
   if (context.missionRunId) lines.push(`Run: ${context.missionRunId}`);
-  if (context.isSubagent) lines.push("Role: subagent (delegated task from parent)");
   lines.push("");
 
   return lines.join("\n");
@@ -153,20 +152,6 @@ export function buildIdentityPrompt(context: EngineContext): string {
  */
 function resolveAspect(ctx: EngineContext): string {
   const name = VEX_NAME;
-  // INTENTIONAL BEHAVIOR FIX (P3): the subagent aspect no longer instructs
-  // `subagent_report_complete` / `subagent_request_parent`. Those tools are
-  // unwired (`subagent_spawn` is out of the registry), so instructing them was
-  // a live contradiction with the Tool Map. A hydrated legacy `is_subagent`
-  // session now gets a clean "report back as your final reply" narrative
-  // instead of dangling references to disabled tools. Restore the tool wiring
-  // (and these instructions) together when subagents are re-enabled.
-  if (ctx.isSubagent) {
-    return [
-      `You are a SUBAGENT — ${name} delegated from a parent session to execute a narrow,`,
-      "scoped task. Stay within the brief and report your findings back to the parent",
-      "as your final reply.",
-    ].join("\n");
-  }
   if (ctx.sessionKind === "agent" && !ctx.missionRunId) {
     return [
       `You are in AGENT mode — ${name} as teacher, collaborator, or one-shot`,

@@ -50,7 +50,6 @@ export const KNOWN_AUTOMATIC_CATEGORIES = [
   "protocol_capture_rejection",
   "sync_worker_failure",
   "wake_resume_failure",
-  "subagent_lifecycle_failure",
   "redaction_anomaly",
 ] as const;
 
@@ -88,7 +87,6 @@ export const bugReportRefsSchema = z
     sessionId: z.string().max(128).optional(),
     missionId: z.string().max(128).optional(),
     missionRunId: z.string().max(128).optional(),
-    subagentId: z.string().max(128).optional(),
     toolName: z.string().max(128).optional(),
     toolCallId: z.string().max(128).optional(),
     protocolNamespace: z.string().max(128).optional(),

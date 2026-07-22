@@ -62,7 +62,6 @@ function ctx(missionRunId: string | null) {
     loadedDocuments: new Map(),
     sessionPermission: "full",
     approved: false,
-    role: "parent",
     missionRunId,
     missionId: "m1",
     sessionKind: "mission",

@@ -2,7 +2,7 @@
  * Messages repo — public row + domain types.
  *
  * Extended with engine metadata (source, messageType, visibility,
- * originSessionId, subagentId) — backwards-compatible, all optional.
+ * originSessionId) — backwards-compatible, all optional.
  */
 
 export interface MessageRow {
@@ -16,7 +16,6 @@ export interface MessageRow {
   message_type: string | null;
   visibility: string | null;
   origin_session_id: string | null;
-  subagent_id: string | null;
   metadata: Record<string, unknown> | null;
 }
 
@@ -59,6 +58,5 @@ export interface MessageMetadata {
   messageType?: string;
   visibility?: string;
   originSessionId?: string;
-  subagentId?: string;
   payload?: Record<string, unknown>;
 }

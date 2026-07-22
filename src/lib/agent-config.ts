@@ -1,27 +1,27 @@
 /**
- * Agent + subagent core tuning — single source of truth (M9).
+ * Agent core tuning — single source of truth (M9).
  *
- * Owns field metadata (key/min/max/default or fallbackFrom) AND the
- * parse pipeline that turns env strings into validated effective
- * values. Two consumers, two contracts:
+ * Owns field metadata (key/min/max/default) AND the parse pipeline
+ * that turns env strings into validated effective values. Two
+ * consumers, two contracts:
  *
  *  - Engine (`src/vex-agent/inference/config.ts`) imports field
- *    constants and `parseAgentEnv` / `parseSubagentEnv`. AGENT_*
- *    invalid values throw a combined error (existing engine
- *    behavior). SUBAGENT_* invalid values fall back silently with a
- *    `logger.warn` (existing engine behavior — engine ignores the
- *    `errors[]` returned by the helper).
+ *    constants and `parseAgentEnv`. AGENT_* invalid values throw a
+ *    combined error (existing engine behavior).
  *
  *  - vex-app (`vex-app/src/main/onboarding/agent-core-writer.ts`)
  *    uses the same helpers but enforces strict validation at the
- *    write boundary: any AGENT or SUBAGENT parse error blocks the
- *    write with `validation.invalid_input`.
+ *    write boundary: any AGENT parse error blocks the write with
+ *    `validation.invalid_input`.
  *
  * Both consumers share the exact range/default constants — no
  * duplicated literals, no drift.
  *
  * Pure module: no fs, no DB, no Electron, no logger. Safe to import
  * from `src/shared/*` and from vex-app preload contexts.
+ *
+ * The optional helper-agent tuning fields were removed in the S1a cut
+ * (2026-07-22); only the AGENT_* fields remain.
  */
 
 export type FieldKind = "int" | "float";
@@ -35,16 +35,9 @@ export interface FieldBase {
 
 export interface FieldWithDefault extends FieldBase {
   readonly default: number | null;
-  readonly fallbackFrom?: never;
-}
-
-export interface FieldWithFallback extends FieldBase {
-  readonly default?: never;
-  readonly fallbackFrom: "agent.maxOutputTokens" | "agent.temperature";
 }
 
 export type AgentField = FieldWithDefault;
-export type SubagentField = FieldWithDefault | FieldWithFallback;
 
 export const AGENT_CONTEXT_LIMIT: FieldWithDefault = {
   key: "AGENT_CONTEXT_LIMIT",
@@ -70,67 +63,10 @@ export const AGENT_TEMPERATURE: FieldWithDefault = {
   default: null,
 };
 
-export const SUBAGENT_MAX_CONCURRENT: FieldWithDefault = {
-  key: "SUBAGENT_MAX_CONCURRENT",
-  kind: "int",
-  min: 1,
-  max: 20,
-  default: 5,
-};
-
-export const SUBAGENT_CONTEXT_LIMIT: FieldWithDefault = {
-  key: "SUBAGENT_CONTEXT_LIMIT",
-  kind: "int",
-  min: 1000,
-  max: 2_000_000,
-  default: 16_384,
-};
-
-export const SUBAGENT_MAX_OUTPUT_TOKENS: FieldWithFallback = {
-  key: "SUBAGENT_MAX_OUTPUT_TOKENS",
-  kind: "int",
-  min: 256,
-  max: 128_000,
-  fallbackFrom: "agent.maxOutputTokens",
-};
-
-export const SUBAGENT_TEMPERATURE: FieldWithFallback = {
-  key: "SUBAGENT_TEMPERATURE",
-  kind: "float",
-  min: 0,
-  max: 2,
-  fallbackFrom: "agent.temperature",
-};
-
-export const SUBAGENT_MAX_ITERATIONS: FieldWithDefault = {
-  key: "SUBAGENT_MAX_ITERATIONS",
-  kind: "int",
-  min: 1,
-  max: 200,
-  default: 25,
-};
-
-export const SUBAGENT_TIMEOUT_MS: FieldWithDefault = {
-  key: "SUBAGENT_TIMEOUT_MS",
-  kind: "int",
-  min: 10_000,
-  max: 1_800_000,
-  default: 300_000,
-};
-
 export const AGENT_FIELDS = [
   AGENT_CONTEXT_LIMIT,
   AGENT_MAX_OUTPUT_TOKENS,
   AGENT_TEMPERATURE,
-] as const;
-
-export const SUBAGENT_FIELDS = [
-  SUBAGENT_MAX_CONCURRENT,
-  SUBAGENT_CONTEXT_LIMIT,
-  SUBAGENT_MAX_OUTPUT_TOKENS,
-  SUBAGENT_TEMPERATURE,
-  SUBAGENT_MAX_ITERATIONS,
-  SUBAGENT_TIMEOUT_MS,
 ] as const;
 
 export interface ParseError {
@@ -144,15 +80,6 @@ export interface AgentEffective {
   readonly contextLimit: number;
   readonly maxOutputTokens: number;
   readonly temperature: number | null;
-}
-
-export interface SubagentEffective {
-  readonly maxConcurrent: number;
-  readonly contextLimit: number;
-  readonly maxOutputTokens: number;
-  readonly temperature: number | null;
-  readonly maxIterations: number;
-  readonly timeoutMs: number;
 }
 
 export interface ParseResult<T> {
@@ -177,37 +104,6 @@ export function parseAgentEnv(env: EnvLike): ParseResult<AgentEffective> {
   };
 }
 
-export function parseSubagentEnv(env: EnvLike, agentEff: AgentEffective): ParseResult<SubagentEffective> {
-  const errors: ParseError[] = [];
-  const maxConcurrent = parseFieldOrDefault(SUBAGENT_MAX_CONCURRENT, env[SUBAGENT_MAX_CONCURRENT.key], errors);
-  const contextLimit = parseFieldOrDefault(SUBAGENT_CONTEXT_LIMIT, env[SUBAGENT_CONTEXT_LIMIT.key], errors);
-  const maxOutputTokens = parseFieldOrFallback(
-    SUBAGENT_MAX_OUTPUT_TOKENS,
-    env[SUBAGENT_MAX_OUTPUT_TOKENS.key],
-    agentEff.maxOutputTokens,
-    errors,
-  );
-  const temperature = parseFieldOrFallback(
-    SUBAGENT_TEMPERATURE,
-    env[SUBAGENT_TEMPERATURE.key],
-    agentEff.temperature,
-    errors,
-  );
-  const maxIterations = parseFieldOrDefault(SUBAGENT_MAX_ITERATIONS, env[SUBAGENT_MAX_ITERATIONS.key], errors);
-  const timeoutMs = parseFieldOrDefault(SUBAGENT_TIMEOUT_MS, env[SUBAGENT_TIMEOUT_MS.key], errors);
-  return {
-    value: {
-      maxConcurrent: maxConcurrent ?? SUBAGENT_MAX_CONCURRENT.default!,
-      contextLimit: contextLimit ?? SUBAGENT_CONTEXT_LIMIT.default!,
-      maxOutputTokens: maxOutputTokens ?? agentEff.maxOutputTokens,
-      temperature,
-      maxIterations: maxIterations ?? SUBAGENT_MAX_ITERATIONS.default!,
-      timeoutMs: timeoutMs ?? SUBAGENT_TIMEOUT_MS.default!,
-    },
-    errors,
-  };
-}
-
 function parseFieldOrDefault(
   field: FieldWithDefault,
   raw: string | null | undefined,
@@ -218,19 +114,6 @@ function parseFieldOrDefault(
   if (trimmed.length === 0) return field.default;
   const parsed = parseAndValidate(field, trimmed, errors);
   return parsed ?? field.default;
-}
-
-function parseFieldOrFallback(
-  field: FieldWithFallback,
-  raw: string | null | undefined,
-  fallback: number | null,
-  errors: ParseError[],
-): number | null {
-  if (raw === undefined || raw === null) return fallback;
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) return fallback;
-  const parsed = parseAndValidate(field, trimmed, errors);
-  return parsed ?? fallback;
 }
 
 function parseAndValidate(field: FieldBase, trimmed: string, errors: ParseError[]): number | null {

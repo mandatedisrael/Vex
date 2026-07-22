@@ -111,7 +111,6 @@ export async function processMissionSetupTurn(
   const baseVisibility: ToolVisibilityBase = {
     sessionId,
     permission: setupContext.sessionPermission,
-    role: "parent",
     sessionKind: "mission",
     missionRunActive: false, // setup — no run yet
     // plan_write is visible in setup when plan-mode is on (`requiresPlanMode`;

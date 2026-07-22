@@ -16,7 +16,7 @@ import type { Message, MessageRow, MessageWithId } from "./types.js";
 /** Get live messages (not archived) for a session. Ordered by created_at + id for deterministic ordering. */
 export async function getLiveMessages(sessionId: string): Promise<Message[]> {
   const rows = await query<MessageRow>(
-    "SELECT id, role, content, tool_call_id, tool_calls, created_at, source, message_type, visibility, origin_session_id, subagent_id, metadata FROM messages WHERE session_id = $1 ORDER BY created_at ASC, id ASC",
+    "SELECT id, role, content, tool_call_id, tool_calls, created_at, source, message_type, visibility, origin_session_id, metadata FROM messages WHERE session_id = $1 ORDER BY created_at ASC, id ASC",
     [sessionId],
   );
   return rows.map(mapRowToMessage);
@@ -38,7 +38,7 @@ export async function getLiveMessagesWithId(
   client?: PoolClient,
 ): Promise<MessageWithId[]> {
   const sql =
-    "SELECT id, role, content, tool_call_id, tool_calls, created_at, source, message_type, visibility, origin_session_id, subagent_id, metadata FROM messages WHERE session_id = $1 ORDER BY created_at ASC, id ASC";
+    "SELECT id, role, content, tool_call_id, tool_calls, created_at, source, message_type, visibility, origin_session_id, metadata FROM messages WHERE session_id = $1 ORDER BY created_at ASC, id ASC";
   const rows = client
     ? await queryWith<MessageRow>(client, sql, [sessionId])
     : await query<MessageRow>(sql, [sessionId]);
@@ -56,7 +56,7 @@ export async function getOperatorInstructionsAfter(
 ): Promise<MessageWithId[]> {
   const rows = await query<MessageRow>(
     `SELECT id, role, content, tool_call_id, tool_calls, created_at,
-            source, message_type, visibility, origin_session_id, subagent_id, metadata
+            source, message_type, visibility, origin_session_id, metadata
        FROM messages
       WHERE session_id = $1
         AND id > $2
@@ -80,11 +80,11 @@ export async function getOperatorInstructionsAfter(
  */
 export async function getAllMessages(sessionId: string): Promise<Message[]> {
   const rows = await query<MessageRow>(
-    `SELECT id, role, content, tool_call_id, tool_calls, created_at, source, message_type, visibility, origin_session_id, subagent_id, metadata
+    `SELECT id, role, content, tool_call_id, tool_calls, created_at, source, message_type, visibility, origin_session_id, metadata
        FROM messages_archive
       WHERE session_id = $1
      UNION ALL
-     SELECT id, role, content, tool_call_id, tool_calls, created_at, source, message_type, visibility, origin_session_id, subagent_id, metadata
+     SELECT id, role, content, tool_call_id, tool_calls, created_at, source, message_type, visibility, origin_session_id, metadata
        FROM messages m
       WHERE m.session_id = $1
         AND NOT EXISTS (

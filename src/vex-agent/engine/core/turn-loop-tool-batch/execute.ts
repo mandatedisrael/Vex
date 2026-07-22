@@ -21,7 +21,6 @@ export function buildToolContext(
     loadedDocuments: context.loadedDocuments,
     sessionPermission: context.sessionPermission,
     approved: false,
-    role: context.isSubagent ? "subagent" : "parent",
     missionRunId: context.missionRunId,
     missionId: context.missionId,
     sessionKind: context.sessionKind,

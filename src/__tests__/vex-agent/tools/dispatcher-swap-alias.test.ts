@@ -57,7 +57,6 @@ function ctx(overrides: Partial<DispatchCtx> = {}): DispatchCtx {
     loadedDocuments: new Map(),
     sessionPermission: "restricted",
     approved: false,
-    role: "parent",
     missionRunId: null,
     missionId: null,
     sessionKind: "agent",

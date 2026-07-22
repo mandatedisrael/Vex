@@ -82,7 +82,6 @@ function context(permission: "restricted" | "full") {
     sessionPermission: permission,
     missionId: null,
     missionRunId: null,
-    isSubagent: false,
     loadedDocuments: new Map(),
     walletPolicy: { kind: "none" },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

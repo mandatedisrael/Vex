@@ -5,9 +5,7 @@
  *
  * Visible whenever session-scoped plan-mode is ON (`requiresPlanMode`) — i.e.
  * agent sessions, mission setup (so the plan is co-authored alongside the
- * contract and accepted together), and active mission runs. Excluded from
- * subagents (they execute a parent-assigned task; they do not author the
- * top-level plan).
+ * contract and accepted together), and active mission runs.
  *
  * `mutating: false` (co-authoring the plan must not deadlock on per-call
  * approval — mirrors `mission_draft_update`). The real safety
@@ -20,7 +18,6 @@ import type { ToolDef } from "../types.js";
 export const PLAN_TOOLS: readonly ToolDef[] = [
   {
     name: "plan_write", kind: "internal", mutating: false, pressureSafety: "safe_at_barrier", actionKind: "local_write",
-    excludeRoles: ["subagent"],
     visibility: { requiresPlanMode: true, hiddenInMissionSetup: false },
     description:
       "Create or replace your current action plan (idempotent — overwrites the prior plan). "

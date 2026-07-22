@@ -24,7 +24,6 @@ function makeContext(overrides: Partial<EngineContext> = {}): EngineContext {
     sessionPermission: "restricted",
     missionId: null,
     missionRunId: null,
-    isSubagent: false,
     selectedEvmWallet: null,
     selectedSolanaWallet: null,
     walletPolicy: { kind: "none" },
@@ -410,11 +409,6 @@ describe("prompt-stack", () => {
       expect(joined).not.toContain("Execution lock (standing rule)");
     });
 
-    it("subagent includes subagent prompt", () => {
-      const joined = joinedStack(makeContext({ isSubagent: true }));
-      expect(joined).toContain("# Subagent Role");
-    });
-
     it("mission setup with context shows draft state", () => {
       const joined = joinedStack(
         makeContext({ sessionKind: "mission" }),
@@ -453,66 +447,6 @@ describe("prompt-stack", () => {
       expect(joined).toContain("Iteration: 5");
     });
 
-    it("subagent with context shows task and restrictions", () => {
-      const joined = joinedStack(
-        makeContext({ isSubagent: true }),
-        {
-          subagentContext: {
-            task: "Research SOL/USDC liquidity on Jupiter",
-            allowTrades: false,
-            childPermission: "restricted",
-          },
-        },
-      );
-      expect(joined).toContain("Research SOL/USDC liquidity");
-      expect(joined).toContain("NO TRADES");
-      expect(joined).toContain("restricted");
-    });
-
-    it("subagent briefing includes parent summary snapshot when provided", () => {
-      const joined = joinedStack(
-        makeContext({ isSubagent: true }),
-        {
-          subagentContext: {
-            task: "Research L2 gas costs",
-            allowTrades: false,
-            childPermission: "restricted",
-            parentSummarySnapshot:
-              "User opened a SOL long at 145 USD, closed BTC short at 62500, portfolio +4.2% 7d.",
-          },
-        },
-      );
-      expect(joined).toContain("## Parent context (snapshot at spawn)");
-      expect(joined).toContain("SOL long at 145 USD");
-      expect(joined).toContain("portfolio +4.2%");
-    });
-
-    it("subagent briefing omits parent context block when snapshot is empty or absent", () => {
-      const withoutSnapshot = joinedStack(
-        makeContext({ isSubagent: true }),
-        {
-          subagentContext: {
-            task: "T",
-            allowTrades: false,
-            childPermission: "restricted",
-          },
-        },
-      );
-      expect(withoutSnapshot).not.toContain("## Parent context");
-
-      const withEmptySnapshot = joinedStack(
-        makeContext({ isSubagent: true }),
-        {
-          subagentContext: {
-            task: "T",
-            allowTrades: false,
-            childPermission: "restricted",
-            parentSummarySnapshot: "   \n   ",
-          },
-        },
-      );
-      expect(withEmptySnapshot).not.toContain("## Parent context");
-    });
   });
 
   // ── Base prompt ─────────────────────────────────────────────
@@ -601,13 +535,6 @@ describe("prompt-stack", () => {
       expect(joined).not.toContain("teacher, collaborator");
       expect(joined).not.toContain("planner");
     });
-
-    it("SUBAGENT aspect overrides sessionKind and narrates delegated task", () => {
-      const joined = joinedStack(makeContext({ isSubagent: true, sessionKind: "agent" }));
-      expect(joined).toContain("SUBAGENT");
-      expect(joined).toContain("delegated");
-      expect(joined).not.toContain("teacher, collaborator");
-    });
   });
 
   // ── DeFi safety rules ──────────────────────────────────────
@@ -667,7 +594,6 @@ describe("prompt-stack", () => {
       { name: "agent/full", ctx: makeContext({ sessionKind: "agent", sessionPermission: "full" }) },
       { name: "mission-setup", ctx: makeContext({ sessionKind: "mission", sessionPermission: "restricted", missionId: "m-1" }) },
       { name: "mission-run", ctx: makeContext({ sessionKind: "mission", sessionPermission: "full", missionId: "m-1", missionRunId: "run-1" }) },
-      { name: "subagent", ctx: makeContext({ isSubagent: true, sessionKind: "agent", sessionPermission: "restricted" }) },
     ];
 
     for (const { name, ctx } of variants) {
@@ -748,23 +674,6 @@ describe("prompt-stack", () => {
       expect(joined).toContain(
         "Do not turn an agent answer into autonomous monitoring, mission drafting, or multi-step research unless the user asks for that workflow",
       );
-    });
-  });
-
-  // The dead subagent tool-call instructions were removed as an intentional
-  // behavior fix (P2 locked requirement 2 + Codex add f): the layer must stop
-  // instructing calls to the unwired subagent handoff tools.
-  describe("dead subagent tool-call instructions removed (P3 requirement 2/f)", () => {
-    it("subagent prefix no longer references the unwired handoff tools", () => {
-      const staticJoined = buildPromptStack(
-        makeContext({ isSubagent: true, sessionKind: "agent" }),
-        { subagentContext: { task: "T", allowTrades: false, childPermission: "restricted" } },
-      ).staticLayers.join("\n");
-      expect(staticJoined).toContain("# Subagent Role");
-      expect(staticJoined).not.toContain("subagent_report_complete");
-      expect(staticJoined).not.toContain("subagent_request_parent");
-      // Still narrates the subagent role + a clean report-back instruction.
-      expect(staticJoined).toContain("SUBAGENT");
     });
   });
 

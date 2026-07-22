@@ -11,8 +11,7 @@
  *
  * Both validate the session selection (id + address snapshot, via
  * `resolveSelectedEntry`) AND the mission wallet policy. Mission policy is NOT
- * gated on `sessionKind` — it rides the explicit `WalletPolicy` so a subagent
- * (sessionKind "agent") still inherits the parent mission's allowed set.
+ * gated on `sessionKind` — it rides the explicit `WalletPolicy` value.
  */
 
 import { VexError, ErrorCodes } from "../../../../errors.js";

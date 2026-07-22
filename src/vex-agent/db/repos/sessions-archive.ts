@@ -15,8 +15,8 @@
  * below:
  *
  *   - SELECT projection from `messages` uses `MESSAGE_DB_COLUMNS`
- *     (13 columns)
- *   - INSERT target uses `MESSAGE_ARCHIVE_DB_COLUMNS` (14 columns)
+ *     (12 columns)
+ *   - INSERT target uses `MESSAGE_ARCHIVE_DB_COLUMNS` (13 columns)
  *   - `rewind_checkpoint_id` is always written NULL: both
  *     `archivePrefix` (compaction) and `forkToolMessageToArchive`
  *     (giant-tool overflow) pass NULL. The rewind/restore writer that

@@ -282,7 +282,6 @@ export interface PolicySnapshot {
   contextUsageBand: InternalToolContext["contextUsageBand"];
   missionId: string | null;
   missionRunId: string | null;
-  role: InternalToolContext["role"];
 }
 
 /**
@@ -298,6 +297,5 @@ export function buildPolicySnapshot(context: InternalToolContext): PolicySnapsho
     contextUsageBand: context.contextUsageBand,
     missionId: context.missionId,
     missionRunId: context.missionRunId,
-    role: context.role,
   };
 }

@@ -29,7 +29,6 @@ function ctx(over: Partial<EngineContext> = {}): EngineContext {
     sessionPermission: "full",
     missionId: null,
     missionRunId: null,
-    isSubagent: false,
     selectedEvmWallet: { id: "w-evm-id", address: EVM },
     selectedSolanaWallet: { id: "w-sol-id", address: SOL },
     walletPolicy: { kind: "none" },

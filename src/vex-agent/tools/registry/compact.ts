@@ -19,7 +19,6 @@ export const COMPACT_TOOLS: readonly ToolDef[] = [
     mutating: false,
     pressureSafety: "compact_only",
     actionKind: "local_write",
-    excludeRoles: ["subagent"],
     visibility: { band: "barrier" },
     description: [
       "Compact the conversation when the context-pressure banner says ACTION REQUIRED (≥ 88% of context limit). Archives the conversation prefix to long-term storage, bumps the checkpoint generation, and enqueues async Track 2 chunking; the next 2 turns get a deterministic resume packet (rolling summary + outstanding items + recent decisions + recent tool outcomes).",

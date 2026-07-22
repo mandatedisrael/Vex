@@ -69,8 +69,8 @@ import type { InternalToolContext } from "@vex-agent/tools/internal/types.js";
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-function ctx(role: "parent" | "subagent" = "parent"): InternalToolContext {
-  return { sessionId: "session-1", role } as unknown as InternalToolContext;
+function ctx(): InternalToolContext {
+  return { sessionId: "session-1" } as unknown as InternalToolContext;
 }
 
 function vector(): number[] {
@@ -119,8 +119,8 @@ describe("long_memory_suggest — accepted path", () => {
     expect(data.duplicate).toBe(false);
   });
 
-  it("stamps the hypothesis source floor, normal sensitivity, and the role as proposer", async () => {
-    await handleLongMemorySuggest(validArgs(), ctx("subagent"));
+  it("stamps the hypothesis source floor, normal sensitivity, and the parent proposer", async () => {
+    await handleLongMemorySuggest(validArgs(), ctx());
 
     const [insertInput] = mockInsertCandidate.mock.calls[0];
     expect(insertInput.source).toBe("hypothesis");
@@ -128,7 +128,7 @@ describe("long_memory_suggest — accepted path", () => {
     expect(insertInput.evidenceStrength).toBe("none");
     expect(insertInput.retrievalVisibility).toBe("not_consolidated");
     expect(insertInput.retainUntil).toBeNull();
-    expect(insertInput.proposedBy).toBe("subagent");
+    expect(insertInput.proposedBy).toBe("parent");
     expect(insertInput.embeddingModel).toBe(TEST_PROVIDER_MODEL);
     expect(insertInput.embeddingDim).toBe(TEST_DIM);
   });

@@ -252,7 +252,7 @@ export interface ToolDefinition {
     /**
      * OpenAI-compatible JSON Schema. Strictly typed via `JsonSchema` rather
      * than `Record<string, unknown>` so engine-side `toToolDefinitions`
-     * and subagent runner don't need `as unknown as Record<...>` casts.
+     * doesn't need `as unknown as Record<...>` casts.
      * Providers pass this through to the upstream API unchanged.
      */
     parameters: JsonSchema;

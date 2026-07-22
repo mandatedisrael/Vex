@@ -185,7 +185,6 @@ function makeContext(overrides = {}) {
     sessionPermission: "restricted" as const,
     missionId: "mission-1",
     missionRunId: "run-1",
-    isSubagent: false,
     selectedEvmWallet: null,
     selectedSolanaWallet: null,
     walletPolicy: { kind: "none" as const },

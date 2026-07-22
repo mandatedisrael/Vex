@@ -7,9 +7,6 @@
  *   - `requiresMissionActiveRun: true` requires `missionRunActive === true`.
  *     Agent mode (one-shot conversation) never loops and never sees
  *     `loop_defer`. Mission setup (no active run yet) also doesn't.
- *   - `excludeRoles: ["subagent"]` is defense in depth — a child subagent
- *     that somehow ended up with the tool name should still be rejected at
- *     dispatch.
  * Contract reminders for the model (PR-5 plan §7):
  *   - `reason` is an INTERNAL resume hint, not a user-facing message. It
  *     surfaces later as the wake banner + `effectiveRecallSeed` input
@@ -107,7 +104,6 @@ export const AUTONOMY_TOOLS: readonly ToolDef[] = [
     mutating: false,
     pressureSafety: "mutating",
     actionKind: "schedule",
-    excludeRoles: ["subagent"],
     visibility: { requiresMissionActiveRun: true },
     description:
       "Pause the current mission run until a wake time. " +

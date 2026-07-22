@@ -131,7 +131,6 @@ function makeContext(overrides: Partial<{ sessionPermission: "restricted" | "ful
     loadedDocuments: new Map(),
     sessionPermission: "restricted" as const,
     approved: false,
-    role: "parent" as const,
     missionRunId: null,
     missionId: null,
     sessionKind: "agent" as const,

@@ -48,7 +48,6 @@ describe("messages repo", () => {
         message_type: null,
         visibility: null,
         origin_session_id: null,
-        subagent_id: null,
         metadata: { success: true },
       },
     ]);

@@ -2,7 +2,7 @@
  * Messages repo — session message history.
  *
  * Extended with engine metadata (source, messageType, visibility,
- * originSessionId, subagentId) — backwards-compatible, all optional.
+ * originSessionId) — backwards-compatible, all optional.
  *
  * Checkpoint support: `getLiveMessagesWithId` returns rows with their DB id so
  * `selectArchivePrefix` can compute a safe cutoff. The plain `getLiveMessages`

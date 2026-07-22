@@ -187,7 +187,6 @@ export type RuntimeStopReason =
   | "checkpoint_pause"
   | "iteration_limit"
   | "timeout"
-  | "waiting_for_parent"
   | "waiting_for_wake"
   | "waiting_for_compact_commit"
   | "compact_unable_at_critical"
@@ -207,7 +206,6 @@ export type MessageSource =
   | "assistant"
   | "engine"
   | "tool"
-  | "subagent"
   | "system";
 
 export type MessageType =
@@ -223,7 +221,6 @@ export type MessageType =
   | "continue"
   | "checkpoint"
   | "wake_due"
-  | "subagent_relay"
   | "tool_result"
   /**
    * A trusted prepare→execute handoff the engine synthesized itself (never
@@ -292,8 +289,8 @@ export interface MissionPatch {
 
 /**
  * Mission wallet policy, resolved once at hydration (puzzle 5 phase 5B) and
- * enforced at wallet resolution. NOT gated on `sessionKind` — a subagent with
- * `sessionKind: "agent"` still inherits the parent's mission policy.
+ * enforced at wallet resolution. NOT gated on `sessionKind` — it rides the
+ * explicit `WalletPolicy` value.
  *   - none: not under a mission → no mission-level wallet restriction.
  *   - mission_allowed: wallet must be in the accepted contract's allowedWallets.
  *   - invalid: under a mission but the active-run snapshot is missing /
@@ -311,9 +308,9 @@ export interface EngineContext {
   /**
    * Session-scoped approval policy, hydrated once from `sessions.permission`
    * at engine entry. Immutable for the duration of the turn — every approval
-   * gate (`tools/protocols/runtime.ts`, `tools/internal/wallet/send.ts`, and
-   * any subagent-spawn check) reads this single value rather than re-querying
-   * the DB or threading a stale `loopMode` through.
+   * gate (`tools/protocols/runtime.ts`, `tools/internal/wallet/send.ts`)
+   * reads this single value rather than re-querying the DB or threading a
+   * stale `loopMode` through.
    */
   sessionPermission: Permission;
   missionId: string | null;
@@ -324,7 +321,6 @@ export interface EngineContext {
   missionRunStartedAt?: string | null;
   /** Optional mission deadline from the frozen mission constraints. */
   missionDeadline?: string | null;
-  isSubagent: boolean;
   /** Per-session selected wallets (id + address), hydrated from the session row. */
   selectedEvmWallet: { id: string; address: string } | null;
   selectedSolanaWallet: { id: string; address: string } | null;
@@ -417,5 +413,4 @@ export interface MessageMetadata {
   messageType?: MessageType;
   visibility?: MessageVisibility;
   originSessionId?: string;
-  subagentId?: string;
 }

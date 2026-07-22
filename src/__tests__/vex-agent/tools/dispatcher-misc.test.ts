@@ -6,45 +6,7 @@ const { dispatchTool } = await import("../../../vex-agent/tools/dispatcher.js");
 
 const baseContext = makeTestContext();
 
-describe("dispatcher — subagent, wallet, unknown, no-stubs", () => {
-  // ── Subagent ─────────────────────────────────────────────────────
-
-  // TODO(subagent-disabled): re-enable razem z SUBAGENT_TOOLS i dispatcher loaders.
-  it.skip("subagent_spawn returns id", async () => {
-    const result = await dispatchTool(
-      { name: "subagent_spawn", args: { name: "VexTest", task: "research markets" }, toolCallId: "call_13" },
-      baseContext,
-    );
-
-    expect(result.success).toBe(true);
-    const parsed = JSON.parse(result.output);
-    expect(parsed.id).toMatch(/^subagent-/);
-    expect(parsed.name).toBe("VexTest");
-  });
-
-  // TODO(subagent-disabled): re-enable razem z SUBAGENT_TOOLS i dispatcher loaders.
-  it.skip("subagent_spawn fails without name", async () => {
-    const result = await dispatchTool(
-      { name: "subagent_spawn", args: { task: "do something" }, toolCallId: "call_13b" },
-      baseContext,
-    );
-
-    expect(result.success).toBe(false);
-    expect(result.output).toContain("name");
-  });
-
-  // TODO(subagent-disabled): re-enable razem z SUBAGENT_TOOLS i dispatcher loaders.
-  it.skip("subagent_status returns empty when none active", async () => {
-    const result = await dispatchTool(
-      { name: "subagent_status", args: {}, toolCallId: "call_13c" },
-      baseContext,
-    );
-
-    expect(result.success).toBe(true);
-    const parsed = JSON.parse(result.output);
-    expect(parsed.message).toContain("No active");
-  });
-
+describe("dispatcher — wallet, unknown, no-stubs", () => {
   // ── Wallet ───────────────────────────────────────────────────────
 
   it("routes wallet_balances to live handler (not stub)", async () => {
@@ -137,10 +99,6 @@ describe("dispatcher — subagent, wallet, unknown, no-stubs", () => {
       { name: "web_research", args: { url: "https://example.com" } },
       { name: "long_memory_get", args: { id: 1 } },
       { name: "long_memory_history", args: { id: 1 } },
-      // TODO(subagent-disabled): re-enable razem z SUBAGENT_TOOLS.
-      // { name: "subagent_spawn", args: { name: "VexX", task: "t" } },
-      // { name: "subagent_status", args: {} },
-      // { name: "subagent_stop", args: { id: "sub-1" } },
     ];
 
     for (const tool of internalTools) {

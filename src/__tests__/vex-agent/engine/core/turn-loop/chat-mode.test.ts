@@ -233,7 +233,6 @@ describe("turn-loop", () => {
       sessionPermission: "restricted" as const,
       missionId: null,
       missionRunId: null,
-      isSubagent: false,
       selectedEvmWallet: null,
       selectedSolanaWallet: null,
       walletPolicy: { kind: "none" as const },
@@ -357,7 +356,7 @@ describe("turn-loop", () => {
       expect(provider.chatCompletion).not.toHaveBeenCalled();
     });
 
-    it("boundary abortSignal (mission/subagent shape) does NOT persist a chat_stopped partial (9-5a regression)", async () => {
+    it("boundary abortSignal (mission shape) does NOT persist a chat_stopped partial (9-5a regression)", async () => {
       const controller = new AbortController();
       controller.abort();
       const provider = makeProvider([{ content: "unused" }]);

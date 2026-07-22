@@ -41,15 +41,14 @@ export async function addMessageReturningId(
   const e = exec ?? getPool();
   const inserted = await queryOneWith<{ id: number; created_at: string | Date }>(
     e,
-    `INSERT INTO messages (session_id, role, content, tool_call_id, tool_calls, created_at, source, message_type, visibility, origin_session_id, subagent_id, metadata)
-     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12::jsonb)
+    `INSERT INTO messages (session_id, role, content, tool_call_id, tool_calls, created_at, source, message_type, visibility, origin_session_id, metadata)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11::jsonb)
      RETURNING id, created_at`,
     [
       sessionId, msg.role, msg.content, msg.toolCallId ?? null,
       nullableJsonb(msg.toolCalls ?? null), msg.timestamp,
       metadata?.source ?? null, metadata?.messageType ?? null,
       metadata?.visibility ?? null, metadata?.originSessionId ?? null,
-      metadata?.subagentId ?? null,
       nullableJsonb(metadata?.payload ?? null),
     ],
   );

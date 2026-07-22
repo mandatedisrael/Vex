@@ -92,7 +92,6 @@ function makeContext(overrides: Record<string, unknown> = {}): never {
     sessionPermission: "trusted",
     missionId: null,
     missionRunId: null,
-    isSubagent: false,
     loadedDocuments: new Map(),
     sourceSurface: "vex_agent",
     sourceSession: "session-test",

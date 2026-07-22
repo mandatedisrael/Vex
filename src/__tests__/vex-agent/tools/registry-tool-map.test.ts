@@ -1,13 +1,10 @@
 /**
  * Tool Map integrity — every registered agent ToolDef must appear in exactly
- * one `TOOL_MAP_CATEGORIES` entry, every name in the map must resolve to
- * a registered ToolDef, and dormant-subagent tools must NOT appear in the
- * agent Tool Map.
+ * one `TOOL_MAP_CATEGORIES` entry, and every name in the map must resolve to
+ * a registered ToolDef.
  *
  * Codex PR3 plan-review (round 1) required this scoping: the invariant
- * covers tools the LLM in agent runtime will see. The `SUBAGENT_TOOLS`
- * array is currently `[]` per the dormant-subagent comment in
- * `registry/subagents.ts`.
+ * covers tools the LLM in agent runtime will see.
  */
 
 import { describe, it, expect } from "vitest";
@@ -22,11 +19,7 @@ import {
   type ToolVisibilityContext,
 } from "../../../vex-agent/tools/registry.js";
 
-const AGENT_SURFACE_TOOL_NAMES = getAllTools()
-  // Subagent dormancy: SUBAGENT_TOOLS is `[]` today. If re-enabled,
-  // re-evaluate whether subagent_* belong in the agent Tool Map.
-  .filter(t => !t.name.startsWith("subagent_"))
-  .map(t => t.name);
+const AGENT_SURFACE_TOOL_NAMES = getAllTools().map(t => t.name);
 
 const TOOL_MAP_NAMES = TOOL_MAP_CATEGORIES.flatMap(c => c.toolNames);
 
@@ -54,14 +47,6 @@ describe("TOOL_MAP_CATEGORIES integrity", () => {
     expect(unresolved, `TOOL_MAP_CATEGORIES names not found in registry: ${unresolved.join(", ")}`).toEqual([]);
   });
 
-  it("does NOT include dormant subagent_* tools", () => {
-    // If SUBAGENT_TOOLS is re-enabled, this assertion has to be revisited
-    // (add a "Subagent control" category, decide whether subagent_* are
-    // model-facing or operator-only).
-    const subagentLeaks = TOOL_MAP_NAMES.filter(n => n.startsWith("subagent_"));
-    expect(subagentLeaks).toEqual([]);
-  });
-
   it("renders in declared order — no alphabetical sort within categories", () => {
     // Codex PR3 GREEN-LIGHT note (2): "Do not enforce alphabetical order
     // inside categories." Order carries model-priority intent (reads
@@ -82,8 +67,7 @@ describe("plan_write visibility (requiresPlanMode + hiddenInMissionSetup:false)"
   // Stage 0/3 decision: `plan_write` reuses the existing `requiresPlanMode`
   // gate and flips `hiddenInMissionSetup` to false, so it becomes visible in
   // mission SETUP exactly when plan-mode is on (co-authoring the plan alongside
-  // the contract), stays hidden when plan-mode is off, and is excluded from
-  // subagents (they execute a parent task; they do not author the top plan).
+  // the contract) and stays hidden when plan-mode is off.
   const isVisible = (ctx: ToolVisibilityContext): boolean =>
     getVisibleToolDefs(ctx).some(t => t.name === "plan_write");
 
@@ -103,16 +87,6 @@ describe("plan_write visibility (requiresPlanMode + hiddenInMissionSetup:false)"
       planMode: true,
     });
     expect(isVisible(ctx)).toBe(true);
-  });
-
-  it("is HIDDEN for subagents even when plan-mode is ON", () => {
-    const ctx = defaultVisibilityContext({
-      sessionKind: "mission",
-      missionRunActive: false,
-      planMode: true,
-      role: "subagent",
-    });
-    expect(isVisible(ctx)).toBe(false);
   });
 });
 
@@ -135,7 +109,6 @@ describe("Research category visibility in MISSION SETUP", () => {
 
       const ctx: ToolVisibilityContext = {
         permission: "restricted",
-        role: "parent",
         sessionKind: "mission",
         missionRunActive: false,
         planMode: false,

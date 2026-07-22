@@ -11,7 +11,7 @@ import type {
   ProtocolDiscoveryResult,
   ProtocolDiscoveryModelResult,
 } from "../protocols/types.js";
-import { isInternalTool, isMutatingTool, isToolBlockedForRole } from "../registry.js";
+import { isInternalTool, isMutatingTool } from "../registry.js";
 import { discoverProtocolCapabilities } from "../protocols/runtime.js";
 import { executeProtocolTool } from "../protocols/runtime.js";
 import {
@@ -118,17 +118,6 @@ export async function routeToolCall(
           : {}),
       },
     );
-  }
-
-  // Hard role enforcement — blocked tools rejected even if model emits them.
-  // Hypervexing aliases are handled immediately below: resolving their
-  // ToolDef first would force a catalog lookup before the mode hard-deny and
-  // make unrelated dispatcher tests depend on a complete mocked catalog.
-  if (!isHypervexingProtocolAlias(call.name) && isToolBlockedForRole(call.name, context.role)) {
-    return {
-      success: false,
-      output: `Tool "${call.name}" is not available for this session role (${context.role}).`,
-    };
   }
 
   // Hypervexing hot-set aliases are valid ONLY while main's per-session

@@ -4,8 +4,8 @@
  *
  * Contract:
  *   - Session-scoped: rejects `blob_key` whose `session_id` differs from
- *     `ctx.sessionId`. Subagents cannot read the parent's blobs (or vice
- *     versa) even if a blob key leaks across the boundary.
+ *     `ctx.sessionId`. One session cannot read another session's blobs
+ *     even if a blob key leaks across the boundary.
  *   - Byte mode (`offset` / `max_bytes`) returns a bounded byte slice, the
  *     original fallback. Search / path / query modes return bounded structured
  *     results. Every mode stays under `MAX_READ_BYTES` by construction so the

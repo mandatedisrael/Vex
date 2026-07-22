@@ -59,7 +59,6 @@ beforeEach(() => {
       sessionPermission: "restricted",
       missionId: "m1",
       missionRunId: "run-1",
-      isSubagent: false,
       loadedDocuments: new Map(),
     },
     messages: [],

@@ -35,7 +35,7 @@ describe("stop-conditions", () => {
   describe("isRuntimePause", () => {
     const runtimeReasons: StopReason[] = [
       "approval_required", "checkpoint_pause", "iteration_limit",
-      "timeout", "waiting_for_parent", "waiting_for_wake",
+      "timeout", "waiting_for_wake",
       "waiting_for_compact_commit", "compact_unable_at_critical",
       "system_error",
     ];
@@ -74,7 +74,6 @@ describe("stop-conditions", () => {
       expect(isResumablePause("iteration_limit")).toBe(false);
       expect(isResumablePause("timeout")).toBe(false);
       expect(isResumablePause("system_error")).toBe(false);
-      expect(isResumablePause("waiting_for_parent")).toBe(false);
     });
 
     it("rejects business stops (terminal, not resumable)", () => {

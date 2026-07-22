@@ -6,7 +6,6 @@ export function makeTestContext(overrides?: Partial<InternalToolContext>): Inter
     loadedDocuments: new Map<string, string>(),
     sessionPermission: "restricted",
     approved: false,
-    role: "parent",
     missionRunId: null,
     missionId: null,
     sessionKind: "agent",

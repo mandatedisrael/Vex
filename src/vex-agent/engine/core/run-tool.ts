@@ -72,7 +72,6 @@ export async function runTool(
     loadedDocuments: new Map(),
     sessionPermission: session.permission,
     approved: true,
-    role: "parent",
     missionRunId: activeRun?.id ?? null,
     missionId,
     sessionKind,

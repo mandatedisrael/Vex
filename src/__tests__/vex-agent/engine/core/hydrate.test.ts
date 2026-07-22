@@ -6,7 +6,6 @@ const mockGetSession = vi.fn();
 const mockGetLiveMessages = vi.fn().mockResolvedValue([]);
 const mockGetMissionBySession = vi.fn().mockResolvedValue(null);
 const mockGetActiveRun = vi.fn().mockResolvedValue(null);
-const mockGetParentSession = vi.fn().mockResolvedValue(null);
 
 vi.mock("@vex-agent/db/repos/sessions.js", () => ({
   getSession: (...a: unknown[]) => mockGetSession(...a),
@@ -27,10 +26,6 @@ vi.mock("@vex-agent/db/repos/missions.js", () => ({
 
 vi.mock("@vex-agent/db/repos/mission-runs.js", () => ({
   getActiveRun: (...a: unknown[]) => mockGetActiveRun(...a),
-}));
-
-vi.mock("@vex-agent/db/repos/session-links.js", () => ({
-  getParentSession: (...a: unknown[]) => mockGetParentSession(...a),
 }));
 
 vi.mock("@vex-agent/db/client.js", () => ({
@@ -67,7 +62,6 @@ describe("hydrate", () => {
     expect(result!.context.sessionId).toBe("session-1");
     expect(result!.context.sessionKind).toBe("agent");
     expect(result!.context.sessionPermission).toBe("restricted");
-    expect(result!.context.isSubagent).toBe(false);
     expect(result!.messages).toHaveLength(1);
     expect(result!.tokenCount).toBe(1500);
   });
@@ -98,18 +92,6 @@ describe("hydrate", () => {
     expect(result!.context.missionRunStartedAt).toBe("2026-05-03T08:10:00.000Z");
     expect(result!.context.missionDeadline).toBe("2026-05-03T14:10:00.000Z");
     expect(result!.summary).toBe("Previous summary");
-  });
-
-  it("detects subagent sessions via session_links", async () => {
-    mockGetSession.mockResolvedValueOnce({
-      id: "session-child", scope: "chat", mode: "agent", permission: "restricted",
-      summary: null,
-      compacted: false, messageCount: 0, tokenCount: 0,
-    });
-    mockGetParentSession.mockResolvedValueOnce({ parentSessionId: "session-parent" });
-
-    const result = await hydrateEngineSession("session-child");
-    expect(result!.context.isSubagent).toBe(true);
   });
 
   it("falls back to mission setup (no active run) when mission exists in draft", async () => {

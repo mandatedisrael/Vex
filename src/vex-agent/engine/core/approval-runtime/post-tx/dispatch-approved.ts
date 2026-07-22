@@ -101,7 +101,6 @@ export async function applyApproveSideEffects(
       loadedDocuments: new Map(),
       sessionPermission: row.queue_permission_at_enqueue,
       approved: true,
-      role: "parent",
       missionRunId,
       missionId: null,
       sessionKind: "agent",

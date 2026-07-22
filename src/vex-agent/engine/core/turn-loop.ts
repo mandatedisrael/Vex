@@ -71,8 +71,8 @@ export async function runTurnLoop(
   abortSignal?: AbortSignal,
   // Chat-turn "stop generating" (9-5a): cancels the in-flight streaming
   // inference + persists partial text. Distinct from `abortSignal` (the
-  // mission/subagent boundary stop) — only the chat ingress passes this, so
-  // mission/subagent callers are behaviour-preserving.
+  // mission boundary stop) — only the chat ingress passes this, so
+  // mission callers are behaviour-preserving.
   inferenceAbortSignal?: AbortSignal,
 ): Promise<TurnLoopResult> {
   let lastText: string | null = null;
@@ -250,7 +250,7 @@ export async function runTurnLoop(
 
     // Execute turn (no save yet — deferred save lives in tool-batch helper).
     // `inferenceAbortSignal` (chat-turn only) lets the streaming inference be
-    // cancelled mid-response; mission/subagent callers leave it undefined.
+    // cancelled mid-response; mission callers leave it undefined.
     const turnResult = await executeTurn(
       context, liveMessages, currentSummary, provider, config, stack.tools, stack.promptOptions,
       inferenceAbortSignal,
